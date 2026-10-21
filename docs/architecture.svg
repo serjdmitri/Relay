@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img" aria-label="How Relay works: your voice goes through on-device dictation to a router that either runs an instant command or asks Claude; Claude uses a local tool server, a confirmation gate guards risky actions, and the actions run on your Mac.">
+  <defs>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient>
+    <linearGradient id="a" x1="0" x2="1"><stop offset="0" stop-color="#6C63FF"/><stop offset="1" stop-color="#C13CF0"/></linearGradient>
+    <linearGradient id="b" x1="0" x2="1"><stop offset="0" stop-color="#C13CF0"/><stop offset="1" stop-color="#FF8A3D"/></linearGradient>
+    <linearGradient id="c" x1="0" x2="1"><stop offset="0" stop-color="#2FC4FF"/><stop offset="1" stop-color="#4ADE80"/></linearGradient>
+    <linearGradient id="d" x1="0" x2="1"><stop offset="0" stop-color="#FF8A3D"/><stop offset="1" stop-color="#FFC94A"/></linearGradient>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#B9B4F0"/></marker>
+  </defs>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif">
+    <rect width="1200" height="500" rx="22" fill="url(#card)"/>
+    <text x="40" y="44" fill="#fff" font-size="22" font-weight="700">How Relay works</text>
+
+    <!-- you -->
+    <text x="40" y="84" fill="#A9A5D6" font-size="13" font-weight="600" letter-spacing="1">YOU</text>
+    <g font-size="15" fill="#fff">
+      <rect x="40" y="96" width="196" height="46" rx="14" fill="url(#a)"/><text x="56" y="125">Right ⌥  ·  Ask</text>
+      <rect x="40" y="154" width="196" height="46" rx="14" fill="url(#b)"/><text x="56" y="183">Right ⌘  ·  Dictate</text>
+      <rect x="40" y="212" width="196" height="46" rx="14" fill="url(#d)"/><text x="56" y="241" fill="#2A1A00">⌥T  ·  Type a request</text>
+    </g>
+
+    <!-- relay -->
+    <rect x="276" y="64" width="552" height="404" rx="20" fill="#fff" fill-opacity="0.05" stroke="#fff" stroke-opacity="0.18"/>
+    <text x="296" y="92" fill="#A9A5D6" font-size="13" font-weight="600" letter-spacing="1">RELAY  ·  MENU BAR APP</text>
+
+    <rect x="296" y="106" width="512" height="56" rx="14" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.2"/>
+    <text x="316" y="130" fill="#fff" font-size="16" font-weight="600">Dictation</text>
+    <text x="316" y="150" fill="#C9C5EE" font-size="13">relay-speech (Swift) · Apple SpeechAnalyzer · on-device, audio never leaves the Mac</text>
+
+    <rect x="296" y="188" width="512" height="36" rx="18" fill="url(#a)"/>
+    <text x="552" y="211" fill="#fff" font-size="15" font-weight="600" text-anchor="middle">Router: instant command, or ask Claude?</text>
+
+    <rect x="296" y="252" width="244" height="92" rx="16" fill="#fff" fill-opacity="0.08" stroke="#C13CF0" stroke-opacity="0.9" stroke-width="1.5"/>
+    <text x="316" y="278" fill="#fff" font-size="16" font-weight="600">Claude</text>
+    <text x="316" y="299" fill="#C9C5EE" font-size="13">Haiku or Sonnet, picked per request</text>
+    <text x="316" y="318" fill="#C9C5EE" font-size="13">your claude · API key · Ollama</text>
+
+    <rect x="564" y="252" width="244" height="92" rx="16" fill="#fff" fill-opacity="0.08" stroke="#FF8A3D" stroke-opacity="0.9" stroke-width="1.5"/>
+    <text x="584" y="278" fill="#fff" font-size="16" font-weight="600">Instant commands</text>
+    <text x="584" y="299" fill="#C9C5EE" font-size="13">No model call. Timers, music, volume,</text>
+    <text x="584" y="318" fill="#C9C5EE" font-size="13">notes, reminders, open apps. Undoable.</text>
+
+    <rect x="296" y="378" width="244" height="64" rx="16" fill="#fff" fill-opacity="0.08" stroke="#fff" stroke-opacity="0.2"/>
+    <text x="316" y="404" fill="#fff" font-size="16" font-weight="600">Local tool server</text>
+    <text x="316" y="424" fill="#C9C5EE" font-size="13">127.0.0.1 · random port · bearer token</text>
+
+    <rect x="564" y="378" width="244" height="64" rx="16" fill="#fff" fill-opacity="0.08" stroke="#4ADE80" stroke-opacity="0.9" stroke-width="1.5"/>
+    <text x="584" y="404" fill="#fff" font-size="16" font-weight="600">Confirm gate</text>
+    <text x="584" y="424" fill="#C9C5EE" font-size="13">Allow / Cancel before send, trash, shell</text>
+
+    <!-- your mac -->
+    <rect x="884" y="64" width="276" height="404" rx="20" fill="#fff" fill-opacity="0.05" stroke="#fff" stroke-opacity="0.18"/>
+    <text x="904" y="92" fill="#A9A5D6" font-size="13" font-weight="600" letter-spacing="1">YOUR MAC</text>
+    <g font-size="14" fill="#fff">
+      <rect x="904" y="106" width="236" height="50" rx="12" fill="url(#a)"/><text x="920" y="127" font-weight="600">Notes · Reminders</text><text x="920" y="145" fill="#E7E4FF" font-size="12">Calendar · Messages</text>
+      <rect x="904" y="166" width="236" height="50" rx="12" fill="url(#b)"/><text x="920" y="187" font-weight="600">Finder and files</text><text x="920" y="205" fill="#FFEAD9" font-size="12">reveal, open, trash</text>
+      <rect x="904" y="226" width="236" height="50" rx="12" fill="url(#c)"/><text x="920" y="247" font-weight="600" fill="#05261A">Screen, clicks, typing</text><text x="920" y="265" fill="#0B3B2A" font-size="12">accessibility tree, screenshots</text>
+      <rect x="904" y="286" width="236" height="50" rx="12" fill="url(#d)"/><text x="920" y="307" font-weight="600" fill="#2A1A00">Firefox (optional)</text><text x="920" y="325" fill="#4A3000" font-size="12">tabs, pages, via local extension</text>
+      <rect x="904" y="346" width="236" height="50" rx="12" fill="#fff" fill-opacity="0.12" stroke="#fff" stroke-opacity="0.25"/><text x="920" y="367" font-weight="600">Apps, volume, dark mode</text><text x="920" y="385" fill="#C9C5EE" font-size="12">AppleScript, shell (asks first)</text>
+    </g>
+    <text x="1022" y="440" fill="#A9A5D6" font-size="12" text-anchor="middle">Everything runs on this Mac.</text>
+
+    <!-- arrows -->
+    <g stroke="#B9B4F0" stroke-width="2" fill="none" marker-end="url(#ar)">
+      <path d="M236 119H292"/><path d="M236 177H292"/><path d="M236 235H292"/>
+      <path d="M552 162V184"/>
+      <path d="M418 224V248"/><path d="M686 224V248"/>
+      <path d="M418 344V374"/>
+      <path d="M540 410H560"/>
+      <path d="M808 310H880"/>
+      <path d="M808 410H880"/>
+    </g>
+  </g>
+</svg>
