@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - More model services: OpenAI (ChatGPT API), Google Gemini, Groq, Mistral, xAI, DeepSeek and a custom OpenAI-compatible address, each with its own key and model. Pick one under Account > Model service.
 - Calmer look: a neutral gray interface with one indigo accent. Each page tints only the soft glows at the top and bottom of the window and the selected sidebar item; the rest of the sidebar stays gray.
 - The sidebar can be collapsed to the left (button in the top bar, or ⌘\) to give the page the whole window. Relay remembers the choice.
+- README, website, diagram, charts and screenshots updated to match. 136 unit tests.
+- No change to how Sign in with Claude works. It stays an unsupported, personal-use path (see the README).
 
 ## 0.1.1
 

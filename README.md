@@ -13,7 +13,7 @@ A menu bar assistant that opens apps, writes notes and reminders, reads your cal
   <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/arm64%20%7C%20x64-dmg-FF9F0A">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-129%20passing-30D158">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-136%20passing-30D158">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey"></a>
 </p>
 
@@ -25,7 +25,7 @@ Dictation is built in (Apple's on-device speech recognition), so a separate dict
 
 **[Website](https://serjdmitri.github.io/Relay/)** | **[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
 
-> **Status: early (v0.1.1).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
+> **Status: early (v0.2.0).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
 
 > **Claude account sign-in is for your own Mac only.** Relay can run your own signed-in Claude Code (`claude`) so you need no API key. Anthropic does not allow third-party apps to offer claude.ai login to other people, so do not hand Relay builds to others expecting that path to be okay. If you share or distribute a build, point it at an **Anthropic API key** or a local **Ollama** model instead (Account page, "Use an API key or a local model instead").
 
@@ -51,7 +51,7 @@ You will approve Microphone, Accessibility, Screen Recording and Input Monitorin
 
 <p align="center">
   <img src="docs/img/ui-main.png" alt="Relay window: Home with shortcuts and stats, and History with a seven-day chart" width="900"><br>
-  <img src="docs/img/ui-more.png" alt="Relay window: Speech settings and Routines" width="900">
+  <img src="docs/img/ui-more.png" alt="Relay window: Account with the model service picker, and Speech settings" width="900">
 </p>
 
 These are the real interface pages rendered with sample data, so no personal information is shown. Regenerate them with `npm run shots && npm run readme-images`.
@@ -59,7 +59,7 @@ These are the real interface pages rendered with sample data, so no personal inf
 ## How it works
 
 <p align="center">
-  <img src="docs/architecture.svg" alt="Diagram: your voice goes through on-device dictation to a router, which runs an instant command or asks Claude; Claude uses a local tool server, a confirm gate guards risky actions, and everything runs on your Mac" width="900">
+  <img src="docs/architecture.svg" alt="Diagram: your voice goes through on-device dictation to a router, which runs an instant command or asks your model; the model uses a local tool server, a confirm gate guards risky actions, and everything runs on your Mac" width="900">
 </p>
 
 ## By the numbers
@@ -143,9 +143,15 @@ The pill is real see-through macOS glass (a small native helper, `native/relay-g
 Turn on **General > Speak replies**, then pick a voice and speed under **Speech > Spoken replies**. Relay uses the best voice it can find, and uses a natural (Siri, Premium or Enhanced) voice automatically once you have downloaded one: System Settings > Accessibility > Spoken Content > System Voice > Manage Voices. Apps cannot see those voices through Apple's speech API, so Relay speaks through the system `say` command.
 
 ### Claude account
-Relay runs your own Claude Code (`claude`), already signed in to your Claude account, and gives it Relay's Mac tools over a local-only tool server (127.0.0.1, random port, bearer token). Sign in, sign out and pick the model on the Account page. The default, **Auto**, starts Claude while you are still talking, answers simple requests with Haiku (fastest), starts writing and planning requests on Sonnet, and moves a struggling Haiku request up to Sonnet in the same conversation, so nothing already done is repeated. Pick Haiku, Sonnet or Opus by hand to turn that off. An API key or a local Ollama model is still available under "Use an API key or a local model instead".
+Relay runs your own Claude Code (`claude`), already signed in to your Claude account, and gives it Relay's Mac tools over a local-only tool server (127.0.0.1, random port, bearer token). Sign in, sign out and pick the model on the Account page. The default, **Auto**, starts Claude while you are still talking, answers simple requests with Haiku (fastest), starts writing and planning requests on Sonnet, and moves a struggling Haiku request up to Sonnet in the same conversation, so nothing already done is repeated. Pick Haiku, Sonnet or Opus by hand to turn that off. An API key or a local Ollama model is still available under "Use an API key or a local model instead" (see below).
 
 This is for your own use on your own Mac. Do not hand Relay builds to other people with this sign-in path: Anthropic does not allow third-party apps to offer claude.ai login to others.
+
+### Other model services (your own API key)
+Account > **Model service** also offers **OpenAI** (the ChatGPT API), **Google Gemini**, **Groq**, **Mistral**, **xAI (Grok)**, **DeepSeek** and a **Custom address** for anything that speaks the OpenAI chat format (LM Studio, OpenRouter and so on), next to the Anthropic API key and Ollama. Each service keeps its own key (stored encrypted with your Keychain) and its own model name, and there is a **Test** button. Model names change, so edit the name if the test fails. OpenAI and Gemini are treated as able to see screenshots; the others are text only, so Relay does not take screenshots with them. The OpenAI API is billed separately from a ChatGPT subscription.
+
+### The window
+The sidebar collapses to the left from the button in the top bar, or with ⌘\, so the page gets the whole window. Relay remembers the choice. The interface is neutral gray with one indigo accent; each page only tints the soft glow at the top and bottom and the selected sidebar item.
 
 ### Tools the agent has
 Apps (list, open, focus, quit), URLs and files, Finder (reveal, list, trash), Notes, Reminders, Calendar, Messages (iMessage), type text, key presses, menu bar clicks, accessibility-tree clicks (`ui_list`/`ui_click`), screenshots, pixel clicks and scrolling, a Relay cursor overlay that glides to the target before clicking, web search and page fetch, volume and dark mode, raw AppleScript, shell. Firefox tab tools appear when the extension is connected.
@@ -158,9 +164,9 @@ Every tool call with its arguments and result. If something does not work, look 
 
 ## What is verified and what is not
 
-Verified on a Mac (`npm test`, 129 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, both API providers' wire formats, the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
+Verified on a Mac (`npm test`, 136 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
 
-Not verified by script: live microphone dictation end to end, music control, spoken-command dictation and word fixes with a real voice, the clipboard and selection tools, permission prompts, global shortcut detection, the AppleScript against Notes, Reminders, Calendar, Messages and Finder beyond what you have tried by hand. `scripts/e2e.mjs` and `scripts/screenshots.mjs` predate dictation and the Claude sign-in and have not been updated or re-run. The Actions tab and `Console.app` (filter "Relay") are where errors show up.
+Not verified by script: real calls to the OpenAI-compatible services (OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek), live microphone dictation end to end, music control, spoken-command dictation and word fixes with a real voice, the clipboard and selection tools, permission prompts, global shortcut detection, the AppleScript against Notes, Reminders, Calendar, Messages and Finder beyond what you have tried by hand. `scripts/e2e.mjs` and `scripts/screenshots.mjs` predate dictation and the Claude sign-in and have not been updated or re-run. The Actions tab and `Console.app` (filter "Relay") are where errors show up.
 
 ## Layout
 ```

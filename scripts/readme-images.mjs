@@ -41,6 +41,6 @@ await shoot('pill-states.png', 1200, 470,
 
 // windows
 await shoot('ui-main.png', 1200, 470, win('main-home.png', 36, 36, 548) + win('main-history.png', 616, 36, 548));
-await shoot('ui-more.png', 1200, 470, win('main-speech.png', 36, 36, 548) + win('main-routines.png', 616, 36, 548));
+await shoot('ui-more.png', 1200, 470, win('main-account-openai.png', 36, 36, 548) + win('main-speech.png', 616, 36, 548));
 await browser.close();
 console.log('images written to', out);
