@@ -33,7 +33,7 @@ const DEFAULT_SHORTCUTS = { ask: { code: 'AltRight', mods: [] }, dictate: { code
 function windowOpts(w, h) {
   return {
     width: w, height: h, minWidth: w, minHeight: Math.min(h, 520), show: false,
-    titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#2b2b2b',
+    titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#120f2b',
     fullscreenable: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   };
