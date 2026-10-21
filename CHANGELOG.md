@@ -2,6 +2,8 @@
 
 ## 0.1.0
 
+Distributed as ad-hoc signed `.dmg` files (arm64 and x64) built by GitHub Actions.
+
 First public version.
 
 - Ask pill: press Right Option, dictate with Talkify, tap again to send. Tap or hold, Stop, and a clipboard fallback.

@@ -8,7 +8,9 @@ First public version of Relay, a menu bar Mac assistant that acts on spoken requ
 - Routines, a Relay cursor overlay, and an optional Firefox extension for tabs and page reading.
 
 ## Install
-No prebuilt app is attached to this release. Build it on your Mac:
+Download the `.dmg` below (`arm64` for Apple Silicon, `x64` for Intel) and drag Relay to Applications. It is not notarized, so the first time, right-click Relay and choose Open, or run `xattr -dr com.apple.quarantine /Applications/Relay.app`.
+
+Or build from source:
 
 ```bash
 git clone https://github.com/serjdmitri/Relay.git
