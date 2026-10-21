@@ -14,7 +14,19 @@ Tagged versions and release notes live on the [Releases page](https://github.com
 
 A menu bar Mac assistant. You dictate with Talkify, Relay does the "do something" part: opens apps, makes notes and reminders, reads your calendar, clicks through UIs, drives Firefox, answers from the web. The window and onboarding follow the layout of Octaflow, with original code, name and icon.
 
-## Install (on your Mac)
+## Download
+
+Get the `.dmg` for your Mac from the [Releases page](https://github.com/serjdmitri/Relay/releases): `arm64` for Apple Silicon (M1 and later), `x64` for Intel. Open it and drag Relay to Applications.
+
+Relay is not notarized by Apple (that needs a paid developer account), so the first launch is blocked by Gatekeeper. Either right-click Relay in Applications and choose **Open**, then **Open** again, or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Relay.app
+```
+
+The `.dmg` files are built by GitHub Actions (`.github/workflows/release.yml`) when a release tag is created, so what you download is built from the tagged source.
+
+## Install from source (on your Mac)
 
 Needs Node 20+ (`brew install node`).
 
