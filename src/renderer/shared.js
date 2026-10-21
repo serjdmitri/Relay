@@ -1,31 +1,53 @@
+// Stroke icons for content areas (colour comes from currentColor).
 const ICONS = {
-  home: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h4v-5h4v5h4v-9"/>',
-  history: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
-  routines: '<rect x="5" y="6" width="14" height="14" rx="3"/><path d="M10 10v6l5-3z" fill="#fff"/><path d="M9 3h6"/>',
-  vocab: '<rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9.5 15l2.5-7 2.5 7M10.4 13h3.2"/>',
-  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
-  model: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>',
+  wave: '<path d="M3 12v0M7 8.5v7M11 5v14M15 8v8M19 10.5v3M21.5 12v0"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21"/>',
+  keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M6 13.5h.01M18 13.5h.01M9 14h6"/>',
   command: '<path d="M9 9V6.5A2.5 2.5 0 106.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1117.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 11-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 116.5 15H9z"/>',
-  shield: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><rect x="9.5" y="10.5" width="5" height="4.5" rx="1" fill="#fff"/><path d="M10.5 10.5V9a1.5 1.5 0 013 0v1.5"/>',
-  wave: '<path d="M4 12v0M8 8v8M12 5v14M16 8v8M20 12v0"/>',
-  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>',
-  keyboard: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10"/>',
-  laptop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M3 19h18"/>',
-  chip: '<rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 4v3M14 4v3M10 17v3M14 17v3M4 10h3M4 14h3M17 10h3M17 14h3"/>',
   record: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/>',
   chat: '<path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4 4v-4H6a2 2 0 01-2-2z"/>',
-  undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h9a6 6 0 010 12"/>',
+  undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h9a6 6 0 010 12" transform="translate(0 -5)"/>',
+  chip: '<rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 4v3M14 4v3M10 17v3M14 17v3M4 10h3M4 14h3M17 10h3M17 14h3"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 018 0v2.5"/>',
+  headphones: '<path d="M4 15v-3a8 8 0 0116 0v3"/><rect x="3" y="14" width="4" height="6" rx="2"/><rect x="17" y="14" width="4" height="6" rx="2"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6.5a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2h2"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  download: '<path d="M12 4v11M7.5 11l4.5 4.5 4.5-4.5M5 20h14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   warn: '<path d="M12 4l9 16H3z"/><path d="M12 10v5M12 17.5v.01"/>'
 };
 const icon = (name) => `<svg viewBox="0 0 24 24">${ICONS[name]}</svg>`;
+
+// Filled glyphs for the sidebar's coloured tiles. White on the tile colour, like SF Symbols.
+// `--bc` (the tile colour) is used to cut details out of a glyph.
+const GLYPHS = {
+  home: '<path fill="#fff" d="M12 3 2.6 11.3a.8.8 0 00.5 1.4H5V20a1.5 1.5 0 001.5 1.5H9.6v-5.2h4.8v5.2h3.1A1.5 1.5 0 0019 20v-7.3h1.9a.8.8 0 00.5-1.4z"/>',
+  history: '<circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="var(--bc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  routines: '<rect x="8" y="2.8" width="8" height="2.2" rx="1.1" fill="#fff" opacity=".75"/><rect x="5" y="6.2" width="14" height="15" rx="3" fill="#fff"/><path d="M10.2 10.6v6.6l5.3-3.3z" fill="var(--bc)"/>',
+  vocab: '<path fill="#fff" d="M7 3.5h10A1.5 1.5 0 0118.5 5v14.2a1.3 1.3 0 01-1.3 1.3H7A2 2 0 015 18.5V5.5a2 2 0 012-2z"/><path d="M9.2 15.2l2.8-7.2 2.8 7.2M10.2 13h3.6" fill="none" stroke="var(--bc)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  general: '<g fill="#fff"><circle cx="12" cy="12" r="6.6"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2" transform="rotate(45 12 12)"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2" transform="rotate(90 12 12)"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2" transform="rotate(135 12 12)"/></g><circle cx="12" cy="12" r="2.9" fill="var(--bc)"/>',
+  speech: '<g stroke="#fff" stroke-width="1.9" stroke-linecap="round"><path d="M4 11v2M7 8.5v7M10 5v14M13 7.5v9M16 5.5v13M19 9v6M21 11.5v1"/></g>',
+  shortcuts: '<g fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V6.5A2.5 2.5 0 106.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1117.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 11-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 116.5 15H9z"/></g>',
+  permissions: '<path fill="#fff" d="M12 2.8 4.6 5.6v6c0 4.6 3 8.3 7.4 9.9 4.4-1.6 7.4-5.3 7.4-9.9v-6z"/><rect x="9" y="10.8" width="6" height="5" rx="1.2" fill="var(--bc)"/><path d="M10.2 10.8V9.4a1.8 1.8 0 013.6 0v1.4" fill="none" stroke="var(--bc)" stroke-width="1.5"/>',
+  mic: '<rect x="9" y="3.2" width="6" height="11.2" rx="3" fill="#fff"/><path d="M5.6 11.2a6.4 6.4 0 0012.8 0M12 17.6v3.2" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>',
+  accessibility: '<circle cx="12" cy="12" r="9.4" fill="#fff"/><circle cx="12" cy="7.6" r="1.7" fill="var(--bc)"/><path d="M7 10.2l5 1 5-1M12 11.2v3.4M9.6 18l2.4-3.4 2.4 3.4" fill="none" stroke="var(--bc)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  screen: '<rect x="3.2" y="5" width="17.6" height="11.6" rx="2" fill="none" stroke="#fff" stroke-width="1.8" stroke-dasharray="3 2"/><circle cx="12" cy="10.8" r="2.4" fill="#fff"/><path d="M8 20h8" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
+  input: '<rect x="2.8" y="6" width="18.4" height="12" rx="2.4" fill="#fff"/><path d="M6.4 10h.01M9.4 10h.01M12.4 10h.01M15.4 10h.01M18 10h.01M8.5 14h7" stroke="var(--bc)" stroke-width="1.8" stroke-linecap="round"/>',
+  account: '<circle cx="12" cy="12" r="9.2" fill="#fff"/><circle cx="12" cy="9.6" r="3.1" fill="var(--bc)"/><path d="M5.8 18.2c1.2-2.6 3.4-3.8 6.2-3.8s5 1.2 6.2 3.8A9 9 0 0112 21.2a9 9 0 01-6.2-3z" fill="var(--bc)"/>'
+};
+const glyph = (name) => `<svg viewBox="0 0 24 24">${GLYPHS[name]}</svg>`;
 
 // Original mark: concentric relay rings and a dot on a dark squircle.
 const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a6a6a"/><stop offset="1" stop-color="#3f3f3f"/></linearGradient></defs>
 <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#lg)"/>
 <g fill="none" stroke="#f1f1f1" stroke-linecap="round"><path d="M50 18a32 32 0 1 1-30 21" stroke-width="5"/><path d="M50 30a20 20 0 1 1-18 13" stroke-width="5" opacity=".8"/><path d="M50 42a8 8 0 1 1-6 5" stroke-width="5" opacity=".6"/></g><circle cx="50" cy="50" r="3.6" fill="#f1f1f1"/></svg>`;
 
-const COLORS = { home: '#2f7cf6', history: '#5e5ce6', routines: '#a24ad8', vocab: '#2d6cf0', general: '#7f8a9c', model: '#1f8bd6', shortcuts: '#2e6cf3', permissions: '#2d6cf3' };
+// Tile colours for the sidebar.
+const COLORS = {
+  home: '#3d7bf0', history: '#6560dd', routines: '#7f55df', vocab: '#3d7bf0',
+  general: '#767c89', speech: '#4690cb', shortcuts: '#3d7bf0', permissions: '#3d7bf0', account: '#767c89'
+};
 
 function h(html) {
   const t = document.createElement('template');

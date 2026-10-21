@@ -1,23 +1,35 @@
 const fs = require('fs');
 const path = require('path');
 
+const SCHEMA = 3;
+
 const DEFAULTS = {
+  schema: SCHEMA,
   onboardingDone: false,
   settings: {
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
     playSounds: true,
+    duckAudio: true, // lower other audio while listening
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     speakReplies: false,
-    pillActivates: true, // bring Relay forward while asking so Talkify's paste lands in the request box
+    dictation: true, // off: the Dictate shortcut (right ⌘) does nothing
+    saveDictation: true, // off: dictated text is typed but not kept in History
+    glass: true, // draw the pill as real see-through glass when this Mac can
+    voice: 'auto', // auto, or a voice name from `say -v ?`
+    voiceRate: 'normal', // slower | normal | faster
     openAtLogin: false,
     showInDock: true,
     shortcuts: {
       ask: { code: 'AltRight', mods: [] },
+      dictate: { code: 'MetaRight', mods: [] },
       type: { code: 'KeyT', mods: ['Alt'] }
     },
+    speech: { locale: 'en-US', input: 'auto' }, // input: auto | default | a device UID
+    appStyles: [], // {app, style}: dictation style per app (default | casual | chat)
     model: {
-      provider: 'anthropic', // anthropic | ollama
+      provider: 'claude', // claude (signed in with your Claude account) | anthropic (API key) | ollama
+      claudeModel: 'auto', // auto (Haiku for simple requests, Sonnet when it is harder) | haiku | sonnet | opus
       anthropicModel: 'claude-sonnet-5-5',
       ollamaModel: 'qwen2.5:14b',
       ollamaUrl: 'http://127.0.0.1:11434',
@@ -26,8 +38,11 @@ const DEFAULTS = {
     firefox: { enabled: false, port: 47831 }
   },
   history: [], // {id, text, status, reply, ts, actions}
+  dictations: [], // {id, text, ts}
   actions: [], // {id, requestId, tool, input, result, ok, ts}
   routines: [], // {id, name, steps: string[]}
+  timers: [], // {id, endsAt, seconds, label}
+  replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
   lastReply: ''
 };
@@ -49,6 +64,16 @@ class Store {
       loaded = JSON.parse(fs.readFileSync(this.file, 'utf8'));
     } catch {}
     this.data = merge(JSON.parse(JSON.stringify(DEFAULTS)), loaded);
+    const from = loaded.schema || 1;
+    if (from < 2) {
+      // Version 1 needed a pasted API key or Ollama. Version 2 signs in with your Claude account.
+      this.data.settings.model.provider = 'claude';
+      this.data.onboardingDone = false; // show the new setup once: sign in, microphone, dictation
+    }
+    if (from < 3 && this.data.settings.model.claudeModel === 'sonnet') {
+      this.data.settings.model.claudeModel = 'auto'; // Sonnet was only the old default
+    }
+    this.data.schema = SCHEMA;
     this._timer = null;
   }
 
@@ -89,6 +114,13 @@ class Store {
     this.save();
   }
 
+  addDictation(entry) {
+    if (this.data.settings.saveDictation === false) return;
+    this.data.dictations.unshift(entry);
+    this.data.dictations = this.data.dictations.slice(0, 500);
+    this.save();
+  }
+
   addAction(entry) {
     this.data.actions.unshift(entry);
     this.data.actions = this.data.actions.slice(0, 1000);
@@ -97,7 +129,8 @@ class Store {
 
   stats() {
     const h = this.data.history;
-    const words = h.reduce((n, x) => n + (x.text.trim() ? x.text.trim().split(/\s+/).length : 0), 0);
+    const count = (list) => list.reduce((n, x) => n + (x.text.trim() ? x.text.trim().split(/\s+/).length : 0), 0);
+    const words = count(h) + count(this.data.dictations);
     const actions = this.data.actions.length;
     // rough estimate: typing 40 wpm vs speaking, plus ~20s per automated action
     const seconds = Math.round((words / 40) * 60 + actions * 20);
@@ -105,4 +138,4 @@ class Store {
   }
 }
 
-module.exports = { Store, DEFAULTS, merge };
+module.exports = { Store, DEFAULTS, SCHEMA, merge };

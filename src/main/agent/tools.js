@@ -195,6 +195,35 @@ function buildTools({ mac, firefox, overlay, getScale, visionCapable = true }) {
     },
 
     {
+      name: 'clipboard_read',
+      description: 'Read what the user last copied: its text, or the image if an image was copied. Use for "what I copied" or "my clipboard".',
+      input_schema: obj({}),
+      describe: () => 'Reading the clipboard',
+      run: async () => {
+        const c = await mac.clipboardRead();
+        if (c && c.image && visionCapable) return { image: c.image, text: c.text ? c.text.slice(0, 20000) : 'An image is on the clipboard.' };
+        const t = c && typeof c === 'object' ? c.text : c;
+        return t ? String(t).slice(0, 20000) : 'The clipboard is empty.';
+      }
+    },
+    {
+      name: 'clipboard_write',
+      description: 'Put text on the clipboard so the user can paste it.',
+      input_schema: obj({ text: str('Text to copy') }, ['text']),
+      describe: () => 'Copying to the clipboard',
+      run: (i) => mac.clipboardWrite(i.text)
+    },
+    {
+      name: 'selected_text',
+      description: 'Read the text currently selected in the front app. Use for "this", "what I highlighted" or "what I selected". Empty when nothing is selected.',
+      input_schema: obj({}),
+      describe: () => 'Reading the selection',
+      run: async () => {
+        const t = await mac.selectedText();
+        return t ? String(t).slice(0, 20000) : 'Nothing is selected in the front app.';
+      }
+    },
+    {
       name: 'set_volume',
       description: 'Set the system output volume, 0 to 100.',
       input_schema: obj({ level: num('0 to 100') }, ['level']),

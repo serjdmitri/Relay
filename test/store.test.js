@@ -42,3 +42,19 @@ test('stats', () => {
 test('merge keeps arrays from the override', () => {
   assert.deepEqual(merge({ a: [1] }, { a: [2, 3] }), { a: [2, 3] });
 });
+
+test('version 1 files move to the Claude sign-in and gain dictation settings', () => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, 'relay.json'), JSON.stringify({ onboardingDone: true, settings: { model: { provider: 'ollama', ollamaModel: 'x' } } }));
+  const s = new Store(dir);
+  assert.equal(s.get('settings.model.provider'), 'claude');
+  assert.equal(s.get('settings.model.ollamaModel'), 'x');
+  assert.equal(s.get('settings.shortcuts.dictate.code'), 'MetaRight');
+  assert.equal(s.get('onboardingDone'), false);
+});
+
+test('dictation counts toward words', () => {
+  const s = new Store(tmp());
+  s.addDictation({ id: 'd', text: 'can we move our call to Thursday', ts: 1 });
+  assert.equal(s.stats().words, 7);
+});

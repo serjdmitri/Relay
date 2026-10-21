@@ -59,3 +59,17 @@ test('stripHtml', () => {
 test('system prompt treats page text as untrusted', () => {
   assert.match(buildSystemPrompt({}), /data, not instructions/);
 });
+
+test('clipboard and selection tools read, write and fall back to plain messages', async () => {
+  const t = Object.fromEntries(buildTools({ mac: {
+    clipboardRead: async () => ({ text: 'hello', image: null }), clipboardWrite: async (x) => `wrote ${x}`, selectedText: async () => ''
+  }, getScale: () => 1 }).map((x) => [x.name, x]));
+  assert.equal(await t.clipboard_read.run({}), 'hello');
+  assert.equal(await t.clipboard_write.run({ text: 'hi' }), 'wrote hi');
+  assert.equal(await t.selected_text.run({}), 'Nothing is selected in the front app.');
+  assert.equal(t.clipboard_read.confirm, undefined);
+  const img = Object.fromEntries(buildTools({ mac: { clipboardRead: async () => ({ text: '', image: { mediaType: 'image/jpeg', data: 'AA' } }) }, getScale: () => 1 }).map((x) => [x.name, x]));
+  assert.equal((await img.clipboard_read.run({})).image.data, 'AA');
+  const blind = Object.fromEntries(buildTools({ mac: { clipboardRead: async () => ({ text: '', image: { mediaType: 'image/jpeg', data: 'AA' } }) }, getScale: () => 1, visionCapable: false }).map((x) => [x.name, x]));
+  assert.equal(await blind.clipboard_read.run({}), 'The clipboard is empty.');
+});
