@@ -39,9 +39,9 @@ const GLYPHS = {
 const glyph = (name) => `<svg viewBox="0 0 24 24">${GLYPHS[name]}</svg>`;
 
 // Original mark: concentric relay rings and a dot on a dark squircle.
-const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a6a6a"/><stop offset="1" stop-color="#3f3f3f"/></linearGradient></defs>
-<rect x="4" y="4" width="92" height="92" rx="22" fill="url(#lg)"/>
-<g fill="none" stroke="#f1f1f1" stroke-linecap="round"><path d="M50 18a32 32 0 1 1-30 21" stroke-width="5"/><path d="M50 30a20 20 0 1 1-18 13" stroke-width="5" opacity=".8"/><path d="M50 42a8 8 0 1 1-6 5" stroke-width="5" opacity=".6"/></g><circle cx="50" cy="50" r="3.6" fill="#f1f1f1"/></svg>`;
+const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="rl-bg" x1="7" y1="4" x2="93" y2="96" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4F46FF"/><stop offset=".5" stop-color="#C13CF0"/><stop offset="1" stop-color="#FF8A3D"/></linearGradient><radialGradient id="rl-sh" cx=".3" cy=".1" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="rl-ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#FFE9C7"/></linearGradient><radialGradient id="rl-gl"><stop offset="0" stop-color="#FFC94A" stop-opacity=".8"/><stop offset="1" stop-color="#FFC94A" stop-opacity="0"/></radialGradient><radialGradient id="rl-dt" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF7C2"/><stop offset="1" stop-color="#FFC94A"/></radialGradient></defs>
+<rect x="3.1" y="3.1" width="93.8" height="93.8" rx="22.7" fill="url(#rl-bg)"/><rect x="3.1" y="3.1" width="93.8" height="93.8" rx="22.7" fill="url(#rl-sh)"/>
+<g fill="none" stroke-linecap="round" stroke-width="5.5"><path d="M50 17.19A32.81 32.81 0 1 1 31.18 23.12" stroke="url(#rl-ar)"/><path d="M50 28.12A21.88 21.88 0 1 1 37.45 32.08" stroke="#fff" stroke-opacity=".78"/><path d="M50 38.67A11.33 11.33 0 1 1 43.50 40.72" stroke="#fff" stroke-opacity=".55"/></g><circle cx="50" cy="50" r="9" fill="url(#rl-gl)"/><circle cx="50" cy="50" r="3.9" fill="url(#rl-dt)"/></svg>`;
 
 // Tile colours for the sidebar.
 const COLORS = {

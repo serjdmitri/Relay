@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- New colourful app icon and in-app logo, and the interface accent colour is now the logo's indigo instead of blue.
+- Website at https://serjdmitri.github.io/Relay/ (served from `docs/`), with live download links.
+- README: screenshots, architecture diagram, charts, and a note on how the model options work.
+- `npm run shots` works with the current interface and finds Chrome on macOS; new `npm run charts` and `npm run readme-images`.
+- No change to how the app signs in or picks a model.
+
 ## 0.1.0
 
 Distributed as ad-hoc signed `.dmg` files (arm64 and x64) built by GitHub Actions. Needs macOS 26 or later.

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay: talk to your Mac</title>
+<meta name="description" content="Relay is a free, open source menu bar assistant for macOS. Talk to it and it opens apps, writes notes and reminders, reads your calendar, drives Firefox and types what you say into any app.">
+<meta property="og:title" content="Relay: talk to your Mac">
+<meta property="og:description" content="A free, open source menu bar assistant for macOS. Built-in on-device dictation. Runs on your own API key or a local Ollama model.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://serjdmitri.github.io/Relay/">
+<meta property="og:image" content="https://serjdmitri.github.io/Relay/img/pill-states.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #0d0a24; --bg2: #151039; --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.14);
+    --text: #f4f2ff; --muted: #b9b4e3;
+    --indigo: #6c63ff; --magenta: #c13cf0; --orange: #ff8a3d; --cyan: #2fc4ff; --green: #4ade80; --yellow: #ffc94a;
+    --grad: linear-gradient(120deg, #6c63ff, #c13cf0 55%, #ff8a3d);
+    --radius: 20px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; }
+  img { max-width: 100%; height: auto; display: block; }
+  .wrap { width: min(1120px, 100% - 40px); margin: 0 auto; }
+  .glow { position: absolute; inset: 0 0 auto 0; height: 880px; pointer-events: none; z-index: 0;
+    background: radial-gradient(600px 400px at 15% 10%, rgba(47,196,255,.30), transparent 70%), radial-gradient(700px 480px at 85% 0%, rgba(193,60,240,.40), transparent 70%), radial-gradient(600px 400px at 70% 55%, rgba(255,138,61,.22), transparent 70%); }
+  header { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(13,10,36,.7); border-bottom: 1px solid var(--line); }
+  nav { display: flex; align-items: center; gap: 22px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; text-decoration: none; margin-right: auto; }
+  .brand img { width: 32px; height: 32px; }
+  nav a.l { color: var(--muted); text-decoration: none; font-size: 15px; }
+  nav a.l:hover { color: #fff; }
+  .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: 999px; font-weight: 600; font-size: 16px; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn.primary { background: var(--grad); color: #fff; box-shadow: 0 10px 30px rgba(193,60,240,.4); }
+  .btn.ghost { background: rgba(255,255,255,.08); border-color: var(--line); color: #fff; }
+  .btn.small { padding: 9px 16px; font-size: 14px; }
+  .btn svg { width: 18px; height: 18px; fill: currentColor; }
+  .hero { position: relative; z-index: 1; text-align: center; padding: 84px 0 40px; }
+  .hero .logo { width: 112px; height: 112px; margin: 0 auto 22px; filter: drop-shadow(0 16px 36px rgba(193,60,240,.55)); animation: float 6s ease-in-out infinite; }
+  @keyframes float { 50% { transform: translateY(-8px); } }
+  .eyebrow { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.05; margin: 0 0 18px; letter-spacing: -.02em; }
+  .g { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 30px; }
+  .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .meta { margin-top: 18px; color: var(--muted); font-size: 14px; }
+  .shot { margin: 56px auto 0; max-width: 940px; border-radius: 24px; box-shadow: 0 30px 80px rgba(8,4,40,.6), 0 0 0 1px var(--line); overflow: hidden; }
+  section { position: relative; z-index: 1; padding: 88px 0 0; }
+  h2 { font-size: clamp(30px, 4.6vw, 44px); line-height: 1.12; margin: 0 0 14px; letter-spacing: -.01em; text-align: center; }
+  .sub { color: var(--muted); text-align: center; max-width: 660px; margin: 0 auto 44px; }
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
+  .card h3 { margin: 14px 0 6px; font-size: 20px; }
+  .card p { margin: 0; color: var(--muted); font-size: 16px; }
+  .ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; }
+  .c1 { background: linear-gradient(135deg,#6c63ff,#c13cf0); } .c2 { background: linear-gradient(135deg,#c13cf0,#ff8a3d); }
+  .c3 { background: linear-gradient(135deg,#2fc4ff,#4ade80); } .c4 { background: linear-gradient(135deg,#ff8a3d,#ffc94a); }
+  .c5 { background: linear-gradient(135deg,#4ade80,#2fc4ff); } .c6 { background: linear-gradient(135deg,#6c63ff,#2fc4ff); }
+  .two { display: grid; gap: 22px; grid-template-columns: 1fr; }
+  .frame { border-radius: 22px; overflow: hidden; box-shadow: 0 24px 60px rgba(8,4,40,.5), 0 0 0 1px var(--line); }
+  .diagram { background: #17143a; border-radius: 22px; padding: 8px; box-shadow: 0 0 0 1px var(--line); }
+  .model h3 { display: flex; align-items: center; gap: 10px; }
+  .tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(74,222,128,.18); color: var(--green); letter-spacing: .02em; }
+  .tag.warn { background: rgba(255,201,74,.18); color: var(--yellow); }
+  .steps { counter-reset: s; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .step { counter-increment: s; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+  .step::before { content: counter(s); display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--grad); font-weight: 700; margin-bottom: 12px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step span { color: var(--muted); font-size: 15px; }
+  code { font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255,255,255,.1); padding: 2px 7px; border-radius: 7px; }
+  pre { margin: 18px 0 0; background: #07051a; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7d3ff; }
+  .dl { text-align: center; margin-top: 30px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .charts { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 22px; margin-bottom: 12px; }
+  summary { cursor: pointer; font-weight: 600; padding: 16px 0; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; font-size: 22px; color: var(--muted); }
+  details[open] summary::after { content: "–"; }
+  details p { margin: 0 0 18px; color: var(--muted); font-size: 16px; }
+  .final { text-align: center; margin: 90px auto 0; padding: 56px 24px; border-radius: 28px; background: linear-gradient(135deg, rgba(108,99,255,.5), rgba(193,60,240,.45) 55%, rgba(255,138,61,.45)); border: 1px solid var(--line); }
+  .final h2 { margin-bottom: 10px; }
+  footer { position: relative; z-index: 1; margin-top: 80px; padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; text-align: center; }
+  footer a { color: #fff; }
+  @media (max-width: 720px) { nav a.l { display: none; } .hero { padding-top: 56px; } }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .hero .logo { animation: none; } .btn { transition: none; } }
+  :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<header>
+  <nav class="wrap" aria-label="Main">
+    <a class="brand" href="#top"><img src="logo.svg" alt="" width="32" height="32">Relay</a>
+    <a class="l" href="#features">Features</a>
+    <a class="l" href="#how">How it works</a>
+    <a class="l" href="#models">Models</a>
+    <a class="l" href="#download">Download</a>
+    <a class="l" href="#faq">FAQ</a>
+    <a class="btn ghost small" href="https://github.com/serjdmitri/Relay">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+  <div class="hero wrap">
+    <img class="logo" src="logo.svg" alt="Relay logo" width="112" height="112">
+    <span class="eyebrow">Free and open source · macOS 26 or later</span>
+    <h1>Talk to your Mac.<br><span class="g">Relay does the rest.</span></h1>
+    <p class="lead">A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces and drives Firefox. It also types what you say into any app, with dictation that never leaves your Mac.</p>
+    <div class="cta">
+      <a class="btn primary" id="dl-main" href="https://github.com/serjdmitri/Relay/releases">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12 3 7h3V1h4v6h3L8 12zM2 14h12v1.5H2z"/></svg>
+        <span id="dl-main-label">Download for Mac</span></a>
+      <a class="btn ghost" href="https://github.com/serjdmitri/Relay">View on GitHub</a>
+    </div>
+    <p class="meta" id="dl-meta">Apple Silicon and Intel · pre-release</p>
+    <div class="shot"><img src="img/pill-states.png" alt="The Relay pill in four states: working, asking for confirmation, showing a result, and the type-a-request box" width="1200" height="470"></div>
+  </div>
+
+  <section id="features" class="wrap">
+    <h2>Everything you say, <span class="g">done</span></h2>
+    <p class="sub">Hold a key, talk, let go. Relay figures out whether it is a quick command or something that needs a model, then does it.</p>
+    <div class="grid">
+      <div class="card"><div class="ic c1">🎙️</div><h3>Ask with your voice</h3><p>Tap or hold <code>Right ⌥</code>, say what you want, and a pill drops out of the notch with a short result. Prefer typing? <code>⌥T</code>.</p></div>
+      <div class="card"><div class="ic c2">⌨️</div><h3>Dictate anywhere</h3><p>Hold <code>Right ⌘</code> and your words are typed where your cursor is. Spoken "new line", "scratch that", word fixes and per-app styles included.</p></div>
+      <div class="card"><div class="ic c4">⚡</div><h3>Instant commands</h3><p>Timers, music, volume, brightness, dark mode, notes, reminders, open apps and sites. About a third of a second, no model call, and "undo that" works.</p></div>
+      <div class="card"><div class="ic c3">🧰</div><h3>Acts in your apps</h3><p>Notes, Reminders, Calendar, Messages, Finder, the clipboard, screen and accessibility tree, plus an optional Firefox extension for tabs and pages.</p></div>
+      <div class="card"><div class="ic c5">🛡️</div><h3>Asks before it acts</h3><p>Anything that sends a message, trashes a file, runs a shell command or looks destructive shows an Allow or Cancel card first.</p></div>
+      <div class="card"><div class="ic c6">🔒</div><h3>Private by design</h3><p>Speech is turned into words on your Mac by Apple's on-device recognition. Only the words go to the model, and only when you ask Relay to do something.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="see">
+    <h2 id="see">See it in action</h2>
+    <p class="sub">The real interface, shown with sample data.</p>
+    <div class="two">
+      <div class="frame"><img src="img/ui-main.png" alt="Relay window: Home with shortcuts and stats, and History with a seven-day chart" width="1200" height="470" loading="lazy"></div>
+      <div class="frame"><img src="img/ui-more.png" alt="Relay window: Speech settings and Routines" width="1200" height="470" loading="lazy"></div>
+    </div>
+  </section>
+
+  <section id="how" class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">Your voice stays on your Mac until there is something for a model to do.</p>
+    <div class="diagram"><img src="architecture.svg" alt="Diagram: your voice goes through on-device dictation to a router, which runs an instant command or asks Claude; Claude uses a local tool server, a confirm gate guards risky actions, and everything runs on your Mac" width="1200" height="500" loading="lazy"></div>
+  </section>
+
+  <section id="models" class="wrap">
+    <h2>Bring your own <span class="g">brain</span></h2>
+    <p class="sub">Relay is free. Pick how it thinks. You never pay Relay anything.</p>
+    <div class="grid model">
+      <div class="card"><h3>Anthropic API key <span class="tag">Recommended</span></h3><p>Paste a key from the Claude Console. It is stored in your Keychain and never shown again. You pay Anthropic for what you use, and Relay picks a fast model for simple requests.</p></div>
+      <div class="card"><h3>Ollama <span class="tag">Free and local</span></h3><p>Run a model on your own Mac. Nothing leaves your machine. Pick one with tool support, and a vision model if you want screenshots.</p></div>
+      <div class="card"><h3>Your own Claude Code <span class="tag warn">Personal builds</span></h3><p>If you build Relay from source for yourself, it can use a Claude Code you have already signed in to. Anthropic does not allow apps to offer this to other people, so downloads are meant for the two options above.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="nums">
+    <h2 id="nums">Built in the open</h2>
+    <p class="sub">The numbers below are drawn from the repository itself.</p>
+    <div class="charts">
+      <img src="img/chart-tests.svg" alt="Bar chart of 129 unit tests by area" width="600" height="340" loading="lazy">
+      <img src="img/chart-code.svg" alt="Donut chart of lines of code by language" width="600" height="340" loading="lazy">
+    </div>
+  </section>
+
+  <section id="download" class="wrap">
+    <h2>Get Relay</h2>
+    <p class="sub">Needs macOS 26 or later. Apple Silicon (arm64) and Intel (x64) builds are on every release.</p>
+    <div class="steps">
+      <div class="step"><b>Download</b><span>Grab the <code>.dmg</code> for your Mac from the latest release and drag Relay to Applications.</span></div>
+      <div class="step"><b>Open it once</b><span>Relay is not notarized, so right-click it and choose <strong>Open</strong>, then <strong>Open</strong> again.</span></div>
+      <div class="step"><b>Allow what it needs</b><span>Microphone, Accessibility, Screen Recording and Input Monitoring, once each. The welcome guide walks you through.</span></div>
+      <div class="step"><b>Pick a model</b><span>Paste an Anthropic API key, or point Relay at a local Ollama model, then press <code>Right ⌥</code> and talk.</span></div>
+    </div>
+    <pre><code>xattr -dr com.apple.quarantine /Applications/Relay.app   # if macOS still refuses to open it</code></pre>
+    <div class="dl">
+      <a class="btn primary" id="dl-arm" href="https://github.com/serjdmitri/Relay/releases">Apple Silicon (arm64)</a>
+      <a class="btn ghost" id="dl-x64" href="https://github.com/serjdmitri/Relay/releases">Intel (x64)</a>
+      <a class="btn ghost" href="https://github.com/serjdmitri/Relay#install-from-source-on-your-mac">Build from source</a>
+    </div>
+  </section>
+
+  <section id="faq" class="wrap">
+    <h2 style="margin-bottom:34px">Questions</h2>
+    <details><summary>Is Relay really free?</summary><p>Yes. It is open source under the MIT license. The only cost is whatever your chosen model charges: an Anthropic API key bills per use, and Ollama runs locally for free.</p></details>
+    <details><summary>Does my voice leave my Mac?</summary><p>No. Dictation uses Apple's on-device speech recognition. Only the resulting words are sent to the model you picked, and only when you ask Relay to do something.</p></details>
+    <details><summary>Can I use my Claude or ChatGPT subscription?</summary><p>Not in the downloadable app. Anthropic's terms do not let third-party apps offer Claude.ai login or route requests through someone's Pro or Max plan, and OpenAI only allows ChatGPT plan use in apps it has approved. Relay uses API keys or local models for that reason. If you build it from source for yourself, it can use your own signed-in Claude Code; please read the note in the README first.</p></details>
+    <details><summary>Why does macOS warn me when I open it?</summary><p>Relay is not notarized by Apple, which needs a paid developer account. Right-click it and choose Open, or run the <code>xattr</code> command above. You can also read and build the source yourself.</p></details>
+    <details><summary>Does it work on Windows, Linux or older Macs?</summary><p>No. Dictation and the glass pill use macOS 26 features, and the actions are built on AppleScript and Accessibility, so Relay is Mac only for now.</p></details>
+    <details><summary>Is it affiliated with Anthropic, Talkify or Octaflow?</summary><p>No. Relay is an independent project. It began as a companion for <a href="https://github.com/tornikegomareli/Talkify">Talkify</a>, and its window follows Octaflow's layout with original code, name and icon.</p></details>
+    <details><summary>Something did not work. What do I do?</summary><p>Open History, then Actions. It lists every step Relay took and any error. Then <a href="https://github.com/serjdmitri/Relay/issues">open an issue</a> with what it shows.</p></details>
+  </section>
+
+  <section class="wrap">
+    <div class="final">
+      <h2>Try it. It is yours to change.</h2>
+      <p class="sub" style="margin-bottom:26px">Star the repo, read the code, send a fix.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/serjdmitri/Relay">Open the GitHub repo</a>
+        <a class="btn ghost" href="https://github.com/serjdmitri/Relay/releases">All releases</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">Relay is MIT licensed · <a href="https://github.com/serjdmitri/Relay">github.com/serjdmitri/Relay</a><br>An independent project. Not affiliated with Anthropic, OpenAI, Talkify or Octaflow.</div>
+</footer>
+
+<script>
+// Point the download buttons at the newest release's real files. Falls back to the Releases page if the API is unavailable.
+(function () {
+  var REPO = 'serjdmitri/Relay';
+  fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=1', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (list) {
+      var rel = list && list[0];
+      if (!rel) return;
+      var find = function (arch) { return (rel.assets || []).filter(function (a) { return a.name.indexOf('-' + arch + '.dmg') > 0; })[0]; };
+      var arm = find('arm64'), x64 = find('x64');
+      if (arm) document.getElementById('dl-arm').href = arm.browser_download_url;
+      if (x64) document.getElementById('dl-x64').href = x64.browser_download_url;
+      if (arm) document.getElementById('dl-main').href = arm.browser_download_url;
+      document.getElementById('dl-main-label').textContent = 'Download ' + rel.tag_name;
+      document.getElementById('dl-meta').textContent = 'Apple Silicon build · Intel and notes on the releases page' + (rel.prerelease ? ' · pre-release' : '');
+    })
+    .catch(function () {});
+})();
+</script>
+</body>
+</html>
