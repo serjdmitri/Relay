@@ -44,30 +44,22 @@ function ready() {
   return { ok: true, text: 'Ready' };
 }
 
-const DESC = {
-  home: 'Talk to your Mac. Relay does the rest.', history: 'Everything you asked, dictated and did.', routines: 'Say a name and Relay runs the steps.',
-  vocab: 'Words Relay should spell your way.', general: 'How Relay behaves day to day.', speech: 'On-device dictation and spoken replies.',
-  shortcuts: 'The keys that wake Relay.', permissions: 'What macOS lets Relay do.', account: 'Which model Relay thinks with.'
-};
-
-// Top tab bar: a coloured tile per page, and the selected page expands into a labelled pill.
-function renderTabs() {
+function renderSidebar() {
   const r = ready();
-  const bar = $('#tabbar');
-  bar.innerHTML = '';
-  NAV.forEach((group, i) => {
-    if (i) bar.append(h('<span class="sep"></span>'));
+  const sb = $('#sidebar');
+  sb.innerHTML = '';
+  for (const group of NAV) {
+    const nav = h('<nav class="nav"></nav>');
     for (const [id, name] of group) {
-      const tab = h(`<button class="tab ${page === id ? 'active' : ''}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}" title="${name}" aria-label="${name}"><span class="tile" style="background:${GRAD[id]};--bc:${COLORS[id]}">${glyph(NAV_GLYPH[id])}</span><span class="lbl">${name}</span></button>`);
-      tab.onclick = () => go(id);
-      bar.append(tab);
+      const item = h(`<div class="nav-item ${page === id ? 'active' : ''}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box" style="background:${GRAD[id]};--bc:${COLORS[id]}">${glyph(NAV_GLYPH[id])}</span>${name}</div>`);
+      item.onclick = () => go(id);
+      nav.append(item);
     }
-  });
-  $('#status').innerHTML = `<span class="dot ${r.ok ? '' : 'off'}"></span>${r.text}<span class="kbd small">${esc(S?.labels.ask || '')}</span><span class="to">to ask</span>`;
-}
-
-function renderBanner() {
-  $('#banner').innerHTML = `<span class="tile" style="background:${GRAD[page]};--bc:${COLORS[page]}">${page === 'home' ? LOGO : glyph(NAV_GLYPH[page])}</span><div class="bt"><h1>${page === 'home' ? 'Relay' : TITLES[page]}</h1><p>${DESC[page]}</p></div><div class="device">${deviceLabel()}</div>`;
+    sb.append(nav);
+  }
+  sb.append(h('<div class="spacer"></div>'));
+  sb.append(h(`<div class="status-card"><div class="status-line"><span class="dot ${r.ok ? '' : 'off'}"></span>${r.text}</div>
+    <div class="status-hint"><span class="kbd small">${esc(S?.labels.ask || '')}</span>to ask</div></div>`));
 }
 
 function go(p) {
@@ -98,12 +90,13 @@ function render() {
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && $('#content').contains(ae)) {
     applyTheme();
-    renderTabs();
+    renderSidebar();
     return; // do not clobber a field the user is typing in
   }
   applyTheme();
-  renderTabs();
-  renderBanner();
+  renderSidebar();
+  $('#title').textContent = TITLES[page];
+  $('#device').innerHTML = deviceLabel();
   const c = $('#content');
   const top = c.scrollTop;
   c.innerHTML = '';
@@ -145,8 +138,10 @@ const allowed = '<span class="allowed" style="display:inline-flex;align-items:ce
 /* ---------- pages ---------- */
 const PAGES = {
   home(c) {
+    const r = ready();
     const st = statsFor(range);
     const time = st.minutesSaved < 1 ? '<1m' : `${st.minutesSaved}m`;
+    c.append(h(`<div class="hero"><div class="app-icon">${LOGO}</div><div><h2>Relay</h2><div class="st"><span class="dot ${r.ok ? '' : 'off'}"></span>${r.text}</div></div></div>`));
     const sel = h(`<div class="select">${{ all: 'All time', today: 'Today', week: 'Last 7 days' }[range]}<svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select><option value="all">All time</option><option value="today">Today</option><option value="week">Last 7 days</option></select></div>`);
     $('select', sel).value = range;
     $('select', sel).onchange = (e) => { range = e.target.value; render(); };
