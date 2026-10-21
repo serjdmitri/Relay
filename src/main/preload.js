@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('relay', {
   getState: () => invoke('state:get'),
   set: (key, value) => invoke('state:set', key, value),
   setApiKey: (key) => invoke('model:set-key', key),
+  setPresetKey: (id, key) => invoke('model:set-preset-key', id, key),
   testModel: () => invoke('model:test'),
   claudeStatus: () => invoke('claude:status'),
   claudeLogin: () => invoke('claude:login'),

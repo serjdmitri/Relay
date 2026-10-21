@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { PRESETS } = require('./agent/providers/presets');
 
 const SCHEMA = 3;
 
@@ -28,12 +29,14 @@ const DEFAULTS = {
     speech: { locale: 'en-US', input: 'auto' }, // input: auto | default | a device UID
     appStyles: [], // {app, style}: dictation style per app (default | casual | chat)
     model: {
-      provider: 'claude', // claude (signed in with your Claude account) | anthropic (API key) | ollama
+      provider: 'claude', // claude (signed in with your Claude account) | anthropic (API key) | ollama | a key of PRESETS (openai, gemini, ...)
       claudeModel: 'auto', // auto (Haiku for simple requests, Sonnet when it is harder) | haiku | sonnet | opus
       anthropicModel: 'claude-sonnet-5-5',
       ollamaModel: 'qwen2.5:14b',
       ollamaUrl: 'http://127.0.0.1:11434',
-      anthropicKeyEnc: '' // base64 of safeStorage ciphertext
+      anthropicKeyEnc: '', // base64 of safeStorage ciphertext
+      // OpenAI-compatible services: one model and one encrypted key each (custom also keeps its address)
+      presets: Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, { model: p.model, keyEnc: '', ...(id === 'custom' ? { url: '' } : {}) }]))
     },
     firefox: { enabled: false, port: 47831 }
   },

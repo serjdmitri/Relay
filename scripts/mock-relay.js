@@ -11,7 +11,8 @@
       shortcuts: { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } },
       speech: { locale: 'en-US', input: 'auto' },
       appStyles: [{ app: 'Messages', style: 'chat' }],
-      model: { provider: 'claude', claudeModel: 'auto', anthropicModel: 'claude-sonnet-5-5', ollamaModel: 'qwen2.5:14b', ollamaUrl: 'http://127.0.0.1:11434' },
+      model: { provider: 'claude', claudeModel: 'auto', anthropicModel: 'claude-sonnet-5-5', ollamaModel: 'qwen2.5:14b', ollamaUrl: 'http://127.0.0.1:11434',
+        presets: { openai: { model: 'gpt-4.1-mini' }, gemini: { model: 'gemini-3.8-flash' }, groq: { model: 'llama-3.3-70b-versatile' }, mistral: { model: 'mistral-large-latest' }, xai: { model: 'grok-4' }, deepseek: { model: 'deepseek-chat' }, custom: { model: '', url: '' } } },
       firefox: { enabled: true, port: 47831 }
     },
     history: [
@@ -39,6 +40,16 @@
     ],
     timers: [], replacements: [{ id: 'w1', from: 'superbase', to: 'Supabase' }], vocabulary: ['Supabase', 'Talkify', 'Ollama', 'Haiku'], lastReply: '',
     hasKey: false,
+    hasKeys: { openai: false, gemini: false, groq: false, mistral: false, xai: false, deepseek: false, custom: false },
+    presetInfo: {
+      openai: { label: 'OpenAI (ChatGPT API)', keyUrl: 'https://platform.openai.com/api-keys', vision: true },
+      gemini: { label: 'Google Gemini', keyUrl: 'https://aistudio.google.com/apikey', vision: true },
+      groq: { label: 'Groq', keyUrl: 'https://console.groq.com/keys', vision: false },
+      mistral: { label: 'Mistral', keyUrl: 'https://console.mistral.ai/api-keys', vision: false },
+      xai: { label: 'xAI (Grok)', keyUrl: 'https://console.x.ai', vision: false },
+      deepseek: { label: 'DeepSeek', keyUrl: 'https://platform.deepseek.com/api_keys', vision: false },
+      custom: { label: 'Custom address', keyUrl: '', vision: false, keyOptional: true }
+    },
     stats: { requests: 42, actions: 97, words: 1850, minutesSaved: 31 },
     labels: { ask: 'Right ⌥', dictate: 'Right ⌘', type: '⌥T' },
     claude: { installed: true, loggedIn: true, checked: true, email: '', path: '/usr/local/bin/claude' },
@@ -80,6 +91,7 @@
     clearDictation: async () => { state.dictations = []; emit(); },
     getState: async () => JSON.parse(JSON.stringify(state)),
     set: async (k, v) => { calls.push(['set', k, v]); setPath(k, v); emit(); },
+    setPresetKey: async (id, k) => { calls.push(['setPresetKey', id, k]); state.hasKeys[id] = !!k; emit(); },
     setApiKey: async (k) => { calls.push(['setApiKey', k]); state.hasKey = !!k; emit(); },
     testModel: async () => ({ ok: state.hasKey, error: 'No Anthropic API key set. Add one in Relay > Model.', text: 'OK' }),
     permissions: async () => window.__perms || { accessibility: true, screen: true, micStatus: 'granted' },
