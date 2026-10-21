@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- More model services: OpenAI (ChatGPT API), Google Gemini, Groq, Mistral, xAI, DeepSeek and a custom OpenAI-compatible address, each with its own key and model. Pick one under Account > Model service.
+- Calmer look: a neutral gray interface with one indigo accent. Each page tints only the soft glows at the top and bottom of the window and the selected sidebar item; the rest of the sidebar stays gray.
+- The sidebar can be collapsed to the left (button in the top bar, or ⌘\) to give the page the whole window. Relay remembers the choice.
+
 ## 0.1.1
 
 - New colourful app icon and in-app logo, and the interface accent colour is now the logo's indigo instead of blue.
