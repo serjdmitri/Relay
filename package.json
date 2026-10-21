@@ -6,7 +6,7 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node --test",
     "shots": "node scripts/screenshots.mjs",
     "icons": "node scripts/make-icons.mjs",
     "pack": "bash scripts/pack-mac.sh"
