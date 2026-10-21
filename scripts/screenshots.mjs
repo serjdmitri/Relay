@@ -12,7 +12,7 @@ const mock = fs.readFileSync(path.join(root, 'scripts/mock-relay.js'), 'utf8');
 const url = (f, q = '') => 'file://' + path.join(root, 'src/renderer', f) + q;
 
 const browser = await launch();
-const ctx = await browser.newContext({ viewport: { width: 900, height: 640 }, deviceScaleFactor: 2 });
+const ctx = await browser.newContext({ viewport: { width: 820, height: 620 }, deviceScaleFactor: 2 });
 await ctx.addInitScript(mock);
 
 const main = await ctx.newPage();
