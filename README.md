@@ -1,6 +1,27 @@
-# Relay
+<p align="center">
+  <img src="docs/logo.svg" alt="Relay logo" width="128" height="128">
+</p>
 
-A menu bar assistant for macOS that does things when you talk to it. Relay opens apps, makes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and answers from the web. It also types what you say into any app. Dictation is built in (Apple's on-device speech recognition), so a separate dictation app is no longer needed. It started as a companion for [Talkify](https://github.com/tornikegomareli/Talkify); you can still use Talkify or any tool that types or pastes text, because the Ask box (`⌥T`) is an ordinary text field.
+<h1 align="center">Relay</h1>
+
+<p align="center"><b>Talk to your Mac. Relay does the rest.</b><br>
+A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and types what you say into any app.</p>
+
+<p align="center">
+  <a href="https://github.com/serjdmitri/Relay/releases"><img alt="Release" src="https://img.shields.io/github/v/release/serjdmitri/Relay?include_prereleases&label=release&color=8B5CF6"></a>
+  <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-0A84FF?logo=apple&logoColor=white">
+  <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/arm64%20%7C%20x64-dmg-FF9F0A">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-129%20passing-30D158">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey"></a>
+</p>
+
+<p align="center">
+  <img src="docs/banner.svg" alt="Illustration: the Relay pill drops out of the notch with a spoken request, then shows a short reply" width="900">
+</p>
+
+Dictation is built in (Apple's on-device speech recognition), so a separate dictation app is no longer needed. It started as a companion for [Talkify](https://github.com/tornikegomareli/Talkify); you can still use Talkify or any tool that types or pastes text, because the Ask box (`⌥T`) is an ordinary text field.
 
 **[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
 
