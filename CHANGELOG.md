@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- More model services: OpenAI (ChatGPT API), Google Gemini, Groq, Mistral, xAI, DeepSeek and a custom OpenAI-compatible address, each with its own key and model. Pick one under Account > Model service.
+- New look: every page has its own colour that drives the selected tab, buttons, toggles, segmented controls, the history chart and the glow behind the page. The grey is gone.
+- New layout: a top tab bar (a coloured tile per page, the selected page expands into a labelled pill) and a coloured page banner replace the left sidebar. Home's status moved to the top bar.
+
 ## 0.1.1
 
 - New colourful app icon and in-app logo, and the interface accent colour is now the logo's indigo instead of blue.
