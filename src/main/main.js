@@ -7,7 +7,7 @@ const { Hotkeys } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
 const { Overlay } = require('./overlay');
-const { AskController, encryptKey, decryptKey } = require('./askController');
+const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
 const { Timers, humanDuration } = require('./timers');
@@ -15,6 +15,7 @@ const { Glass } = require('./glass');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
+const { PRESETS, isPreset } = require('./agent/providers/presets');
 const claudeCli = require('./agent/claudeCli');
 
 app.setName('Relay');
@@ -74,9 +75,16 @@ function publicState() {
   const d = JSON.parse(JSON.stringify(store.data));
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
+  const hasKeys = {};
+  for (const [id, s] of Object.entries(d.settings.model.presets)) {
+    hasKeys[id] = !!decryptKey(s.keyEnc);
+    delete s.keyEnc;
+  }
   return {
     ...d,
     hasKey,
+    hasKeys,
+    presetInfo: PRESETS,
     history: d.history.slice(0, 200),
     actions: d.actions.slice(0, 300),
     stats: store.stats(),
@@ -184,6 +192,11 @@ function registerIpc() {
     store.set('settings.model.anthropicKeyEnc', encryptKey(String(key || '').trim()));
     broadcast();
   });
+  ipcMain.handle('model:set-preset-key', (_e, id, key) => {
+    if (!isPreset(id)) return;
+    store.set(`settings.model.presets.${id}.keyEnc`, encryptKey(String(key || '').trim()));
+    broadcast();
+  });
   ipcMain.handle('model:test', async () => {
     const m = store.get('settings.model');
     try {
@@ -194,7 +207,9 @@ function registerIpc() {
         const r = await claudeCli.runClaude({ text: 'ping', system: 'Reply with the single word OK.', tools: [], confirm: async () => false, host: ask.mcp, claudePath, model: m.claudeModel === 'auto' ? 'haiku' : m.claudeModel });
         return r.status === 'done' ? { ok: true, text: r.reply.slice(0, 40) } : { ok: false, error: r.reply };
       }
-      const provider = m.provider === 'ollama'
+      const provider = isPreset(m.provider)
+        ? compatProvider(m).provider
+        : m.provider === 'ollama'
         ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel })
         : new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel, maxTokens: 16 });
       const r = await provider.step({ system: 'Reply with the single word OK.', messages: [{ role: 'user', content: [{ type: 'text', text: 'ping' }] }], tools: [] });

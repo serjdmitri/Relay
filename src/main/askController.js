@@ -10,6 +10,8 @@ const { buildSystemPrompt, buildContext } = require('./agent/system-prompt');
 const { routeModel } = require('./agent/router');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
+const { OpenAICompatProvider } = require('./agent/providers/openai');
+const { PRESETS, isPreset } = require('./agent/providers/presets');
 const { McpHost, ClaudeSession, runSmart, findClaude } = require('./agent/claudeCli');
 const { createMac } = require('./agent/mac');
 const { parseQuick, runQuick } = require('./quick');
@@ -29,6 +31,15 @@ function decryptKey(enc) {
   } catch {
     return '';
   }
+}
+
+// The model service picked in Account when it is one of the OpenAI-compatible presets.
+function compatProvider(m) {
+  const p = PRESETS[m.provider];
+  const s = m.presets?.[m.provider] || {};
+  const model = s.model || p.model;
+  const provider = new OpenAICompatProvider({ baseUrl: m.provider === 'custom' ? s.url : p.baseUrl, apiKey: decryptKey(s.keyEnc), model, label: p.label, keyOptional: !!p.keyOptional });
+  return { provider, vision: p.vision || VISION_RE.test(model) };
 }
 
 function encryptKey(key) {
@@ -735,6 +746,7 @@ class AskController {
     if (m.provider === 'ollama') {
       return { provider: new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel }), vision: VISION_RE.test(m.ollamaModel) };
     }
+    if (isPreset(m.provider)) return compatProvider(m);
     return { provider: new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel }), vision: true };
   }
 
@@ -875,4 +887,4 @@ class AskController {
   }
 }
 
-module.exports = { AskController, encryptKey, decryptKey };
+module.exports = { AskController, encryptKey, decryptKey, compatProvider };

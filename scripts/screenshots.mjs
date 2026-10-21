@@ -25,6 +25,12 @@ for (const p of ['home', 'history', 'routines', 'vocab', 'general', 'speech', 's
   await main.screenshot({ path: path.join(out, `main-${p}.png`) });
 }
 
+// the model service picker, with a key-based service selected
+await main.goto(url('index.html', '?page=account'));
+await main.evaluate(() => window.relay.set('settings.model.provider', 'openai'));
+await main.waitForTimeout(200);
+await main.screenshot({ path: path.join(out, 'main-account-openai.png') });
+
 const onb = await ctx.newPage();
 await onb.setViewportSize({ width: 720, height: 560 });
 onb.on('pageerror', (e) => errors.push('onb: ' + e.message));

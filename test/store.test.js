@@ -53,6 +53,19 @@ test('version 1 files move to the Claude sign-in and gain dictation settings', (
   assert.equal(s.get('onboardingDone'), false);
 });
 
+test('model service presets get defaults without touching an existing choice', () => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, 'relay.json'), JSON.stringify({ schema: 3, onboardingDone: true, settings: { model: { provider: 'anthropic', anthropicModel: 'x' } } }));
+  const s = new Store(dir);
+  assert.equal(s.get('settings.model.provider'), 'anthropic');
+  assert.equal(s.get('settings.model.presets.openai.model'), 'gpt-4.1-mini');
+  assert.equal(s.get('settings.model.presets.openai.keyEnc'), '');
+  assert.equal(s.get('settings.model.presets.custom.url'), '');
+  s.set('settings.model.presets.gemini.keyEnc', 'k');
+  assert.equal(s.get('settings.model.presets.gemini.keyEnc'), 'k');
+  assert.equal(s.get('settings.model.presets.groq.keyEnc'), '');
+});
+
 test('dictation counts toward words', () => {
   const s = new Store(tmp());
   s.addDictation({ id: 'd', text: 'can we move our call to Thursday', ts: 1 });

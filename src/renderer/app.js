@@ -38,6 +38,7 @@ function ready() {
     if (S.claude.checked && !S.claude.loggedIn) return { ok: false, text: 'Sign in to Claude' };
   }
   if (m.provider === 'anthropic' && !S.hasKey) return { ok: false, text: 'Add a model key' };
+  if (S.presetInfo?.[m.provider] && !S.presetInfo[m.provider].keyOptional && !S.hasKeys?.[m.provider]) return { ok: false, text: 'Add a model key' };
   if (perms.micStatus === 'denied' || perms.micStatus === 'restricted') return { ok: false, text: 'Microphone off' };
   if (S.speech.error) return { ok: false, text: 'Dictation unavailable' };
   return { ok: true, text: 'Ready' };
@@ -510,8 +511,13 @@ const PAGES = {
 
     const adv = h(`<details class="adv" ${m.provider !== 'claude' ? 'open' : ''}><summary>Use an API key or a local model instead</summary><div class="card" style="padding:14px;margin-top:10px"></div></details>`);
     const box = $('.card', adv);
-    box.append(h(`<div class="seg" style="margin-bottom:14px">${[['claude', 'Claude account'], ['anthropic', 'API key'], ['ollama', 'Ollama (local)']].map(([v, l]) => `<button data-v="${v}" class="${m.provider === v ? 'on' : ''}">${l}</button>`).join('')}</div>`));
-    box.firstElementChild.onclick = (e) => e.target.dataset.v && relay.set('settings.model.provider', e.target.dataset.v);
+    const PI = S.presetInfo || {};
+    const services = [['claude', 'Claude account'], ['anthropic', 'Anthropic API key'], ...Object.entries(PI).filter(([id]) => id !== 'custom').map(([id, p]) => [id, p.label]), ['ollama', 'Ollama (local)'], ['custom', PI.custom?.label || 'Custom address']];
+    box.append(h(`<div class="row" style="padding:0 0 14px"><div class="grow"><div class="t" style="font-weight:600">Model service</div></div><div class="select" style="margin:0"><span id="pname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="psel">${services.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></div></div>`));
+    const psel = $('#psel', box);
+    psel.value = m.provider;
+    $('#pname', box).textContent = psel.options[psel.selectedIndex]?.text || '';
+    psel.onchange = () => relay.set('settings.model.provider', psel.value);
     if (m.provider === 'anthropic') {
       box.append(h(`<div style="display:flex;flex-direction:column;gap:12px"><div><div class="note" style="margin-bottom:6px">Anthropic API key ${S.hasKey ? '<span class="ok">· saved in your Keychain</span>' : ''}</div><div class="field-row"><input class="field" id="key" type="password" placeholder="${S.hasKey ? '••••••••••••' : 'sk-ant-…'}"><button class="btn" id="savekey" style="height:28px">Save</button></div></div>
         <div><div class="note" style="margin-bottom:6px">Model</div><input class="field" id="mname" value="${esc(m.anthropicModel)}"></div></div>`));
@@ -522,6 +528,23 @@ const PAGES = {
         <div><div class="note" style="margin-bottom:6px">Model (needs tool support; a vision model such as qwen2.5vl lets Relay see the screen)</div><input class="field" id="omodel" value="${esc(m.ollamaModel)}"></div></div>`));
       $('#ourl', box).onchange = (e) => relay.set('settings.model.ollamaUrl', e.target.value.trim());
       $('#omodel', box).onchange = (e) => relay.set('settings.model.ollamaModel', e.target.value.trim());
+    } else if (PI[m.provider]) {
+      const id = m.provider, info = PI[id], ps = m.presets?.[id] || {}, keyed = S.hasKeys?.[id];
+      box.append(h(`<div style="display:flex;flex-direction:column;gap:12px">
+        ${id === 'custom' ? `<div><div class="note" style="margin-bottom:6px">Address (OpenAI-compatible, usually ends in /v1)</div><input class="field" id="purl" value="${esc(ps.url || '')}" placeholder="http://127.0.0.1:1234/v1"></div>` : ''}
+        <div><div class="note" style="margin-bottom:6px">${esc(info.label)} key${info.keyOptional ? ' (optional)' : ''} ${keyed ? '<span class="ok">· saved in your Keychain</span>' : ''}</div><div class="field-row"><input class="field" id="pkey" type="password" placeholder="${keyed ? '••••••••••••' : 'Paste your key'}"><button class="btn" id="psave" style="height:28px">Save</button></div>${info.keyUrl ? `<div class="note" style="margin-top:6px">Get a key at ${esc(info.keyUrl.replace('https://', ''))}</div>` : ''}</div>
+        <div><div class="note" style="margin-bottom:6px">Model</div><input class="field" id="pmodel" value="${esc(ps.model || '')}"></div>
+        <div class="note">${id === 'openai' ? 'This uses the OpenAI API, which is billed separately from a ChatGPT subscription. ' : ''}${info.vision ? '' : 'Relay treats this model as text only, so it will not take screenshots. '}Model names change: if the test fails, check the name in the service docs.</div>
+        <div style="display:flex;gap:10px;align-items:center"><button class="btn" id="ptest">Test</button><span id="pres">${modelTest}</span></div></div>`));
+      $('#psave', box).onclick = async () => { await relay.setPresetKey(id, $('#pkey', box).value); $('#pkey', box).value = ''; };
+      $('#pmodel', box).onchange = (e) => relay.set(`settings.model.presets.${id}.model`, e.target.value.trim());
+      if (id === 'custom') $('#purl', box).onchange = (e) => relay.set('settings.model.presets.custom.url', e.target.value.trim());
+      $('#ptest', box).onclick = async () => {
+        $('#pres', box).textContent = 'Testing…';
+        const r = await relay.testModel();
+        modelTest = r.ok ? '<span class="ok">Connected</span>' : `<span class="bad">${esc(r.error)}</span>`;
+        $('#pres', box).innerHTML = modelTest;
+      };
     } else {
       box.append(h('<div class="note">Relay uses your Claude account above. Pick another option here only if you would rather use an API key or a local model.</div>'));
     }
