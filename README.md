@@ -23,9 +23,9 @@ A menu bar assistant that opens apps, writes notes and reminders, reads your cal
 
 Dictation is built in (Apple's on-device speech recognition), so a separate dictation app is no longer needed. It started as a companion for [Talkify](https://github.com/tornikegomareli/Talkify); you can still use Talkify or any tool that types or pastes text, because the Ask box (`⌥T`) is an ordinary text field.
 
-**[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
+**[Website](https://serjdmitri.github.io/Relay/)** | **[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
 
-> **Status: early (v0.1.0).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
+> **Status: early (v0.1.1).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
 
 > **Claude account sign-in is for your own Mac only.** Relay can run your own signed-in Claude Code (`claude`) so you need no API key. Anthropic does not allow third-party apps to offer claude.ai login to other people, so do not hand Relay builds to others expecting that path to be okay. If you share or distribute a build, point it at an **Anthropic API key** or a local **Ollama** model instead (Account page, "Use an API key or a local model instead").
 

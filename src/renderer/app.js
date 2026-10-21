@@ -112,7 +112,7 @@ function statsFor(rangeId) {
 }
 
 const mark = (status) => status === 'done'
-  ? `<svg class="mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#3b82f6"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  ? `<svg class="mark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#6c63ff"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
   : `<svg class="mark" viewBox="0 0 24 24"><path d="M12 3L22 20H2z" fill="#ff9f0a" stroke="#ff9f0a" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v5M12 16.5v.01" stroke="#2a2a2a" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
 function requestRow(x) {
@@ -318,7 +318,7 @@ const PAGES = {
     if (!sp.available) status = '<span class="bad">Not installed</span>';
     else if (sp.error) status = `<span class="bad">${esc(sp.error)}</span>`;
     else if (sp.preparing !== null && sp.preparing !== undefined) status = `<span class="note">Getting ready ${Math.round(sp.preparing * 100)}%</span>`;
-    else if (sp.prepared) status = '<span class="ok" style="display:inline-flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#3b82f6"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color:var(--link)">In use</span></span>';
+    else if (sp.prepared) status = '<span class="ok" style="display:inline-flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#6c63ff"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color:var(--link)">In use</span></span>';
     else status = '<span class="note">Getting ready…</span>';
     card.append(h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Apple on-device speech</div><div class="d">Fast and accurate for everyday talking. Built into your Mac.</div>${sp.preparing != null ? `<div class="progress"><i style="width:${Math.round(sp.preparing * 100)}%"></i></div>` : ''}</div><div>${status}</div></div>`));
     const lang = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Language</div><div class="d">What you speak in.</div></div><div class="select" style="margin:0"><span id="lname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="lsel"></select></div></div>');
