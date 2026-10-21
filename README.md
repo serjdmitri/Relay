@@ -1,18 +1,16 @@
 # Relay
 
-A menu bar assistant for macOS that does things when you ask. Dictate with Talkify (or any tool that types or pastes text), and Relay opens apps, writes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and answers from the web. It runs on Claude or on a local model through Ollama.
+A menu bar assistant for macOS that does things when you ask. Dictate with [Talkify](https://github.com/tornikegomareli/Talkify) (or any tool that types or pastes text), and Relay opens apps, writes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and answers from the web. It runs on Claude or on a local model through Ollama.
 
-**[Download from Releases](https://github.com/serjdmitri/Relay/releases)** | [Install](#install-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
+**[Download from Releases](https://github.com/serjdmitri/Relay/releases)** | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
 
 > **Status: early (v0.1.0).** The agent, interface and tests run, but the macOS-specific parts (AppleScript against real apps, global shortcuts, permission prompts) had not been run on a Mac when this was first committed. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
 
-Relay is an independent project. It is not affiliated with Anthropic, Talkify or Octaflow. Its window and first-run flow are inspired by Octaflow's layout, with original code, name and icon.
+Relay is an independent project. It is not affiliated with Anthropic, [Talkify](https://github.com/tornikegomareli/Talkify) or Octaflow. Its window and first-run flow are inspired by Octaflow's layout, with original code, name and icon.
 
 ## Releases
 
-Tagged versions and release notes live on the [Releases page](https://github.com/serjdmitri/Relay/releases). Each release is built from source with `npm run pack`; the notes say what changed and what was tested.
-
-A menu bar Mac assistant. You dictate with Talkify, Relay does the "do something" part: opens apps, makes notes and reminders, reads your calendar, clicks through UIs, drives Firefox, answers from the web. The window and onboarding follow the layout of Octaflow, with original code, name and icon.
+Tagged versions and release notes live on the [Releases page](https://github.com/serjdmitri/Relay/releases). The `.dmg` files on each release are built by GitHub Actions from the tagged source. The notes say what changed and what was tested.
 
 ## Download
 
