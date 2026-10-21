@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img" aria-label="How Relay works: your voice goes through on-device dictation to a router that either runs an instant command or asks Claude; Claude uses a local tool server, a confirmation gate guards risky actions, and the actions run on your Mac.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img" aria-label="How Relay works: your voice goes through on-device dictation to a router that either runs an instant command or asks your model; the model uses a local tool server, a confirmation gate guards risky actions, and the actions run on your Mac.">
   <defs>
     <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient>
     <linearGradient id="a" x1="0" x2="1"><stop offset="0" stop-color="#6C63FF"/><stop offset="1" stop-color="#C13CF0"/></linearGradient>
@@ -28,12 +28,12 @@
     <text x="316" y="150" fill="#C9C5EE" font-size="13">relay-speech (Swift) · Apple SpeechAnalyzer · on-device, audio never leaves the Mac</text>
 
     <rect x="296" y="188" width="512" height="36" rx="18" fill="url(#a)"/>
-    <text x="552" y="211" fill="#fff" font-size="15" font-weight="600" text-anchor="middle">Router: instant command, or ask Claude?</text>
+    <text x="552" y="211" fill="#fff" font-size="15" font-weight="600" text-anchor="middle">Router: instant command, or ask your model?</text>
 
     <rect x="296" y="252" width="244" height="92" rx="16" fill="#fff" fill-opacity="0.08" stroke="#C13CF0" stroke-opacity="0.9" stroke-width="1.5"/>
-    <text x="316" y="278" fill="#fff" font-size="16" font-weight="600">Claude</text>
-    <text x="316" y="299" fill="#C9C5EE" font-size="13">Haiku or Sonnet, picked per request</text>
-    <text x="316" y="318" fill="#C9C5EE" font-size="13">your claude · API key · Ollama</text>
+    <text x="316" y="278" fill="#fff" font-size="16" font-weight="600">Your model</text>
+    <text x="316" y="299" fill="#C9C5EE" font-size="13">Claude (Haiku or Sonnet per request)</text>
+    <text x="316" y="318" fill="#C9C5EE" font-size="13">or OpenAI, Gemini, Groq, Ollama…</text>
 
     <rect x="564" y="252" width="244" height="92" rx="16" fill="#fff" fill-opacity="0.08" stroke="#FF8A3D" stroke-opacity="0.9" stroke-width="1.5"/>
     <text x="584" y="278" fill="#fff" font-size="16" font-weight="600">Instant commands</text>
