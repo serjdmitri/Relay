@@ -54,6 +54,24 @@ function dateScript(varName, iso) {
   ];
 }
 
+// The clipboard as it was, so borrowing it for a paste or a copy does not lose an image or formatted text.
+function clipSnapshot(clipboard) {
+  return { text: clipboard.readText(), html: clipboard.readHTML?.(), rtf: clipboard.readRTF?.(), image: clipboard.readImage?.() };
+}
+
+function clipRestore(clipboard, s) {
+  const data = {};
+  if (s.text) data.text = s.text;
+  if (s.html) data.html = s.html;
+  if (s.rtf) data.rtf = s.rtf;
+  if (s.image && !s.image.isEmpty()) data.image = s.image;
+  const keys = Object.keys(data);
+  if (keys.length === 1 && data.text) clipboard.writeText(data.text);
+  else if (keys.length) clipboard.write(data);
+  else if (clipboard.clear) clipboard.clear();
+  else clipboard.writeText('');
+}
+
 function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) {
   const osa = (script, { signal } = {}) => {
     const lines = Array.isArray(script) ? script : String(script).split('\n');
@@ -90,10 +108,11 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) 
       return `Focused ${name}.`;
     },
 
+    // app = null opens it in the default browser
     async openUrl(url, app = 'Firefox') {
       if (!/^(https?:|mailto:)/i.test(url)) throw new Error('Only http, https and mailto URLs are allowed.');
-      await exec('open', ['-a', app, url]);
-      return `Opened ${url} in ${app}.`;
+      await exec('open', app ? ['-a', app, url] : [url]);
+      return `Opened ${url}${app ? ' in ' + app : ''}.`;
     },
 
     async openPath(p) {
@@ -129,6 +148,15 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) 
       await osa(['tell application "Notes"', `make new note with properties {body:${q(html)}}`, 'end tell']);
       return `Created note "${title}".`;
     },
+    // Like notesCreate, but returns the note's id so it can be deleted again (undo).
+    async notesCreateId(title, body = '') {
+      const html = `<h1>${esc(title)}</h1>` + esc(body).replace(/\n/g, '<br>');
+      return osa(['tell application "Notes"', `set n to make new note with properties {body:${q(html)}}`, 'return id of n', 'end tell']);
+    },
+    async notesDeleteById(id) {
+      await osa(['tell application "Notes"', `delete (first note whose id is ${q(id)})`, 'end tell']);
+      return 'Deleted the note.';
+    },
     async notesList(limit = 20) {
       return osa([
         'tell application "Notes"', 'set out to {}', 'set n to count of notes', `if n > ${+limit} then set n to ${+limit}`,
@@ -158,6 +186,21 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) 
       script.push(`tell theList to make new reminder with properties {${props.join(', ')}}`, 'end tell');
       await osa(script);
       return `Added reminder "${title}"${due ? ' due ' + due : ''}.`;
+    },
+    // Returns the reminder's id so it can be deleted again (undo). Sets both the due date and the alert time.
+    async remindersAddId(title, due) {
+      const script = ['tell application "Reminders"', 'set theList to default list'];
+      const props = [`name:${q(title)}`];
+      if (due) {
+        script.push(...dateScript('d', due));
+        props.push('due date:d', 'remind me date:d');
+      }
+      script.push(`set r to make new reminder at end of reminders of theList with properties {${props.join(', ')}}`, 'return id of r', 'end tell');
+      return osa(script);
+    },
+    async remindersDeleteById(id) {
+      await osa(['tell application "Reminders"', `delete (first reminder whose id is ${q(id)})`, 'end tell']);
+      return 'Deleted the reminder.';
     },
     async remindersList() {
       const out = await osa([
@@ -202,12 +245,89 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) 
     // Input
     async typeText(text) {
       if (!clipboard) throw new Error('Clipboard unavailable.');
-      const prevText = clipboard.readText();
+      const before = clipSnapshot(clipboard);
       clipboard.writeText(text);
       await osa('tell application "System Events" to keystroke "v" using {command down}');
       await new Promise((r) => setTimeout(r, 250));
-      clipboard.writeText(prevText);
+      clipRestore(clipboard, before);
       return `Typed ${text.length} characters.`;
+    },
+
+    // What the user copied: text, or an image (as a JPEG no wider than 1400 pixels).
+    async clipboardRead() {
+      if (!clipboard) throw new Error('Clipboard unavailable.');
+      const text = clipboard.readText();
+      let image = null;
+      const img = clipboard.readImage?.();
+      if (img && !img.isEmpty()) {
+        let i = img;
+        if (i.getSize().width > 1400) i = i.resize({ width: 1400 });
+        const size = i.getSize();
+        image = { mediaType: 'image/jpeg', data: i.toJPEG(80).toString('base64'), width: size.width, height: size.height };
+      }
+      return { text, image };
+    },
+
+    async clipboardWrite(text) {
+      if (!clipboard) throw new Error('Clipboard unavailable.');
+      clipboard.writeText(String(text));
+      return `Copied ${String(text).length} characters to the clipboard.`;
+    },
+
+    // The text selected in the front app: copy it, read it, put the clipboard back.
+    async selectedText() {
+      if (!clipboard) throw new Error('Clipboard unavailable.');
+      const before = clipSnapshot(clipboard);
+      const marker = `relay-selection-${Date.now()}-${Math.random()}`;
+      clipboard.writeText(marker);
+      try {
+        await osa('tell application "System Events" to keystroke "c" using {command down}');
+        for (let i = 0; i < 25; i++) {
+          await new Promise((r) => setTimeout(r, 40));
+          if (clipboard.readText() !== marker) break;
+        }
+        const got = clipboard.readText();
+        return got === marker ? '' : got;
+      } finally {
+        clipRestore(clipboard, before);
+      }
+    },
+    // Music and Spotify: op is play, pause, next or previous.
+    async mediaControl(app, op) {
+      const cmd = { play: 'play', pause: 'pause', next: 'next track', previous: 'previous track' }[op];
+      if (!cmd) throw new Error(`Unknown media command: ${op}`);
+      await osa(`tell application ${q(app)} to ${cmd}`);
+      return `${op} sent to ${app}.`;
+    },
+    // The keyboard's media keys, for whatever app has them (a browser tab, for instance).
+    async mediaKey(op) {
+      const code = { play: 16, next: 17, previous: 18 }[op];
+      if (code === undefined) throw new Error(`Unknown media key: ${op}`);
+      await jxa(`ObjC.import('AppKit');
+function post(down) { var f = down ? 0xa00 : 0xb00; var e = $.NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(14, $.NSMakePoint(0, 0), f, 0, 0, null, 8, (${code} << 16) | f, -1); $.CGEventPost(0, e.CGEvent); }
+post(true); post(false);`);
+      return `Pressed the ${op} key.`;
+    },
+
+    async batteryStatus() {
+      const out = await exec('pmset', ['-g', 'batt']);
+      const m = out.match(/(\d+)%;\s*([^;]+);(?:\s*(\d+:\d+) remaining)?/);
+      if (!m) return null;
+      const state = m[2].trim();
+      const mins = m[3] ? m[3].split(':').map(Number) : null;
+      return {
+        percent: +m[1],
+        state: /discharging/i.test(state) ? 'on battery power' : /charged/i.test(state) ? 'fully charged' : /charging/i.test(state) ? 'charging' : state.replace(/^finishing charge$/i, 'almost full'),
+        remaining: mins ? `${mins[0] ? mins[0] + ' hour' + (mins[0] === 1 ? '' : 's') + (mins[1] ? ' ' : '') : ''}${mins[1] ? mins[1] + ' minute' + (mins[1] === 1 ? '' : 's') : ''}`.trim() : ''
+      };
+    },
+    async lockScreen() {
+      await osa('tell application "System Events" to keystroke "q" using {control down, command down}');
+      return 'Locked the screen.';
+    },
+    async sleepDisplay() {
+      await exec('pmset', ['displaysleepnow']);
+      return 'Display asleep.';
     },
     async pressKeys(combo) {
       await osa(keyScript(combo));

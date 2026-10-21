@@ -1,5 +1,5 @@
 // Pre-LLM handling of spoken commands: routines and routine recording.
-// Talkify adds capitalization and punctuation, so everything is normalized first.
+// Speech recognition adds capitalization and punctuation, so everything is normalized first.
 
 function normalize(text) {
   return String(text)

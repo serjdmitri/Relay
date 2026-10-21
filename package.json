@@ -6,10 +6,12 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test",
+    "test": "node --test \"test/*.test.js\"",
     "shots": "node scripts/screenshots.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "pack": "bash scripts/pack-mac.sh"
+    "pack": "bash scripts/pack-mac.sh",
+    "speech": "bash scripts/build-speech.sh",
+    "signing": "bash scripts/setup-signing.sh"
   },
   "dependencies": {
     "uiohook-napi": "^1.5.4",
@@ -23,18 +25,46 @@
   "build": {
     "appId": "com.sergey.relay",
     "productName": "Relay",
-    "files": ["src/**/*", "assets/**/*", "package.json"],
-    "extraResources": [{ "from": "extension/firefox", "to": "firefox-extension" }],
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "extension/firefox",
+        "to": "firefox-extension"
+      },
+      {
+        "from": "native/build/relay-speech",
+        "to": "native/relay-speech"
+      },
+      {
+        "from": "native/build/relay-glass",
+        "to": "native/relay-glass"
+      }
+    ],
     "npmRebuild": false,
-    "asarUnpack": ["**/node_modules/uiohook-napi/**"],
+    "asarUnpack": [
+      "**/node_modules/uiohook-napi/**"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": [{ "target": "dir", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/icon.png",
       "identity": null,
       "extendInfo": {
         "NSAppleEventsUsageDescription": "Relay controls your apps (Notes, Reminders, Messages, Calendar, Finder, Firefox) when you ask it to.",
-        "NSMicrophoneUsageDescription": "Not used. Relay relies on Talkify for dictation."
+        "NSMicrophoneUsageDescription": "Relay listens while you hold or tap its shortcut. Audio is turned into words on this Mac and never leaves it.",
+        "NSSpeechRecognitionUsageDescription": "Relay turns what you say into text using Apple's on-device speech recognition."
       }
     }
   }

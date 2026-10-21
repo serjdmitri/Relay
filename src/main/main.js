@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -8,19 +8,26 @@ const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
 const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey } = require('./askController');
+const { Speech } = require('./speech');
+const { Speaker } = require('./voice');
+const { Timers, humanDuration } = require('./timers');
+const { Glass } = require('./glass');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
+const claudeCli = require('./agent/claudeCli');
 
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass;
+let claudeState = { installed: false, loggedIn: false, checked: false };
+let speechInfo = { device: null, preparing: null, prepared: false, error: null };
 let mainWin = null;
 let onboardWin = null;
 let quitting = false;
 
-const DEFAULT_SHORTCUTS = { ask: { code: 'AltRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } };
+const DEFAULT_SHORTCUTS = { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } };
 
 function windowOpts(w, h) {
   return {
@@ -47,7 +54,7 @@ function openMain(page) {
     mainWin.focus();
     if (page) mainWin.webContents.send('navigate', page);
   }
-  app.dock?.show();
+  if (store.get('settings.showInDock')) app.dock?.show();
 }
 
 function openOnboarding() {
@@ -73,9 +80,13 @@ function publicState() {
     history: d.history.slice(0, 200),
     actions: d.actions.slice(0, 300),
     stats: store.stats(),
-    labels: { ask: label(d.settings.shortcuts.ask), type: label(d.settings.shortcuts.type) },
+    labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type) },
+    claude: claudeState,
+    speech: { available: speech.available, ...speechInfo },
+    dictations: d.dictations.slice(0, 200),
     firefoxConnected: bridge.isConnected(),
     hotkeysRunning: hotkeys.running,
+    hotkeysSeen: hotkeys.eventsSeen > 0,
     hotkeysError: hotkeys.error,
     version: app.getVersion(),
     extensionPath: extensionPath()
@@ -92,7 +103,7 @@ function rebuildTray() {
   const last = store.get('lastReply');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
-    { label: 'Ask Relay…', click: () => ask.open() },
+    { label: 'Type a Request…', click: () => ask.open() },
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
@@ -124,6 +135,42 @@ function startHotkeysWhenTrusted() {
   setTimeout(startHotkeysWhenTrusted, 2000);
 }
 
+async function refreshClaude() {
+  const claudePath = await claudeCli.findClaude();
+  claudeState = { ...(await claudeCli.authStatus(claudePath)), path: claudePath || '', checked: true };
+}
+
+function glassBinPath() {
+  return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-glass') : path.join(__dirname, '../../native/build/relay-glass');
+}
+
+function speechBinPath() {
+  return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-speech') : path.join(__dirname, '../../native/build/relay-speech');
+}
+
+// Loads the on-device speech model so the first dictation starts instantly.
+async function prepareSpeech() {
+  if (!speech.available) {
+    speechInfo = { ...speechInfo, error: 'The dictation helper is missing. Rebuild Relay with npm run pack.' };
+    return;
+  }
+  speechInfo = { ...speechInfo, prepared: false, error: null };
+  try {
+    speechInfo.device = await speech.inputDevice(store.get('settings.speech.input'));
+    await speech.prepare(store.get('settings.speech.locale'), [...store.get('vocabulary'), ...(store.get('replacements') || []).map((r) => r.to)]);
+    speechInfo = { ...speechInfo, prepared: true, preparing: null, error: null };
+  } catch (e) {
+    speechInfo = { ...speechInfo, preparing: null, error: e.message };
+  }
+  broadcast();
+}
+
+// New vocabulary or word fixes: teach the recognizer once you stop editing.
+function schedulePrepareSpeech() {
+  clearTimeout(prepareTimer);
+  prepareTimer = setTimeout(() => prepareSpeech(), 2000);
+}
+
 function registerIpc() {
   ipcMain.handle('state:get', () => publicState());
   ipcMain.handle('state:set', (_e, key, value) => {
@@ -139,10 +186,17 @@ function registerIpc() {
   });
   ipcMain.handle('model:test', async () => {
     const m = store.get('settings.model');
-    const provider = m.provider === 'ollama'
-      ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel })
-      : new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel, maxTokens: 16 });
     try {
+      if (m.provider === 'claude') {
+        const claudePath = await claudeCli.findClaude();
+        if (!claudePath) return { ok: false, error: 'Claude Code is not installed.' };
+        await ask.mcp.start();
+        const r = await claudeCli.runClaude({ text: 'ping', system: 'Reply with the single word OK.', tools: [], confirm: async () => false, host: ask.mcp, claudePath, model: m.claudeModel === 'auto' ? 'haiku' : m.claudeModel });
+        return r.status === 'done' ? { ok: true, text: r.reply.slice(0, 40) } : { ok: false, error: r.reply };
+      }
+      const provider = m.provider === 'ollama'
+        ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel })
+        : new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel, maxTokens: 16 });
       const r = await provider.step({ system: 'Reply with the single word OK.', messages: [{ role: 'user', content: [{ type: 'text', text: 'ping' }] }], tools: [] });
       return { ok: true, text: r.text.slice(0, 40) };
     } catch (e) {
@@ -150,7 +204,65 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle('claude:status', async () => {
+    await refreshClaude();
+    broadcast();
+    return claudeState;
+  });
+  ipcMain.handle('claude:login', async () => {
+    const claudePath = await claudeCli.findClaude();
+    if (!claudePath) return { ok: false, error: 'Claude Code is not installed.' };
+    const r = await claudeCli.login(claudePath);
+    await refreshClaude();
+    if (r.ok && claudeState.loggedIn) store.set('settings.model.provider', 'claude');
+    broadcast();
+    return { ...r, ok: r.ok && claudeState.loggedIn };
+  });
+  ipcMain.handle('claude:cancel-login', () => claudeCli.login.current?.kill());
+  ipcMain.handle('claude:logout', async () => {
+    const claudePath = await claudeCli.findClaude();
+    if (claudePath) await claudeCli.logout(claudePath);
+    await refreshClaude();
+    broadcast();
+  });
+  ipcMain.handle('speech:request-mic', async () => {
+    const ok = await systemPreferences.askForMediaAccess('microphone');
+    broadcast();
+    return ok;
+  });
+  ipcMain.handle('app:icons', async () => {
+    const paths = { Notes: '/System/Applications/Notes.app', Reminders: '/System/Applications/Reminders.app', Messages: '/System/Applications/Messages.app', Calendar: '/System/Applications/Calendar.app', Finder: '/System/Library/CoreServices/Finder.app', Firefox: '/Applications/Firefox.app' };
+    const jxa = "ObjC.import('AppKit'); function run(a){ var i=$.NSWorkspace.sharedWorkspace.iconForFile(a[0]); i.setSize($.NSMakeSize(64,64)); var r=$.NSBitmapImageRep.alloc.initWithData(i.TIFFRepresentation); return ObjC.unwrap(r.representationUsingTypeProperties($.NSBitmapImageFileTypePNG,$({})).base64EncodedStringWithOptions(0)); }";
+    const out = {};
+    await Promise.all(Object.entries(paths).map(([name, p]) => new Promise((resolve) => {
+      require('child_process').execFile('osascript', ['-l', 'JavaScript', '-e', jxa, p], { timeout: 8000 }, (err, stdout) => {
+        if (!err && stdout.trim()) out[name] = 'data:image/png;base64,' + stdout.trim();
+        resolve();
+      });
+    })));
+    return out;
+  });
+  ipcMain.handle('voice:list', async () => ({
+    voices: (await speaker.voiceList()).filter((v) => v.kind !== 'Novelty' && v.lang.startsWith('en')),
+    picked: await speaker.resolve(store.get('settings.voice'))
+  }));
+  ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', { voice, rate }));
+  ipcMain.handle('voice:open-settings', () => shell.openExternal('x-apple.systempreferences:com.apple.Accessibility-Settings.extension'));
+  ipcMain.handle('speech:locales', () => speech.locales().catch(() => []));
+  ipcMain.handle('speech:set-locale', async (_e, id) => {
+    store.set('settings.speech.locale', id);
+    prepareSpeech();
+    broadcast();
+  });
+
   ipcMain.handle('perm:status', () => perms.status());
+  ipcMain.handle('speech:device', async () => (speechInfo.device = await speech.inputDevice(store.get('settings.speech.input')).catch(() => speechInfo.device)));
+  ipcMain.handle('speech:inputs', () => speech.inputDevices(store.get('settings.speech.input')).catch(() => ({ default: null, using: null, list: [] })));
+  ipcMain.handle('speech:set-input', async (_e, pref) => {
+    store.set('settings.speech.input', pref);
+    speechInfo.device = await speech.inputDevice(pref).catch(() => speechInfo.device);
+    broadcast();
+  });
   ipcMain.handle('perm:request-accessibility', () => perms.requestAccessibility());
   ipcMain.handle('perm:open-pane', (_e, name) => perms.openPane(name));
   ipcMain.handle('perm:test-automation', async (_e, appName) => {
@@ -185,27 +297,58 @@ function registerIpc() {
     await ask.submit(r.name);
   });
 
+  ipcMain.handle('replace:add', (_e, from, to) => {
+    from = String(from || '').trim();
+    to = String(to ?? '').trim();
+    if (!from || from.toLowerCase() === to.toLowerCase()) return;
+    const list = (store.data.replacements || []).filter((r) => r.from.toLowerCase() !== from.toLowerCase());
+    list.unshift({ id: crypto.randomUUID(), from, to });
+    store.data.replacements = list;
+    store.save();
+    schedulePrepareSpeech();
+    broadcast();
+  });
+  ipcMain.handle('replace:remove', (_e, id) => {
+    store.data.replacements = (store.data.replacements || []).filter((r) => r.id !== id);
+    store.save();
+    schedulePrepareSpeech();
+    broadcast();
+  });
+  ipcMain.handle('apps:running', () => ask.mac.listApps().catch(() => []));
   ipcMain.handle('vocab:add', (_e, terms) => {
     const set = new Set(store.get('vocabulary'));
     for (const t of terms) if (t.trim()) set.add(t.trim());
     store.data.vocabulary = [...set];
     store.save();
+    schedulePrepareSpeech();
     broadcast();
   });
   ipcMain.handle('vocab:remove', (_e, t) => {
     store.data.vocabulary = store.get('vocabulary').filter((x) => x !== t);
     store.save();
+    schedulePrepareSpeech();
+    broadcast();
+  });
+  ipcMain.handle('dictation:delete', (_e, id) => {
+    store.data.dictations = store.data.dictations.filter((d) => d.id !== id);
+    store.save();
+    broadcast();
+  });
+  ipcMain.handle('dictation:clear', () => {
+    store.data.dictations = [];
+    store.save();
     broadcast();
   });
   ipcMain.handle('history:clear', () => {
     store.data.history = [];
+    store.data.dictations = [];
     store.data.actions = [];
     store.save();
     broadcast();
   });
 
   ipcMain.handle('shortcut:set', (_e, name, def) => {
-    if (!['ask', 'type'].includes(name)) return;
+    if (!['ask', 'dictate', 'type'].includes(name)) return;
     store.set(`settings.shortcuts.${name}`, def);
     broadcast();
   });
@@ -237,9 +380,11 @@ function registerIpc() {
     if (text) await ask.submit(text);
   });
   ipcMain.handle('ask:submit', (_e, text) => ask.submit(text));
-  ipcMain.handle('ask:cancel', () => (ask.state === 'working' || ask.state === 'confirm' ? ask.stop() : ask.close()));
+  ipcMain.handle('ask:cancel', () => ask.cancelAll());
   ipcMain.handle('ask:confirm', (_e, yes) => ask.pendingConfirm?.(!!yes));
   ipcMain.handle('ask:resize', (_e, h) => ask.resize(h));
+  ipcMain.handle('ask:interactive', (_e, on) => ask.win && !ask.win.isDestroyed() && ask.win.setIgnoreMouseEvents(!on, { forward: true }));
+  ipcMain.handle('ask:hidden', () => ask.finishHide());
 }
 
 function startBridge() {
@@ -255,7 +400,36 @@ app.whenReady().then(() => {
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
   overlay = new Overlay({ isEnabled: () => store.get('settings.cursor') });
-  ask = new AskController({ store, bridge, overlay, onChange: broadcast });
+  speech = new Speech({ binPath: speechBinPath() });
+  speech.on('preparing', (f) => {
+    speechInfo = { ...speechInfo, preparing: f };
+    broadcast();
+  });
+  speaker = new Speaker();
+  timers = new Timers({
+    store,
+    onFire: (t) => {
+      const alarm = t.label === 'Alarm';
+      const body = alarm ? 'Your alarm is going off.' : t.label || `Your timer for ${humanDuration(t.seconds)} is done.`;
+      const text = t.missed ? `${body} It finished while Relay was closed.` : body;
+      if (Notification.isSupported()) new Notification({ title: alarm ? 'Alarm' : 'Timer done', body: text }).show();
+      ask.alert(text);
+    }
+  });
+  glass = new Glass({ binPath: glassBinPath() });
+  ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, onChange: broadcast });
+  timers.start();
+  // Start the glass helper now rather than at the first pill, and give focus straight back if it took it:
+  // a new helper started by the front app can end up in front, which would send a dictation nowhere.
+  if (glass.supported && store.get('settings.glass') !== false) {
+    ask.frontName().catch(() => null).then((before) => {
+      glass.onReady = async () => {
+        const now = await ask.frontName().catch(() => null);
+        if (now === 'relay-glass' && before && before !== 'relay-glass') ask.mac.focusApp(before).catch(() => {});
+      };
+      glass.start();
+    });
+  }
   hotkeys = new Hotkeys({ getShortcuts: () => store.get('settings.shortcuts'), onEvent: (n, k) => ask.onShortcut(n, k) });
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');
@@ -263,6 +437,25 @@ app.whenReady().then(() => {
   icon.setTemplateImage(true);
   tray = new Tray(icon);
   tray.setToolTip('Relay');
+  const statusIcon = (name) => nativeImage.createFromPath(path.join(__dirname, `../../assets/${name}.png`));
+  const trayIcons = { idle: icon, listening: [statusIcon('trayListening-1'), statusIcon('trayListening-2')], working: statusIcon('trayWorking') };
+  let trayPulse = null;
+  // A red pulsing badge while Relay listens, a blue one while it works, the normal icon otherwise.
+  ask.onState = (state) => {
+    clearInterval(trayPulse);
+    if (state === 'listening' || state === 'finishing') {
+      let frame = 0;
+      tray.setImage(trayIcons.listening[0]);
+      tray.setToolTip('Relay is listening');
+      trayPulse = setInterval(() => tray.setImage(trayIcons.listening[++frame % 2]), 450);
+    } else if (state === 'working' || state === 'confirm') {
+      tray.setImage(trayIcons.working);
+      tray.setToolTip('Relay is working');
+    } else {
+      tray.setImage(trayIcons.idle);
+      tray.setToolTip('Relay');
+    }
+  };
 
   if (process.env.RELAY_E2E) global.__relay = { store, ask, bridge, hotkeys, openMain, openOnboarding };
   registerIpc();
@@ -270,8 +463,17 @@ app.whenReady().then(() => {
   applyDockAndLogin();
   rebuildTray();
   startHotkeysWhenTrusted();
+  refreshClaude().then(broadcast);
+  prepareSpeech();
+  // Headsets come and go: keep the microphone label in the title bar current.
+  setInterval(async () => {
+    if (!speech.child) return;
+    const d = await speech.inputDevice(store.get('settings.speech.input')).catch(() => null);
+    if (d && d !== speechInfo.device) { speechInfo.device = d; broadcast(); }
+  }, 8000);
+  if (process.env.RELAY_DEMO) ask.demo(process.env.RELAY_DEMO);
 
-  if (store.get('onboardingDone')) openMain('home');
+  if (store.get('onboardingDone')) openMain(process.env.RELAY_PAGE || 'home');
   else openOnboarding();
 });
 
@@ -282,5 +484,11 @@ app.on('before-quit', () => {
   quitting = true;
   hotkeys?.stop();
   bridge?.stop();
+  speaker?.stop();
+  glass?.stop();
+  speech?.stop();
+  ask?.dropWarm(true);
+  ask?.mcp.stop();
+  ask?.unduck();
   store?.flush();
 });

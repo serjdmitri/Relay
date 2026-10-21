@@ -39,43 +39,41 @@ async function runAgent({ text, provider, tools, system, confirm, onEvent = () =
 
     const results = [];
     for (const call of res.toolCalls) {
-      const tool = byName.get(call.name);
-      let content;
-      let isError = false;
-      if (!tool) {
-        content = [{ type: 'text', text: `Unknown tool: ${call.name}` }];
-        isError = true;
-      } else {
-        const ask = tool.confirm ? tool.confirm(call.input) : null;
-        let allowed = true;
-        if (ask) {
-          allowed = await confirm({ tool: call.name, input: call.input, question: ask });
-        }
-        if (signal?.aborted) return { status: 'stopped', reply: 'Stopped.', actions };
-        if (!allowed) {
-          content = [{ type: 'text', text: 'The user declined this action. Do not retry it. Tell them it was not done.' }];
-          onEvent({ type: 'tool', name: call.name, input: call.input, ok: false, result: 'declined' });
-        } else {
-          onEvent({ type: 'tool-start', name: call.name, input: call.input, label: tool.describe?.(call.input) });
-          try {
-            const out = await tool.run(call.input, { signal });
-            content = normalizeOutput(out);
-            actions++;
-            onEvent({ type: 'tool', name: call.name, input: call.input, ok: true, result: summarize(content) });
-          } catch (e) {
-            if (signal?.aborted) return { status: 'stopped', reply: 'Stopped.', actions };
-            content = [{ type: 'text', text: `Error: ${e.message}` }];
-            isError = true;
-            onEvent({ type: 'tool', name: call.name, input: call.input, ok: false, result: e.message });
-          }
-        }
-      }
-      results.push({ type: 'tool_result', tool_use_id: call.id, content, ...(isError ? { is_error: true } : {}) });
+      const out = await callTool({ tool: byName.get(call.name), name: call.name, input: call.input, confirm, onEvent, signal });
+      if (out.aborted) return { status: 'stopped', reply: 'Stopped.', actions };
+      if (out.ran) actions++;
+      results.push({ type: 'tool_result', tool_use_id: call.id, content: out.content, ...(out.isError ? { is_error: true } : {}) });
     }
     messages.push({ role: 'user', content: results });
     trimImages(messages);
   }
   return { status: 'failed', reply: `I stopped after ${maxSteps} steps without finishing.`, actions };
+}
+
+// Runs one tool call: unknown tool, confirmation gate, execution and event reporting.
+// Shared by the built-in loop and by the MCP server that the signed-in Claude CLI calls.
+async function callTool({ tool, name, input, confirm, onEvent = () => {}, signal }) {
+  if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+  const ask = tool.confirm ? tool.confirm(input) : null;
+  if (ask) {
+    const allowed = await confirm({ tool: name, input, question: ask });
+    if (signal?.aborted) return { aborted: true, content: [] };
+    if (!allowed) {
+      onEvent({ type: 'tool', name, input, ok: false, result: 'declined' });
+      return { content: [{ type: 'text', text: 'The user declined this action. Do not retry it. Tell them it was not done.' }] };
+    }
+  }
+  onEvent({ type: 'tool-start', name, input, label: tool.describe?.(input) });
+  try {
+    const out = await tool.run(input, { signal });
+    const content = normalizeOutput(out);
+    onEvent({ type: 'tool', name, input, ok: true, result: summarize(content) });
+    return { content, ran: true };
+  } catch (e) {
+    if (signal?.aborted) return { aborted: true, content: [] };
+    onEvent({ type: 'tool', name, input, ok: false, result: e.message });
+    return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
+  }
 }
 
 function normalizeOutput(out) {
@@ -95,4 +93,4 @@ function summarize(content) {
   return t.length > 300 ? t.slice(0, 300) + '...' : t;
 }
 
-module.exports = { runAgent, MAX_STEPS, trimImages };
+module.exports = { runAgent, callTool, normalizeOutput, MAX_STEPS, trimImages };

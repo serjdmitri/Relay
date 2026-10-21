@@ -111,3 +111,43 @@ test('click and scroll go through JXA with the right event types', async () => {
   await mac.click(1, 2, { right: true });
   assert.ok(r.calls[1].args.join(' ').includes('kCGEventRightMouseDown'));
 });
+
+test('typeText keeps an image that was on the clipboard', async () => {
+  const written = [];
+  const image = { isEmpty: () => false, tag: 'img' };
+  const clip = { text: '', readText() { return this.text; }, writeText(t) { this.text = t; written.push(['text', t]); }, readImage: () => image, write(d) { written.push(['write', d]); }, clear() { written.push(['clear']); } };
+  const mac = createMac({ exec: recorder().exec, clipboard: clip });
+  await mac.typeText('hi');
+  assert.deepEqual(written[written.length - 1], ['write', { image }]);
+});
+
+test('selectedText copies, reads, and puts the clipboard back', async () => {
+  let text = 'before';
+  const clip = { readText: () => text, writeText: (t) => { text = t; }, clear() { text = ''; } };
+  const r = recorder(() => { text = 'the selection'; return ''; });
+  const mac = createMac({ exec: r.exec, clipboard: clip });
+  assert.equal(await mac.selectedText(), 'the selection');
+  assert.equal(text, 'before');
+  assert.ok(r.calls[0].args.join(' ').includes('keystroke "c"'));
+  const none = createMac({ exec: recorder().exec, clipboard: { readText: () => text, writeText: (t) => { text = t; } } });
+  assert.equal(await none.selectedText(), '');
+});
+
+test('voices: parse the say listing and pick a sensible one', () => {
+  const { parseVoices, pickVoice, speakable } = require('../src/main/voice');
+  const out = [
+    'Albert              en_US    # Hello! My name is Albert.',
+    'Samantha (English (US)) en_US    # Hello! My name is Samantha.',
+    'Daniel              en_GB    # Hello! My name is Daniel.',
+    'Tara (English (India)) en_IN    # Hi, I’m Siri!',
+    'Zoe (Premium)       en_US    # Hello! My name is Zoe.',
+    'Amélie             fr_CA    # Bonjour'
+  ].join('\n');
+  const v = parseVoices(out);
+  assert.deepEqual(v.map((x) => x.kind), ['Novelty', 'Standard', 'Standard', 'Siri', 'Premium', 'Standard']);
+  assert.equal(pickVoice(v, 'auto', 'en_US'), 'Zoe (Premium)');
+  assert.equal(pickVoice(v.slice(0, 4), 'auto', 'en_US'), 'Samantha (English (US))'); // a natural voice from another region is not used automatically
+  assert.equal(pickVoice(v, 'Daniel', 'en_US'), 'Daniel');
+  assert.equal(pickVoice(v, 'Gone', 'en_US'), 'Zoe (Premium)');
+  assert.equal(speakable('**Done** 🎉 see https://x.co/a?b=1'), 'Done see a link');
+});

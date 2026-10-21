@@ -30,20 +30,22 @@ class ShortcutMatcher {
   }
 
   handle(type, code) {
-    const { ask, type: typeSc } = this.getShortcuts();
+    const sc = this.getShortcuts();
     if (type === 'down') {
       if (this.down.has(code)) return; // key repeat
       this.down.add(code);
-      this._onDown(code, { ask, type: typeSc });
+      this._onDown(code, sc);
     } else {
       this.down.delete(code);
-      this._onUp(code, { ask, type: typeSc });
+      this._onUp(code);
     }
   }
 
   _onDown(code, sc) {
     // any other key cancels an in-flight modifier-only press (it was a combo, not a tap)
     if (this.modState && code !== this.modState.code) this._cancelMod();
+    // Esc always cancels whatever Relay is doing; the controller ignores it when idle.
+    if (code === 'Escape') this.emit('cancel', 'press');
 
     for (const [name, def] of Object.entries(sc)) {
       if (!def) continue;
@@ -73,9 +75,12 @@ class ShortcutMatcher {
   }
 
   _cancelMod() {
-    if (!this.modState) return;
-    this.clearTimer(this.modState.timer);
+    const s = this.modState;
+    if (!s) return;
+    this.clearTimer(s.timer);
     this.modState = null;
+    // The key was already held long enough to start listening; end it cleanly instead of leaving it open.
+    if (s.held) this.emit(s.name, 'hold-end', { heldMs: this.now() - s.t0 });
   }
 }
 

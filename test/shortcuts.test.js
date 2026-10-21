@@ -65,6 +65,36 @@ test('key repeat is ignored and slow release after tap window is not a tap', () 
   assert.deepEqual(events, ['ask:tap']);
 });
 
+const sc3 = { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } };
+
+test('right command is its own dictate shortcut next to right option', () => {
+  const { m, events, advance } = harness(sc3);
+  m.handle('down', 'MetaRight');
+  advance(100);
+  m.handle('up', 'MetaRight');
+  m.handle('down', 'AltRight');
+  advance(400);
+  m.handle('up', 'AltRight');
+  assert.deepEqual(events, ['dictate:tap', 'ask:hold-start', 'ask:hold-end']);
+});
+
+test('pressing another key after the hold started ends the hold instead of leaving it open', () => {
+  const { m, events, advance } = harness(sc3);
+  m.handle('down', 'MetaRight');
+  advance(400);
+  m.handle('down', 'KeyV');
+  m.handle('up', 'KeyV');
+  m.handle('up', 'MetaRight');
+  assert.deepEqual(events, ['dictate:hold-start', 'dictate:hold-end']);
+});
+
+test('escape emits cancel', () => {
+  const { m, events } = harness(sc3);
+  m.handle('down', 'Escape');
+  m.handle('up', 'Escape');
+  assert.deepEqual(events, ['cancel:press']);
+});
+
 test('labels', () => {
   assert.equal(label({ code: 'AltRight', mods: [] }), 'Right ⌥');
   assert.equal(label({ code: 'KeyT', mods: ['Alt'] }), '⌥T');

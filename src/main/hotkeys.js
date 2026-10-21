@@ -23,6 +23,7 @@ class Hotkeys {
     this.log = log;
     this.running = false;
     this.error = null;
+    this.eventsSeen = 0; // stays 0 when Input Monitoring is off, even though the hook starts
   }
 
   start() {
@@ -32,6 +33,7 @@ class Hotkeys {
       const codes = buildCodeMap(UiohookKey);
       this.matcher = new ShortcutMatcher({ getShortcuts: this.getShortcuts, emit: this.onEvent });
       uIOhook.on('keydown', (e) => {
+        this.eventsSeen++;
         const c = codes.get(e.keycode);
         if (c) this.matcher.handle('down', c);
       });
