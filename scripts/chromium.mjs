@@ -4,7 +4,8 @@ import fs from 'node:fs';
 const candidates = [
   process.env.CHROMIUM_PATH,
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  '/opt/pw-browsers/chromium/chrome-linux/chrome'
+  '/opt/pw-browsers/chromium/chrome-linux/chrome',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ].filter(Boolean);
 
 export async function launch() {

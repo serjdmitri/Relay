@@ -43,6 +43,38 @@ xattr -dr com.apple.quarantine /Applications/Relay.app
 
 You will approve Microphone, Accessibility, Screen Recording and Input Monitoring once. Ad-hoc signed downloads change identity with every release, so macOS asks again after you update.
 
+## See it
+
+<p align="center">
+  <img src="docs/img/pill-states.png" alt="The Relay pill in four states: working, asking for confirmation, showing a result, and the type-a-request box" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/img/ui-main.png" alt="Relay window: Home with shortcuts and stats, and History with a seven-day chart" width="900"><br>
+  <img src="docs/img/ui-more.png" alt="Relay window: Speech settings and Routines" width="900">
+</p>
+
+These are the real interface pages rendered with sample data, so no personal information is shown. Regenerate them with `npm run shots && npm run readme-images`.
+
+## How it works
+
+<p align="center">
+  <img src="docs/architecture.svg" alt="Diagram: your voice goes through on-device dictation to a router, which runs an instant command or asks Claude; Claude uses a local tool server, a confirm gate guards risky actions, and everything runs on your Mac" width="900">
+</p>
+
+## By the numbers
+
+<p align="center">
+  <img src="docs/img/chart-tests.svg" alt="Bar chart of unit tests by area" width="440">
+  <img src="docs/img/chart-code.svg" alt="Donut chart of lines of code by language" width="440">
+</p>
+
+The charts are drawn from the repository itself by `npm run charts` (tests are counted from `test/`, lines from the source files).
+
+<a href="https://star-history.com/#serjdmitri/Relay&Date">
+  <img src="https://api.star-history.com/svg?repos=serjdmitri/Relay&type=Date&theme=dark" alt="Star history chart for serjdmitri/Relay" width="600">
+</a>
+
 ## Install from source (on your Mac)
 
 Needs Node 20+ (`brew install node`), Xcode or the command line tools (`xcode-select --install`, for the dictation helper), macOS 26 or later, and [Claude Code](https://claude.ai/code) signed in to your Claude account (Relay can do the sign-in for you).
@@ -141,7 +173,7 @@ test            unit tests         scripts   packaging, icons, screenshots, e2e
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a PR run `npm test` on a Mac. `scripts/e2e.mjs` (end-to-end run of the real app with a mock model) predates dictation and the Claude sign-in and needs updating before it is useful again.
+Issues and pull requests are welcome. Before opening a PR run `npm test` on a Mac. After changing the interface, `npm run shots && npm run readme-images` refreshes the pictures above (it needs Google Chrome, or set `CHROMIUM_PATH`). `scripts/e2e.mjs` (end-to-end run of the real app with a mock model) predates dictation and the Claude sign-in and needs updating before it is useful again.
 
 ## License
 

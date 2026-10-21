@@ -11,7 +11,9 @@
     "icons": "node scripts/make-icons.mjs",
     "pack": "bash scripts/pack-mac.sh",
     "speech": "bash scripts/build-speech.sh",
-    "signing": "bash scripts/setup-signing.sh"
+    "signing": "bash scripts/setup-signing.sh",
+    "charts": "node scripts/make-charts.mjs",
+    "readme-images": "node scripts/readme-images.mjs"
   },
   "dependencies": {
     "uiohook-napi": "^1.5.4",

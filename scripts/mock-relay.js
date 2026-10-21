@@ -1,28 +1,56 @@
 // Stand-in for the preload bridge so the renderer pages can run in plain Chromium.
 (() => {
   const now = Date.now();
+  const min = 60e3;
   const state = {
+    schema: 3,
     onboardingDone: true,
     settings: {
-      talking: 'tap-or-hold', playSounds: true, actEnabled: true, cursor: true, speakReplies: false, openAtLogin: false, showInDock: true,
-      shortcuts: { ask: { code: 'AltRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } },
-      model: { provider: 'anthropic', anthropicModel: 'claude-sonnet-5-5', ollamaModel: 'qwen2.5:14b', ollamaUrl: 'http://127.0.0.1:11434' },
-      firefox: { enabled: false, port: 47831 }
+      talking: 'tap-or-hold', playSounds: true, duckAudio: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
+      glass: true, voice: 'auto', voiceRate: 'normal', openAtLogin: true, showInDock: false,
+      shortcuts: { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } },
+      speech: { locale: 'en-US', input: 'auto' },
+      appStyles: [{ app: 'Messages', style: 'chat' }],
+      model: { provider: 'claude', claudeModel: 'auto', anthropicModel: 'claude-sonnet-5-5', ollamaModel: 'qwen2.5:14b', ollamaUrl: 'http://127.0.0.1:11434' },
+      firefox: { enabled: true, port: 47831 }
     },
     history: [
-      { id: '1', text: 'What apps do I have open?', status: 'done', reply: 'You have 6 apps open: Claude, darktable, Finder, Firefox, Preview and System Settings.', ts: now - 37 * 60e3 },
-      { id: '2', text: 'Open notes.', status: 'stopped', reply: 'Stopped.', ts: now - 37 * 60e3 },
-      { id: '3', text: 'Can you show me my download folder?', status: 'done', reply: 'Opened the Downloads folder.', ts: now - 37 * 60e3 }
+      { id: '1', text: 'Remind me to call mom at 5pm', status: 'done', reply: 'Reminder set: call mom, today at 5:00 PM.', ts: now - 4 * min },
+      { id: '2', text: 'What is on my calendar tomorrow?', status: 'done', reply: 'Tomorrow you have a design review at 10:00 and lunch with Sam at 12:30.', ts: now - 19 * min },
+      { id: '3', text: 'Make a note called Trip ideas saying book flights and check passports', status: 'done', reply: 'Created the note "Trip ideas".', ts: now - 52 * min },
+      { id: '4', text: 'Open github.com in Firefox', status: 'done', reply: 'Opened github.com in Firefox.', ts: now - 95 * min },
+      { id: '5', text: 'Set a timer for 10 minutes', status: 'done', reply: 'Timer set for 10 minutes.', ts: now - 3 * 60 * min },
+      { id: '6', text: 'Send "running late" to Alex', status: 'stopped', reply: 'Cancelled. Nothing was sent.', ts: now - 5 * 60 * min }
+    ],
+    dictations: [
+      { id: 'd1', text: 'Thanks for the update, I will review the draft this afternoon and send comments by tomorrow morning.', ts: now - 11 * min },
+      { id: 'd2', text: 'Can we move the standup to ten thirty?', ts: now - 40 * min },
+      { id: 'd3', text: 'Meeting notes: ship the beta on Friday, follow up with design about the icon.', ts: now - 2 * 60 * min }
     ],
     actions: [
-      { id: 'a1', tool: 'open_path', input: { path: '~/Downloads' }, result: 'Opened /Users/sergey/Downloads.', ok: true, ts: now - 37 * 60e3 },
-      { id: 'a2', tool: 'list_running_apps', input: {}, result: 'Claude, darktable, Finder', ok: true, ts: now - 38 * 60e3 }
+      { id: 'a1', tool: 'reminders_add', input: { title: 'Call mom', when: 'today 17:00' }, result: 'Added reminder "Call mom" for 17:00.', ok: true, ts: now - 4 * min },
+      { id: 'a2', tool: 'calendar_list', input: { range: 'tomorrow' }, result: '2 events', ok: true, ts: now - 19 * min },
+      { id: 'a3', tool: 'notes_create', input: { title: 'Trip ideas' }, result: 'Created note "Trip ideas".', ok: true, ts: now - 52 * min },
+      { id: 'a4', tool: 'open_url', input: { url: 'https://github.com' }, result: 'Opened in Firefox.', ok: true, ts: now - 95 * min }
     ],
-    routines: [], vocabulary: [], lastReply: '', hasKey: false,
-    stats: { requests: 3, actions: 2, words: 19, minutesSaved: 1 },
-    labels: { ask: 'Right ⌥', type: '⌥T' },
-    firefoxConnected: false, hotkeysRunning: true, hotkeysError: null, version: '0.1.0', extensionPath: '/Applications/Relay.app/Contents/Resources/firefox-extension'
+    routines: [
+      { id: 'r1', name: 'start my day', steps: ['open Calendar and read me today', 'open Notes', 'set a timer for 25 minutes'] },
+      { id: 'r2', name: 'wind down', steps: ['turn on dark mode', 'set brightness to 30 percent', 'pause the music'] }
+    ],
+    timers: [], replacements: [{ id: 'w1', from: 'superbase', to: 'Supabase' }], vocabulary: ['Supabase', 'Talkify', 'Ollama', 'Haiku'], lastReply: '',
+    hasKey: false,
+    stats: { requests: 42, actions: 97, words: 1850, minutesSaved: 31 },
+    labels: { ask: 'Right ⌥', dictate: 'Right ⌘', type: '⌥T' },
+    claude: { installed: true, loggedIn: true, checked: true, email: '', path: '/usr/local/bin/claude' },
+    speech: { available: true, device: 'MacBook Pro Microphone', preparing: null, prepared: true, error: null },
+    firefoxConnected: true, hotkeysRunning: true, hotkeysSeen: true, hotkeysError: null, version: '0.1.0', extensionPath: '/Applications/Relay.app/Contents/Resources/firefox-extension'
   };
+  const day = 24 * 60 * min;
+  [3, 5, 2, 7, 4, 6].forEach((n, i) => {
+    for (let k = 0; k < n; k++) {
+      state.history.push({ id: `old${i}-${k}`, text: ['Open Notes', 'Set a timer for 10 minutes', 'What is on my calendar today?', 'Pause the music', 'Remind me to stretch at 3'][k % 5], status: 'done', reply: 'Done.', ts: now - (6 - i) * day - k * 37 * min });
+    }
+  });
   const listeners = new Set();
   const emit = () => listeners.forEach((f) => f());
   const LABEL = { AltRight: 'Right ⌥', AltLeft: 'Left ⌥', MetaRight: 'Right ⌘' };
@@ -36,11 +64,25 @@
   window.__relayCalls = calls;
   window.__relayState = state;
   window.relay = {
+    claudeStatus: async () => state.claude,
+    claudeLogin: async () => ({ ok: true }), claudeCancelLogin: async () => {}, claudeLogout: async () => {},
+    requestMic: async () => ({ ok: true, status: 'granted' }),
+    speechLocales: async () => [{ id: 'en-US', name: 'English (United States)' }, { id: 'en-GB', name: 'English (United Kingdom)' }, { id: 'es-ES', name: 'Spanish (Spain)' }, { id: 'fr-FR', name: 'French (France)' }, { id: 'de-DE', name: 'German (Germany)' }],
+    setSpeechLocale: async () => {},
+    inputDevice: async () => 'MacBook Pro Microphone',
+    inputDevices: async () => ({ default: 'MacBook Pro Microphone', using: 'MacBook Pro Microphone', list: [{ uid: 'a', name: 'MacBook Pro Microphone' }, { uid: 'b', name: 'AirPods Pro' }] }),
+    voices: async () => ({ picked: 'Samantha', voices: [{ name: 'Samantha', kind: 'Standard', lang: 'en_US' }, { name: 'Ava (Premium)', kind: 'Premium', lang: 'en_US' }] }),
+    previewVoice: async () => {}, openVoiceSettings: async () => {}, setInput: async () => {},
+    appIcons: async () => ({}), runningApps: async () => ['Notes', 'Reminders', 'Messages', 'Safari', 'Firefox'],
+    addReplacement: async (from, to) => { state.replacements.push({ id: String(Date.now()), from, to }); emit(); },
+    removeReplacement: async (id) => { state.replacements = state.replacements.filter((r) => r.id !== id); emit(); },
+    deleteDictation: async (id) => { state.dictations = state.dictations.filter((d) => d.id !== id); emit(); },
+    clearDictation: async () => { state.dictations = []; emit(); },
     getState: async () => JSON.parse(JSON.stringify(state)),
     set: async (k, v) => { calls.push(['set', k, v]); setPath(k, v); emit(); },
     setApiKey: async (k) => { calls.push(['setApiKey', k]); state.hasKey = !!k; emit(); },
     testModel: async () => ({ ok: state.hasKey, error: 'No Anthropic API key set. Add one in Relay > Model.', text: 'OK' }),
-    permissions: async () => window.__perms || { accessibility: false, screen: false },
+    permissions: async () => window.__perms || { accessibility: true, screen: true, micStatus: 'granted' },
     requestAccessibility: async () => false,
     openPane: async (n) => calls.push(['openPane', n]),
     testAutomation: async (a) => ({ ok: a !== 'Messages', denied: a === 'Messages' }),
@@ -62,6 +104,7 @@
       cancel: async () => calls.push(['ask.cancel']),
       confirm: async (y) => calls.push(['ask.confirm', y]),
       resize: async (h) => { window.__pillHeight = h; },
+      interactive: async () => {}, hidden: async () => {},
       onState: (cb) => { window.__askState = cb; return () => {}; }
     },
     onStateChanged: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
