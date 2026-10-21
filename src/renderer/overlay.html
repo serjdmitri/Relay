@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';">
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
+  #cur { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: transform .45s cubic-bezier(.2,.8,.2,1); transform: translate(-100px, -100px); }
+  #halo { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle, rgba(88,166,255,.55) 0%, rgba(47,124,246,.25) 55%, rgba(47,124,246,0) 72%); }
+  #ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border-radius: 50%; border: 2.5px solid #58a6ff; box-shadow: 0 0 14px #2f7cf6; animation: pulse 1.1s ease-out infinite; }
+  #dot { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+  #lab { position: absolute; left: 24px; top: 14px; background: #1d1d1f; color: #fff; font: 500 13px -apple-system, system-ui, sans-serif; padding: 5px 10px; border-radius: 10px; border: 1px solid #3a3a3d; white-space: nowrap; display: none; }
+  @keyframes pulse { 0% { transform: scale(.8); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="cur"><div id="halo"></div><div id="ring"></div><div id="dot"></div><div id="lab"></div></div>
+<script src="overlay.js"></script>
+</body>
+</html>

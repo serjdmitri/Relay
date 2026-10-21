@@ -1,0 +1,9 @@
+{
+  "manifest_version": 2,
+  "name": "Relay for Firefox",
+  "version": "0.1.0",
+  "description": "Lets the Relay Mac app read pages, switch tabs and click or type in Firefox. Talks only to 127.0.0.1.",
+  "browser_specific_settings": { "gecko": { "id": "relay@sergey.local" } },
+  "permissions": ["tabs", "<all_urls>"],
+  "background": { "scripts": ["background.js"], "persistent": true }
+}

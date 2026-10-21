@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #eee; user-select: none; }
+  #pill { margin: 4px; background: #1d1d1f; border: 1px solid #3a3a3d; border-radius: 26px; padding: 10px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+  .line { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+  .mic { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(#58a6ff, #2f7cf6); display: grid; place-items: center; flex: none; }
+  .mic svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .mic.ok { background: #30d158; } .mic.bad { background: #ff9f0a; }
+  input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #f4f4f4; font-size: 16px; user-select: text; }
+  input::placeholder { color: #7d7d82; }
+  .hint { color: #8a8a8f; font-size: 13px; white-space: nowrap; }
+  .label { flex: 1; min-width: 0; font-size: 15px; }
+  .label small { display: block; color: #8a8a8f; font-size: 12px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spin { width: 18px; height: 18px; border: 2.5px solid #3a3a3d; border-top-color: #58a6ff; border-radius: 50%; animation: s .8s linear infinite; margin: 0 8px; flex: none; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .btn { background: #3a3a3d; border: 0; color: #eee; border-radius: 15px; padding: 7px 14px; font-size: 13px; font-weight: 500; flex: none; }
+  .btn.go { background: #2f7cf6; color: #fff; }
+  .q { padding: 4px 8px 6px; font-size: 15px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; user-select: text; max-height: 140px; overflow: auto; }
+  .acts { display: flex; justify-content: flex-end; gap: 10px; padding: 6px 4px 2px; }
+  .reply { flex: 1; font-size: 15px; line-height: 1.4; padding: 4px 0; user-select: text; word-break: break-word; }
+  .bars { display: flex; gap: 3px; align-items: center; height: 20px; flex: none; }
+  .bars i { width: 3px; height: 4px; border-radius: 2px; background: #58a6ff; animation: b 1s ease-in-out infinite; }
+  .bars i:nth-child(2) { animation-delay: .12s; } .bars i:nth-child(3) { animation-delay: .24s; } .bars i:nth-child(4) { animation-delay: .36s; } .bars i:nth-child(5) { animation-delay: .48s; }
+  @keyframes b { 0%,100% { height: 4px; } 50% { height: 16px; } }
+</style>
+</head>
+<body>
+<div id="pill"></div>
+<script src="ask.js"></script>
+</body>
+</html>
