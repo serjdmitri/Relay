@@ -51,7 +51,7 @@ function renderSidebar() {
   for (const group of NAV) {
     const nav = h('<nav class="nav"></nav>');
     for (const [id, name] of group) {
-      const item = h(`<div class="nav-item ${page === id ? 'active' : ''}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box" style="background:${GRAD[id]};--bc:${COLORS[id]}">${glyph(NAV_GLYPH[id])}</span>${name}</div>`);
+      const item = h(`<div class="nav-item ${page === id ? 'active' : ''}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span>${name}</div>`);
       item.onclick = () => go(id);
       nav.append(item);
     }
@@ -74,15 +74,11 @@ function deviceLabel() {
   return `${icon('headphones')}${esc(d || 'Microphone')}`;
 }
 
-// The current page's colours drive --accent, buttons, toggles and the background glow (see styles.css).
+// The current page's colours tint the glows at the top and bottom and the selected sidebar item (see styles.css).
 function applyTheme() {
   const [a, b] = THEME[page] || THEME.home;
   document.documentElement.style.setProperty('--pc', a);
   document.documentElement.style.setProperty('--pc2', b);
-  // text on a filled button: dark on light colours (cyan, lime, yellow), white on the rest
-  const lum = (hex) => { const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * bl; };
-  const L = (lum(a) + lum(b)) / 2;
-  document.documentElement.style.setProperty('--on', 1.05 / (L + 0.05) >= (L + 0.05) / 0.055 ? '#fff' : '#0b0820');
 }
 
 function render() {
@@ -658,6 +654,19 @@ window.addEventListener('keyup', (e) => {
     perms = await relay.permissions();
     render();
   });
+  // Sidebar collapse: the button in the top bar, or Cmd+\. The choice is remembered.
+  const appEl = $('.app');
+  const setSidebar = (collapsed) => {
+    appEl.classList.toggle('collapsed', collapsed);
+    $('#sbtn').title = collapsed ? 'Show sidebar (⌘\\)' : 'Hide sidebar (⌘\\)';
+    try { localStorage.setItem('sidebar', collapsed ? 'collapsed' : 'open'); } catch {}
+  };
+  const toggleSidebar = () => setSidebar(!appEl.classList.contains('collapsed'));
+  $('#sbtn').onclick = toggleSidebar;
+  document.addEventListener('keydown', (e) => { if (e.metaKey && e.key === '\\') { e.preventDefault(); toggleSidebar(); } });
+  let saved = null;
+  try { saved = localStorage.getItem('sidebar'); } catch {}
+  setSidebar(saved === 'collapsed');
   relay.claudeStatus();
   relay.appIcons().then((i) => { appIcons = i; if (page === 'permissions') render(); });
   setInterval(async () => {

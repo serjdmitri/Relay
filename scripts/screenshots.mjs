@@ -12,7 +12,7 @@ const mock = fs.readFileSync(path.join(root, 'scripts/mock-relay.js'), 'utf8');
 const url = (f, q = '') => 'file://' + path.join(root, 'src/renderer', f) + q;
 
 const browser = await launch();
-const ctx = await browser.newContext({ viewport: { width: 900, height: 640 }, deviceScaleFactor: 2 });
+const ctx = await browser.newContext({ viewport: { width: 820, height: 620 }, deviceScaleFactor: 2 });
 await ctx.addInitScript(mock);
 
 const main = await ctx.newPage();
@@ -24,6 +24,13 @@ for (const p of ['home', 'history', 'routines', 'vocab', 'general', 'speech', 's
   await main.waitForTimeout(150);
   await main.screenshot({ path: path.join(out, `main-${p}.png`) });
 }
+
+// sidebar collapsed: the main area takes the whole window
+await main.goto(url('index.html', '?page=home'));
+await main.evaluate(() => document.getElementById('sbtn').click());
+await main.waitForTimeout(500);
+await main.screenshot({ path: path.join(out, 'main-home-collapsed.png') });
+await main.evaluate(() => localStorage.removeItem('sidebar'));
 
 // the model service picker, with a key-based service selected
 await main.goto(url('index.html', '?page=account'));
