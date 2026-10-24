@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Docs and site: the main pitch is now "No API key: it runs on the Claude plan you already have" (through your own Claude Code). API keys and Ollama are options. No app changes.
+
 ## 0.2.0
 
 - More model services: OpenAI (ChatGPT API), Google Gemini, Groq, Mistral, xAI, DeepSeek and a custom OpenAI-compatible address, each with its own key and model. Pick one under Account > Model service.

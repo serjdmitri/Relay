@@ -5,10 +5,12 @@
 <h1 align="center">Relay</h1>
 
 <p align="center"><b>Talk to your Mac. Relay does the rest.</b><br>
-A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and types what you say into any app.</p>
+A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and types what you say into any app.<br>
+<b>No API key: it runs on the Claude plan you already have.</b></p>
 
 <p align="center">
   <a href="https://github.com/serjdmitri/Relay/releases"><img alt="Release" src="https://img.shields.io/github/v/release/serjdmitri/Relay?include_prereleases&label=release&color=8B5CF6"></a>
+  <img alt="No API key needed" src="https://img.shields.io/badge/API%20key-not%20needed-30D158">
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-0A84FF?logo=apple&logoColor=white">
   <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/arm64%20%7C%20x64-dmg-FF9F0A">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
@@ -27,7 +29,7 @@ Dictation is built in (Apple's on-device speech recognition), so a separate dict
 
 > **Status: early (v0.2.0).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
 
-> **Claude account sign-in is for your own Mac only.** Relay can run your own signed-in Claude Code (`claude`) so you need no API key. Anthropic does not allow third-party apps to offer claude.ai login to other people, so do not hand Relay builds to others expecting that path to be okay. If you share or distribute a build, point it at an **Anthropic API key** or a local **Ollama** model instead (Account page, "Use an API key or a local model instead").
+> **How it runs.** Relay uses your own [Claude Code](https://claude.ai/code), signed in to your Claude plan (Pro or Max), so you need no API key. Relay never sees your password; it runs the real `claude` program. Relay is an independent project and is not made or endorsed by Anthropic, and Anthropic's rules for third-party apps can change. If they do, an **API key** (Anthropic, OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek or any OpenAI-compatible address) or a local **Ollama** model keeps Relay working: Account > "Use an API key or a local model instead".
 
 Relay is an independent project. It is not affiliated with Anthropic, [Talkify](https://github.com/tornikegomareli/Talkify) or Octaflow. The window, pages and pill follow Octaflow's layout, with original code, name and icon.
 
@@ -145,9 +147,9 @@ Turn on **General > Speak replies**, then pick a voice and speed under **Speech 
 ### Claude account
 Relay runs your own Claude Code (`claude`), already signed in to your Claude account, and gives it Relay's Mac tools over a local-only tool server (127.0.0.1, random port, bearer token). Sign in, sign out and pick the model on the Account page. The default, **Auto**, starts Claude while you are still talking, answers simple requests with Haiku (fastest), starts writing and planning requests on Sonnet, and moves a struggling Haiku request up to Sonnet in the same conversation, so nothing already done is repeated. Pick Haiku, Sonnet or Opus by hand to turn that off. An API key or a local Ollama model is still available under "Use an API key or a local model instead" (see below).
 
-This is for your own use on your own Mac. Do not hand Relay builds to other people with this sign-in path: Anthropic does not allow third-party apps to offer claude.ai login to others.
+The Claude plan is the default, and no API key is needed. See the note at the top about how this relies on Claude Code.
 
-### Other model services (your own API key)
+### Other model services (an API key instead of your Claude plan)
 Account > **Model service** also offers **OpenAI** (the ChatGPT API), **Google Gemini**, **Groq**, **Mistral**, **xAI (Grok)**, **DeepSeek** and a **Custom address** for anything that speaks the OpenAI chat format (LM Studio, OpenRouter and so on), next to the Anthropic API key and Ollama. Each service keeps its own key (stored encrypted with your Keychain) and its own model name, and there is a **Test** button. Model names change, so edit the name if the test fails. OpenAI and Gemini are treated as able to see screenshots; the others are text only, so Relay does not take screenshots with them. The OpenAI API is billed separately from a ChatGPT subscription.
 
 ### The window

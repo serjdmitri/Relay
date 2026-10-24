@@ -6,7 +6,7 @@
 <title>Relay: talk to your Mac</title>
 <meta name="description" content="Relay is a free, open source menu bar assistant for macOS. Talk to it and it opens apps, writes notes and reminders, reads your calendar, drives Firefox and types what you say into any app.">
 <meta property="og:title" content="Relay: talk to your Mac">
-<meta property="og:description" content="A free, open source menu bar assistant for macOS. Built-in on-device dictation. Runs on your own API key (Anthropic, OpenAI, Gemini and more) or a local Ollama model.">
+<meta property="og:description" content="A free, open source menu bar assistant for macOS. Built-in on-device dictation. No API key: it runs on your Claude plan. API keys and local models are options.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://serjdmitri.github.io/Relay/">
 <meta property="og:image" content="https://serjdmitri.github.io/Relay/img/pill-states.png">
@@ -111,9 +111,9 @@
 <main id="top">
   <div class="hero wrap">
     <img class="logo" src="logo.svg" alt="Relay logo" width="112" height="112">
-    <span class="eyebrow">Free and open source · macOS 26 or later</span>
+    <span class="eyebrow">Free and open source · No API key · macOS 26 or later</span>
     <h1>Talk to your Mac.<br><span class="g">Relay does the rest.</span></h1>
-    <p class="lead">A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces and drives Firefox. It also types what you say into any app, with dictation that never leaves your Mac.</p>
+    <p class="lead">A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces and drives Firefox. It also types what you say into any app, with dictation that never leaves your Mac. <strong>No API key: it runs on the Claude plan you already have.</strong></p>
     <div class="cta">
       <a class="btn primary" id="dl-main" href="https://github.com/serjdmitri/Relay/releases">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12 3 7h3V1h4v6h3L8 12zM2 14h12v1.5H2z"/></svg>
@@ -153,12 +153,12 @@
   </section>
 
   <section id="models" class="wrap">
-    <h2>Bring your own <span class="g">brain</span></h2>
-    <p class="sub">Relay is free. Pick how it thinks. You never pay Relay anything.</p>
+    <h2>No API key. <span class="g">Your Claude plan.</span></h2>
+    <p class="sub">Relay is free. By default it thinks with the Claude plan you already have, through your own Claude Code. Prefer something else? An API key or a local model works too.</p>
     <div class="grid model">
-      <div class="card"><h3>Your own API key <span class="tag">Recommended</span></h3><p>Anthropic, OpenAI (the ChatGPT API), Google Gemini, Groq, Mistral, xAI Grok, DeepSeek, or any OpenAI-compatible address. Paste a key once; it is stored encrypted with your Keychain. You pay the service for what you use, and there is a Test button to check it.</p></div>
+      <div class="card"><h3>Your Claude plan <span class="tag">Default</span></h3><p>No API key. Relay runs your own Claude Code, signed in to your Claude plan (Pro or Max), and gives it Mac tools through a local-only server. Relay never sees your password. Simple requests use a fast model and harder ones move up automatically.</p></div>
+      <div class="card"><h3>Your own API key</h3><p>Anthropic, OpenAI (the ChatGPT API), Google Gemini, Groq, Mistral, xAI Grok, DeepSeek, or any OpenAI-compatible address. Paste a key once; it is stored encrypted with your Keychain. There is a Test button to check it.</p></div>
       <div class="card"><h3>Ollama <span class="tag">Free and local</span></h3><p>Run a model on your own Mac. Nothing leaves your machine. Pick one with tool support, and a vision model if you want screenshots.</p></div>
-      <div class="card"><h3>Your own Claude Code <span class="tag warn">Unsupported</span></h3><p>Relay can also run a Claude Code you have signed in to yourself. It is included but unsupported: Anthropic does not allow apps to offer Claude.ai login or use a plan on behalf of other people, so use it at your own risk. The two options on the left are the supported ones.</p></div>
     </div>
   </section>
 
@@ -178,7 +178,7 @@
       <div class="step"><b>Download</b><span>Grab the <code>.dmg</code> for your Mac from the latest release and drag Relay to Applications.</span></div>
       <div class="step"><b>Open it once</b><span>Relay is not notarized, so right-click it and choose <strong>Open</strong>, then <strong>Open</strong> again.</span></div>
       <div class="step"><b>Allow what it needs</b><span>Microphone, Accessibility, Screen Recording and Input Monitoring, once each. The welcome guide walks you through.</span></div>
-      <div class="step"><b>Pick a model</b><span>In Account, pick a model service and paste its API key, or point Relay at a local Ollama model. Then press <code>Right ⌥</code> and talk.</span></div>
+      <div class="step"><b>Sign in</b><span>Install <a href="https://claude.ai/code" style="text-decoration:underline">Claude Code</a> and sign in to your Claude plan; Relay can start the sign-in for you. Or pick an API key or Ollama in Account. Then press <code>Right ⌥</code> and talk.</span></div>
     </div>
     <pre><code>xattr -dr com.apple.quarantine /Applications/Relay.app   # if macOS still refuses to open it</code></pre>
     <div class="dl">
@@ -190,9 +190,10 @@
 
   <section id="faq" class="wrap">
     <h2 style="margin-bottom:34px">Questions</h2>
-    <details><summary>Is Relay really free?</summary><p>Yes. It is open source under the MIT license. The only cost is whatever your chosen model service charges: an API key bills per use, and Ollama runs locally for free.</p></details>
+    <details><summary>Is Relay really free?</summary><p>Yes. It is open source under the MIT license. The only cost is the model: your existing Claude plan (nothing extra), an API key (billed per use by that service), or Ollama (free, runs on your Mac).</p></details>
     <details><summary>Does my voice leave my Mac?</summary><p>No. Dictation uses Apple's on-device speech recognition. Only the resulting words are sent to the model you picked, and only when you ask Relay to do something.</p></details>
-    <details><summary>Can I use my Claude or ChatGPT subscription?</summary><p>Not as a supported feature. Anthropic does not allow third-party apps to offer Claude.ai login or to route requests through someone's Pro or Max plan, and OpenAI only allows ChatGPT plan use in apps it has approved. Relay's supported options are API keys and local models; the OpenAI API is billed separately from ChatGPT Plus. Relay does include an unsupported path that runs a Claude Code you have signed in to yourself. It may stop working and is used at your own risk; please read the note in the README.</p></details>
+    <details><summary>Do I need an API key?</summary><p>No. By default Relay runs your own Claude Code, signed in to your Claude plan, so there is nothing extra to pay Relay and no key to paste. API keys (Anthropic, OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek, any OpenAI-compatible address) and local Ollama models are options in Account.</p></details>
+    <details><summary>Is this approved by Anthropic? Could it stop working?</summary><p>No, Relay is an independent project, not made or endorsed by Anthropic. It works by running the real Claude Code on your Mac with your own sign-in; Relay never sees your password. Anthropic's rules for third-party apps can change, and if they do, an API key or a local model keeps Relay working. ChatGPT plans are not supported: for OpenAI, use an API key (billed separately from ChatGPT Plus).</p></details>
     <details><summary>Why does macOS warn me when I open it?</summary><p>Relay is not notarized by Apple, which needs a paid developer account. Right-click it and choose Open, or run the <code>xattr</code> command above. You can also read and build the source yourself.</p></details>
     <details><summary>Does it work on Windows, Linux or older Macs?</summary><p>No. Dictation and the glass pill use macOS 26 features, and the actions are built on AppleScript and Accessibility, so Relay is Mac only for now.</p></details>
     <details><summary>Is it affiliated with Anthropic, Talkify or Octaflow?</summary><p>No. Relay is an independent project. It began as a companion for <a href="https://github.com/tornikegomareli/Talkify">Talkify</a>, and its window follows Octaflow's layout with original code, name and icon.</p></details>
