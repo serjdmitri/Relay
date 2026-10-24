@@ -13,7 +13,7 @@ More model services, a calmer look and a sidebar you can collapse.
 Download the `.dmg` for your Mac and drag Relay to Applications. It is not notarized, so the first time, right-click Relay and choose Open, or run `xattr -dr com.apple.quarantine /Applications/Relay.app`. You will approve Microphone, Accessibility, Screen Recording and Input Monitoring once.
 
 ## Models and sign-in
-Supported options are an API key from one of the services above, or a local Ollama model. Relay also includes an unsupported, personal-use path that runs a Claude Code you have signed in to yourself. Anthropic does not allow apps to offer Claude.ai login or use a plan on behalf of other people, so use it at your own risk.
+**No API key by default:** Relay runs your own Claude Code, signed in to your Claude plan (Pro or Max). Relay never sees your password. Relay is an independent project, not made or endorsed by Anthropic, and Anthropic's rules for third-party apps can change; if they do, an API key (Anthropic, OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek or any OpenAI-compatible address) or a local Ollama model keeps Relay working. ChatGPT plans are not supported (use an OpenAI API key).
 
 ## Testing status
 136 unit tests pass. Real calls to the new model services (OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek) were not made: they are covered by tests with fake servers, so check the model name with the Test button. Live microphone dictation, music control, permission prompts and AppleScript against every app have only been tried by hand. If something fails, open an issue with what History > Actions shows.
