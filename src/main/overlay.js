@@ -1,4 +1,4 @@
-const { BrowserWindow, screen, ipcMain } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 const { displayAt, normalizeStrokes, strokesBox } = require('./overlayGeometry');
 
@@ -10,6 +10,9 @@ const { displayAt, normalizeStrokes, strokesBox } = require('./overlayGeometry')
 const FOLLOW_MS = 33; // the buddy follows the pointer about 30 times a second, and only while it is on screen
 const HALO_MS = 2500;
 const MARKS_MS = 30000;
+const MARK_POLL_MS = 16; // how often the pointer is read while the mark key is held
+const MARK_TRAIL_MS = 1600; // the trail fades after this long, and only this much of the path counts as the mark
+const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
@@ -28,15 +31,8 @@ class Overlay {
     this.buddyWatchdog = null;
     this.onClear = null; // called when the marks go away, however that happens
     this.marking = null; // the window the user is drawing a mark on (the mark key is held)
-    this.markWait = null;
-    // The overlay page reports what the user drew with the mark key.
-    ipcMain.on('overlay:mark', (ev, data) => {
-      for (const e of this.wins.values()) {
-        if (e.win.isDestroyed() || e.win.webContents !== ev.sender) continue;
-        e.marks = normalizeStrokes(data && data.strokes);
-        if (data && data.final && this.markWait) this.markWait();
-      }
-    });
+    this.markPts = [];
+    this.markPoll = null;
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -71,7 +67,7 @@ class Overlay {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
-    e = { win, display, shapes: false, card: false, halo: false, buddy: false, haloTimer: null, ready: false, queue: [], mark: false, markShow: false, marks: [], markTimer: null };
+    e = { win, display, shapes: false, card: false, halo: false, buddy: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
     // A page that has not finished loading would drop what we send it, so hold commands until it has.
     win.webContents.once('did-finish-load', () => {
       e.ready = true;
@@ -96,7 +92,7 @@ class Overlay {
       e.look = look;
       this.send(e, { type: 'look', look });
     }
-    const want = e.shapes || e.card || e.halo || e.buddy || e.mark || e.markShow;
+    const want = e.shapes || e.card || e.halo || e.buddy || e.markShow;
     if (want && !e.win.isVisible()) {
       if (e.win.getBounds().x !== e.display.bounds.x || e.win.getBounds().y !== e.display.bounds.y) e.win.setBounds(e.display.bounds);
       e.win.showInactive();
@@ -276,43 +272,52 @@ class Overlay {
     return false;
   }
 
-  // ----- the mark key: hold it, circle something on screen, let go -----
-  // While it is held the display under the pointer takes the mouse, so the user can draw freehand strokes on it.
+  // ----- the mark key: hold it and move the pointer round something; no click needed -----
+  // The pointer's path is followed while the key is held and drawn as a trail that fades after a moment. When the key
+  // is let go, the recent path is what the user circled.
   markStart() {
     if (!this.isEnabled()) return false;
     this.markCancel();
     const e = this.entry(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
     this.marking = e;
-    e.marks = [];
-    e.mark = true;
+    this.markPts = [];
     e.markShow = true;
     clearTimeout(e.markTimer);
-    e.win.setIgnoreMouseEvents(false);
     this.refresh(e);
     this.send(e, { type: 'mark-start' });
+    this.markPoll = setInterval(() => this.markTick(), MARK_POLL_MS);
     return true;
   }
 
-  // The key was released. Resolves to { display, box (global points), strokes } or null when nothing was drawn.
+  markTick() {
+    const e = this.marking;
+    if (!e || e.win.isDestroyed()) return;
+    const p = screen.getCursorScreenPoint();
+    const last = this.markPts[this.markPts.length - 1];
+    if (last && Math.hypot(p.x - last.gx, p.y - last.gy) < 2) return;
+    const o = this.origin(e);
+    const t = Date.now();
+    this.markPts.push({ gx: p.x, gy: p.y, t });
+    while (this.markPts.length && t - this.markPts[0].t > 6000) this.markPts.shift();
+    this.send(e, { type: 'mark-point', x: p.x - o.x, y: p.y - o.y });
+  }
+
+  // The key was let go. { display, box (global points), strokes } for what was circled, or null.
   async markEnd() {
     const e = this.marking;
     if (!e) return null;
+    clearInterval(this.markPoll);
+    this.markPoll = null;
     this.marking = null;
-    const reported = new Promise((resolve) => {
-      this.markWait = resolve;
-      setTimeout(resolve, 400);
-    });
     this.send(e, { type: 'mark-end' });
-    await reported;
-    this.markWait = null;
-    e.mark = false;
-    if (!e.win.isDestroyed()) e.win.setIgnoreMouseEvents(true);
-    const strokes = normalizeStrokes(e.marks);
+    const since = Date.now() - MARK_TRAIL_MS;
+    const recent = this.markPts.filter((q) => q.t >= since).map((q) => [q.gx, q.gy]);
+    this.markPts = [];
+    const strokes = normalizeStrokes([recent]);
     const box = strokesBox(strokes);
-    e.markTimer = setTimeout(() => this.markFade(e), box ? 2500 : 0); // what was drawn stays a moment, then goes
-    if (!box) return null;
-    const o = this.origin(e);
-    return { display: e.display, box: { x: box.x + o.x, y: box.y + o.y, w: box.w, h: box.h }, strokes: strokes.length };
+    e.markTimer = setTimeout(() => this.markFade(e), MARK_TRAIL_MS + 300); // the trail finishes fading, then the window goes
+    if (!box || box.w < MARK_MIN || box.h < MARK_MIN) return null; // a pointer that only passed by is not a circle
+    return { display: e.display, box, strokes: 1 };
   }
 
   markFade(e) {
@@ -323,12 +328,12 @@ class Overlay {
 
   // Esc while marking: drop it.
   markCancel() {
+    clearInterval(this.markPoll);
+    this.markPoll = null;
+    this.markPts = [];
     const e = this.marking;
     if (!e) return;
     this.marking = null;
-    e.mark = false;
-    e.marks = [];
-    if (!e.win.isDestroyed()) e.win.setIgnoreMouseEvents(true);
     this.send(e, { type: 'mark-end', cancel: true });
     this.markFade(e);
   }

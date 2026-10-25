@@ -429,7 +429,7 @@ const PAGES = {
     card.append(row('ask', 'wave', 'Ask Relay', 'Talk, then send. Press while it works to stop it.', true));
     card.append(row('dictate', 'mic', 'Dictate', 'Talk; the words are typed where your cursor is.'));
     card.append(row('type', 'keyboard', 'Type a request', "For when talking isn't an option. Press again to close."));
-    card.append(row('mark', 'record', 'Mark the screen', 'Hold it, circle something with the mouse, let go, then ask about it. Use one modifier key on its own.'));
+    card.append(row('mark', 'record', 'Mark the screen', 'Hold it and move the pointer round something, then let go and ask about it. No clicking. Use one modifier key on its own.'));
     c.append(card);
     c.append(h('<div class="note" style="margin:16px 12px;line-height:16px">A key with ⌃, ⌥ or ⌘, an F-key, or one modifier on its own like Right ⌥. Esc cancels.<br><span class="link" id="reset">Reset to defaults</span></div>'));
     $('#reset', c).onclick = () => relay.resetShortcuts();
