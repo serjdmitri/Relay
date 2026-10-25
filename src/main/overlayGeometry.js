@@ -126,6 +126,15 @@ function normalizeStrokes(raw) {
   return out;
 }
 
+// The last stretch of pointer movement: walking back from the newest point while the pauses between points stay short.
+// A pointer that circled something and then rested for a moment still gives that circle. points: [{ t, ... }] oldest first.
+function lastBurst(points, { gapMs = 500, maxMs = 5000 } = {}) {
+  if (!points.length) return [];
+  let i = points.length - 1;
+  while (i > 0 && points[i].t - points[i - 1].t < gapMs && points[points.length - 1].t - points[i - 1].t <= maxMs) i--;
+  return points.slice(i);
+}
+
 // The rectangle all strokes fit in, or null.
 function strokesBox(strokes) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -159,4 +168,4 @@ function displayAt(displays, p) {
   return displays.reduce((best, d) => (dist(d) < dist(best) ? d : best), displays[0]);
 }
 
-module.exports = { toGlobal, normalizeShapes, parseFrame, guideCard, guideSteps, guideCommand, inRect, normalizeStrokes, strokesBox, markRegion, displayAt, KINDS, MAX_SHAPES, MAX_STEPS };
+module.exports = { toGlobal, normalizeShapes, parseFrame, guideCard, guideSteps, guideCommand, inRect, normalizeStrokes, strokesBox, markRegion, lastBurst, displayAt, KINDS, MAX_SHAPES, MAX_STEPS };

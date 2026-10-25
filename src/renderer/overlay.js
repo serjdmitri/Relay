@@ -208,14 +208,15 @@ let marking = false;
 let trailRaf = 0;
 
 function drawTrail(now) {
-  const alive = trail.filter((q) => now - q.t < TRAIL_MS);
+  // While the key is held the trail only ages as the pointer moves, so a circle stays up if the pointer then rests.
+  const ref = marking && trail.length ? trail[trail.length - 1].t : now;
+  const alive = trail.filter((q) => ref - q.t < TRAIL_MS);
   trail = alive;
   markLayer.replaceChildren();
   if (alive.length > 1) {
     const pts = alive.map((q) => `${q.x},${q.y}`).join(' ');
     const under = el('polyline', { class: 'u', points: pts });
     const over = el('polyline', { class: 'o', points: pts });
-    over.style.opacity = String(Math.min(1, (TRAIL_MS - (now - alive[0].t)) / 700 + 0.35)); // the tail thins as it ages
     markLayer.append(under, over);
   }
   if (marking || alive.length) trailRaf = requestAnimationFrame((t) => drawTrail(performance.now()));
