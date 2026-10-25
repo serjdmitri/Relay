@@ -152,6 +152,10 @@ function glassBinPath() {
   return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-glass') : path.join(__dirname, '../../native/build/relay-glass');
 }
 
+function axBinPath() {
+  return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-ax') : path.join(__dirname, '../../native/build/relay-ax');
+}
+
 function speechBinPath() {
   return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-speech') : path.join(__dirname, '../../native/build/relay-speech');
 }
@@ -414,7 +418,7 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getLook: () => store.get('settings.look') || 'jarvis' });
   overlay.watchDisplays();
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
@@ -433,7 +437,7 @@ app.whenReady().then(() => {
     }
   });
   glass = new Glass({ binPath: glassBinPath() });
-  ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, onChange: broadcast });
+  ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
   timers.start();
   // Start the glass helper now rather than at the first pill, and give focus straight back if it took it:
   // a new helper started by the front app can end up in front, which would send a dictation nowhere.

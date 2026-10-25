@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Voice-first Mac agent. Dictate with Talkify, Relay does the rest.",
   "main": "src/main/main.js",
   "scripts": {
@@ -44,6 +44,10 @@
       {
         "from": "native/build/relay-glass",
         "to": "native/relay-glass"
+      },
+      {
+        "from": "native/build/relay-ax",
+        "to": "native/relay-ax"
       }
     ],
     "npmRebuild": false,

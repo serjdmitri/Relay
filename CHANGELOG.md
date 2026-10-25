@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- **Jarvis look (new default):** a cyan HUD. The buddy is a rotating ring reticle (it pulses while listening, spins faster while thinking and closes into a check when done); the pill pops up with HUD corner brackets, a status readout (LISTENING, WORKING, COMPLETE) and a scanning bar; guides show as a HUD panel with a progress bar; drawings, rings and labels are cyan. Switch back under General > Look > Classic.
+- **Guides are far more reliable.** Looking up an element used to go through System Events, which took 30 seconds or timed out in Notes, the Claude app and Xcode. A new native helper (`relay-ax`) walks the accessibility tree directly (0.2 to 0.6 seconds) and wakes up Electron apps' accessibility. If an element has no accessibility name, Relay now reads the text off the screen (Apple's on-device text recognition) and points at that.
+- **Guides check what you do.** The highlight stays on until the step is done and follows the element if you move the window. Clicking the highlighted spot (or saying "next") moves on; if the next thing is not there, the highlighted element disappears, or you click somewhere else, Relay looks at the screen and rewrites the remaining steps.
+- `ui_list` is much faster too (the same helper).
+
 ## 0.3.1
 
 - Guides now move on by themselves. Relay outlines the element for the current step, and when you click it (or say "next") it goes to the next step and outlines that one. Before, "next" was heard as a new request (it skipped a Spotify song) and the model had to be asked again for every step. While a guide is up, "next", "back" and "stop" are for the guide; "next song" still goes to the music commands.

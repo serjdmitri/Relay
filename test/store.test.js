@@ -10,6 +10,8 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'relay-'));
 test('defaults, persistence and nested set/get', () => {
   const dir = tmp();
   const s = new Store(dir);
+  assert.equal(s.get('settings.look'), 'jarvis', 'the Jarvis look is the default');
+  assert.equal(s.get('settings.buddy'), true);
   assert.equal(s.get('settings.shortcuts.ask.code'), 'AltRight');
   s.set('settings.model.provider', 'ollama');
   s.flush();

@@ -54,10 +54,11 @@ const states = {
   working: { state: 'working', label: 'Opening Notes', text: 'Open notes and make a note called Plan' },
   confirm: { state: 'confirm', question: 'Send "running late" to +1 305 555 0100?' },
   done: { state: 'done', status: 'done', reply: 'Reminder set: call mom, today at 5:00 PM.' },
-  dictating: { state: 'working', label: 'Listening', text: 'Open Notes and remind me to call mom at 5' }
+  dictating: { state: 'working', label: 'Listening', text: 'Open Notes and remind me to call mom at 5' },
+  listening: { state: 'listening', mode: 'ask', askLabel: 'Right ⌥', dictateLabel: 'Right ⌘', reset: true, partial: 'Show me how to turn on Night Shift' }
 };
 for (const [name, msg] of Object.entries(states)) {
-  await pill.evaluate((m) => window.__askState(m), { ...msg, show: true, glass: false });
+  await pill.evaluate((m) => window.__askState(m), { ...msg, show: true, glass: false, look: 'jarvis' });
   await pill.waitForTimeout(1100);
   const r = await pill.evaluate(() => { const b = document.getElementById('pill').getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; });
   const pad = 70; // keep the whole soft shadow so it fades out instead of being cut off
@@ -68,8 +69,9 @@ const ov = await ctx.newPage();
 await ov.setViewportSize({ width: 1000, height: 620 });
 ov.on('pageerror', (e) => errors.push('overlay: ' + e.message));
 await ov.goto(url('overlay.html'));
-await ov.evaluate(() => { document.documentElement.style.background = 'linear-gradient(135deg,#1B1464,#6B2BD9 45%,#E0489B 80%,#FF9A4D)'; });
 const send = (m) => ov.evaluate((x) => window.__overlay(x), m);
+await ov.evaluate(() => { document.documentElement.style.background = 'radial-gradient(900px 600px at 50% 40%, #12425e, #061826 70%, #03101b)'; });
+await send({ type: 'look', look: 'jarvis' });
 const snap = async (name, wait = 900) => { await ov.waitForTimeout(wait); await ov.screenshot({ path: path.join(out, `overlay-${name}.png`) }); };
 await send({ type: 'buddy-state', state: 'listening' });
 await send({ type: 'cursor', x: 330, y: 280 });
@@ -87,6 +89,13 @@ await send({ type: 'draw', add: false, shapes: [
 await snap('draw', 1300);
 await send({ type: 'guide', card: { steps: ['Open System Settings', 'Click Displays', 'Click Night Shift', 'Turn on Schedule'], current: 1, total: 4 } });
 await snap('guide', 700);
+await send({ type: 'clear' });
+// the classic look, for comparison
+await ov.evaluate(() => { document.documentElement.style.background = 'linear-gradient(135deg,#1B1464,#6B2BD9 45%,#E0489B 80%,#FF9A4D)'; });
+await send({ type: 'look', look: 'classic' });
+await send({ type: 'buddy-state', state: 'thinking' });
+await send({ type: 'guide', card: { steps: ['Open System Settings', 'Click Displays', 'Click Night Shift', 'Turn on Schedule'], current: 1, total: 4 } });
+await snap('classic-guide', 700);
 await send({ type: 'clear' });
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }

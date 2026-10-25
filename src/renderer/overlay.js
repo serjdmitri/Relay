@@ -10,11 +10,12 @@ let cursor = null; // where the real pointer is
 let pos = null; // where the buddy is drawn
 let flyTo = null; // { x, y, until }: the buddy is pointing at something
 let state = null;
+let jarvis = false;
 let raf = 0;
 
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
-  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - 30, y: flyTo.y + 30 } : cursor && { x: cursor.x + 15, y: cursor.y + 17 };
+  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - (jarvis ? 38 : 30), y: flyTo.y + (jarvis ? 38 : 30) } : cursor && (jarvis ? { x: cursor.x + 24, y: cursor.y + 26 } : { x: cursor.x + 15, y: cursor.y + 17 });
   if (goal) {
     if (!pos) pos = { ...goal };
     pos.x += (goal.x - pos.x) * 0.35; // a soft lag, so it trails the pointer instead of sticking to it
@@ -115,6 +116,15 @@ function showCard(c) {
   b.textContent = 'Relay';
   head.append(a, b);
   card.append(head);
+  const prog = document.createElement('div');
+  prog.className = 'prog';
+  for (let i = 0; i < c.total; i++) {
+    const seg = document.createElement('i');
+    if (i < c.current) seg.className = 'on';
+    else if (i === c.current) seg.className = 'now';
+    prog.append(seg);
+  }
+  card.append(prog);
   c.steps.forEach((text, i) => {
     const row = document.createElement('div');
     row.className = 'step' + (i === c.current ? ' now' : i < c.current ? ' done' : '');
@@ -168,6 +178,10 @@ window.relay.onOverlay((m) => {
       break;
     case 'clear':
       clearAll();
+      break;
+    case 'look':
+      jarvis = m.look === 'jarvis';
+      document.body.classList.toggle('jarvis', jarvis);
       break;
   }
 });

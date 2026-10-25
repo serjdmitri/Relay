@@ -90,3 +90,73 @@ test('guides turned off: start reports it and stays inactive', async () => {
   assert.equal(await g.start(steps, 0), false);
   assert.ok(!g.active);
 });
+
+// ---- checking what the user does
+function withReplan(opts) {
+  const s = setup(opts);
+  const asked = [];
+  let t = 1000000;
+  s.g.onReplan = (info) => { asked.push(info); };
+  s.g.now = () => t;
+  s.tick = (ms) => { t += ms; };
+  s.asked = asked;
+  return s;
+}
+
+test('a click away from the highlight asks for a progress check, but a click on it does not', async () => {
+  const { g, where, asked } = withReplan({ frames: { a: box(100, 100), b: box(300, 300) } });
+  await g.start(steps, 0, 'Set up Night Shift');
+  Object.assign(where, { x: 900, y: 900 });
+  g.onClick();
+  await new Promise((r) => setTimeout(r, 1700));
+  assert.equal(asked.length, 1);
+  assert.deepEqual(asked[0], { goal: 'Set up Night Shift', steps: ['One', 'Two', 'Three'], index: 0, reason: 'They clicked somewhere other than the highlighted spot.' });
+  Object.assign(where, { x: 140, y: 115 });
+  g.onClick();
+  await new Promise((r) => setTimeout(r, 700));
+  assert.equal(asked.length, 1, 'clicking the right spot just moves on');
+  assert.equal(g.index, 1);
+});
+
+test('progress checks are rate limited and capped', () => {
+  const { g, asked, tick } = withReplan({ frames: { a: box(1, 1) } });
+  g.live = true; g.steps = steps;
+  assert.ok(g.requestReplan('one'));
+  assert.ok(!g.requestReplan('too soon'));
+  for (let i = 0; i < 10; i++) { tick(9000); g.requestReplan('later'); }
+  assert.equal(asked.length, 6, 'at most six a guide');
+  g.deactivate();
+  assert.ok(!g.requestReplan('not live'));
+});
+
+test('when the next step has nothing to point at, the model is asked to look at the screen', async () => {
+  const { g, asked } = withReplan({ frames: { a: box(1, 1) } }); // "b" does not exist
+  await g.start(steps, 0);
+  const out = await g.run('next');
+  assert.match(out, /Checking the screen/);
+  assert.equal(asked.length, 1);
+  assert.match(asked[0].reason, /Step 2 .*could not be found/);
+  assert.equal(asked[0].index, 1);
+});
+
+test('the outline follows an element that moves, and a vanished one asks for a check', async () => {
+  let at = box(100, 100);
+  const { g, calls, asked } = withReplan({ frames: { a: () => at } });
+  await g.start(steps, 0);
+  await g.check();
+  assert.equal(calls.length, 1, 'unmoved: nothing redrawn');
+  at = box(400, 300);
+  await g.check();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].shape.x, 400);
+  assert.equal(g.region.x, 400);
+  at = () => { throw new Error('gone'); };
+  const frames = { a: at };
+  g.mac = { uiLocate: async () => { throw new Error('gone'); } };
+  await g.check(); await g.check();
+  assert.equal(asked.length, 0, 'two misses are tolerated');
+  await g.check();
+  assert.equal(asked.length, 1);
+  assert.match(asked[0].reason, /no longer on screen/);
+  g.deactivate();
+});

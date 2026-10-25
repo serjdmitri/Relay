@@ -302,7 +302,11 @@ const PAGES = {
 
     title('Ask Relay');
     const ask = h('<div class="card flat"></div>');
+    const lookNow = S.settings.look === 'classic' ? 'classic' : 'jarvis';
+    const look = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Look</div><div class="seg">${[['jarvis', 'Jarvis'], ['classic', 'Classic']].map(([v, l]) => `<button data-v="${v}" class="${lookNow === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Jarvis: a cyan HUD ring follows your pointer, and the pill and guides pop up as HUD panels. Classic: the soft indigo orb.</div></div>`);
+    look.onclick = (e) => e.target.dataset.v && relay.set('settings.look', e.target.dataset.v);
     ask.append(
+      look,
       toggleRow('Let Relay do things for you', 'Off: it only types what you say.', 'settings.actEnabled'),
       toggleRow('Relay cursor', "Shows Relay's own pointer, drawings and step-by-step guides on your screen.", 'settings.cursor'),
       toggleRow('Buddy cursor', 'A small helper follows your pointer while Relay listens and works, and flies to what it points at.', 'settings.buddy'),

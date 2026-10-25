@@ -28,6 +28,7 @@ fi
 # The dictation helper first, so the app's signature covers it.
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-speech"
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-glass"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-ax"
 codesign --force --deep --sign "$SIGN" "$APP"
 
 echo

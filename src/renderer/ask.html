@@ -69,6 +69,33 @@
   .bars.idle i { animation: b 1.1s ease-in-out infinite; }
   .bars.idle i:nth-child(2) { animation-delay: .12s; } .bars.idle i:nth-child(3) { animation-delay: .24s; } .bars.idle i:nth-child(4) { animation-delay: .36s; } .bars.idle i:nth-child(5) { animation-delay: .48s; }
   @keyframes b { 0%,100% { height: 4px; } 50% { height: 12px; } }
+
+  /* ===== Jarvis look: HUD brackets, a status readout and a scanning bar ===== */
+  .jarvis #pill::before, .jarvis #pill::after { content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid #4de1ff; pointer-events: none; opacity: 0; transition: opacity .3s ease .25s; filter: drop-shadow(0 0 4px #19b4e6); }
+  .jarvis #pill::before { left: 9px; top: 7px; border-right: 0; border-bottom: 0; border-top-left-radius: 8px; }
+  .jarvis #pill::after { right: 9px; bottom: 7px; border-left: 0; border-top: 0; border-bottom-right-radius: 8px; }
+  .jarvis #stage.in #pill::before, .jarvis #stage.in #pill::after { opacity: .95; }
+  .jarvis #sheen { box-shadow: inset 0 0 0 1px rgba(77,225,255,.4), inset 0 0 26px rgba(25,180,230,.12), 0 0 22px rgba(25,180,230,.28), 0 14px 32px rgba(0,0,0,.34); background: linear-gradient(180deg, rgba(77,225,255,.10) 0%, rgba(77,225,255,.02) 40%, rgba(0,0,0,0) 100%); }
+  .jarvis #body { background: #04121e; }
+  .jarvis .bars i { background: #4de1ff; box-shadow: 0 0 8px rgba(77,225,255,.8); border-radius: 1px; }
+  .jarvis .hint, .jarvis .label small { color: #6aa9bb; }
+  .status { display: none; }
+  .jarvis .status { font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; color: #4de1ff; text-transform: uppercase; padding: 1px 0 3px; display: block; }
+  .jarvis .ico.ok { color: #7dffb2; } .jarvis .ico.mic { color: #4de1ff; }
+  .jarvis .btn.go { background: #19b4e6; color: #02121d; }
+  .jarvis .btn { border-radius: 4px; }
+  .jarvis .reply, .jarvis .label, .jarvis .live { color: #e6faff; }
+  .jarvis .spin { display: none; }
+  .jarvis .live.empty span:not(.status) { display: none; }
+  .hudspin { display: none; }
+  .jarvis .hudspin { display: block; width: 22px; height: 22px; flex: none; position: relative; margin: 0 1px; }
+  .hudspin::before, .hudspin::after { content: ""; position: absolute; border-radius: 50%; border: 2px solid transparent; }
+  .hudspin::before { inset: 0; border-top-color: #4de1ff; border-bottom-color: #4de1ff; animation: s 1.1s linear infinite; }
+  .hudspin::after { inset: 5px; border-left-color: #bff6ff; animation: s .7s linear infinite reverse; }
+  .scan { display: none; }
+  .jarvis .scan { display: block; position: relative; height: 2px; margin: 6px 0 0; background: rgba(77,225,255,.14); overflow: hidden; }
+  .jarvis .scan::after { content: ""; position: absolute; top: 0; bottom: 0; width: 34%; background: linear-gradient(90deg, rgba(77,225,255,0), #4de1ff, rgba(77,225,255,0)); animation: sweep 1.3s ease-in-out infinite; }
+  @keyframes sweep { from { left: -34%; } to { left: 100%; } }
 </style>
 </head>
 <body>

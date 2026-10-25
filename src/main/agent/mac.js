@@ -74,7 +74,41 @@ function clipRestore(clipboard, s) {
 
 const { parseFrame } = require('../overlayGeometry');
 
-function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) {
+// axBin: native/relay-ax, which walks the accessibility tree directly and reads on-screen text (System Events needs tens of
+// seconds on big or Electron apps). getView(): { scale, origin } of the last screenshot, to turn a text position into screen points.
+function createMac({ exec = defaultExec, clipboard, capture, getDisplay, axBin = null, getView = () => ({ scale: 1, origin: { x: 0, y: 0 } }) } = {}) {
+  let axRefused = false;
+  const hasAx = () => !!axBin && !axRefused && fs.existsSync(axBin);
+  const ax = async (args) => {
+    try {
+      return await exec(axBin, args, { timeout: 20000 });
+    } catch (e) {
+      if (/Accessibility is not allowed/.test(e.message)) axRefused = true; // the old, slower way still works
+      throw e;
+    }
+  };
+  const notFound = (app, name) => new Error(`No UI element named "${name}" in ${app}. Use ui_list to see what exists.`);
+
+  // Where a text appears on the display, read from a screenshot. Works in apps whose accessibility tree is thin.
+  const findText = async (text) => {
+    if (!hasAx() || !capture) throw new Error('Reading text on screen is not available.');
+    const shot = await capture();
+    const file = path.join(os.tmpdir(), `relay-ocr-${process.pid}-${Date.now()}.jpg`);
+    fs.writeFileSync(file, Buffer.from(shot.data, 'base64'));
+    try {
+      const out = await ax(['ocr', file, String(text)]);
+      if (!out || out === 'not found') throw new Error(`Could not see "${text}" on the screen.`);
+      const [nx, ny, nw, nh] = out.split('|').map(Number);
+      if (![nx, ny, nw, nh].every(Number.isFinite)) throw new Error('Could not read where that text is.');
+      const { scale, origin } = getView();
+      const w = nw * shot.width * scale, h = nh * shot.height * scale;
+      const x = origin.x + nx * shot.width * scale, y = origin.y + ny * shot.height * scale;
+      return { x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  };
+
   const osa = (script, { signal } = {}) => {
     const lines = Array.isArray(script) ? script : String(script).split('\n');
     const args = [];
@@ -354,6 +388,13 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
 
     // UI scripting through the accessibility tree
     async uiList(app) {
+      if (hasAx()) {
+        try {
+          return (await ax(['list', app, '2.5'])) || 'No named UI elements found.';
+        } catch (e) {
+          if (!axRefused) throw e;
+        }
+      }
       const out = await osa([
         'tell application "System Events"', `tell process ${q(app)}`, 'set out to {}', 'try', 'set els to entire contents of window 1', 'on error', 'return "No window."', 'end try',
         'repeat with e in els', 'try', 'set r to role of e', 'set n to name of e',
@@ -363,6 +404,18 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       return lines(out).slice(0, 150).join('\n') || 'No named UI elements found.';
     },
     async uiClick(app, name) {
+      if (hasAx()) {
+        try {
+          const r = await ax(['press', app, name, '2.5']);
+          if (r === 'pressed') return `Clicked "${name}" in ${app}.`;
+          if (r === 'not found') throw notFound(app, name);
+          const f = parseFrame((await ax(['find', app, name, '2.5'])).split('|').slice(0, 4).join('|')); // not pressable: click where it is
+          await this.click(f.cx, f.cy);
+          return `Clicked "${name}" in ${app}.`;
+        } catch (e) {
+          if (!axRefused) throw e;
+        }
+      }
       const out = await osa([
         'tell application "System Events"', `tell process ${q(app)}`, 'set els to entire contents of window 1',
         'repeat with e in els', 'try', `if name of e is ${q(name)} then`, 'click e', 'return "clicked"', 'end if', 'end try', 'end repeat',
@@ -372,7 +425,16 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       return `Clicked "${name}" in ${app}.`;
     },
     // Where a named element sits on screen, so Relay can point at it exactly (no screenshot needed).
-    async uiLocate(app, name) {
+    async uiLocate(app, name, { seconds = 2.5 } = {}) {
+      if (hasAx()) {
+        try {
+          const out = await ax(['find', app, name, String(seconds)]);
+          if (!out || out === 'not found') throw notFound(app, name);
+          return parseFrame(out.split('|').slice(0, 4).join('|'));
+        } catch (e) {
+          if (!axRefused) throw e;
+        }
+      }
       const out = await osa([
         'tell application "System Events"', `tell process ${q(app)}`, 'set els to entire contents of window 1',
         'repeat with e in els', 'try', `if name of e is ${q(name)} then`, 'set p to position of e', 'set s to size of e',
@@ -381,6 +443,20 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       ]);
       if (!out || out === 'not found') throw new Error(`No UI element named "${name}" in ${app}. Use ui_list to see what exists.`);
       return parseFrame(out);
+    },
+    findText,
+    // An element by name, else the same words read off the screen.
+    async locate(app, name, { seconds = 2.5, ocr = true } = {}) {
+      try {
+        return await this.uiLocate(app, name, { seconds });
+      } catch (e) {
+        if (!ocr || !hasAx()) throw e;
+        try {
+          return await findText(name);
+        } catch {
+          throw e;
+        }
+      }
     },
     async menuClick(app, menuPath) {
       if (!Array.isArray(menuPath) || menuPath.length < 2) throw new Error('menu_path needs at least [menu, item].');
