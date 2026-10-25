@@ -1,26 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Bar chart: 136 unit tests by area">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Bar chart: 149 unit tests by area">
   <defs><linearGradient id="g0" x1="0" x2="1"><stop offset="0" stop-color="#6C63FF"/><stop offset="1" stop-color="#C13CF0"/></linearGradient><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#C13CF0"/><stop offset="1" stop-color="#FF8A3D"/></linearGradient><linearGradient id="g2" x1="0" x2="1"><stop offset="0" stop-color="#FF8A3D"/><stop offset="1" stop-color="#2FC4FF"/></linearGradient><linearGradient id="g3" x1="0" x2="1"><stop offset="0" stop-color="#2FC4FF"/><stop offset="1" stop-color="#4ADE80"/></linearGradient><linearGradient id="g4" x1="0" x2="1"><stop offset="0" stop-color="#4ADE80"/><stop offset="1" stop-color="#FFC94A"/></linearGradient><linearGradient id="g5" x1="0" x2="1"><stop offset="0" stop-color="#FFC94A"/><stop offset="1" stop-color="#6C63FF"/></linearGradient><linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient></defs>
   <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif">
     <rect width="600" height="340" rx="20" fill="url(#card)"/>
-    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">136 unit tests</text>
-    <text x="28" y="70" fill="#A9A5D6" font-size="13">by area · counted from test/*.test.js · v0.1.1</text>
+    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">149 unit tests</text>
+    <text x="28" y="70" fill="#A9A5D6" font-size="13">by area · counted from test/*.test.js · v0.3.0</text>
     <text x="28" y="121" fill="#D9D6F5" font-size="14">Claude and the agent loop</text>
     <rect x="242" y="104" width="302" height="24" rx="8" fill="url(#g0)"/>
-    <text x="554" y="121" fill="#fff" font-size="14" font-weight="700">44</text>
+    <text x="554" y="121" fill="#fff" font-size="14" font-weight="700">49</text>
     <text x="28" y="159" fill="#D9D6F5" font-size="14">Instant commands and timers</text>
-    <rect x="242" y="142" width="233" height="24" rx="8" fill="url(#g1)"/>
-    <text x="485" y="159" fill="#fff" font-size="14" font-weight="700">34</text>
+    <rect x="242" y="142" width="210" height="24" rx="8" fill="url(#g1)"/>
+    <text x="462" y="159" fill="#fff" font-size="14" font-weight="700">34</text>
     <text x="28" y="197" fill="#D9D6F5" font-size="14">Settings, shortcuts, Firefox</text>
-    <rect x="242" y="180" width="144" height="24" rx="8" fill="url(#g2)"/>
-    <text x="396" y="197" fill="#fff" font-size="14" font-weight="700">21</text>
+    <rect x="242" y="180" width="129" height="24" rx="8" fill="url(#g2)"/>
+    <text x="381" y="197" fill="#fff" font-size="14" font-weight="700">21</text>
     <text x="28" y="235" fill="#D9D6F5" font-size="14">Mac actions (AppleScript)</text>
-    <rect x="242" y="218" width="110" height="24" rx="8" fill="url(#g3)"/>
-    <text x="362" y="235" fill="#fff" font-size="14" font-weight="700">16</text>
+    <rect x="242" y="218" width="105" height="24" rx="8" fill="url(#g3)"/>
+    <text x="357" y="235" fill="#fff" font-size="14" font-weight="700">17</text>
     <text x="28" y="273" fill="#D9D6F5" font-size="14">Dictation and glass pill</text>
-    <rect x="242" y="256" width="103" height="24" rx="8" fill="url(#g4)"/>
-    <text x="355" y="273" fill="#fff" font-size="14" font-weight="700">15</text>
+    <rect x="242" y="256" width="92" height="24" rx="8" fill="url(#g4)"/>
+    <text x="344" y="273" fill="#fff" font-size="14" font-weight="700">15</text>
     <text x="28" y="311" fill="#D9D6F5" font-size="14">Other</text>
-    <rect x="242" y="294" width="41" height="24" rx="8" fill="url(#g5)"/>
-    <text x="293" y="311" fill="#fff" font-size="14" font-weight="700">6</text>
+    <rect x="242" y="294" width="80" height="24" rx="8" fill="url(#g5)"/>
+    <text x="332" y="311" fill="#fff" font-size="14" font-weight="700">13</text>
   </g>
 </svg>

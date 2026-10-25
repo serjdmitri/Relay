@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Buddy cursor: a small helper follows your pointer while Relay listens and works (a mic meter, a spinner, then a check), and flies to what it points at. New setting: General > Buddy cursor.
 - Show me: Relay can point at an exact on-screen element (`point_at_element`, from the accessibility tree, so it works even with models that cannot see images), draw boxes, circles, arrows and labels (`draw_on_screen`), and walk you through a task with a step card (`guide_step`; say "next" to go on). Marks stay about 30 seconds or until you press Esc or start a new request.
