@@ -13,9 +13,10 @@ const MARKS_MS = 30000;
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic' }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
+    this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
     this.wins = new Map(); // display id -> { win, display, shapes, card, halo, buddy, haloTimer }
     this.buddyState = null;
     this.followTimer = null;
@@ -80,6 +81,11 @@ class Overlay {
   // A window is on screen only while it has something to show.
   refresh(e) {
     if (e.win.isDestroyed()) return;
+    const look = this.getLook() === 'classic' ? 'classic' : 'jarvis';
+    if (e.look !== look) {
+      e.look = look;
+      this.send(e, { type: 'look', look });
+    }
     const want = e.shapes || e.card || e.halo || e.buddy;
     if (want && !e.win.isVisible()) {
       if (e.win.getBounds().x !== e.display.bounds.x || e.win.getBounds().y !== e.display.bounds.y) e.win.setBounds(e.display.bounds);
@@ -93,18 +99,21 @@ class Overlay {
   }
 
   // ----- the halo: point at a spot -----
-  async point(x, y, label) {
+  // hold: the ring stays until the marks are cleared (a guide step), instead of fading after a moment.
+  async point(x, y, label, { hold = false } = {}) {
     if (!this.isEnabled()) return false;
     const e = this.entry(displayAt(screen.getAllDisplays(), { x, y }));
     e.halo = true;
     this.refresh(e);
     this.send(e, { type: 'point', ...this.local(e, { x, y }), label: label || '' });
     clearTimeout(e.haloTimer);
-    e.haloTimer = setTimeout(() => {
-      e.halo = false;
-      this.send(e, { type: 'halo-off' });
-      this.refresh(e);
-    }, HALO_MS);
+    if (!hold) {
+      e.haloTimer = setTimeout(() => {
+        e.halo = false;
+        this.send(e, { type: 'halo-off' });
+        this.refresh(e);
+      }, HALO_MS);
+    }
     await new Promise((r) => setTimeout(r, 500)); // let the glide finish before a click lands
     return true;
   }
@@ -165,7 +174,7 @@ class Overlay {
   // ----- marks: drawings and the guide card -----
   armMarks(seconds = MARKS_MS / 1000) {
     clearTimeout(this.marksTimer);
-    this.marksTimer = setTimeout(() => this.clear(), Math.min(120, Math.max(3, seconds)) * 1000);
+    this.marksTimer = setTimeout(() => this.clear(), Math.min(900, Math.max(3, seconds)) * 1000);
   }
 
   // shapes are in global points. add: keep what is already drawn.
@@ -205,15 +214,18 @@ class Overlay {
     const d = target ? displayAt(screen.getAllDisplays(), target) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     for (const w of this.wins.values()) {
       w.card = false;
+      w.halo = false;
+      clearTimeout(w.haloTimer);
       this.send(w, { type: 'guide', card: null });
+      this.send(w, { type: 'halo-off' });
     }
     const e = this.entry(d);
     e.card = true;
     this.refresh(e);
     this.send(e, { type: 'guide', card });
     if (box) await this.draw([box], { add: false });
-    if (target) await this.point(target.x, target.y, card.steps[card.current]);
-    this.armMarks(180);
+    if (target) await this.point(target.x, target.y, card.steps[card.current], { hold: true });
+    this.armMarks(600);
     return true;
   }
 

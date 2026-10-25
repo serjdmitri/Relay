@@ -95,22 +95,26 @@ function put(html, bind) {
   }, 80);
 }
 
+const HUDSPIN = '<div class="hudspin"></div>';
+const SCAN = '<div class="scan"></div>';
+const status = (t) => `<span class="status">${t}</span>`;
+
 const BAR_SHAPE = [0.55, 0.85, 1, 0.8, 0.5];
 
 function renderListening(msg) {
   const label = msg.mode === 'dictate' ? msg.dictateLabel : msg.askLabel;
   if (current !== 'listening' || msg.reset) {
-    put(`<div class="line"><div class="bars idle" id="bars">${BAR_SHAPE.map(() => '<i></i>').join('')}</div><div class="live empty" id="live"><span>${msg.mode === 'dictate' ? 'Dictating…' : 'Listening…'}</span></div><span class="hint">${esc(label)} to ${msg.mode === 'dictate' ? 'finish' : 'send'}</span></div>`);
+    put(`<div class="line"><div class="bars idle" id="bars">${BAR_SHAPE.map(() => '<i></i>').join('')}</div><div class="live empty" id="live">${status(msg.mode === 'dictate' ? 'Dictating' : 'Listening')}<span>${msg.mode === 'dictate' ? 'Dictating…' : 'Listening…'}</span></div><span class="hint">${esc(label)} to ${msg.mode === 'dictate' ? 'finish' : 'send'}</span></div>`);
   }
   const live = $('live');
   if (msg.preparing !== undefined && live && !msg.partial) {
     live.className = 'live empty';
-    live.innerHTML = `<span>Getting speech ready ${Math.round(msg.preparing * 100)}%</span>`;
+    live.innerHTML = `${status(msg.mode === 'dictate' ? 'Dictating' : 'Listening')}<span>Getting speech ready ${Math.round(msg.preparing * 100)}%</span>`;
   }
   if (msg.partial !== undefined && live) {
     if (msg.partial) {
       live.className = 'live';
-      live.innerHTML = `<span>${esc(msg.partial)}</span>`;
+      live.innerHTML = `${status(msg.mode === 'dictate' ? 'Dictating' : 'Listening')}<span>${esc(msg.partial)}</span>`;
       fit();
     } else if (msg.reset) {
       live.className = 'live empty';
@@ -143,13 +147,13 @@ function renderInput(msg) {
 function draw(msg) {
   if (msg.state === 'listening') renderListening(msg);
   else if (msg.state === 'finishing') {
-    if (current !== 'finishing') put('<div class="line"><div class="spin"></div><div class="label">Finishing…</div></div>');
+    if (current !== 'finishing') put(`<div class="line"><div class="spin"></div>${HUDSPIN}<div class="label">${status('Processing')}Finishing…</div></div>${SCAN}`);
   } else if (msg.state === 'input') renderInput(msg);
   else if (msg.state === 'working') {
     const label = msg.label || 'Working';
     if (current !== 'working' || msg.label || msg.text) {
       const prev = pill.querySelector('.label small')?.textContent;
-      put(`<div class="line"><div class="spin"></div><div class="label">${esc(label)}…<small>${esc(msg.text || prev || '')}</small></div><button class="btn" id="stop">Stop</button></div>`, () => {
+      put(`<div class="line"><div class="spin"></div>${HUDSPIN}<div class="label">${status('Working')}${esc(label)}…<small>${esc(msg.text || prev || '')}</small></div><button class="btn" id="stop">Stop</button></div>${SCAN}`, () => {
         $('stop').onclick = () => window.relay.ask.cancel();
       });
     }
@@ -163,7 +167,7 @@ function draw(msg) {
   } else if (msg.state === 'done') {
     if (msg.reply !== undefined) {
       const ok = msg.status === 'done';
-      put(`<div class="line"><div class="ico ${ok ? 'ok' : 'bad warn'}">${ok ? CHECK : WARN}</div><div class="reply">${esc(msg.reply)}</div><span class="x" id="x">✕</span></div>`, () => {
+      put(`<div class="line"><div class="ico ${ok ? 'ok' : 'bad warn'}">${ok ? CHECK : WARN}</div><div class="reply">${status(ok ? 'Complete' : 'Attention')}${esc(msg.reply)}</div><span class="x" id="x">✕</span></div>`, () => {
         $('x').onclick = () => window.relay.ask.cancel();
       });
     }
@@ -171,6 +175,7 @@ function draw(msg) {
 }
 
 function render(msg) {
+  if (msg.look !== undefined) document.body.classList.toggle('jarvis', msg.look === 'jarvis');
   if (msg.glass !== undefined) stage.classList.toggle('native-glass', !!msg.glass); // real glass is drawn behind this window
   if (msg.top !== undefined && msg.top !== TOP) { TOP = msg.top; layout(); }
   if (msg.hide) return exit();

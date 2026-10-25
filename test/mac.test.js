@@ -161,3 +161,48 @@ test('voices: parse the say listing and pick a sensible one', () => {
   assert.equal(pickVoice(v, 'Gone', 'en_US'), 'Zoe (Premium)');
   assert.equal(speakable('**Done** 🎉 see https://x.co/a?b=1'), 'Done see a link');
 });
+
+// ---- the native accessibility helper (relay-ax) and reading text off the screen
+function axMac(handler, extra = {}) {
+  const calls = [];
+  const exec = async (cmd, args) => { calls.push([cmd, ...args]); return handler(cmd, args); };
+  return { calls, mac: createMac({ exec, axBin: process.execPath, ...extra }) };
+}
+
+test('with the helper, ui_list, locate and click use it instead of System Events', async () => {
+  const { mac, calls } = axMac((cmd, args) => {
+    if (args[0] === 'list') return 'AXButton | New Note';
+    if (args[0] === 'find') return args[2] === 'Nope' ? 'not found' : '100.5|200|80|30|AXButton';
+    if (args[0] === 'press') return 'pressed';
+  });
+  assert.equal(await mac.uiList('Notes'), 'AXButton | New Note');
+  assert.deepEqual(await mac.uiLocate('Notes', 'New Note'), { x: 100.5, y: 200, w: 80, h: 30, cx: 140.5, cy: 215 });
+  await assert.rejects(() => mac.uiLocate('Notes', 'Nope'), /No UI element named "Nope" in Notes/);
+  assert.match(await mac.uiClick('Notes', 'New Note'), /Clicked "New Note"/);
+  assert.ok(calls.every((c) => c[0] === process.execPath), 'never touched osascript');
+});
+
+test('locate reads the text off the screen when the accessibility tree has no such element', async () => {
+  const shot = { data: Buffer.from('x').toString('base64'), width: 1000, height: 500 };
+  const { mac } = axMac((cmd, args) => {
+    if (args[0] === 'find') return 'not found';
+    if (args[0] === 'ocr') return args[2] === 'Send' ? '0.5|0.2|0.1|0.04|Send' : 'not found';
+  }, { capture: async () => shot, getView: () => ({ scale: 2, origin: { x: 100, y: 10 } }) });
+  const f = await mac.locate('Claude', 'Send');
+  assert.deepEqual([f.x, f.y, f.w, f.h], [1100, 210, 200, 40]);
+  assert.deepEqual([f.cx, f.cy], [1200, 230]);
+  await assert.rejects(() => mac.locate('Claude', 'Nowhere'), /No UI element named "Nowhere" in Claude/);
+  await assert.rejects(() => mac.locate('Claude', 'Nowhere', { ocr: false }), /No UI element/);
+});
+
+test('if the helper is refused accessibility, the AppleScript way takes over', async () => {
+  let n = 0;
+  const exec = async (cmd, args) => {
+    n++;
+    if (cmd === process.execPath) throw new Error('Accessibility is not allowed for Relay.');
+    return '5|6|7|8';
+  };
+  const mac = createMac({ exec, axBin: process.execPath });
+  assert.deepEqual(await mac.uiLocate('Notes', 'X'), { x: 5, y: 6, w: 7, h: 8, cx: 8.5, cy: 10 }, 'the same call falls back');
+  assert.equal(n, 2);
+});

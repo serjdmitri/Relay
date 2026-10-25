@@ -13,6 +13,7 @@ const DEFAULTS = {
     duckAudio: true, // lower other audio while listening
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
+    look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
     buddy: true, // a small helper follows your pointer while Relay works
     speakReplies: false,
     dictation: true, // off: the Dictate shortcut (right ⌘) does nothing

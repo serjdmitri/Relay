@@ -1,26 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Donut chart: 11039 lines of code by language">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Donut chart: 11641 lines of code by language">
   <defs><linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient></defs>
   <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif">
     <rect width="600" height="340" rx="20" fill="url(#card)"/>
-    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">11,039 lines of code</text>
-    <text x="28" y="70" fill="#A9A5D6" font-size="13">by language · 1,866 of them are tests · v0.3.1</text>
-    <path d="M168.00 122.00 A92 92 0 1 1 94.92 158.11 L121.93 178.77 A58 58 0 1 0 168.00 156.00Z" fill="#6C63FF"/>
-    <path d="M96.63 155.95 A92 92 0 0 1 123.93 133.24 L140.22 163.09 A58 58 0 0 0 123.01 177.40Z" fill="#C13CF0"/>
-    <path d="M126.37 131.96 A92 92 0 0 1 159.02 122.44 L162.34 156.28 A58 58 0 0 0 141.75 162.28Z" fill="#FF8A3D"/>
-    <path d="M161.77 122.21 A92 92 0 0 1 165.24 122.04 L166.26 156.03 A58 58 0 0 0 164.07 156.13Z" fill="#2FC4FF"/>
+    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">11,641 lines of code</text>
+    <text x="28" y="70" fill="#A9A5D6" font-size="13">by language · 1,983 of them are tests · v0.4.0</text>
+    <path d="M168.00 122.00 A92 92 0 1 1 89.87 165.42 L118.75 183.37 A58 58 0 1 0 168.00 156.00Z" fill="#6C63FF"/>
+    <path d="M91.36 163.10 A92 92 0 0 1 122.24 134.19 L139.15 163.68 A58 58 0 0 0 119.69 181.91Z" fill="#C13CF0"/>
+    <path d="M124.65 132.85 A92 92 0 0 1 159.10 122.43 L162.39 156.27 A58 58 0 0 0 140.67 162.84Z" fill="#FF8A3D"/>
+    <path d="M161.85 122.21 A92 92 0 0 1 165.24 122.04 L166.26 156.03 A58 58 0 0 0 164.12 156.13Z" fill="#2FC4FF"/>
     <text x="168" y="220" fill="#fff" font-size="22" font-weight="700" text-anchor="middle">4</text>
     <text x="168" y="240" fill="#A9A5D6" font-size="12" text-anchor="middle">languages</text>
     <rect x="340" y="128" width="14" height="14" rx="4" fill="#6C63FF"/>
     <text x="364" y="140" fill="#D9D6F5" font-size="15">JavaScript</text>
-    <text x="572" y="140" fill="#fff" font-size="15" font-weight="700" text-anchor="end">9,479</text>
+    <text x="572" y="140" fill="#fff" font-size="15" font-weight="700" text-anchor="end">9,817</text>
     <rect x="340" y="168" width="14" height="14" rx="4" fill="#C13CF0"/>
     <text x="364" y="180" fill="#D9D6F5" font-size="15">Swift</text>
-    <text x="572" y="180" fill="#fff" font-size="15" font-weight="700" text-anchor="end">735</text>
+    <text x="572" y="180" fill="#fff" font-size="15" font-weight="700" text-anchor="end">915</text>
     <rect x="340" y="208" width="14" height="14" rx="4" fill="#FF8A3D"/>
     <text x="364" y="220" fill="#D9D6F5" font-size="15">HTML and CSS</text>
-    <text x="572" y="220" fill="#fff" font-size="15" font-weight="700" text-anchor="end">706</text>
+    <text x="572" y="220" fill="#fff" font-size="15" font-weight="700" text-anchor="end">785</text>
     <rect x="340" y="248" width="14" height="14" rx="4" fill="#2FC4FF"/>
     <text x="364" y="260" fill="#D9D6F5" font-size="15">Shell</text>
-    <text x="572" y="260" fill="#fff" font-size="15" font-weight="700" text-anchor="end">119</text>
+    <text x="572" y="260" fill="#fff" font-size="15" font-weight="700" text-anchor="end">124</text>
   </g>
 </svg>

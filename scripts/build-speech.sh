@@ -11,3 +11,6 @@ echo "Built native/build/relay-speech"
 # The glass behind the pill (needs macOS 26 to draw real glass; falls back to blur on older systems).
 swiftc -O -swift-version 5 relay-glass.swift -o build/relay-glass
 echo "Built native/build/relay-glass"
+# Fast accessibility lookups and on-screen text finding, for pointing and guides.
+swiftc -O -swift-version 5 relay-ax.swift -o build/relay-ax
+echo "Built native/build/relay-ax"

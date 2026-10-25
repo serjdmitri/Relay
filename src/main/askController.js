@@ -65,7 +65,7 @@ async function fastFrontmost() {
 
 // States: idle | listening | finishing | input | working | confirm | done
 class AskController {
-  constructor({ store, bridge, overlay, speech, speaker, timers, glass, onChange }) {
+  constructor({ store, bridge, overlay, speech, speaker, timers, glass, axBin = null, onChange }) {
     this.store = store;
     this.bridge = bridge;
     this.overlay = overlay;
@@ -104,9 +104,10 @@ class AskController {
     this.frontP = null;
     this.appsP = null;
     this.mcp = new McpHost();
-    this.mac = createMac({ clipboard, capture: () => this.capture() });
+    this.mac = createMac({ clipboard, capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
+    this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
       if (this.state === 'listening') this.push({ partial: text });
@@ -250,6 +251,7 @@ class AskController {
       mode: this.mode,
       top: this.topOffset(),
       glass: this.useGlass(),
+      look: this.store.get('settings.look') === 'classic' ? 'classic' : 'jarvis',
       askLabel: require('./shortcuts').label(this.store.get('settings.shortcuts.ask')),
       dictateLabel: require('./shortcuts').label(this.store.get('settings.shortcuts.dictate')),
       ...extra
@@ -608,15 +610,16 @@ class AskController {
     await this.handleText(text);
   }
 
-  async handleText(text) {
+  // opts.shown: what to show and record instead of the text itself, for requests Relay makes on its own.
+  async handleText(text, opts = {}) {
     const routines = this.store.get('routines');
     const cmd = parseCommand(text, routines, { recording: !!this.recording });
     this.state = 'working';
     this.overlay.beginRequest();
     this.win.setFocusable(false);
-    this.push({ label: 'Thinking', text });
+    this.push({ label: 'Thinking', text: opts.shown || text });
 
-    const entry = { id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() };
+    const entry = { id: crypto.randomUUID(), text: opts.shown || text, status: 'working', reply: '', ts: Date.now() };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);
     if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
@@ -639,11 +642,25 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
+        if (opts.shown) return this.runRequest(effective, entry);
         this.lastRequestText = effective;
         const quick = await this.tryQuick(effective, entry);
         return quick || this.runRequest(effective, entry);
       }
     }
+  }
+
+  // The user is following a guide and has gone off it (or the next thing is missing): have the model look at the screen,
+  // work out where they are, and put up the corrected steps.
+  async checkGuide({ goal, steps, index, reason }) {
+    if (!['idle', 'done'].includes(this.state)) return false;
+    const list = steps.map((s, i) => `${i + 1}. ${s}`).join('\n');
+    const text = `[Guide check] Relay is walking the user through: ${goal}\nSteps:\n${list}\nThey were on step ${index + 1}. ${reason}\n` +
+      'Look at the screen now (ui_list for the front app, or a screenshot) and work out what they have done and what is left. ' +
+      'Then call guide_step ONCE with the remaining steps, each with the app and name of the element to click when you know it, starting at the step they should do next. ' +
+      'If the goal is already reached, call draw_on_screen with clear true. Reply with one short sentence telling them what to do now.';
+    await this.handleText(text, { shown: 'Checking your progress' });
+    return true;
   }
 
   // Simple commands ("open Notes", "volume down") run at once, without asking the model.

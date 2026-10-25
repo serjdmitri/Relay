@@ -13,6 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
 function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
+  const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
 
   const tools = [
@@ -263,7 +264,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin 
       input_schema: obj({ app: str('App name'), name: str('Exact element name from ui_list'), label: str('Short label') }, ['app', 'name']),
       describe: (i) => `Showing ${i.name}`,
       run: async (i) => {
-        const f = await mac.uiLocate(i.app, i.name);
+        const f = await locate(i.app, i.name);
         if (!overlay) return OFF;
         const shown = await overlay.point(f.cx, f.cy, i.label || i.name);
         if (shown === false) return OFF;
@@ -293,7 +294,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin 
         const loose = [];
         for (const s of i.shapes) {
           if (s && s.app && s.name) {
-            const f = await mac.uiLocate(s.app, s.name);
+            const f = await locate(s.app, s.name);
             anchored.push(s.type === 'circle'
               ? { type: 'circle', x: f.cx, y: f.cy, r: Math.max(f.w, f.h) / 2 + 8, label: String(s.label || '').slice(0, 60) }
               : s.type === 'arrow'
@@ -315,6 +316,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin 
       input_schema: obj({
         steps: { type: 'array', description: '1 to 8 steps', items: obj({ text: str('One short step'), app: str('App that has the element'), name: str('Exact element name from ui_list'), x: num('X in screenshot pixels'), y: num('Y in screenshot pixels') }, ['text']) },
         current: num('Step to start on, from 1 (default 1)'),
+        goal: str('What the user is trying to do, in a few words'),
         app: str('App for the start step\'s element, if the step has none'), name: str('Exact element name for the start step'),
         x: num('X for the start step, in screenshot pixels'), y: num('Y for the start step, in screenshot pixels')
       }, ['steps']),
@@ -323,7 +325,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin 
         const { steps, current } = guideSteps(i.steps, i.current || 1, { toPt: toPoints, fallback: { app: i.app, name: i.name, x: i.x, y: i.y } });
         if (!overlay) return OFF;
         const g = guides || new Guide({ overlay, mac });
-        const out = await g.start(steps, current);
+        const out = await g.start(steps, current, i.goal);
         return out === false ? OFF : out;
       }
     }
