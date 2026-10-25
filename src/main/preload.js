@@ -8,6 +8,7 @@ const on = (channel, cb) => {
 };
 
 contextBridge.exposeInMainWorld('relay', {
+  overlayMark: (data) => ipcRenderer.send('overlay:mark', data),
   getState: () => invoke('state:get'),
   set: (key, value) => invoke('state:set', key, value),
   setApiKey: (key) => invoke('model:set-key', key),

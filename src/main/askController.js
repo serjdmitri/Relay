@@ -18,6 +18,7 @@ const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain } = require('./meta');
 const { Guide } = require('./guide');
+const { markRegion } = require('./overlayGeometry');
 
 const PILL_W = 480;
 const PAD = 36; // transparent margin around the pill: room for its shadow and the liquid drop
@@ -105,6 +106,7 @@ class AskController {
     this.appsP = null;
     this.mcp = new McpHost();
     this.mac = createMac({ clipboard, capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
+    this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
     this.guide.onReplan = (info) => this.checkGuide(info);
@@ -306,7 +308,13 @@ class AskController {
   // ----- shortcut events -----
   onShortcut(name, kind) {
     if (this.suspended) return;
+    if (name === 'mark') {
+      if (kind === 'hold-start' && (this.state === 'idle' || this.state === 'done')) this.overlay.markStart();
+      else if (kind === 'hold-end') this.finishMark();
+      return;
+    }
     if (name === 'cancel') {
+      this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
       else if (this.overlay.hasMarks()) this.overlay.clear(); // Esc closes drawings and guides
       return;
@@ -351,6 +359,29 @@ class AskController {
     }
   }
 
+  // The mark key was released: look at what was circled and keep it for the next request.
+  async finishMark() {
+    try {
+      const m = await this.overlay.markEnd();
+      if (!m) return;
+      const shot = await this.captureRegion(m.display, markRegion(m.box, m.display.bounds));
+      this.mark = { ts: Date.now(), box: m.box, ...shot };
+      this.notice('Marked. Now ask about it.', 'done');
+    } catch (e) {
+      this.notice(e.message, 'failed');
+    }
+  }
+
+  // The mark, while it is fresh enough to still be what "this" means.
+  freshMark() {
+    return this.mark && Date.now() - this.mark.ts < 180000 ? this.mark : null;
+  }
+
+  markHint() {
+    const m = this.freshMark();
+    return m ? { ageSec: Math.round((Date.now() - m.ts) / 1000), w: m.box.w, h: m.box.h } : null;
+  }
+
   cancelAll() {
     this.speaker?.stop();
     this.overlay.hide();
@@ -363,7 +394,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -819,7 +850,7 @@ class AskController {
         }
         const route = routeModel(text, model.claudeModel);
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal });
         return result;
       } catch (e) {
@@ -833,7 +864,7 @@ class AskController {
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
-      frontmost: this.prevApp, runningApps,
+      frontmost: this.prevApp, runningApps, mark: this.markHint(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'),
       firefoxConnected: this.bridge.isConnected(), screen: display.size, visionCapable: vision
     });
@@ -902,6 +933,30 @@ class AskController {
   }
 
   // ----- screenshot for the model -----
+  // A picture of one rectangle of a display (global points), at the screen's full detail, for the marked area.
+  async captureRegion(d, region) {
+    const wasVisible = this.win && !this.win.isDestroyed() && this.win.isVisible();
+    if (wasVisible) this.win.setOpacity(0);
+    this.overlay.setCaptureHidden(true); // the strokes the user drew must not hide what is under them
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      const f = d.scaleFactor;
+      const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: Math.round(d.size.width * f), height: Math.round(d.size.height * f) } });
+      const src = sources.find((s) => String(s.display_id) === String(d.id)) || sources[0];
+      if (!src || src.thumbnail.isEmpty()) throw new Error('Could not capture the screen. Grant Screen Recording to Relay in System Settings.');
+      let img = src.thumbnail.crop({
+        x: Math.max(0, Math.round((region.x - d.bounds.x) * f)), y: Math.max(0, Math.round((region.y - d.bounds.y) * f)),
+        width: Math.round(region.w * f), height: Math.round(region.h * f)
+      });
+      if (img.getSize().width > 1100) img = img.resize({ width: 1100 });
+      const size = img.getSize();
+      return { mediaType: 'image/jpeg', data: img.toJPEG(85).toString('base64'), width: size.width, height: size.height };
+    } finally {
+      this.overlay.setCaptureHidden(false);
+      if (wasVisible) this.win.setOpacity(1);
+    }
+  }
+
   async capture() {
     const d = this.disp || screen.getPrimaryDisplay();
     const wasVisible = this.win && !this.win.isDestroyed() && this.win.isVisible();

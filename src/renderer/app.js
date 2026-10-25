@@ -129,7 +129,7 @@ function requestRow(x) {
   return `<div class="req">${mark(x.status)}<div style="flex:1;min-width:0"><div class="tt"><span>${esc(x.text)}</span><span class="when">${timeAgo(x.ts)}</span></div><div class="rp">${esc(x.status === 'stopped' ? 'Stopped at your request. Any earlier actions may already have happened.' : x.reply || '')}</div></div></div>`;
 }
 
-const allowed = '<span class="allowed" style="display:inline-flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#34c759"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#1d1d1d" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Allowed</span>';
+const allowed = '<span class="allowed" style="display:inline-flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#4cc2ff"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#1d1d1d" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Allowed</span>';
 
 /* ---------- pages ---------- */
 const PAGES = {
@@ -211,7 +211,7 @@ const PAGES = {
       drawDict();
     } else {
       c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Use this to see what happened when a request did not work.</div>'));
-      c.append(h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#34c759' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span></div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`));
+      c.append(h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span></div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`));
     }
   },
 
@@ -429,6 +429,7 @@ const PAGES = {
     card.append(row('ask', 'wave', 'Ask Relay', 'Talk, then send. Press while it works to stop it.', true));
     card.append(row('dictate', 'mic', 'Dictate', 'Talk; the words are typed where your cursor is.'));
     card.append(row('type', 'keyboard', 'Type a request', "For when talking isn't an option. Press again to close."));
+    card.append(row('mark', 'record', 'Mark the screen', 'Hold it, circle something with the mouse, let go, then ask about it. Use one modifier key on its own.'));
     c.append(card);
     c.append(h('<div class="note" style="margin:16px 12px;line-height:16px">A key with ⌃, ⌥ or ⌘, an F-key, or one modifier on its own like Right ⌥. Esc cancels.<br><span class="link" id="reset">Reset to defaults</span></div>'));
     $('#reset', c).onclick = () => relay.resetShortcuts();
@@ -438,10 +439,10 @@ const PAGES = {
     c.append(h('<div class="section-title" style="margin-top:0">On this Mac</div>'));
     const card = h('<div class="card"></div>');
     const prow = (ic, color, t, d, right) => h(`<div class="row" style="min-height:57px;--div:60px;padding:10px 16px"><div style="display:flex;gap:14px;align-items:center"><span class="icon-box" style="background:${color};--bc:${color};width:30px;height:30px;border-radius:8px">${ic}</span><div><div class="ttl">${t}</div><div class="d">${d}</div></div></div><div>${right}</div></div>`);
-    const mic = prow(glyph('mic'), '#e05577', 'Microphone', 'Hears you while you use a shortcut.', perms.mic ? allowed : `<button class="btn primary" data-p="mic">${perms.micStatus === 'denied' ? 'Open Settings' : 'Allow'}</button>`);
-    const a = prow(glyph('accessibility'), '#3d7bf0', 'Accessibility', 'Types for you and works in your apps.', perms.accessibility ? allowed : '<button class="btn primary" data-p="acc">Allow</button>');
-    const s = prow(glyph('screen'), '#7f55df', 'Screen Recording', "Sees apps it can't read any other way.", perms.screen ? allowed : '<button class="btn primary" data-p="screen">Allow</button>');
-    const i = prow(glyph('input'), '#3d7bf0', 'Input Monitoring', 'Hears your shortcut keys from any app.', S.hotkeysRunning && S.hotkeysSeen ? allowed : S.hotkeysRunning ? '<span class="note" style="color:var(--dim)">Press any key to check</span>' : '<button class="btn primary" data-p="input">Open Settings</button>');
+    const mic = prow(glyph('mic'), '#2a9ee0', 'Microphone', 'Hears you while you use a shortcut.', perms.mic ? allowed : `<button class="btn primary" data-p="mic">${perms.micStatus === 'denied' ? 'Open Settings' : 'Allow'}</button>`);
+    const a = prow(glyph('accessibility'), '#1f86cf', 'Accessibility', 'Types for you and works in your apps.', perms.accessibility ? allowed : '<button class="btn primary" data-p="acc">Allow</button>');
+    const s = prow(glyph('screen'), '#2aa5d8', 'Screen Recording', "Sees apps it can't read any other way.", perms.screen ? allowed : '<button class="btn primary" data-p="screen">Allow</button>');
+    const i = prow(glyph('input'), '#1f86cf', 'Input Monitoring', 'Hears your shortcut keys from any app.', S.hotkeysRunning && S.hotkeysSeen ? allowed : S.hotkeysRunning ? '<span class="note" style="color:var(--dim)">Press any key to check</span>' : '<button class="btn primary" data-p="input">Open Settings</button>');
     card.append(mic, a, s, i);
     card.onclick = (e) => {
       const p = e.target.dataset.p;
@@ -624,7 +625,7 @@ function editRoutine(r) {
 }
 
 /* ---------- shortcut capture ---------- */
-// capturing = { key: 'ask' | 'dictate' | 'type', mod: DOM code of a modifier held on its own, or null }
+// capturing = { key: 'ask' | 'dictate' | 'type' | 'mark', mod: DOM code of a modifier held on its own, or null }
 window.addEventListener('keydown', (e) => {
   if (!capturing) return;
   e.preventDefault();

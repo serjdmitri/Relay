@@ -6,8 +6,8 @@
       <stop offset="0.8" stop-color="#E0489B"/>
       <stop offset="1" stop-color="#FF9A4D"/>
     </linearGradient>
-    <radialGradient id="orb1" cx="0.2" cy="0.3" r="0.5"><stop offset="0" stop-color="#5BE3FF" stop-opacity="0.55"/><stop offset="1" stop-color="#5BE3FF" stop-opacity="0"/></radialGradient>
-    <radialGradient id="orb2" cx="0.85" cy="0.8" r="0.5"><stop offset="0" stop-color="#FFE27A" stop-opacity="0.5"/><stop offset="1" stop-color="#FFE27A" stop-opacity="0"/></radialGradient>
+    <radialGradient id="orb1" cx="0.2" cy="0.3" r="0.5"><stop offset="0" stop-color="#4cc2ff" stop-opacity="0.55"/><stop offset="1" stop-color="#4cc2ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="orb2" cx="0.85" cy="0.8" r="0.5"><stop offset="0" stop-color="#9fdcff" stop-opacity="0.5"/><stop offset="1" stop-color="#9fdcff" stop-opacity="0"/></radialGradient>
     <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7AE7FF"/><stop offset="0.5" stop-color="#C58BFF"/><stop offset="1" stop-color="#FFB46B"/></linearGradient>
     <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.30"/><stop offset="1" stop-color="#fff" stop-opacity="0.12"/></linearGradient>
     <filter id="shadow" x="-20%" y="-30%" width="140%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#14062E" flood-opacity="0.55"/></filter>
@@ -17,12 +17,12 @@
     <rect width="1200" height="460" fill="url(#wall)"/>
     <rect width="1200" height="460" fill="url(#orb1)"/>
     <rect width="1200" height="460" fill="url(#orb2)"/>
-    <rect width="1200" height="34" fill="#0B0620" fill-opacity="0.35"/>
+    <rect width="1200" height="34" fill="#0b1118" fill-opacity="0.35"/>
     <path d="M470 0h260v26a22 22 0 0 1-22 22H492a22 22 0 0 1-22-22z" fill="#05030D"/>
     <g fill="#fff" fill-opacity="0.9" font-size="14" font-weight="600"><text x="26" y="23">Relay</text><text x="1040" y="23" font-weight="500">Tue 9:41</text></g>
 
     <g filter="url(#shadow)">
-      <rect x="220" y="58" width="760" height="92" rx="46" fill="#0B0620" fill-opacity="0.62"/>
+      <rect x="220" y="58" width="760" height="92" rx="46" fill="#0b1118" fill-opacity="0.62"/>
       <rect x="220" y="58" width="760" height="92" rx="46" fill="url(#glass)" stroke="#fff" stroke-opacity="0.35"/>
     </g>
     <g transform="translate(272 104)" stroke="url(#wave)" stroke-width="6" stroke-linecap="round">
@@ -31,12 +31,12 @@
     <text x="384" y="113" fill="#fff" font-size="25" font-weight="500">“Open Notes and remind me to call mom at 5”</text>
 
     <g filter="url(#shadow)">
-      <rect x="340" y="184" width="520" height="168" rx="26" fill="#0B0620" fill-opacity="0.58"/>
+      <rect x="340" y="184" width="520" height="168" rx="26" fill="#0b1118" fill-opacity="0.58"/>
       <rect x="340" y="184" width="520" height="168" rx="26" fill="url(#glass)" stroke="#fff" stroke-opacity="0.3"/>
     </g>
     <g font-size="21" fill="#fff">
-      <g transform="translate(372 222)"><circle cx="11" cy="-7" r="11" fill="#5BE39A"/><path d="M6 -7l4 4 8-8" stroke="#06331B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="34" y="0">Opened Notes</text></g>
-      <g transform="translate(372 270)"><circle cx="11" cy="-7" r="11" fill="#5BE39A"/><path d="M6 -7l4 4 8-8" stroke="#06331B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="34" y="0">Reminder set: call mom, today 5:00 PM</text></g>
+      <g transform="translate(372 222)"><circle cx="11" cy="-7" r="11" fill="#4cc2ff"/><path d="M6 -7l4 4 8-8" stroke="#06202e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="34" y="0">Opened Notes</text></g>
+      <g transform="translate(372 270)"><circle cx="11" cy="-7" r="11" fill="#4cc2ff"/><path d="M6 -7l4 4 8-8" stroke="#06202e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><text x="34" y="0">Reminder set: call mom, today 5:00 PM</text></g>
     </g>
     <text x="372" y="322" fill="#fff" fill-opacity="0.72" font-size="18">Done. Anything else?</text>
   </g>

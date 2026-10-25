@@ -90,6 +90,16 @@ await snap('draw', 1300);
 await send({ type: 'guide', card: { steps: ['Open System Settings', 'Click Displays', 'Click Night Shift', 'Turn on Schedule'], current: 1, total: 4 } });
 await snap('guide', 700);
 await send({ type: 'clear' });
+// the mark key: a freehand circle drawn while it is held
+await send({ type: 'mark-start' });
+const ring = Array.from({ length: 41 }, (_, i) => [610 + 150 * Math.cos((i / 40) * 6.4), 300 + 95 * Math.sin((i / 40) * 6.4)]);
+await ov.mouse.move(ring[0][0], ring[0][1]);
+await ov.mouse.down();
+for (const [x, y] of ring) await ov.mouse.move(x, y);
+await ov.mouse.up();
+await snap('mark', 300);
+await send({ type: 'mark-end', cancel: true });
+await send({ type: 'mark-clear' });
 // the classic look, for comparison
 await ov.evaluate(() => { document.documentElement.style.background = 'linear-gradient(135deg,#1B1464,#6B2BD9 45%,#E0489B 80%,#FF9A4D)'; });
 await send({ type: 'look', look: 'classic' });

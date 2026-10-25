@@ -26,7 +26,8 @@ const DEFAULTS = {
     shortcuts: {
       ask: { code: 'AltRight', mods: [] },
       dictate: { code: 'MetaRight', mods: [] },
-      type: { code: 'KeyT', mods: ['Alt'] }
+      type: { code: 'KeyT', mods: ['Alt'] },
+      mark: { code: 'ControlLeft', mods: [] } // hold it, circle something, let go
     },
     speech: { locale: 'en-US', input: 'auto' }, // input: auto | default | a device UID
     appStyles: [], // {app, style}: dictation style per app (default | casual | chat)

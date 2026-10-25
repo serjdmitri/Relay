@@ -98,3 +98,20 @@ test('inRect counts the edge and a margin', () => {
   assert.ok(!inRect({ x: 5, y: 15 }, r));
   assert.ok(inRect({ x: 5, y: 15 }, r, 6));
 });
+
+test('marks: strokes are cleaned, boxed, and turned into a region to look at', () => {
+  const { normalizeStrokes, strokesBox, markRegion } = require('../src/main/overlayGeometry');
+  const strokes = normalizeStrokes([[[10, 20], [30, 40], ['x', 1]], [[5, 5]], 'junk', [[100, 60], [90, 80], [120, 70]]]);
+  assert.equal(strokes.length, 2, 'a one-point stroke and junk are dropped');
+  assert.deepEqual(strokes[0], [[10, 20], [30, 40]]);
+  assert.deepEqual(strokesBox(strokes), { x: 10, y: 20, w: 110, h: 60 });
+  assert.equal(strokesBox([]), null);
+  assert.equal(normalizeStrokes(null).length, 0);
+  assert.equal(normalizeStrokes(Array(100).fill([[0, 0], [1, 1]])).length, 40);
+  const bounds = { x: 1000, y: 0, width: 1440, height: 900 };
+  const r = markRegion({ x: 1010, y: 10, w: 20, h: 20 }, bounds);
+  assert.deepEqual(r, { x: 1000, y: 0, w: 260, h: 200 }, 'a tiny mark gets its surroundings and stays on its display');
+  const big = markRegion({ x: 1100, y: 100, w: 600, h: 400 }, bounds);
+  assert.deepEqual(big, { x: 1072, y: 72, w: 656, h: 456 });
+  assert.deepEqual(markRegion({ x: 0, y: 0, w: 5000, h: 5000 }, bounds), { x: 1000, y: 0, w: 1440, h: 900 });
+});

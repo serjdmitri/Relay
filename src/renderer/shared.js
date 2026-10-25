@@ -39,14 +39,14 @@ const GLYPHS = {
 const glyph = (name) => `<svg viewBox="0 0 24 24">${GLYPHS[name]}</svg>`;
 
 // Original mark: concentric relay rings and a dot on a dark squircle.
-const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="rl-bg" x1="7" y1="4" x2="93" y2="96" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4F46FF"/><stop offset=".5" stop-color="#C13CF0"/><stop offset="1" stop-color="#FF8A3D"/></linearGradient><radialGradient id="rl-sh" cx=".3" cy=".1" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="rl-ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#FFE9C7"/></linearGradient><radialGradient id="rl-gl"><stop offset="0" stop-color="#FFC94A" stop-opacity=".8"/><stop offset="1" stop-color="#FFC94A" stop-opacity="0"/></radialGradient><radialGradient id="rl-dt" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF7C2"/><stop offset="1" stop-color="#FFC94A"/></radialGradient></defs>
+const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="rl-bg" x1="7" y1="4" x2="93" y2="96" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0b2236"/><stop offset=".5" stop-color="#0f4a75"/><stop offset="1" stop-color="#1c8fd6"/></linearGradient><radialGradient id="rl-sh" cx=".3" cy=".1" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="rl-ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#bfeaff"/></linearGradient><radialGradient id="rl-gl"><stop offset="0" stop-color="#4cc2ff" stop-opacity=".8"/><stop offset="1" stop-color="#4cc2ff" stop-opacity="0"/></radialGradient><radialGradient id="rl-dt" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#e6f8ff"/><stop offset="1" stop-color="#4cc2ff"/></radialGradient></defs>
 <rect x="3.1" y="3.1" width="93.8" height="93.8" rx="22.7" fill="url(#rl-bg)"/><rect x="3.1" y="3.1" width="93.8" height="93.8" rx="22.7" fill="url(#rl-sh)"/>
 <g fill="none" stroke-linecap="round" stroke-width="5.5"><path d="M50 17.19A32.81 32.81 0 1 1 31.18 23.12" stroke="url(#rl-ar)"/><path d="M50 28.12A21.88 21.88 0 1 1 37.45 32.08" stroke="#fff" stroke-opacity=".78"/><path d="M50 38.67A11.33 11.33 0 1 1 43.50 40.72" stroke="#fff" stroke-opacity=".55"/></g><circle cx="50" cy="50" r="9" fill="url(#rl-gl)"/><circle cx="50" cy="50" r="3.9" fill="url(#rl-dt)"/></svg>`;
 
 // Every page has its own colour pair: it tints the tile, the selected item, buttons, toggles and the glow behind the page.
 const THEME = {
-  home: ['#6c63ff', '#c13cf0'], history: ['#2f9bff', '#6c63ff'], routines: ['#d946ef', '#ff5c93'], vocab: ['#14b8a6', '#2fc4ff'],
-  general: ['#ff8a3d', '#ffc94a'], speech: ['#22d3ee', '#4ade80'], shortcuts: ['#4ade80', '#a3e635'], permissions: ['#fb5a7a', '#ff8a3d'], account: ['#fbbf24', '#ff8a3d']
+  home: ['#1c8fd6', '#4cc2ff'], history: ['#2a9ee0', '#5fb4ff'], routines: ['#1f86cf', '#3fb6e8'], vocab: ['#2aa5d8', '#58cdf0'],
+  general: ['#2490d4', '#4cc2ff'], speech: ['#2aa5d8', '#4cc2ff'], shortcuts: ['#1f86cf', '#4cc2ff'], permissions: ['#2a9ee0', '#4cc2ff'], account: ['#1c8fd6', '#5fb4ff']
 };
 const COLORS = Object.fromEntries(Object.entries(THEME).map(([id, [a]]) => [id, a]));
 const GRAD = Object.fromEntries(Object.entries(THEME).map(([id, [a, b]]) => [id, `linear-gradient(135deg, ${a}, ${b})`]));

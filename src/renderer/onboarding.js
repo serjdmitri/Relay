@@ -70,7 +70,7 @@ const SCREENS = {
   },
 
   1() {
-    $('#stage').innerHTML = `<div class="mock"><div class="mh"><span class="s" style="background:#e05577"></span><div><small>Privacy &amp; Security</small><b>Microphone</b></div></div>
+    $('#stage').innerHTML = `<div class="mock"><div class="mh"><span class="s" style="background:#2a9ee0"></span><div><small>Privacy &amp; Security</small><b>Microphone</b></div></div>
       <div class="mr"><span><span class="ghost"></span><span class="bar"></span></span><span></span></div>
       <div class="mr"><span style="display:flex;align-items:center;gap:12px"><span style="width:26px;height:26px;border-radius:7px;display:inline-grid;place-items:center;background:#444">${LOGO.replace('<svg', '<svg width="22" height="22"')}</span><span style="font-size:17px">Relay</span></span><div class="toggle ${perms.mic ? 'on' : ''}"></div></div></div>
       <h2>Let Relay hear you</h2><p class="sub">So you can talk instead of type. Audio is turned into words on this Mac and never sent anywhere.</p>${chip(perms.mic, 'Microphone on', 'Waiting for Microphone')}
@@ -101,7 +101,7 @@ const SCREENS = {
   },
 
   4() {
-    $('#stage').innerHTML = `<div class="mock"><div class="mh"><span class="s" style="background:#e0568a"></span><div><small>Privacy &amp; Security</small><b>Input Monitoring</b></div></div>
+    $('#stage').innerHTML = `<div class="mock"><div class="mh"><span class="s" style="background:#2a9ee0"></span><div><small>Privacy &amp; Security</small><b>Input Monitoring</b></div></div>
       <div class="mr"><span><span class="ghost"></span><span class="bar"></span></span><span></span></div>
       <div class="mr"><span style="display:flex;align-items:center;gap:12px"><span style="width:26px;height:26px;border-radius:7px;display:inline-grid;place-items:center;background:#444">${LOGO.replace('<svg', '<svg width="22" height="22"')}</span><span style="font-size:17px">Relay</span></span><div class="toggle ${S.hotkeysRunning && S.hotkeysSeen ? 'on' : ''}"></div></div></div>
       <h2>Let Relay hear its shortcut</h2><p class="sub">So ${esc(S.labels.ask)} works from any app, not just this window.</p>${chip(S.hotkeysRunning && S.hotkeysSeen, 'Shortcuts on', S.hotkeysRunning ? 'Press any key to check' : 'Waiting for shortcuts')}

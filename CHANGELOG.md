@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- **Mark the screen.** Hold the mark key (Left ⌃ by default, change it under Shortcuts), circle or scribble over anything on screen with the mouse, let go, then ask about it. Relay looks at that area specifically ("what is this?", "fix this"). A model without image support gets the text in the area instead. The mark stays for three minutes, so you can ask a few things about it. Esc cancels it.
+- **A calmer look.** One cyan accent on dark navy everywhere: Settings, the logo and app icon, the pill, the buddy and guides. No purple, no green, no glow. The pill keeps its shape; its cyan accent is two short arcs that follow the pill's own outline.
+- **The buddy is a small ring with a cursor triangle.** When Relay draws, the triangle moves along each stroke as it appears, then the label pops in.
+- **Fix: drawings and guides sat about 40 points too low.** macOS kept Relay's full-screen overlay window below the menu bar, so marks were shifted down by the menu bar's height. The overlay now sits at the true top of the screen and positions are worked out from where the window really is.
+- Settings: General > Look still switches between Jarvis (cyan) and Classic.
+
 ## 0.4.0
 
 - **Jarvis look (new default):** a cyan HUD. The buddy is a rotating ring reticle (it pulses while listening, spins faster while thinking and closes into a check when done); the pill pops up with HUD corner brackets, a status readout (LISTENING, WORKING, COMPLETE) and a scanning bar; guides show as a HUD panel with a progress bar; drawings, rings and labels are cyan. Switch back under General > Look > Classic.
