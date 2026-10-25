@@ -3,6 +3,7 @@
 //   relay-ax find  <app> <name> [seconds]   prints "x|y|w|h|role" in global points, or "not found"
 //   relay-ax list  <app> [seconds]          prints "Role | name" lines
 //   relay-ax press <app> <name> [seconds]   presses the element: "pressed" | "not found" | "failed"
+//   relay-ax text  <png>                    prints every line of text in a picture
 //   relay-ax ocr   <png> <text> [accurate]  finds text in a picture: "nx|ny|nw|nh|text" (0..1, top-left origin) or "not found"
 // System Events' "entire contents" takes tens of seconds on big or Electron apps; this walks the tree directly with a
 // time limit, asks Chromium/Electron apps to build their tree, and reads text with Apple's Vision framework.
@@ -141,6 +142,14 @@ case "press":
     if let n = find(args[2], args[3], seconds: secs) {
         print(AXUIElementPerformAction(n.el, kAXPressAction as CFString) == .success ? "pressed" : "failed")
     } else { print("not found") }
+case "text":
+    guard let timg = NSImage(contentsOfFile: args[2]), let tcg = timg.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fail("Could not read the picture.") }
+    let treq = VNRecognizeTextRequest()
+    treq.recognitionLevel = .accurate
+    treq.usesLanguageCorrection = true
+    do { try VNImageRequestHandler(cgImage: tcg, options: [:]).perform([treq]) } catch { fail("Text recognition failed: \(error.localizedDescription)") }
+    let ordered = (treq.results ?? []).sorted { $0.boundingBox.origin.y > $1.boundingBox.origin.y }
+    print(ordered.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n"))
 case "ocr":
     guard args.count >= 4 else { fail("usage: relay-ax ocr <png> <text>") }
     guard let img = NSImage(contentsOfFile: args[2]), let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fail("Could not read the picture.") }

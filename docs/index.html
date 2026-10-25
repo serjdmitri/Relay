@@ -14,10 +14,10 @@
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #0d0a24; --bg2: #151039; --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.14);
-    --text: #f4f2ff; --muted: #b9b4e3;
-    --indigo: #6c63ff; --magenta: #c13cf0; --orange: #ff8a3d; --cyan: #2fc4ff; --green: #4ade80; --yellow: #ffc94a;
-    --grad: linear-gradient(120deg, #6c63ff, #c13cf0 55%, #ff8a3d);
+    --bg: #0b1118; --bg2: #0f1822; --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.14);
+    --text: #eef6fb; --muted: #9db4c4;
+    --indigo: #1c8fd6; --magenta: #2a9ee0; --orange: #4cc2ff; --cyan: #4cc2ff; --green: #4cc2ff; --yellow: #9fdcff;
+    --grad: linear-gradient(120deg, #1c8fd6, #2a9ee0 55%, #4cc2ff);
     --radius: 20px;
   }
   * { box-sizing: border-box; }
@@ -27,8 +27,8 @@
   img { max-width: 100%; height: auto; display: block; }
   .wrap { width: min(1120px, 100% - 40px); margin: 0 auto; }
   .glow { position: absolute; inset: 0 0 auto 0; height: 880px; pointer-events: none; z-index: 0;
-    background: radial-gradient(600px 400px at 15% 10%, rgba(47,196,255,.30), transparent 70%), radial-gradient(700px 480px at 85% 0%, rgba(193,60,240,.40), transparent 70%), radial-gradient(600px 400px at 70% 55%, rgba(255,138,61,.22), transparent 70%); }
-  header { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(13,10,36,.7); border-bottom: 1px solid var(--line); }
+    background: radial-gradient(600px 400px at 15% 10%, rgba(76,194,255,.30), transparent 70%), radial-gradient(700px 480px at 85% 0%, rgba(42,158,224,.40), transparent 70%), radial-gradient(600px 400px at 70% 55%, rgba(76,194,255,.22), transparent 70%); }
+  header { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(11,17,24,.7); border-bottom: 1px solid var(--line); }
   nav { display: flex; align-items: center; gap: 22px; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; text-decoration: none; margin-right: auto; }
   .brand img { width: 32px; height: 32px; }
@@ -36,12 +36,12 @@
   nav a.l:hover { color: #fff; }
   .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: 999px; font-weight: 600; font-size: 16px; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
   .btn:hover { transform: translateY(-2px); }
-  .btn.primary { background: var(--grad); color: #fff; box-shadow: 0 10px 30px rgba(193,60,240,.4); }
+  .btn.primary { background: var(--grad); color: #fff; box-shadow: 0 10px 30px rgba(42,158,224,.4); }
   .btn.ghost { background: rgba(255,255,255,.08); border-color: var(--line); color: #fff; }
   .btn.small { padding: 9px 16px; font-size: 14px; }
   .btn svg { width: 18px; height: 18px; fill: currentColor; }
   .hero { position: relative; z-index: 1; text-align: center; padding: 84px 0 40px; }
-  .hero .logo { width: 112px; height: 112px; margin: 0 auto 22px; filter: drop-shadow(0 16px 36px rgba(193,60,240,.55)); animation: float 6s ease-in-out infinite; }
+  .hero .logo { width: 112px; height: 112px; margin: 0 auto 22px; filter: drop-shadow(0 16px 36px rgba(42,158,224,.55)); animation: float 6s ease-in-out infinite; }
   @keyframes float { 50% { transform: translateY(-8px); } }
   .eyebrow { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 14px; margin-bottom: 20px; }
   h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.05; margin: 0 0 18px; letter-spacing: -.02em; }
@@ -49,7 +49,7 @@
   .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 30px; }
   .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .meta { margin-top: 18px; color: var(--muted); font-size: 14px; }
-  .shot { margin: 56px auto 0; max-width: 940px; border-radius: 24px; box-shadow: 0 30px 80px rgba(8,4,40,.6), 0 0 0 1px var(--line); overflow: hidden; }
+  .shot { margin: 56px auto 0; max-width: 940px; border-radius: 24px; box-shadow: 0 30px 80px rgba(4,12,20,.6), 0 0 0 1px var(--line); overflow: hidden; }
   section { position: relative; z-index: 1; padding: 88px 0 0; }
   h2 { font-size: clamp(30px, 4.6vw, 44px); line-height: 1.12; margin: 0 0 14px; letter-spacing: -.01em; text-align: center; }
   .sub { color: var(--muted); text-align: center; max-width: 660px; margin: 0 auto 44px; }
@@ -58,22 +58,22 @@
   .card h3 { margin: 14px 0 6px; font-size: 20px; }
   .card p { margin: 0; color: var(--muted); font-size: 16px; }
   .ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; }
-  .c1 { background: linear-gradient(135deg,#6c63ff,#c13cf0); } .c2 { background: linear-gradient(135deg,#c13cf0,#ff8a3d); }
-  .c3 { background: linear-gradient(135deg,#2fc4ff,#4ade80); } .c4 { background: linear-gradient(135deg,#ff8a3d,#ffc94a); }
-  .c5 { background: linear-gradient(135deg,#4ade80,#2fc4ff); } .c6 { background: linear-gradient(135deg,#6c63ff,#2fc4ff); }
+  .c1 { background: linear-gradient(135deg,#1c8fd6,#2a9ee0); } .c2 { background: linear-gradient(135deg,#2a9ee0,#4cc2ff); }
+  .c3 { background: linear-gradient(135deg,#4cc2ff,#4cc2ff); } .c4 { background: linear-gradient(135deg,#4cc2ff,#9fdcff); }
+  .c5 { background: linear-gradient(135deg,#4cc2ff,#4cc2ff); } .c6 { background: linear-gradient(135deg,#1c8fd6,#4cc2ff); }
   .two { display: grid; gap: 22px; grid-template-columns: 1fr; }
-  .frame { border-radius: 22px; overflow: hidden; box-shadow: 0 24px 60px rgba(8,4,40,.5), 0 0 0 1px var(--line); }
+  .frame { border-radius: 22px; overflow: hidden; box-shadow: 0 24px 60px rgba(4,12,20,.5), 0 0 0 1px var(--line); }
   .diagram { background: #17143a; border-radius: 22px; padding: 8px; box-shadow: 0 0 0 1px var(--line); }
   .model h3 { display: flex; align-items: center; gap: 10px; }
-  .tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(74,222,128,.18); color: var(--green); letter-spacing: .02em; }
-  .tag.warn { background: rgba(255,201,74,.18); color: var(--yellow); }
+  .tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(76,194,255,.18); color: var(--green); letter-spacing: .02em; }
+  .tag.warn { background: rgba(159,220,255,.18); color: var(--yellow); }
   .steps { counter-reset: s; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
   .step { counter-increment: s; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
   .step::before { content: counter(s); display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--grad); font-weight: 700; margin-bottom: 12px; }
   .step b { display: block; margin-bottom: 4px; }
   .step span { color: var(--muted); font-size: 15px; }
   code { font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255,255,255,.1); padding: 2px 7px; border-radius: 7px; }
-  pre { margin: 18px 0 0; background: #07051a; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7d3ff; }
+  pre { margin: 18px 0 0; background: #07051a; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #cfe3f0; }
   .dl { text-align: center; margin-top: 30px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .charts { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
   details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 22px; margin-bottom: 12px; }
@@ -82,7 +82,7 @@
   summary::after { content: "+"; font-size: 22px; color: var(--muted); }
   details[open] summary::after { content: "–"; }
   details p { margin: 0 0 18px; color: var(--muted); font-size: 16px; }
-  .final { text-align: center; margin: 90px auto 0; padding: 56px 24px; border-radius: 28px; background: linear-gradient(135deg, rgba(108,99,255,.5), rgba(193,60,240,.45) 55%, rgba(255,138,61,.45)); border: 1px solid var(--line); }
+  .final { text-align: center; margin: 90px auto 0; padding: 56px 24px; border-radius: 28px; background: linear-gradient(135deg, rgba(28,143,214,.5), rgba(42,158,224,.45) 55%, rgba(76,194,255,.45)); border: 1px solid var(--line); }
   .final h2 { margin-bottom: 10px; }
   footer { position: relative; z-index: 1; margin-top: 80px; padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; text-align: center; }
   footer a { color: #fff; }
@@ -133,7 +133,7 @@
       <div class="card"><div class="ic c4">⚡</div><h3>Instant commands</h3><p>Timers, music, volume, brightness, dark mode, notes, reminders, open apps and sites. About a third of a second, no model call, and "undo that" works.</p></div>
       <div class="card"><div class="ic c3">🧰</div><h3>Acts in your apps</h3><p>Notes, Reminders, Calendar, Messages, Finder, the clipboard, screen and accessibility tree, plus an optional Firefox extension for tabs and pages.</p></div>
       <div class="card"><div class="ic c1">👆</div><h3>Shows you, not just tells you</h3><p>Ask where something is and Relay points at it, circles it, or walks you through the steps on your own screen. Click the outlined spot, or say "next", to go on.</p></div>
-      <div class="card"><div class="ic c2">🛰️</div><h3>A Jarvis-style HUD</h3><p>A cyan reticle follows your cursor while Relay listens and thinks, and the pill and guides pop up as HUD panels. Prefer it calm? Switch to Classic.</p></div>
+      <div class="card"><div class="ic c2">🛰️</div><h3>Circle it, then ask</h3><p>Hold a key, circle anything on screen, let go and ask. Relay looks at exactly what you marked. A small ring with a cursor triangle follows your pointer and traces what it draws.</p></div>
       <div class="card"><div class="ic c5">🛡️</div><h3>Asks before it acts</h3><p>Anything that sends a message, trashes a file, runs a shell command or looks destructive shows an Allow or Cancel card first.</p></div>
       <div class="card"><div class="ic c6">🔒</div><h3>Private by design</h3><p>Speech is turned into words on your Mac by Apple's on-device recognition. Only the words go to the model, and only when you ask Relay to do something.</p></div>
     </div>
@@ -168,7 +168,7 @@
     <h2 id="nums">Built in the open</h2>
     <p class="sub">The numbers below are drawn from the repository itself.</p>
     <div class="charts">
-      <img src="img/chart-tests.svg" alt="Bar chart of 167 unit tests by area" width="600" height="340" loading="lazy">
+      <img src="img/chart-tests.svg" alt="Bar chart of 170 unit tests by area" width="600" height="340" loading="lazy">
       <img src="img/chart-code.svg" alt="Donut chart of lines of code by language" width="600" height="340" loading="lazy">
     </div>
   </section>

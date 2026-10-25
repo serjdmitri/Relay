@@ -28,7 +28,7 @@ let mainWin = null;
 let onboardWin = null;
 let quitting = false;
 
-const DEFAULT_SHORTCUTS = { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } };
+const DEFAULT_SHORTCUTS = { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] }, mark: { code: 'ControlLeft', mods: [] } };
 
 function windowOpts(w, h) {
   return {
@@ -88,7 +88,7 @@ function publicState() {
     history: d.history.slice(0, 200),
     actions: d.actions.slice(0, 300),
     stats: store.stats(),
-    labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type) },
+    labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
     claude: claudeState,
     speech: { available: speech.available, ...speechInfo },
     dictations: d.dictations.slice(0, 200),
@@ -367,7 +367,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('shortcut:set', (_e, name, def) => {
-    if (!['ask', 'dictate', 'type'].includes(name)) return;
+    if (!['ask', 'dictate', 'type', 'mark'].includes(name)) return;
     store.set(`settings.shortcuts.${name}`, def);
     broadcast();
   });

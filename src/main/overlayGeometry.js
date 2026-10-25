@@ -109,6 +109,44 @@ function inRect(p, r, margin = 0) {
   return p.x >= r.x - margin && p.x <= r.x + r.w + margin && p.y >= r.y - margin && p.y <= r.y + r.h + margin;
 }
 
+// What the user drew with the mark key: strokes of [x, y] points. Anything else is dropped, and the size is capped.
+const MAX_STROKES = 40;
+const MAX_POINTS = 600;
+function normalizeStrokes(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const s of raw.slice(0, MAX_STROKES)) {
+    if (!Array.isArray(s)) continue;
+    const pts = [];
+    for (const p of s.slice(0, MAX_POINTS)) {
+      if (Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])) pts.push([p[0], p[1]]);
+    }
+    if (pts.length >= 2) out.push(pts);
+  }
+  return out;
+}
+
+// The rectangle all strokes fit in, or null.
+function strokesBox(strokes) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const s of strokes) for (const [x, y] of s) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  return x1 < x0 ? null : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+// What to look at for a marked box: grown by a margin, at least a minimum size (a tiny circle needs its surroundings),
+// and kept inside the display.
+function markRegion(box, bounds, { pad = 28, minW = 260, minH = 200 } = {}) {
+  let w = Math.max(box.w + pad * 2, minW);
+  let h = Math.max(box.h + pad * 2, minH);
+  w = Math.min(w, bounds.width);
+  h = Math.min(h, bounds.height);
+  let x = box.x + box.w / 2 - w / 2;
+  let y = box.y + box.h / 2 - h / 2;
+  x = Math.max(bounds.x, Math.min(bounds.x + bounds.width - w, x));
+  y = Math.max(bounds.y, Math.min(bounds.y + bounds.height - h, y));
+  return { x, y, w, h };
+}
+
 // Which display holds a point; the nearest one when it is outside all of them (an off-screen element).
 function displayAt(displays, p) {
   const inside = displays.find((d) => p.x >= d.bounds.x && p.x < d.bounds.x + d.bounds.width && p.y >= d.bounds.y && p.y < d.bounds.y + d.bounds.height);
@@ -121,4 +159,4 @@ function displayAt(displays, p) {
   return displays.reduce((best, d) => (dist(d) < dist(best) ? d : best), displays[0]);
 }
 
-module.exports = { toGlobal, normalizeShapes, parseFrame, guideCard, guideSteps, guideCommand, inRect, displayAt, KINDS, MAX_SHAPES, MAX_STEPS };
+module.exports = { toGlobal, normalizeShapes, parseFrame, guideCard, guideSteps, guideCommand, inRect, normalizeStrokes, strokesBox, markRegion, displayAt, KINDS, MAX_SHAPES, MAX_STEPS };

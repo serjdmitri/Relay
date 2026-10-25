@@ -3,6 +3,7 @@
 // Commands arrive from the main process (src/main/overlay.js) in this display's own coordinates.
 // Text from a model only ever goes in with textContent.
 const $ = (id) => document.getElementById(id);
+const pen = $('pen');
 const cur = $('cur'), lab = $('lab'), buddy = $('buddy'), svg = $('draw'), labels = $('labels'), card = $('card');
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -15,7 +16,7 @@ let raf = 0;
 
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
-  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - (jarvis ? 38 : 30), y: flyTo.y + (jarvis ? 38 : 30) } : cursor && (jarvis ? { x: cursor.x + 24, y: cursor.y + 26 } : { x: cursor.x + 15, y: cursor.y + 17 });
+  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - (jarvis ? 40 : 30), y: flyTo.y + (jarvis ? 40 : 30) } : cursor && (jarvis ? { x: cursor.x + 30, y: cursor.y + 33 } : { x: cursor.x + 15, y: cursor.y + 17 });
   if (goal) {
     if (!pos) pos = { ...goal };
     pos.x += (goal.x - pos.x) * 0.35; // a soft lag, so it trails the pointer instead of sticking to it
@@ -56,19 +57,21 @@ const el = (name, attrs) => {
 };
 
 // Every stroke is drawn twice, a white one under a coloured one, so it reads on any background.
-function stroke(make) {
+function stroke(make, t) {
   const g = el('g', {});
   for (const cls of ['under', 'over']) {
     const e = make();
     e.setAttribute('class', `shape ${cls}`);
     e.setAttribute('pathLength', '1');
+    if (t) { e.style.animationDuration = t.dur + 's'; e.style.animationDelay = t.delay + 's'; }
     g.append(e);
   }
   return g;
 }
 
-function tag(text, x, y, big) {
+function tag(text, x, y, big, delay = 0) {
   const t = document.createElement('div');
+  if (delay) t.style.animationDelay = delay + 's';
   t.className = 'tag' + (big ? ' big' : '');
   t.textContent = text;
   labels.append(t);
@@ -77,31 +80,86 @@ function tag(text, x, y, big) {
   t.style.top = Math.max(8, Math.min(innerHeight - h - 8, y)) + 'px';
 }
 
+// The points a stroke passes through, so the pen can follow it as it is drawn.
+function pathOf(s) {
+  if (s.type === 'box') return [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h], [s.x, s.y]];
+  if (s.type === 'circle') return Array.from({ length: 41 }, (_, i) => [s.x + s.r * Math.cos((i / 40) * 2 * Math.PI), s.y + s.r * Math.sin((i / 40) * 2 * Math.PI)]);
+  if (s.type === 'arrow') return [[s.x, s.y], [s.x2, s.y2]];
+  return null;
+}
+const lengthOf = (pts) => pts.reduce((n, p, i) => (i ? n + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0), 0);
+const at = (pts, f) => {
+  const total = lengthOf(pts);
+  let want = f * total;
+  for (let i = 1; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    if (want <= seg || i === pts.length - 1) {
+      const k = seg ? Math.min(1, want / seg) : 1;
+      return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k];
+    }
+    want -= seg;
+  }
+  return pts[pts.length - 1];
+};
+
+let tracing = null;
+function trace(plan) {
+  cancelAnimationFrame(tracing && tracing.raf);
+  if (!jarvis || !plan.length) { pen.classList.remove('on'); tracing = null; return; }
+  const t0 = performance.now();
+  const end = Math.max(...plan.map((p) => p.delay + p.dur)) * 1000;
+  tracing = { raf: 0 };
+  const step = (now) => {
+    const ms = now - t0;
+    const cur = plan.find((p) => ms >= p.delay * 1000 && ms <= (p.delay + p.dur) * 1000) || null;
+    if (cur) {
+      const f = (ms - cur.delay * 1000) / (cur.dur * 1000);
+      const e = 1 - (1 - f) * (1 - f); // the stroke eases out like its animation does
+      const [x, y] = at(cur.pts, e);
+      pen.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      pen.classList.add('on');
+    }
+    if (ms < end + 400) tracing.raf = requestAnimationFrame(step);
+    else pen.classList.remove('on');
+  };
+  tracing.raf = requestAnimationFrame(step);
+}
+
 function draw(shapes, add) {
   if (!add) {
     svg.replaceChildren();
     labels.replaceChildren();
   }
+  let clock = 0; // each stroke starts when the one before it ends
+  const plan = [];
   for (const s of shapes) {
+    const pts = pathOf(s);
+    const len = pts ? lengthOf(pts) : 0;
+    const t = pts ? { delay: clock, dur: Math.max(0.35, Math.min(1.1, len / 900)) } : null;
+    if (t) { plan.push({ ...t, pts }); clock += t.dur + 0.08; }
+    const after = t ? t.delay + t.dur : clock;
     if (s.type === 'box') {
       const fill = el('rect', { x: s.x, y: s.y, width: s.w, height: s.h, rx: 10 });
       fill.setAttribute('class', 'shape fill');
-      svg.append(fill, stroke(() => el('rect', { x: s.x, y: s.y, width: s.w, height: s.h, rx: 10 })));
-      if (s.label) tag(s.label, s.x, s.y - 40);
+      fill.style.animationDelay = after + 's';
+      svg.append(fill, stroke(() => el('rect', { x: s.x, y: s.y, width: s.w, height: s.h, rx: 10 }), t));
+      if (s.label) tag(s.label, s.x, s.y - 40, false, after);
     } else if (s.type === 'circle') {
       const fill = el('circle', { cx: s.x, cy: s.y, r: s.r });
       fill.setAttribute('class', 'shape fill');
-      svg.append(fill, stroke(() => el('circle', { cx: s.x, cy: s.y, r: s.r })));
-      if (s.label) tag(s.label, s.x + s.r + 10, s.y - 16);
+      fill.style.animationDelay = after + 's';
+      svg.append(fill, stroke(() => el('circle', { cx: s.x, cy: s.y, r: s.r }), t));
+      if (s.label) tag(s.label, s.x + s.r + 10, s.y - 16, false, after);
     } else if (s.type === 'arrow') {
       const a = Math.atan2(s.y2 - s.y, s.x2 - s.x), L = 22;
       const head = (d) => `M${s.x2} ${s.y2} L${s.x2 - L * Math.cos(a + d)} ${s.y2 - L * Math.sin(a + d)}`;
-      svg.append(stroke(() => el('path', { d: `M${s.x} ${s.y} L${s.x2} ${s.y2} ${head(0.45)} ${head(-0.45)}` })));
-      if (s.label) tag(s.label, s.x2 + 12, s.y2 + 8);
+      svg.append(stroke(() => el('path', { d: `M${s.x} ${s.y} L${s.x2} ${s.y2} ${head(0.45)} ${head(-0.45)}` }), t));
+      if (s.label) tag(s.label, s.x2 + 12, s.y2 + 8, false, after);
     } else if (s.type === 'text') {
-      tag(s.text, s.x, s.y, true);
+      tag(s.text, s.x, s.y, true, clock);
     }
   }
+  trace(plan);
 }
 
 function showCard(c) {
@@ -142,7 +200,67 @@ function showCard(c) {
   card.append(foot);
 }
 
+// ----- the mark key: freehand strokes while it is held -----
+const markLayer = $('markLayer');
+let marking = false;
+let strokes = [];
+let live = null; // the stroke being drawn: { pts, under, over }
+
+function reportMarks(final) {
+  const send = strokes.map((s) => {
+    const step = Math.max(1, Math.ceil(s.length / 150));
+    return s.filter((_, i) => i % step === 0 || i === s.length - 1);
+  });
+  window.relay.overlayMark({ strokes: send, final: !!final });
+}
+
+function markStart() {
+  marking = true;
+  strokes = [];
+  live = null;
+  markLayer.replaceChildren();
+  document.body.classList.add('marking');
+}
+
+function markEnd(cancel) {
+  live = null;
+  marking = false;
+  document.body.classList.remove('marking');
+  pen.classList.remove('on');
+  if (!cancel) reportMarks(true);
+}
+
+document.addEventListener('mousedown', (e) => {
+  if (!marking) return;
+  const pts = [[e.clientX, e.clientY]];
+  const under = el('polyline', { class: 'u', points: `${e.clientX},${e.clientY}` });
+  const over = el('polyline', { class: 'o', points: `${e.clientX},${e.clientY}` });
+  markLayer.append(under, over);
+  strokes.push(pts);
+  live = { pts, under, over };
+});
+document.addEventListener('mousemove', (e) => {
+  if (!marking) return;
+  if (jarvis) { // the pen triangle is the pointer while marking
+    pen.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+    pen.classList.add('on');
+  }
+  if (!live) return;
+  const last = live.pts[live.pts.length - 1];
+  if (Math.hypot(e.clientX - last[0], e.clientY - last[1]) < 2) return;
+  live.pts.push([e.clientX, e.clientY]);
+  const pts = live.pts.map((p) => `${p[0]},${p[1]}`).join(' ');
+  live.under.setAttribute('points', pts);
+  live.over.setAttribute('points', pts);
+});
+document.addEventListener('mouseup', () => {
+  if (!marking || !live) return;
+  live = null;
+  reportMarks(false);
+});
+
 function clearAll() {
+  pen.classList.remove('on');
   svg.replaceChildren();
   labels.replaceChildren();
   showCard(null);
@@ -178,6 +296,15 @@ window.relay.onOverlay((m) => {
       break;
     case 'clear':
       clearAll();
+      break;
+    case 'mark-start':
+      markStart();
+      break;
+    case 'mark-end':
+      markEnd(m.cancel);
+      break;
+    case 'mark-clear':
+      markLayer.replaceChildren();
       break;
     case 'look':
       jarvis = m.look === 'jarvis';

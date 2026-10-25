@@ -11,7 +11,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -255,6 +255,22 @@ function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin 
       run: (i) => mac.runShell(i.command)
     }
   ];
+
+  // What the user marked with the mark key: a picture of that area, or its text for a model that cannot see images.
+  tools.push({
+    name: 'see_marked_area',
+    description: 'Look at the part of the screen the user marked (circled) by holding the mark key. Use it first when the request says "this", "here" or "that" and the context says they marked something. Returns a picture of that area.',
+    input_schema: obj({}),
+    describe: () => 'Looking at what you marked',
+    run: async () => {
+      const m = getMark();
+      if (!m) return 'The user has not marked anything recently. Use screenshot to look at the screen instead.';
+      const where = `${Math.round(m.box.w)}x${Math.round(m.box.h)} points drawn around ${Math.round(m.box.x)},${Math.round(m.box.y)}`;
+      if (visionCapable) return { image: { mediaType: m.mediaType, data: m.data }, text: `The area the user marked (${where}), with some of its surroundings.` };
+      const text = mac.readText ? await mac.readText(m) : '';
+      return text ? `Text in the area the user marked (${where}):\n${text}` : 'The marked area has no readable text, and this model cannot see images.';
+    }
+  });
 
   // Show the user where something is. These work from the accessibility tree, so they need no vision model.
   tools.push(

@@ -445,6 +445,17 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       return parseFrame(out);
     },
     findText,
+    // All the text in a picture ({ data: base64 }), read on this Mac. For models that cannot see images.
+    async readText(shot) {
+      if (!hasAx()) return '';
+      const file = path.join(os.tmpdir(), `relay-text-${process.pid}-${Date.now()}.jpg`);
+      fs.writeFileSync(file, Buffer.from(shot.data, 'base64'));
+      try {
+        return (await ax(['text', file])).trim();
+      } finally {
+        fs.rmSync(file, { force: true });
+      }
+    },
     // An element by name, else the same words read off the screen.
     async locate(app, name, { seconds = 2.5, ocr = true } = {}) {
       try {

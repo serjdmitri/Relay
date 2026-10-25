@@ -145,3 +145,24 @@ test('the system prompt tells the model how to show things on screen', () => {
   const p = buildSystemPrompt({});
   assert.ok(p.includes('point_at_element') && p.includes('guide_step') && p.includes('draw_on_screen'));
 });
+
+// ---- the area the user marked with the mark key
+test('see_marked_area gives a vision model the picture, a text-only model the text, and says so when nothing is marked', async () => {
+  const mark = { mediaType: 'image/jpeg', data: 'AAAA', width: 300, height: 200, box: { x: 10, y: 20, w: 120, h: 80 } };
+  const mk = (extra) => Object.fromEntries(buildTools({ mac: { ...fakeMac, readText: async () => 'Total: $42' }, overlay: null, getScale: () => 1, ...extra }).map((t) => [t.name, t]));
+  const seeing = await mk({ getMark: () => mark }).see_marked_area.run({});
+  assert.deepEqual(seeing.image, { mediaType: 'image/jpeg', data: 'AAAA' });
+  assert.match(seeing.text, /120x80 points drawn around 10,20/);
+  const blind = await mk({ getMark: () => mark, visionCapable: false }).see_marked_area.run({});
+  assert.match(blind, /Text in the area the user marked/);
+  assert.match(blind, /Total: \$42/);
+  assert.match(await mk({}).see_marked_area.run({}), /has not marked anything/);
+});
+
+test('the request context says when the user marked something', () => {
+  const { buildContext, buildSystemPrompt } = require('../src/main/agent/system-prompt');
+  assert.match(buildContext({ mark: { ageSec: 7, w: 120.4, h: 80 } }), /marked an area of their screen 7 seconds ago \(120x80 points\)\. Call see_marked_area/);
+  assert.ok(!buildContext({}).includes('marked'));
+  assert.match(buildSystemPrompt({ mark: { ageSec: 1, w: 5, h: 5 } }), /see_marked_area/);
+  assert.match(buildSystemPrompt({}), /If the context says the user marked/, 'the standing rule is always there');
+});

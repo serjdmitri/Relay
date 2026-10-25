@@ -1,6 +1,6 @@
-const { BrowserWindow, screen } = require('electron');
+const { BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
-const { displayAt } = require('./overlayGeometry');
+const { displayAt, normalizeStrokes, strokesBox } = require('./overlayGeometry');
 
 // Everything Relay draws over your screen, one click-through window per display:
 //  - the buddy: a small helper that follows your pointer while Relay works (and flies to what it points at),
@@ -27,6 +27,16 @@ class Overlay {
     this.touched = false; // did this request draw or guide?
     this.buddyWatchdog = null;
     this.onClear = null; // called when the marks go away, however that happens
+    this.marking = null; // the window the user is drawing a mark on (the mark key is held)
+    this.markWait = null;
+    // The overlay page reports what the user drew with the mark key.
+    ipcMain.on('overlay:mark', (ev, data) => {
+      for (const e of this.wins.values()) {
+        if (e.win.isDestroyed() || e.win.webContents !== ev.sender) continue;
+        e.marks = normalizeStrokes(data && data.strokes);
+        if (data && data.final && this.markWait) this.markWait();
+      }
+    });
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -53,7 +63,7 @@ class Overlay {
     const b = display.bounds;
     const win = new BrowserWindow({
       x: b.x, y: b.y, width: b.width, height: b.height,
-      transparent: true, frame: false, hasShadow: false, resizable: false, focusable: false, skipTaskbar: true,
+      transparent: true, frame: false, hasShadow: false, resizable: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true,
       show: false, type: 'panel',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
     });
@@ -61,7 +71,7 @@ class Overlay {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
-    e = { win, display, shapes: false, card: false, halo: false, buddy: false, haloTimer: null, ready: false, queue: [] };
+    e = { win, display, shapes: false, card: false, halo: false, buddy: false, haloTimer: null, ready: false, queue: [], mark: false, markShow: false, marks: [], markTimer: null };
     // A page that has not finished loading would drop what we send it, so hold commands until it has.
     win.webContents.once('did-finish-load', () => {
       e.ready = true;
@@ -86,7 +96,7 @@ class Overlay {
       e.look = look;
       this.send(e, { type: 'look', look });
     }
-    const want = e.shapes || e.card || e.halo || e.buddy;
+    const want = e.shapes || e.card || e.halo || e.buddy || e.mark || e.markShow;
     if (want && !e.win.isVisible()) {
       if (e.win.getBounds().x !== e.display.bounds.x || e.win.getBounds().y !== e.display.bounds.y) e.win.setBounds(e.display.bounds);
       e.win.showInactive();
@@ -94,8 +104,16 @@ class Overlay {
     } else if (!want && e.win.isVisible()) e.win.hide();
   }
 
+  // Where the window really is. macOS can keep a window below the menu bar even when asked for the top of the display,
+  // so positions are always worked out from the window's own corner, not the display's.
+  origin(e) {
+    const b = e.win.getBounds();
+    return { x: b.x, y: b.y };
+  }
+
   local(e, p) {
-    return { x: p.x - e.display.bounds.x, y: p.y - e.display.bounds.y };
+    const o = this.origin(e);
+    return { x: p.x - o.x, y: p.y - o.y };
   }
 
   // ----- the halo: point at a spot -----
@@ -197,10 +215,10 @@ class Overlay {
     }
     for (const { d, shapes: list } of byDisplay.values()) {
       const e = this.entry(d);
-      const o = { x: d.bounds.x, y: d.bounds.y };
-      const moved = list.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y, ...(s.x2 !== undefined ? { x2: s.x2 - o.x, y2: s.y2 - o.y } : {}) }));
       e.shapes = true;
-      this.refresh(e);
+      this.refresh(e); // show it first: only then is the window's real position known
+      const o = this.origin(e);
+      const moved = list.map((s) => ({ ...s, x: s.x - o.x, y: s.y - o.y, ...(s.x2 !== undefined ? { x2: s.x2 - o.x, y2: s.y2 - o.y } : {}) }));
       this.send(e, { type: 'draw', shapes: moved, add: true });
     }
     this.armMarks(seconds);
@@ -258,8 +276,66 @@ class Overlay {
     return false;
   }
 
+  // ----- the mark key: hold it, circle something on screen, let go -----
+  // While it is held the display under the pointer takes the mouse, so the user can draw freehand strokes on it.
+  markStart() {
+    if (!this.isEnabled()) return false;
+    this.markCancel();
+    const e = this.entry(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
+    this.marking = e;
+    e.marks = [];
+    e.mark = true;
+    e.markShow = true;
+    clearTimeout(e.markTimer);
+    e.win.setIgnoreMouseEvents(false);
+    this.refresh(e);
+    this.send(e, { type: 'mark-start' });
+    return true;
+  }
+
+  // The key was released. Resolves to { display, box (global points), strokes } or null when nothing was drawn.
+  async markEnd() {
+    const e = this.marking;
+    if (!e) return null;
+    this.marking = null;
+    const reported = new Promise((resolve) => {
+      this.markWait = resolve;
+      setTimeout(resolve, 400);
+    });
+    this.send(e, { type: 'mark-end' });
+    await reported;
+    this.markWait = null;
+    e.mark = false;
+    if (!e.win.isDestroyed()) e.win.setIgnoreMouseEvents(true);
+    const strokes = normalizeStrokes(e.marks);
+    const box = strokesBox(strokes);
+    e.markTimer = setTimeout(() => this.markFade(e), box ? 2500 : 0); // what was drawn stays a moment, then goes
+    if (!box) return null;
+    const o = this.origin(e);
+    return { display: e.display, box: { x: box.x + o.x, y: box.y + o.y, w: box.w, h: box.h }, strokes: strokes.length };
+  }
+
+  markFade(e) {
+    e.markShow = false;
+    this.send(e, { type: 'mark-clear' });
+    this.refresh(e);
+  }
+
+  // Esc while marking: drop it.
+  markCancel() {
+    const e = this.marking;
+    if (!e) return;
+    this.marking = null;
+    e.mark = false;
+    e.marks = [];
+    if (!e.win.isDestroyed()) e.win.setIgnoreMouseEvents(true);
+    this.send(e, { type: 'mark-end', cancel: true });
+    this.markFade(e);
+  }
+
   // Everything off at once.
   hide() {
+    this.markCancel();
     this.clear();
     this.buddy(null);
   }

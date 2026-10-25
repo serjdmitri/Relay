@@ -12,10 +12,10 @@ const out = path.join(root, 'docs/img');
 fs.mkdirSync(out, { recursive: true });
 const img = (f) => 'data:image/png;base64,' + fs.readFileSync(path.join(shots, f)).toString('base64');
 
-const WALL = 'linear-gradient(135deg,#1B1464 0%,#6B2BD9 42%,#E0489B 78%,#FF9A4D 100%)';
+const WALL = 'linear-gradient(135deg,#06182a 0%,#0c3a5c 45%,#1a6f9c 80%,#4cc2ff 100%)';
 const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Text',Helvetica,Arial,sans-serif";
 const base = (w, h, body) => `<!doctype html><body style="margin:0;width:${w}px;height:${h}px;background:${WALL};position:relative;overflow:hidden;font-family:${FONT};color:#fff">
-<div style="position:absolute;inset:0;background:radial-gradient(circle at 18% 22%,rgba(91,227,255,.45),transparent 45%),radial-gradient(circle at 88% 85%,rgba(255,226,122,.40),transparent 45%)"></div>${body}</body>`;
+<div style="position:absolute;inset:0;background:radial-gradient(circle at 18% 22%,rgba(91,227,255,.45),transparent 45%),radial-gradient(circle at 88% 85%,rgba(159,220,255,.28),transparent 45%)"></div>${body}</body>`;
 
 const win = (file, x, y, w) => `<img src="${img(file)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;border-radius:14px;box-shadow:0 24px 60px rgba(10,4,40,.55),0 0 0 1px rgba(255,255,255,.18)">`;
 const cap = (t, x, y, w) => `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;text-align:center;font-size:17px;font-weight:600;text-shadow:0 1px 8px rgba(20,6,60,.5)">${t}</div>`;
