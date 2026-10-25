@@ -290,6 +290,7 @@ class AskController {
     if (this.suspended) return;
     if (name === 'cancel') {
       if (this.state !== 'idle') this.cancelAll();
+      else if (this.overlay.hasMarks()) this.overlay.clear(); // Esc closes drawings and guides
       return;
     }
     if (name === 'dictate' && this.store.get('settings.dictation') === false) {
@@ -334,6 +335,7 @@ class AskController {
 
   cancelAll() {
     this.speaker?.stop();
+    this.overlay.hide();
     if (this.state === 'working' || this.state === 'confirm') return this.stop();
     if (this.state === 'listening' || this.state === 'finishing') {
       this.speech.cancel();
@@ -343,7 +345,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, getScale: () => this.scale, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -422,6 +424,8 @@ class AskController {
     this.heldStart = held;
     this.listenStartedAt = Date.now();
     this.state = 'listening';
+    this.overlay.clear(); // marks from the last request go away when you start a new one
+    this.overlay.buddy('listening');
     this.speaker?.stop(); // the microphone must not hear Relay talking
     this.prefetch();
     if (mode === 'ask') this.warmUp();
@@ -557,6 +561,7 @@ class AskController {
 
   close() {
     clearTimeout(this.doneTimer);
+    this.overlay.buddy(null);
     this.state = 'idle';
     this.dropWarm();
     this.hideSoft();
@@ -594,6 +599,7 @@ class AskController {
     const routines = this.store.get('routines');
     const cmd = parseCommand(text, routines, { recording: !!this.recording });
     this.state = 'working';
+    this.overlay.buddy('thinking');
     this.win.setFocusable(false);
     this.push({ label: 'Thinking', text });
 
@@ -830,7 +836,7 @@ class AskController {
     this.abort = null;
     this.state = 'done';
     this.push({ reply, status: res.status });
-    this.overlay.hide();
+    this.overlay.workDone(); // the buddy leaves; drawings and guides stay until dismissed
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     if (this.store.get('settings.speakReplies') && res.status === 'done') this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
     this.onChange();
@@ -864,9 +870,10 @@ class AskController {
 
   // ----- screenshot for the model -----
   async capture() {
-    const d = screen.getPrimaryDisplay();
+    const d = this.disp || screen.getPrimaryDisplay();
     const wasVisible = this.win && !this.win.isDestroyed() && this.win.isVisible();
     if (wasVisible) this.win.setOpacity(0);
+    this.overlay.setCaptureHidden(true); // the buddy and any drawings must not appear in what the model sees
     await new Promise((r) => setTimeout(r, 80));
     try {
       const pxW = Math.round(d.size.width * d.scaleFactor);
@@ -880,8 +887,10 @@ class AskController {
       if (img.getSize().width > maxW) img = img.resize({ width: maxW });
       const size = img.getSize();
       this.scale = d.size.width / size.width;
+      this.origin = { x: d.bounds.x, y: d.bounds.y }; // where this display starts in global points
       return { mediaType: 'image/jpeg', data: img.toJPEG(75).toString('base64'), width: size.width, height: size.height };
     } finally {
+      this.overlay.setCaptureHidden(false);
       if (wasVisible) this.win.setOpacity(1);
     }
   }

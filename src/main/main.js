@@ -414,7 +414,8 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor') });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false });
+  overlay.watchDisplays();
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
     speechInfo = { ...speechInfo, preparing: f };

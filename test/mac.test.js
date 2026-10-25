@@ -69,6 +69,16 @@ test('typeText pastes via clipboard and restores it', async () => {
   assert.ok(r.calls[0].args.join(' ').includes('keystroke "v"'));
 });
 
+test('uiLocate reads an element frame and says so clearly when there is none', async () => {
+  const found = createMac({ exec: recorder('100,200,80,30').exec });
+  assert.deepEqual(await found.uiLocate('Notes', 'New Note'), { x: 100, y: 200, w: 80, h: 30, cx: 140, cy: 215 });
+  const none = createMac({ exec: recorder('not found').exec });
+  await assert.rejects(() => none.uiLocate('Notes', 'Nope'), /No UI element named "Nope" in Notes/);
+  const rec = recorder('1,2,3,4');
+  await createMac({ exec: rec.exec }).uiLocate('Notes', 'Say "hi"');
+  assert.ok(rec.calls[0].args.join(' ').includes('name of e is "Say \\"hi\\""'), 'the name is quoted safely');
+});
+
 test('uiClick surfaces a clear error when nothing matches', async () => {
   const mac = createMac({ exec: recorder('not found').exec });
   await assert.rejects(() => mac.uiClick('Notes', 'Nope'), /No UI element named "Nope"/);

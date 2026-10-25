@@ -63,6 +63,31 @@ for (const [name, msg] of Object.entries(states)) {
   const pad = 70; // keep the whole soft shadow so it fades out instead of being cut off
   await pill.screenshot({ path: path.join(out, `pill-${name}.png`), omitBackground: true, clip: { x: Math.max(0, r.x - pad), y: Math.max(0, r.y - pad), width: r.w + 2 * pad, height: r.h + 2 * pad } });
 }
+// the overlay (buddy, drawings and the step-by-step guide) drawn over a wallpaper, since the real window is transparent
+const ov = await ctx.newPage();
+await ov.setViewportSize({ width: 1000, height: 620 });
+ov.on('pageerror', (e) => errors.push('overlay: ' + e.message));
+await ov.goto(url('overlay.html'));
+await ov.evaluate(() => { document.documentElement.style.background = 'linear-gradient(135deg,#1B1464,#6B2BD9 45%,#E0489B 80%,#FF9A4D)'; });
+const send = (m) => ov.evaluate((x) => window.__overlay(x), m);
+const snap = async (name, wait = 900) => { await ov.waitForTimeout(wait); await ov.screenshot({ path: path.join(out, `overlay-${name}.png`) }); };
+await send({ type: 'buddy-state', state: 'listening' });
+await send({ type: 'cursor', x: 330, y: 280 });
+await snap('buddy-listening', 1200);
+await send({ type: 'buddy-state', state: 'thinking' });
+await snap('buddy-thinking', 500);
+await send({ type: 'buddy-state', state: 'done' });
+await snap('buddy-done', 600);
+await send({ type: 'point', x: 640, y: 200, label: 'Night Shift' });
+await send({ type: 'draw', add: false, shapes: [
+  { type: 'box', x: 540, y: 170, w: 210, h: 62, label: 'Turn this on' },
+  { type: 'arrow', x: 260, y: 430, x2: 520, y2: 250, label: 'Start here' },
+  { type: 'circle', x: 760, y: 420, r: 44, label: 'Then click Done' }
+] });
+await snap('draw', 1300);
+await send({ type: 'guide', card: { steps: ['Open System Settings', 'Click Displays', 'Click Night Shift', 'Turn on Schedule'], current: 1, total: 4 } });
+await snap('guide', 700);
+await send({ type: 'clear' });
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
 console.log('shots written to', out);
