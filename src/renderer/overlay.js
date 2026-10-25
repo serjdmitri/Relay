@@ -200,64 +200,48 @@ function showCard(c) {
   card.append(foot);
 }
 
-// ----- the mark key: freehand strokes while it is held -----
+// ----- the mark key: a trail that follows the pointer while the key is held, and fades -----
 const markLayer = $('markLayer');
+const TRAIL_MS = 1600;
+let trail = []; // { x, y, t }
 let marking = false;
-let strokes = [];
-let live = null; // the stroke being drawn: { pts, under, over }
+let trailRaf = 0;
 
-function reportMarks(final) {
-  const send = strokes.map((s) => {
-    const step = Math.max(1, Math.ceil(s.length / 150));
-    return s.filter((_, i) => i % step === 0 || i === s.length - 1);
-  });
-  window.relay.overlayMark({ strokes: send, final: !!final });
+function drawTrail(now) {
+  const alive = trail.filter((q) => now - q.t < TRAIL_MS);
+  trail = alive;
+  markLayer.replaceChildren();
+  if (alive.length > 1) {
+    const pts = alive.map((q) => `${q.x},${q.y}`).join(' ');
+    const under = el('polyline', { class: 'u', points: pts });
+    const over = el('polyline', { class: 'o', points: pts });
+    over.style.opacity = String(Math.min(1, (TRAIL_MS - (now - alive[0].t)) / 700 + 0.35)); // the tail thins as it ages
+    markLayer.append(under, over);
+  }
+  if (marking || alive.length) trailRaf = requestAnimationFrame((t) => drawTrail(performance.now()));
+  else trailRaf = 0;
 }
 
 function markStart() {
   marking = true;
-  strokes = [];
-  live = null;
+  trail = [];
   markLayer.replaceChildren();
-  document.body.classList.add('marking');
+  if (!trailRaf) trailRaf = requestAnimationFrame(() => drawTrail(performance.now()));
+}
+
+function markPoint(x, y) {
+  trail.push({ x, y, t: performance.now() });
+  if (jarvis) { // the pen triangle rides at the head of the trail
+    pen.style.transform = `translate(${x}px, ${y}px)`;
+    pen.classList.add('on');
+  }
 }
 
 function markEnd(cancel) {
-  live = null;
   marking = false;
-  document.body.classList.remove('marking');
   pen.classList.remove('on');
-  if (!cancel) reportMarks(true);
+  if (cancel) trail = [];
 }
-
-document.addEventListener('mousedown', (e) => {
-  if (!marking) return;
-  const pts = [[e.clientX, e.clientY]];
-  const under = el('polyline', { class: 'u', points: `${e.clientX},${e.clientY}` });
-  const over = el('polyline', { class: 'o', points: `${e.clientX},${e.clientY}` });
-  markLayer.append(under, over);
-  strokes.push(pts);
-  live = { pts, under, over };
-});
-document.addEventListener('mousemove', (e) => {
-  if (!marking) return;
-  if (jarvis) { // the pen triangle is the pointer while marking
-    pen.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
-    pen.classList.add('on');
-  }
-  if (!live) return;
-  const last = live.pts[live.pts.length - 1];
-  if (Math.hypot(e.clientX - last[0], e.clientY - last[1]) < 2) return;
-  live.pts.push([e.clientX, e.clientY]);
-  const pts = live.pts.map((p) => `${p[0]},${p[1]}`).join(' ');
-  live.under.setAttribute('points', pts);
-  live.over.setAttribute('points', pts);
-});
-document.addEventListener('mouseup', () => {
-  if (!marking || !live) return;
-  live = null;
-  reportMarks(false);
-});
 
 function clearAll() {
   pen.classList.remove('on');
@@ -300,10 +284,14 @@ window.relay.onOverlay((m) => {
     case 'mark-start':
       markStart();
       break;
+    case 'mark-point':
+      markPoint(m.x, m.y);
+      break;
     case 'mark-end':
       markEnd(m.cancel);
       break;
     case 'mark-clear':
+      trail = [];
       markLayer.replaceChildren();
       break;
     case 'look':

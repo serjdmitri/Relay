@@ -121,7 +121,6 @@
     },
     onStateChanged: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
     onNavigate: (cb) => { window.__navigate = cb; return () => {}; },
-    onOverlay: (cb) => { window.__overlay = cb; return () => {}; },
-    overlayMark: () => {}
+    onOverlay: (cb) => { window.__overlay = cb; return () => {}; }
   };
 })();

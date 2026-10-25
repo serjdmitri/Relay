@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- **Mark the screen without clicking.** In 0.5.0 you had to hold the mark key and drag with the mouse, which does not work with Control held (macOS turns Control-click into a right click). Now you hold the key and just move the pointer round what you mean: a cyan trail follows it and fades, and when you let go Relay looks at what you circled. The mouse is never blocked, so nothing is clicked by accident. A pointer that only passes by (under about 28 points across) is ignored.
+
 ## 0.5.0
 
 - **Mark the screen.** Hold the mark key (Left ⌃ by default, change it under Shortcuts), circle or scribble over anything on screen with the mouse, let go, then ask about it. Relay looks at that area specifically ("what is this?", "fix this"). A model without image support gets the text in the area instead. The mark stays for three minutes, so you can ask a few things about it. Esc cancels it.
