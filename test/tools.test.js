@@ -84,8 +84,7 @@ const frame = { x: 100, y: 200, w: 80, h: 30, cx: 140, cy: 215 };
 test('point_at_element points at the exact spot and outlines the element, with no vision model needed', async () => {
   const overlay = fakeOverlay();
   const tools = Object.fromEntries(buildTools({ mac: { ...fakeMac, uiLocate: async () => frame }, overlay, getScale: () => 1, visionCapable: false }).map((t) => [t.name, t]));
-  assert.ok(tools.point_at_element && tools.guide_step, 'available to text-only models');
-  assert.ok(!tools.draw_on_screen, 'drawing needs screenshot coordinates, so it needs vision');
+  assert.ok(tools.point_at_element && tools.guide_step && tools.draw_on_screen, 'available to text-only models (drawing can anchor to element names)');
   const out = await tools.point_at_element.run({ app: 'Notes', name: 'New Note', label: 'Here' });
   assert.match(out, /Pointed at "New Note" in Notes/);
   assert.deepEqual(overlay.calls[0], ['point', 140, 215, 'Here']);
@@ -104,21 +103,34 @@ test('draw_on_screen converts screenshot pixels with the scale and the display o
   await assert.rejects(() => tools.draw_on_screen.run({ shapes: [{ type: 'star', x: 1, y: 1 }] }), /type must be one of/);
 });
 
-test('guide_step shows the card and points at an element or at screenshot coordinates', async () => {
+test('guide_step starts a guide once, with a target for the first step from an element or a screenshot spot', async () => {
   const overlay = fakeOverlay();
   const tools = Object.fromEntries(buildTools({ mac: { ...fakeMac, uiLocate: async () => frame }, overlay, getScale: () => 2, getOrigin: () => ({ x: 10, y: 0 }) }).map((t) => [t.name, t]));
-  const steps = ['Open System Settings', 'Click Displays', 'Turn on Night Shift'];
-  const a = await tools.guide_step.run({ steps, current: 2, app: 'System Settings', name: 'Displays' });
+  const texts = ['Open System Settings', 'Click Displays', 'Turn on Night Shift'];
+  const a = await tools.guide_step.run({ steps: texts.map((text) => ({ text })), current: 2, app: 'System Settings', name: 'Displays' });
   assert.match(a, /step 2 of 3/i);
-  assert.match(a, /say "next"/);
-  assert.deepEqual(overlay.calls[0][1], { steps, current: 1, total: 3 });
+  assert.match(a, /do not call guide_step again/);
+  assert.deepEqual(overlay.calls[0][1], { steps: texts, current: 1, total: 3 });
   assert.deepEqual(overlay.calls[0][2], { x: 140, y: 215 });
-  assert.equal(overlay.calls[0][3].type, 'box');
-  await tools.guide_step.run({ steps, current: 3, x: 50, y: 40 });
+  assert.deepEqual(overlay.calls[0][3], { type: 'box', x: 100, y: 200, w: 80, h: 30, label: '' });
+  await tools.guide_step.run({ steps: texts, current: 3, x: 50, y: 40 });
   assert.deepEqual(overlay.calls[1][2], { x: 110, y: 80 });
-  await tools.guide_step.run({ steps, current: 1 });
+  assert.equal(overlay.calls[1][3].type, 'circle', 'a spot with no element gets a ring');
+  await tools.guide_step.run({ steps: texts, current: 1 });
   assert.equal(overlay.calls[2][2], null, 'no target: the card alone');
   await assert.rejects(() => tools.guide_step.run({ steps: [], current: 1 }), /non-empty/);
+});
+
+test('draw_on_screen outlines a named element exactly, and mixes with screenshot-pixel shapes', async () => {
+  const overlay = fakeOverlay();
+  const tools = Object.fromEntries(buildTools({ mac: { ...fakeMac, uiLocate: async () => frame }, overlay, getScale: () => 2, getOrigin: () => ({ x: 0, y: 0 }) }).map((t) => [t.name, t]));
+  const out = await tools.draw_on_screen.run({ shapes: [{ type: 'box', app: 'Notes', name: 'New Note', label: 'Here' }, { type: 'circle', app: 'Notes', name: 'New Note' }, { type: 'text', x: 5, y: 5, text: 'Hi' }] });
+  assert.match(out, /Drew 3 marks/);
+  const drawn = overlay.calls[0][1];
+  assert.deepEqual(drawn[0], { type: 'box', x: 100, y: 200, w: 80, h: 30, label: 'Here' });
+  assert.equal(drawn[1].type, 'circle');
+  assert.deepEqual([drawn[1].x, drawn[1].y], [140, 215]);
+  assert.deepEqual(drawn[2], { type: 'text', x: 10, y: 10, text: 'Hi' });
 });
 
 test('the show-me tools say so plainly when Relay cursor is turned off', async () => {

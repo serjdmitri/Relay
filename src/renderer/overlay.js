@@ -14,11 +14,11 @@ let raf = 0;
 
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
-  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - 36, y: flyTo.y + 36 } : cursor && { x: cursor.x + 28, y: cursor.y + 28 };
+  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - 30, y: flyTo.y + 30 } : cursor && { x: cursor.x + 15, y: cursor.y + 17 };
   if (goal) {
     if (!pos) pos = { ...goal };
-    pos.x += (goal.x - pos.x) * 0.2; // a soft lag, so it trails the pointer instead of sticking to it
-    pos.y += (goal.y - pos.y) * 0.2;
+    pos.x += (goal.x - pos.x) * 0.35; // a soft lag, so it trails the pointer instead of sticking to it
+    pos.y += (goal.y - pos.y) * 0.35;
     buddy.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
   }
   raf = state ? requestAnimationFrame(frame) : 0;

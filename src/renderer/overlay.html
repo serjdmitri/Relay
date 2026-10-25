@@ -18,16 +18,16 @@
   /* the buddy: follows the real pointer */
   #buddy { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; transition: opacity .25s; will-change: transform; }
   #buddy.on { opacity: 1; }
-  .orb { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; border-radius: 50%;
+  .orb { position: absolute; left: -10px; top: -10px; width: 20px; height: 20px; border-radius: 50%;
     background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.75), rgba(255,255,255,0) 38%), linear-gradient(135deg, #6c63ff, #c13cf0 62%, #ff8a3d);
-    box-shadow: 0 6px 18px rgba(108,99,255,.55), 0 0 0 2px rgba(255,255,255,.9); transition: background .3s; }
-  .bars { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 2.5px; }
-  .bars i { width: 3px; height: 8px; border-radius: 2px; background: #fff; animation: eq .8s ease-in-out infinite; }
+    box-shadow: 0 3px 10px rgba(108,99,255,.5), 0 0 0 1.5px rgba(255,255,255,.9); transition: background .3s; }
+  .bars { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 1.5px; }
+  .bars i { width: 2px; height: 5px; border-radius: 2px; background: #fff; animation: eq .8s ease-in-out infinite; }
   .bars i:nth-child(2) { animation-delay: .15s; } .bars i:nth-child(3) { animation-delay: .3s; }
-  @keyframes eq { 0%, 100% { height: 5px; } 50% { height: 15px; } }
-  .spin { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; border: 3px solid transparent; border-top-color: rgba(255,255,255,.95); display: none; animation: spin .9s linear infinite; }
+  @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 10px; } }
+  .spin { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%; border: 2.5px solid transparent; border-top-color: rgba(255,255,255,.95); display: none; animation: spin .9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .chk { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; display: none; }
+  .chk { position: absolute; left: -10px; top: -10px; width: 20px; height: 20px; display: none; }
   #buddy.listening .bars { display: flex; }
   #buddy.thinking .spin { display: block; }
   #buddy.done .orb { background: linear-gradient(135deg, #34c759, #2fc4ff); }

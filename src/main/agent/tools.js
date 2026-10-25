@@ -1,6 +1,7 @@
 const { scriptNeedsConfirm } = require('./safety');
 const web = require('./web');
-const { toGlobal, normalizeShapes, guideCard, KINDS } = require('../overlayGeometry');
+const { toGlobal, normalizeShapes, guideSteps, KINDS } = require('../overlayGeometry');
+const { Guide } = require('../guide');
 
 const str = (description) => ({ type: 'string', description });
 const num = (description) => ({ type: 'number', description });
@@ -10,7 +11,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
 
@@ -271,27 +272,59 @@ function buildTools({ mac, firefox, overlay, getScale, getOrigin = () => ({ x: 0
       }
     },
     {
-      name: 'guide_step',
-      description: 'Walk the user through a task one step at a time: shows a checklist card with the current step highlighted, and points at where to click. Give the whole list of steps each time and the current step number. Point with app+name (exact) or x,y from a screenshot. The user says "next" when ready; then call this again with the next step.',
+      name: 'draw_on_screen',
+      description: 'Draw boxes, circles, arrows and text labels over the screen to show the user something, for example to circle a button or mark where to look. Best: give a shape app and name (an exact element from ui_list) and Relay outlines that element exactly, with no screenshot. Otherwise x, y (and w, h, r, x2, y2) are pixels in the most recent screenshot, so take one first. Use few, clear marks. They stay about 30 seconds, or until the user presses Esc. Set add to build on what is already drawn; set clear with no shapes to remove marks.',
       input_schema: obj({
-        steps: { type: 'array', items: str('One short step'), description: '1 to 8 short steps' },
-        current: num('Which step the user is on, starting at 1'),
-        app: str('App for the element to point at'), name: str('Exact element name to point at'),
-        x: num('X in screenshot pixels'), y: num('Y in screenshot pixels')
-      }, ['steps', 'current']),
-      describe: (i) => `Showing step ${i.current}`,
+        shapes: {
+          type: 'array',
+          description: 'Up to 12 shapes',
+          items: obj({ type: { type: 'string', enum: KINDS }, app: str('With name: outline this element exactly'), name: str('Exact element name from ui_list'), x: num('X'), y: num('Y'), w: num('Box width'), h: num('Box height'), r: num('Circle radius'), x2: num('Arrow end X'), y2: num('Arrow end Y'), label: str('Short label'), text: str('Text for a text shape') }, ['type'])
+        },
+        add: { type: 'boolean', description: 'Keep what is already drawn' },
+        clear: { type: 'boolean', description: 'Remove all marks' }
+      }),
+      describe: () => 'Drawing on the screen',
       run: async (i) => {
-        const card = guideCard(i.steps, i.current);
-        let target = null;
-        let box = null;
-        if (i.app && i.name) {
-          const f = await mac.uiLocate(i.app, i.name);
-          target = { x: f.cx, y: f.cy };
-          box = { type: 'box', x: f.x, y: f.y, w: f.w, h: f.h, label: '' };
-        } else if (i.x != null && i.y != null) target = toPoints(i.x, i.y);
-        const shown = overlay ? await overlay.guide(card, target, box) : false;
-        if (shown === false) return OFF;
-        return `Showing step ${card.current + 1} of ${card.total}. Tell the user to say "next" when they are done.`;
+        if (!overlay) return OFF;
+        if (i.clear && !(i.shapes && i.shapes.length)) { overlay.clear(); return 'Cleared the marks.'; }
+        if (!Array.isArray(i.shapes) || !i.shapes.length) throw new Error('shapes must be a non-empty list.');
+        // A shape with app and name is anchored to the element's exact frame (global points); the rest are screenshot pixels.
+        const anchored = [];
+        const loose = [];
+        for (const s of i.shapes) {
+          if (s && s.app && s.name) {
+            const f = await mac.uiLocate(s.app, s.name);
+            anchored.push(s.type === 'circle'
+              ? { type: 'circle', x: f.cx, y: f.cy, r: Math.max(f.w, f.h) / 2 + 8, label: String(s.label || '').slice(0, 60) }
+              : s.type === 'arrow'
+                ? { type: 'arrow', x: f.cx + 120, y: f.cy + 90, x2: f.cx, y2: f.cy, label: String(s.label || '').slice(0, 60) }
+                : s.type === 'text'
+                  ? { type: 'text', x: f.x, y: f.y + f.h + 6, text: String(s.text || s.label || s.name).slice(0, 60) }
+                  : { type: 'box', x: f.x, y: f.y, w: f.w, h: f.h, label: String(s.label || '').slice(0, 60) });
+          } else loose.push(s);
+        }
+        const shapes = [...anchored, ...(loose.length ? normalizeShapes(loose, { scale: getScale(), origin: getOrigin() }) : [])];
+        if (shapes.length > 12) throw new Error('Draw at most 12 shapes at a time.');
+        if ((await overlay.draw(shapes, { add: !!i.add })) === false) return OFF;
+        return `Drew ${shapes.length} mark${shapes.length === 1 ? '' : 's'}. They stay about 30 seconds, or until the user presses Esc.`;
+      }
+    },
+    {
+      name: 'guide_step',
+      description: 'Walk the user through a task on their own screen. Call it ONCE with the whole list of steps. Each step is a short sentence, or an object { text, app, name } where app and name are the exact UI element to click (names come from ui_list), or { text, x, y } for a spot in a screenshot. Relay shows a checklist card, outlines the current step\'s element and moves to the next step on its own when the user clicks it or says "next". Do not call it again for each step.',
+      input_schema: obj({
+        steps: { type: 'array', description: '1 to 8 steps', items: obj({ text: str('One short step'), app: str('App that has the element'), name: str('Exact element name from ui_list'), x: num('X in screenshot pixels'), y: num('Y in screenshot pixels') }, ['text']) },
+        current: num('Step to start on, from 1 (default 1)'),
+        app: str('App for the start step\'s element, if the step has none'), name: str('Exact element name for the start step'),
+        x: num('X for the start step, in screenshot pixels'), y: num('Y for the start step, in screenshot pixels')
+      }, ['steps']),
+      describe: () => 'Showing the steps',
+      run: async (i) => {
+        const { steps, current } = guideSteps(i.steps, i.current || 1, { toPt: toPoints, fallback: { app: i.app, name: i.name, x: i.x, y: i.y } });
+        if (!overlay) return OFF;
+        const g = guides || new Guide({ overlay, mac });
+        const out = await g.start(steps, current);
+        return out === false ? OFF : out;
       }
     }
   );
@@ -327,27 +360,6 @@ function buildTools({ mac, firefox, overlay, getScale, getOrigin = () => ({ x: 0
           const p = toPoints(i.x, i.y);
           await overlay?.point(p.x, p.y, i.label);
           return 'Pointed.';
-        }
-      },
-      {
-        name: 'draw_on_screen',
-        description: 'Draw boxes, circles, arrows and text labels over the screen to show the user something. Coordinates are pixels in the most recent screenshot. Use few, clear marks. They stay about 30 seconds, or until the user presses Esc. Set add to build on what is already drawn; set clear with no shapes to remove marks.',
-        input_schema: obj({
-          shapes: {
-            type: 'array',
-            description: 'Up to 12 shapes',
-            items: obj({ type: { type: 'string', enum: KINDS }, x: num('X'), y: num('Y'), w: num('Box width'), h: num('Box height'), r: num('Circle radius'), x2: num('Arrow end X'), y2: num('Arrow end Y'), label: str('Short label'), text: str('Text for a text shape') }, ['type', 'x', 'y'])
-          },
-          add: { type: 'boolean', description: 'Keep what is already drawn' },
-          clear: { type: 'boolean', description: 'Remove all marks' }
-        }),
-        describe: () => 'Drawing on the screen',
-        run: async (i) => {
-          if (!overlay) return OFF;
-          if (i.clear && !(i.shapes && i.shapes.length)) { overlay.clear(); return 'Cleared the marks.'; }
-          const shapes = normalizeShapes(i.shapes, { scale: getScale(), origin: getOrigin() });
-          if ((await overlay.draw(shapes, { add: !!i.add })) === false) return OFF;
-          return `Drew ${shapes.length} mark${shapes.length === 1 ? '' : 's'}. They stay about 30 seconds, or until the user presses Esc.`;
         }
       },
       {

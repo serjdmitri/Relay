@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { toGlobal, normalizeShapes, parseFrame, guideCard, displayAt, MAX_SHAPES } = require('../src/main/overlayGeometry');
+const { toGlobal, normalizeShapes, parseFrame, guideCard, guideSteps, guideCommand, inRect, displayAt, MAX_SHAPES } = require('../src/main/overlayGeometry');
 
 test('toGlobal applies the scale and the display origin (a second screen can start left of zero)', () => {
   assert.deepEqual(toGlobal(100, 50, { scale: 2 }), { x: 200, y: 100 });
@@ -71,4 +71,30 @@ test('displayAt finds the display holding a point, or the nearest one for a poin
   assert.equal(displayAt([main, side], { x: 1440, y: 0 }).id, 2);
   assert.equal(displayAt([main, side], { x: 5000, y: 100 }).id, 2);
   assert.equal(displayAt([main, side], { x: 700, y: 2000 }).id, 1);
+});
+
+test('guideSteps accepts strings and element or spot targets, and puts a loose target on the current step', () => {
+  const toPt = (x, y) => ({ x: x * 2, y: y * 2 });
+  const { steps, current } = guideSteps(['Open it', { text: 'Click Save', app: 'Notes', name: 'Save' }, { text: 'Here', x: 5, y: 6 }, { text: '' }], 2, { toPt });
+  assert.equal(current, 1);
+  assert.deepEqual(steps, [{ text: 'Open it' }, { text: 'Click Save', app: 'Notes', name: 'Save' }, { text: 'Here', pt: { x: 10, y: 12 } }]);
+  assert.deepEqual(guideSteps(['a', 'b'], 1, { toPt, fallback: { x: 1, y: 2 } }).steps[0].pt, { x: 2, y: 4 });
+  assert.equal(guideSteps([{ text: 'a', app: 'X', name: 'Y' }], 1, { fallback: { app: 'Z', name: 'W' } }).steps[0].name, 'Y', 'a step keeps its own target');
+  assert.throws(() => guideSteps([]), /non-empty/);
+  assert.throws(() => guideSteps(['', ' ']), /must contain text/);
+  assert.throws(() => guideSteps(Array(9).fill('x')), /at most 8/);
+});
+
+test('guideCommand reads whole-phrase next, back and stop, and leaves other requests alone', () => {
+  for (const t of ['Next.', 'next step', 'Okay, next!', 'done', "I'm done", 'I did it', 'continue']) assert.equal(guideCommand(t), 'next', t);
+  for (const t of ['back', 'Go back.', 'previous step']) assert.equal(guideCommand(t), 'back', t);
+  for (const t of ['stop', 'close the guide', 'cancel']) assert.equal(guideCommand(t), 'stop', t);
+  for (const t of ['next song', 'play the next episode', 'open notes', 'what is next on my calendar', '']) assert.equal(guideCommand(t), null, t);
+});
+
+test('inRect counts the edge and a margin', () => {
+  const r = { x: 10, y: 10, w: 20, h: 10 };
+  assert.ok(inRect({ x: 10, y: 10 }, r) && inRect({ x: 30, y: 20 }, r));
+  assert.ok(!inRect({ x: 5, y: 15 }, r));
+  assert.ok(inRect({ x: 5, y: 15 }, r, 6));
 });

@@ -17,8 +17,9 @@ function buildCodeMap(UiohookKey) {
 }
 
 class Hotkeys {
-  constructor({ getShortcuts, onEvent, log = console }) {
+  constructor({ getShortcuts, onEvent, onClick = null, log = console }) {
     this.getShortcuts = getShortcuts;
+    this.onClick = onClick;
     this.onEvent = onEvent;
     this.log = log;
     this.running = false;
@@ -40,6 +41,9 @@ class Hotkeys {
       uIOhook.on('keyup', (e) => {
         const c = codes.get(e.keycode);
         if (c) this.matcher.handle('up', c);
+      });
+      uIOhook.on('mouseup', () => {
+        if (this.onClick) this.onClick();
       });
       uIOhook.start();
       this.uIOhook = uIOhook;
