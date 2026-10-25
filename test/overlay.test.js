@@ -42,6 +42,8 @@ test('normalizeShapes shortens long labels and gives circles a default radius', 
 test('parseFrame reads the element position System Events returns, including a screen left of the main one', () => {
   assert.deepEqual(parseFrame('100,200,80,30'), { x: 100, y: 200, w: 80, h: 30, cx: 140, cy: 215 });
   assert.equal(parseFrame(' -1440 , 12 , 50 , 20 \n').cx, -1415);
+  assert.deepEqual(parseFrame('412,5|20,25|80|30'), { x: 412.5, y: 20.25, w: 80, h: 30, cx: 452.5, cy: 35.25 }, 'a decimal comma locale');
+  assert.equal(parseFrame('412.5|20|80|30').x, 412.5);
   assert.throws(() => parseFrame('not found'), /Could not read/);
   assert.throws(() => parseFrame('1,2,3'), /Could not read/);
   assert.throws(() => parseFrame(''), /Could not read/);

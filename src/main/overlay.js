@@ -10,6 +10,7 @@ const { displayAt } = require('./overlayGeometry');
 const FOLLOW_MS = 33; // the buddy follows the pointer about 30 times a second, and only while it is on screen
 const HALO_MS = 2500;
 const MARKS_MS = 30000;
+const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
   constructor({ isEnabled, isBuddy = () => true }) {
@@ -22,6 +23,8 @@ class Overlay {
     this.marksTimer = null;
     this.doneTimer = null;
     this.captureHidden = false;
+    this.touched = false; // did this request draw or guide?
+    this.buddyWatchdog = null;
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -108,6 +111,7 @@ class Overlay {
   // ----- the buddy: follows the pointer while Relay is listening, thinking or has just finished -----
   buddy(state) {
     clearTimeout(this.doneTimer);
+    clearTimeout(this.buddyWatchdog);
     if (!state || !this.isBuddy()) {
       this.buddyState = null;
       clearInterval(this.followTimer);
@@ -122,6 +126,7 @@ class Overlay {
       return;
     }
     this.buddyState = state;
+    this.buddyWatchdog = setTimeout(() => this.buddy(null), BUDDY_MAX_MS);
     for (const e of this.wins.values()) this.send(e, { type: 'buddy-state', state });
     if (!this.followTimer) this.followTimer = setInterval(() => this.follow(), FOLLOW_MS);
     this.follow(true);
@@ -165,6 +170,7 @@ class Overlay {
   // shapes are in global points. add: keep what is already drawn.
   async draw(shapes, { add = false, seconds } = {}) {
     if (!this.isEnabled()) return false;
+    this.touched = true;
     const displays = screen.getAllDisplays();
     const byDisplay = new Map();
     for (const s of shapes) {
@@ -194,6 +200,7 @@ class Overlay {
   // card: { steps, current, total }. target: where to point (global points) or null; box: an element's frame to outline.
   async guide(card, target, box) {
     if (!this.isEnabled()) return false;
+    this.touched = true;
     const d = target ? displayAt(screen.getAllDisplays(), target) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     for (const w of this.wins.values()) {
       w.card = false;
@@ -207,6 +214,16 @@ class Overlay {
     if (target) await this.point(target.x, target.y, card.steps[card.current]);
     this.armMarks(90);
     return true;
+  }
+
+  // Marks belong to the request that made them. A new request leaves them up while it runs (so "next" can replace
+  // the guide), and when it finishes they go unless that request drew or guided again.
+  beginRequest() {
+    this.touched = false;
+  }
+
+  endRequest() {
+    if (!this.touched) this.clear();
   }
 
   // Esc, a new request, or the timeout: drawings, the guide card and the halo go away.

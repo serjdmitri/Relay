@@ -45,9 +45,11 @@ function normalizeShapes(shapes, ctx = {}) {
   });
 }
 
-// What System Events gives for an element: "x,y,w,h" in global points.
+// What System Events gives for an element: "x|y|w|h" in global points. The separator is a bar because in some
+// locales AppleScript writes numbers with a decimal comma ("412,5"). A plain "x,y,w,h" is still accepted.
 function parseFrame(out) {
-  const parts = String(out || '').trim().split(',').map((v) => Number(v.trim()));
+  const raw = String(out || '').trim();
+  const parts = (raw.includes('|') ? raw.split('|') : raw.split(',')).map((v) => Number(v.trim().replace(',', '.')));
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) throw new Error("Could not read that element's position.");
   const [x, y, w, h] = parts;
   if (w <= 0 || h <= 0) throw new Error('That element has no size on screen (it may be hidden).');

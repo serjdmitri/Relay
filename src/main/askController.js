@@ -285,6 +285,19 @@ class AskController {
     return this.duckChain;
   }
 
+  // The buddy follows the state, so no way out of a state can leave it on screen.
+  get state() {
+    return this._state;
+  }
+
+  set state(v) {
+    this._state = v;
+    if (v === 'listening') this.overlay?.buddy('listening');
+    else if (v === 'finishing' || v === 'working' || v === 'confirm') this.overlay?.buddy('thinking');
+    else if (v === 'done') this.overlay?.workDone();
+    else this.overlay?.buddy(null); // idle, or the typing box
+  }
+
   // ----- shortcut events -----
   onShortcut(name, kind) {
     if (this.suspended) return;
@@ -424,8 +437,6 @@ class AskController {
     this.heldStart = held;
     this.listenStartedAt = Date.now();
     this.state = 'listening';
-    this.overlay.clear(); // marks from the last request go away when you start a new one
-    this.overlay.buddy('listening');
     this.speaker?.stop(); // the microphone must not hear Relay talking
     this.prefetch();
     if (mode === 'ask') this.warmUp();
@@ -561,7 +572,6 @@ class AskController {
 
   close() {
     clearTimeout(this.doneTimer);
-    this.overlay.buddy(null);
     this.state = 'idle';
     this.dropWarm();
     this.hideSoft();
@@ -599,7 +609,7 @@ class AskController {
     const routines = this.store.get('routines');
     const cmd = parseCommand(text, routines, { recording: !!this.recording });
     this.state = 'working';
-    this.overlay.buddy('thinking');
+    this.overlay.beginRequest();
     this.win.setFocusable(false);
     this.push({ label: 'Thinking', text });
 
@@ -836,7 +846,7 @@ class AskController {
     this.abort = null;
     this.state = 'done';
     this.push({ reply, status: res.status });
-    this.overlay.workDone(); // the buddy leaves; drawings and guides stay until dismissed
+    this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     if (this.store.get('settings.speakReplies') && res.status === 'done') this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
     this.onChange();

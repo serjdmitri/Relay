@@ -376,7 +376,7 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       const out = await osa([
         'tell application "System Events"', `tell process ${q(app)}`, 'set els to entire contents of window 1',
         'repeat with e in els', 'try', `if name of e is ${q(name)} then`, 'set p to position of e', 'set s to size of e',
-        'return ((item 1 of p) as text) & "," & ((item 2 of p) as text) & "," & ((item 1 of s) as text) & "," & ((item 2 of s) as text)',
+        'return ((item 1 of p) as text) & "|" & ((item 2 of p) as text) & "|" & ((item 1 of s) as text) & "|" & ((item 2 of s) as text)',
         'end if', 'end try', 'end repeat', 'return "not found"', 'end tell', 'end tell'
       ]);
       if (!out || out === 'not found') throw new Error(`No UI element named "${name}" in ${app}. Use ui_list to see what exists.`);
