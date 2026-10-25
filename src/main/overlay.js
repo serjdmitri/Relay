@@ -1,6 +1,6 @@
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
-const { displayAt, normalizeStrokes, strokesBox } = require('./overlayGeometry');
+const { displayAt, normalizeStrokes, strokesBox, lastBurst } = require('./overlayGeometry');
 
 // Everything Relay draws over your screen, one click-through window per display:
 //  - the buddy: a small helper that follows your pointer while Relay works (and flies to what it points at),
@@ -310,8 +310,7 @@ class Overlay {
     this.markPoll = null;
     this.marking = null;
     this.send(e, { type: 'mark-end' });
-    const since = Date.now() - MARK_TRAIL_MS;
-    const recent = this.markPts.filter((q) => q.t >= since).map((q) => [q.gx, q.gy]);
+    const recent = lastBurst(this.markPts).map((q) => [q.gx, q.gy]);
     this.markPts = [];
     const strokes = normalizeStrokes([recent]);
     const box = strokesBox(strokes);

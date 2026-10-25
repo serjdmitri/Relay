@@ -115,3 +115,15 @@ test('marks: strokes are cleaned, boxed, and turned into a region to look at', (
   assert.deepEqual(big, { x: 1072, y: 72, w: 656, h: 456 });
   assert.deepEqual(markRegion({ x: 0, y: 0, w: 5000, h: 5000 }, bounds), { x: 1000, y: 0, w: 1440, h: 900 });
 });
+
+test('lastBurst keeps the latest stretch of movement and drops what came before a pause', () => {
+  const { lastBurst } = require('../src/main/overlayGeometry');
+  const pts = [0, 100, 200, 300, 2000, 2100, 2200, 2300].map((t, i) => ({ t, i }));
+  assert.deepEqual(lastBurst(pts).map((p) => p.i), [4, 5, 6, 7], 'a pause of over half a second starts a new burst');
+  assert.deepEqual(lastBurst([]), []);
+  assert.deepEqual(lastBurst([{ t: 5 }]).length, 1);
+  const long = Array.from({ length: 100 }, (_, i) => ({ t: i * 100, i }));
+  assert.ok(lastBurst(long).length <= 51, 'a burst is capped at five seconds');
+  const resting = [...[0, 100, 200, 300].map((t) => ({ t })), { t: 400 }];
+  assert.equal(lastBurst(resting).length, 5, 'pointer movement then rest: still the circle');
+});
