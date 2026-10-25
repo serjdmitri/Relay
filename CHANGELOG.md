@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Guides now move on by themselves. Relay outlines the element for the current step, and when you click it (or say "next") it goes to the next step and outlines that one. Before, "next" was heard as a new request (it skipped a Spotify song) and the model had to be asked again for every step. While a guide is up, "next", "back" and "stop" are for the guide; "next song" still goes to the music commands.
+- Guides and drawings always show something on screen: an outline around the element, or a ring around a spot. `draw_on_screen` can now outline an element by app and name, exactly, with no screenshot, so it works with text-only models too.
+- Buddy cursor: smaller, closer to the pointer, and the spinner is now centered on the orb.
+
 ## 0.3.0
 
 - Buddy cursor: a small helper follows your pointer while Relay listens and works (a mic meter, a spinner, then a check), and flies to what it points at. New setting: General > Buddy cursor.

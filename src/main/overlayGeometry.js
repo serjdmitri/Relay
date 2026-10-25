@@ -67,6 +67,48 @@ function guideCard(steps, current = 1) {
   return { steps: list, current: idx, total: list.length };
 }
 
+// Steps for a guide: each is a string, or { text, app, name } (an element to point at, found in the accessibility tree
+// when the step comes up) or { text, x, y } (a spot in a screenshot, turned into a screen point by toPt).
+// A target given outside the list (app, name, x, y) belongs to the current step if that step has none.
+function guideSteps(raw, current = 1, { toPt = (x, y) => ({ x, y }), fallback = {} } = {}) {
+  if (!Array.isArray(raw) || !raw.length) throw new Error('steps must be a non-empty list of short strings.');
+  if (raw.length > MAX_STEPS) throw new Error(`A guide has at most ${MAX_STEPS} steps.`);
+  const steps = [];
+  for (const r of raw) {
+    const o = typeof r === 'string' ? { text: r } : r && typeof r === 'object' ? r : {};
+    const text = clip(o.text, MAX_STEP_TEXT).trim();
+    if (!text) continue;
+    const s = { text };
+    if (o.app && o.name) { s.app = String(o.app); s.name = String(o.name); }
+    else if (o.x != null && o.y != null && o.x !== '' && o.y !== '') s.pt = toPt(o.x, o.y);
+    steps.push(s);
+  }
+  if (!steps.length) throw new Error('steps must contain text.');
+  const n = Math.round(Number(current));
+  const index = Number.isFinite(n) ? Math.min(steps.length, Math.max(1, n)) - 1 : 0;
+  const here = steps[index];
+  if (!here.app && !here.pt) {
+    if (fallback.app && fallback.name) { here.app = String(fallback.app); here.name = String(fallback.name); }
+    else if (fallback.x != null && fallback.y != null) here.pt = toPt(fallback.x, fallback.y);
+  }
+  return { steps, current: index };
+}
+
+// What a spoken or typed request means while a guide is on screen: "next", "back" or "stop", else null.
+// Only whole phrases count, so "next song" still reaches the music commands.
+function guideCommand(text) {
+  const t = String(text || '').toLowerCase().replace(/[.!?,]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^(ok(ay)? |alright |and )?(next( step| one)?|done|i'?m done|i did (it|that)|did it|finished|continue|go on|go ahead|keep going|got it)$/.test(t)) return 'next';
+  if (/^(go )?(back|previous( step)?|last step|one back)$/.test(t)) return 'back';
+  if (/^(stop|exit|end|close|cancel|dismiss)( the)?( guide| steps)?$/.test(t)) return 'stop';
+  return null;
+}
+
+// Is a point inside a rectangle grown by a margin?
+function inRect(p, r, margin = 0) {
+  return p.x >= r.x - margin && p.x <= r.x + r.w + margin && p.y >= r.y - margin && p.y <= r.y + r.h + margin;
+}
+
 // Which display holds a point; the nearest one when it is outside all of them (an off-screen element).
 function displayAt(displays, p) {
   const inside = displays.find((d) => p.x >= d.bounds.x && p.x < d.bounds.x + d.bounds.width && p.y >= d.bounds.y && p.y < d.bounds.y + d.bounds.height);
@@ -79,4 +121,4 @@ function displayAt(displays, p) {
   return displays.reduce((best, d) => (dist(d) < dist(best) ? d : best), displays[0]);
 }
 
-module.exports = { toGlobal, normalizeShapes, parseFrame, guideCard, displayAt, KINDS, MAX_SHAPES, MAX_STEPS };
+module.exports = { toGlobal, normalizeShapes, parseFrame, guideCard, guideSteps, guideCommand, inRect, displayAt, KINDS, MAX_SHAPES, MAX_STEPS };

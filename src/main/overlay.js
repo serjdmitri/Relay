@@ -25,6 +25,7 @@ class Overlay {
     this.captureHidden = false;
     this.touched = false; // did this request draw or guide?
     this.buddyWatchdog = null;
+    this.onClear = null; // called when the marks go away, however that happens
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -212,7 +213,7 @@ class Overlay {
     this.send(e, { type: 'guide', card });
     if (box) await this.draw([box], { add: false });
     if (target) await this.point(target.x, target.y, card.steps[card.current]);
-    this.armMarks(90);
+    this.armMarks(180);
     return true;
   }
 
@@ -237,6 +238,7 @@ class Overlay {
       this.send(e, { type: 'clear' });
       this.refresh(e);
     }
+    if (this.onClear) this.onClear();
   }
 
   hasMarks() {

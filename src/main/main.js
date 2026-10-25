@@ -446,7 +446,7 @@ app.whenReady().then(() => {
       glass.start();
     });
   }
-  hotkeys = new Hotkeys({ getShortcuts: () => store.get('settings.shortcuts'), onEvent: (n, k) => ask.onShortcut(n, k) });
+  hotkeys = new Hotkeys({ getShortcuts: () => store.get('settings.shortcuts'), onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');
   const icon = nativeImage.createFromPath(iconPath);

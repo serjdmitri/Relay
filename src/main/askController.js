@@ -17,6 +17,7 @@ const { createMac } = require('./agent/mac');
 const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain } = require('./meta');
+const { Guide } = require('./guide');
 
 const PILL_W = 480;
 const PAD = 36; // transparent margin around the pill: room for its shadow and the liquid drop
@@ -104,6 +105,8 @@ class AskController {
     this.appsP = null;
     this.mcp = new McpHost();
     this.mac = createMac({ clipboard, capture: () => this.capture() });
+    this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
+    this.overlay.onClear = () => this.guide.deactivate();
 
     speech.on('partial', (text) => {
       if (this.state === 'listening') this.push({ partial: text });
@@ -358,7 +361,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -614,6 +617,9 @@ class AskController {
     this.push({ label: 'Thinking', text });
 
     const entry = { id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() };
+    // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
+    const gc = this.guide.command(text);
+    if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
     switch (cmd.type) {
       case 'routine-start':
         this.recording = [];
