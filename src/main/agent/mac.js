@@ -72,6 +72,8 @@ function clipRestore(clipboard, s) {
   else clipboard.writeText('');
 }
 
+const { parseFrame } = require('../overlayGeometry');
+
 function createMac({ exec = defaultExec, clipboard, capture, getDisplay } = {}) {
   const osa = (script, { signal } = {}) => {
     const lines = Array.isArray(script) ? script : String(script).split('\n');
@@ -368,6 +370,17 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       ]);
       if (out !== 'clicked') throw new Error(`No UI element named "${name}" in ${app}. Use ui_list to see what exists.`);
       return `Clicked "${name}" in ${app}.`;
+    },
+    // Where a named element sits on screen, so Relay can point at it exactly (no screenshot needed).
+    async uiLocate(app, name) {
+      const out = await osa([
+        'tell application "System Events"', `tell process ${q(app)}`, 'set els to entire contents of window 1',
+        'repeat with e in els', 'try', `if name of e is ${q(name)} then`, 'set p to position of e', 'set s to size of e',
+        'return ((item 1 of p) as text) & "," & ((item 2 of p) as text) & "," & ((item 1 of s) as text) & "," & ((item 2 of s) as text)',
+        'end if', 'end try', 'end repeat', 'return "not found"', 'end tell', 'end tell'
+      ]);
+      if (!out || out === 'not found') throw new Error(`No UI element named "${name}" in ${app}. Use ui_list to see what exists.`);
+      return parseFrame(out);
     },
     async menuClick(app, menuPath) {
       if (!Array.isArray(menuPath) || menuPath.length < 2) throw new Error('menu_path needs at least [menu, item].');

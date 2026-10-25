@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Buddy cursor: a small helper follows your pointer while Relay listens and works (a mic meter, a spinner, then a check), and flies to what it points at. New setting: General > Buddy cursor.
+- Show me: Relay can point at an exact on-screen element (`point_at_element`, from the accessibility tree, so it works even with models that cannot see images), draw boxes, circles, arrows and labels (`draw_on_screen`), and walk you through a task with a step card (`guide_step`; say "next" to go on). Marks stay about 30 seconds or until you press Esc or start a new request.
+- On-screen marks and the buddy work on every display, and screenshots now capture the display you are on. The buddy and marks are hidden while a screenshot is taken so the model does not see them.
 - Docs and site: the main pitch is now "No API key: it runs on the Claude plan you already have" (through your own Claude Code). API keys and Ollama are options. No app changes.
 
 ## 0.2.0

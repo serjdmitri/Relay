@@ -60,5 +60,5 @@ contextBridge.exposeInMainWorld('relay', {
   },
   onStateChanged: (cb) => on('state-changed', cb),
   onNavigate: (cb) => on('navigate', cb),
-  onOverlayPoint: (cb) => on('overlay:point', cb)
+  onOverlay: (cb) => on('overlay:cmd', cb)
 });

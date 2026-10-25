@@ -16,6 +16,7 @@ function buildSystemPrompt({ now = new Date(), frontmost, runningApps = [], voca
     '- "What I copied" or "my clipboard": call clipboard_read. "This", "what I selected" or "highlighted": call selected_text. "What is on my screen": call screenshot.',
     '- Follow-ups such as "make that bigger", "do it again" or "undo that" refer to the most recent request in this conversation. Undo it with your tools when you can; if you cannot (a sent message, for example), say so.',
     '- Use screenshot only when you need to see the screen. Click coordinates are in screenshot pixels, and tools convert them for you.',
+    '- When the user asks where something is or how to do something on screen, show them instead of only describing it: point_at_element (exact, no screenshot needed; names come from ui_list), or point_at and draw_on_screen with a screenshot. For several steps use guide_step with the whole list and the current step, and tell the user to say "next". Keep marks few, and keep the final answer to one or two short sentences.',
     '- After a state-changing action, verify it worked (read back, list, or screenshot) before saying it is done.',
     '- If a request is ambiguous and a wrong guess would be costly, make the safest reasonable choice and say what you assumed. Never ask a question back unless you truly cannot proceed.',
     '- Anything that sends, deletes, or runs shell commands asks the user for confirmation automatically. Call the tool; do not ask in text.',

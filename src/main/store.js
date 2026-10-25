@@ -13,6 +13,7 @@ const DEFAULTS = {
     duckAudio: true, // lower other audio while listening
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
+    buddy: true, // a small helper follows your pointer while Relay works
     speakReplies: false,
     dictation: true, // off: the Dictate shortcut (right ⌘) does nothing
     saveDictation: true, // off: dictated text is typed but not kept in History
