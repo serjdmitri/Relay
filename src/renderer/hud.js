@@ -37,7 +37,7 @@
   let level = 0; // 0..1 microphone level
   let amp = 0; // smoothed
   let scale = 1;
-  let halo = 120;
+  let halo = 165;
   let tick = 0;
   let rings = [0, 120, 240];
   let scan = 0;
@@ -73,7 +73,7 @@
     // the reactor reacts to loudness: the mic while listening, a gentle made-up swell while it speaks
     const target = speaking ? 0.4 + 0.35 * Math.abs(Math.sin(tick * 0.11)) + 0.2 * Math.random() * Math.abs(Math.sin(tick * 0.31)) : level;
     amp += (target - amp) * 0.3;
-    const baseHalo = 120; // brighter than the reference at rest, so it reads on a busy screen
+    const baseHalo = 165; // brighter than the reference at rest, so it reads on a busy screen
     const tgtScale = 1 + amp * (speaking ? 0.13 : 0.06);
     const tgtHalo = baseHalo + amp * (speaking ? 95 : 75);
     scale += (tgtScale - scale) * (speaking ? 0.38 : 0.2);
@@ -105,8 +105,8 @@
       const r = rFace * (1.8 - i * 0.08);
       const a = Math.max(0, Math.min(1, (halo * 0.085 * (1 - i / 10)) / 255));
       ctx.beginPath();
-      ctx.strokeStyle = `rgba(${PRI},${a})`;
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = `rgba(${PRI},${Math.min(1, a * 1.5)})`;
+      ctx.lineWidth = 1.8;
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.stroke();
     }
@@ -124,21 +124,21 @@
     // three spinning rings of dashes
     [[0.48, 3, 115, 78], [0.40, 2, 78, 55], [0.32, 1, 56, 40]].forEach(([rf, w, len, gap], idx) => {
       const r = fw * rf;
-      const a = Math.max(0, Math.min(1, (halo * (1 - idx * 0.18)) / 255));
-      for (let ang = rings[idx]; ang < rings[idx] + 360; ang += len + gap) arc(cx, cy, r, ang, len, `rgba(${PRI},${a})`, w);
+      const a = Math.max(0, Math.min(1, (halo * (1 - idx * 0.12)) / 255 * 1.25));
+      for (let ang = rings[idx]; ang < rings[idx] + 360; ang += len + gap) arc(cx, cy, r, ang, len, `rgba(${PRI},${a})`, w + 0.8);
     });
 
     // two scanners
     const sa = Math.min(1, (halo * 1.5) / 255);
     const ex = speaking ? 75 : 44;
-    arc(cx, cy, fw * 0.5, scan, ex, `rgba(${PRI},${sa})`, 2.5);
-    arc(cx, cy, fw * 0.5, scan2, ex, `rgba(${ACC},${sa / 2})`, 1.5);
+    arc(cx, cy, fw * 0.5, scan, ex, `rgba(${PRI},${sa})`, 3.2);
+    arc(cx, cy, fw * 0.5, scan2, ex, `rgba(${ACC},${Math.min(1, sa * 0.75)})`, 2);
 
     // tick marks and crosshair
     const tOut = fw * 0.497;
     const tIn = fw * 0.474;
-    ctx.strokeStyle = `rgba(${PRI},0.55)`;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = `rgba(${PRI},0.85)`;
+    ctx.lineWidth = 1.4;
     for (let deg = 0; deg < 360; deg += 10) {
       const inn = deg % 30 === 0 ? tIn : tIn + 6;
       const r = rad(deg);
@@ -149,7 +149,7 @@
     }
     const chR = fw * 0.51;
     const gap = fw * 0.16;
-    ctx.strokeStyle = `rgba(${PRI},${Math.min(1, (halo * 0.5) / 255)})`;
+    ctx.strokeStyle = `rgba(${PRI},${Math.min(1, (halo * 0.8) / 255)})`;
     ctx.beginPath();
     ctx.moveTo(cx - chR, cy); ctx.lineTo(cx - gap, cy);
     ctx.moveTo(cx + gap, cy); ctx.lineTo(cx + chR, cy);
@@ -169,11 +169,11 @@
       ctx.fill();
     }
     ctx.beginPath();
-    ctx.strokeStyle = `rgba(${PRI},${Math.min(1, (halo * 2) / 255)})`;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = `rgba(${PRI},1)`;
+    ctx.lineWidth = 2;
     ctx.arc(cx, cy, orb, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = `rgba(${PRI},${Math.min(1, (halo * 2) / 255)})`;
+    ctx.fillStyle = `rgba(200,248,255,1)`;
     ctx.font = `700 ${Math.round(fw * 0.03)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

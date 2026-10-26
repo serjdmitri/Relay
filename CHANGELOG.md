@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- The reactor is brighter, with a soft cyan glow and a dark shadow so it reads on a white window too. In the top left corner there is no panel behind it any more, just a shadow behind the reactor and the text. (The dark blue veil behind the big reactor in the middle stays.)
+
 ## 0.7.0
 
 - **A big Jarvis reactor in the middle of your screen.** When you ask by voice (Right ⌥, or "Hey Jarvis"), a large arc reactor appears in the middle of the screen, with no window behind it: spinning rings, scanners, tick marks and a core with the name in it. It swells and its bars follow your voice while you talk, shows your words under it, and when you stop it shrinks to the top left corner and keeps working there ("PROCESSING 3s") until the task is done. Then the answer appears beside it, and the reactor swells and throws off sparks while Relay speaks. It is drawn from the look of the reference J.A.R.V.I.S. HUD you attached. Typing a request (⌥T) and Allow / Cancel questions still use the pill, because they need the keyboard or the mouse; General > Look > Classic brings the pill back for everything.
