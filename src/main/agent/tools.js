@@ -13,7 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -300,6 +300,23 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => memory.remove(i.match)
       }
     );
+  }
+
+  // An answer card: a picture, the key facts and links, shown beside the answer (Relay finds the picture).
+  if (cards) {
+    tools.push({
+      name: 'show_card',
+      description: 'Show an answer card on screen with a picture, key facts and links, for "who is…", "what is…", "what does … look like", "tell me about…" (kind entity) or "show me … options" such as hotels, restaurants, products or places (kind list). Relay finds the picture from Wikipedia and Wikimedia Commons by image_query (default the title; use the proper Wikipedia name, e.g. "Eiffel Tower"). Fill in only what you know is true. After it, answer in one short sentence: the card shows the rest.',
+      input_schema: obj({
+        kind: str('entity or list'), title: str('Name of the thing, or what the list is'), subtitle: str('A few words, e.g. "Paris, France" or "French engineer, 1832 to 1923"'), summary: str('Two or three sentences'),
+        image_query: str('What to look up a picture for'),
+        facts: { type: 'array', description: 'Up to 6 label/value pairs', items: obj({ label: str('Label'), value: str('Value') }, ['label', 'value']) },
+        links: { type: 'array', description: 'Up to 4 https links', items: obj({ label: str('Button text'), url: str('https URL') }, ['url']) },
+        items: { type: 'array', description: 'For a list: up to 6 options', items: obj({ title: str('Name'), subtitle: str('Short detail'), note: str('One line, e.g. price or rating'), url: str('https URL'), image_query: str('What to look up a picture for, if it has a Wikipedia page') }, ['title']) }
+      }, ['title']),
+      describe: (i) => `Showing ${i.title}`,
+      run: async (i) => cards.show(i)
+    });
   }
 
   // Long jobs that do not need the screen can run in the background while the user carries on.

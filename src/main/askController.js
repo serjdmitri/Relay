@@ -18,6 +18,7 @@ const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
 const usage = require('./usage');
+const { buildCard } = require('./cards/card');
 const { NotionApi, notionTools } = require('./connectors/notion');
 const { GoogleApi, googleTools } = require('./connectors/google');
 const { corrections, noteCorrection } = require('./learn');
@@ -108,6 +109,7 @@ class AskController {
     this.lastApps = [];
     this.lastDictation = null;
     this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); }, onFinish: (a) => this.agentFinished(a) });
+    this.cardPanel = null; // set by the app: the answer card window
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
@@ -389,6 +391,7 @@ class AskController {
     // Any of these cuts a spoken reply off mid-sentence, whatever else it then does (see interruptSpeech).
     if (name === 'cancel' || (name === 'type' && kind === 'press')) this.interruptSpeech();
     if (name === 'cancel') {
+      this.cardPanel?.hide();
       this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
       else if (this.overlay.hasMarks()) this.overlay.clear(); // Esc closes drawings and guides
@@ -460,6 +463,15 @@ class AskController {
       this.store.set('corrections', counts);
     };
     this.learnTimers = [setTimeout(check, 12000), setTimeout(check, 45000)];
+  }
+
+  // ----- answer cards -----
+  async showCard(raw) {
+    if (!this.cardPanel || this.store.get('settings.cards') === false) return 'Cards are turned off.';
+    const card = await buildCard(raw);
+    if (!card) return 'The card needs a title.';
+    await this.cardPanel.show(card);
+    return `Showed a card${card.image ? ' with a picture' : ''}. Now answer in one short sentence: the card shows the rest.`;
   }
 
   // ----- background agents -----
@@ -724,7 +736,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1045,6 +1057,7 @@ class AskController {
     this.push({ label: 'Thinking', text: opts.shown || text });
 
     if (!opts.scheduled) this.unattended = false;
+    if (!opts.drain) this.cardPanel?.hide(); // a new request takes the last card away
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now() };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);

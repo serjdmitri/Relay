@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.0
+
+- **Answer cards with pictures.** Ask "who is Gustave Eiffel?", "what does the Eiffel Tower look like?", "tell me about Boston" or "show me things to see in Boston", and a black glass card pops out on the right with a picture, a short summary, key facts and link buttons, while Relay says one short sentence. For a list of options (hotels, places, products) the card shows each with a small picture, a line of detail and a link. Click a link to open it, the × or Esc to close it, or let it go by itself after 30 seconds (it stays while you hover). Turn it off in General > Answer cards with pictures.
+- **Pictures come from Wikipedia and Wikimedia Commons** (free, with the photographer and license shown under the picture). Relay downloads the picture itself and gives the card the file, so the card never contacts the web. Things without a Wikipedia page, like a local cafe, get a card without a picture.
+- **Fix: the Recent menu on the left edge did not appear the first time.** Its page was told to show before it had finished loading, so the message was lost (and a second message went to the wrong channel name, so it never slid out or tucked away properly). It now waits for the page and uses the right channel. Found by running both windows in real Electron.
+
 ## 0.14.0
 
 - **Connectors.** A new Settings > Connectors page lets Relay work in your Notion, Gmail and Google Calendar, each connected by you and kept on this Mac (the secrets are encrypted).
