@@ -17,10 +17,10 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, isAlways = () => false, getLook = () => 'classic' }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S' }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
-    this.isAlways = isAlways; // "Always show Jarvis": the ring stays beside the pointer even when Relay is idle
+    this.getName = getName; // the name shown in the reactor's core
     this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
     this.wins = new Map(); // display id -> { win, display, shapes, card, halo, buddy, haloTimer }
     this.buddyState = null;
@@ -36,8 +36,8 @@ class Overlay {
     this.marking = null; // the window the user is drawing a mark on (the mark key is held)
     this.markPts = [];
     this.markPoll = null;
-    this.capActive = false; // the caption card (what Relay hears, is doing or says) is showing beside the pointer
-    this.capState = {};
+    this.hudEntry = null; // the window showing the reactor (the display the pointer was on when it appeared)
+    this.hudState = {};
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -72,7 +72,7 @@ class Overlay {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
-    e = { win, display, shapes: false, card: false, halo: false, buddy: false, cap: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
+    e = { win, display, shapes: false, card: false, halo: false, buddy: false, hud: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
     // A page that has not finished loading would drop what we send it, so hold commands until it has.
     win.webContents.once('did-finish-load', () => {
       e.ready = true;
@@ -97,7 +97,7 @@ class Overlay {
       e.look = look;
       this.send(e, { type: 'look', look });
     }
-    const want = e.shapes || e.card || e.halo || e.buddy || e.cap || e.markShow;
+    const want = e.shapes || e.card || e.halo || e.buddy || e.hud || e.markShow;
     if (want && !e.win.isVisible()) {
       if (e.win.getBounds().x !== e.display.bounds.x || e.win.getBounds().y !== e.display.bounds.y) e.win.setBounds(e.display.bounds);
       e.win.showInactive();
@@ -141,14 +141,12 @@ class Overlay {
   buddy(state) {
     clearTimeout(this.doneTimer);
     clearTimeout(this.buddyWatchdog);
-    const want = this.isBuddy() ? state || (this.isAlways() ? 'idle' : null) : null;
+    const want = this.isBuddy() ? state || 'idle' : null; // the arrow follows the pointer all the time while it is switched on
     if (!want) {
       this.buddyState = null;
-      if (!this.capActive) {
-        clearTimeout(this.followTimer);
-        this.followTimer = null;
-        this.lastCursor = null;
-      }
+      clearTimeout(this.followTimer);
+      this.followTimer = null;
+      this.lastCursor = null;
       for (const e of this.wins.values()) {
         if (!e.buddy) continue;
         e.buddy = false;
@@ -174,7 +172,7 @@ class Overlay {
   tick() {
     const moved = this.follow();
     this.idleTicks = moved ? 0 : this.idleTicks + 1;
-    this.followTimer = this.buddyState || this.capActive ? setTimeout(() => this.tick(), this.idleTicks > 15 ? FOLLOW_IDLE_MS : FOLLOW_MS) : null;
+    this.followTimer = this.buddyState ? setTimeout(() => this.tick(), this.idleTicks > 15 ? FOLLOW_IDLE_MS : FOLLOW_MS) : null;
   }
 
   // Moves the buddy to the pointer. Returns whether the pointer had moved.
@@ -191,11 +189,6 @@ class Overlay {
         this.send(e, { type: 'buddy-away' });
         this.refresh(e);
       }
-      if (e.cap) {
-        e.cap = false;
-        this.send(e, { type: 'caption', hide: true });
-        this.refresh(e);
-      }
     }
     if (this.buddyState && !here.buddy) {
       here.buddy = true;
@@ -203,42 +196,33 @@ class Overlay {
       this.send(here, { type: 'buddy-state', state: this.buddyState });
       this.refresh(here);
     }
-    if (this.capActive && !here.cap) {
-      here.cap = true;
-      this.send(here, { type: 'caption', state: this.capState });
-      this.refresh(here);
-    }
     this.send(here, { type: 'cursor', ...this.local(here, p) });
     return true;
   }
 
-  // ----- the caption: what Relay hears, is doing, or answers, in a card beside the pointer (instead of the pill) -----
+  // ----- the reactor: the Jarvis HUD in the middle of the screen while Relay listens, small in the top left while it works -----
   // msg uses the same fields as the pill ({ state, mode, partial, level, label, text, reply, status, ... }) or { hide: true }.
-  caption(msg) {
+  hud(msg) {
     if (msg.hide) {
-      this.capActive = false;
-      this.capState = {};
-      for (const e of this.wins.values()) {
-        if (!e.cap) continue;
-        e.cap = false;
-        this.send(e, { type: 'caption', hide: true });
-        this.refresh(e);
+      this.hudState = {};
+      const e = this.hudEntry;
+      this.hudEntry = null;
+      if (e && !e.win.isDestroyed()) {
+        this.send(e, { type: 'hud', hide: true });
+        clearTimeout(e.hudTimer);
+        e.hudTimer = setTimeout(() => { if (this.hudEntry !== e) { e.hud = false; this.refresh(e); } }, 500); // let it fade out first
       }
-      if (!this.buddyState) { clearTimeout(this.followTimer); this.followTimer = null; this.lastCursor = null; }
       return;
     }
-    if (msg.state && msg.state !== this.capState.state || msg.reset) this.capState = { state: msg.state, mode: msg.mode };
-    Object.assign(this.capState, msg);
-    this.capActive = true;
-    this.idleTicks = 0;
-    if (!this.followTimer) this.followTimer = setTimeout(() => this.tick(), FOLLOW_MS);
-    const here = this.entry(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
-    if (!here.cap) {
-      here.cap = true;
-      this.refresh(here);
+    if ((msg.state && msg.state !== this.hudState.state) || msg.reset) this.hudState = { state: msg.state, mode: msg.mode };
+    Object.assign(this.hudState, msg);
+    if (!this.hudEntry) {
+      this.hudEntry = this.entry(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
+      this.hudEntry.hud = true;
+      clearTimeout(this.hudEntry.hudTimer);
+      this.refresh(this.hudEntry);
     }
-    this.send(here, { type: 'caption', state: this.capState });
-    this.follow(true);
+    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName() } });
   }
 
   // "Hey Jarvis" is listening: the ring shows a quiet sign of it.
@@ -247,12 +231,10 @@ class Overlay {
     for (const e of this.wins.values()) this.send(e, { type: 'armed', on: !!on });
   }
 
-  // Relay is speaking: the ring moves with its voice.
+  // Relay is speaking: the reactor swells and throws off sparks.
   speaking(on) {
-    if (on) {
-      if (!this.isBuddy()) return;
-      this.buddy('speaking');
-    } else if (this.buddyState === 'speaking') this.buddy(null);
+    if (this.hudEntry) this.send(this.hudEntry, { type: 'hud-speaking', on: !!on });
+    this.speakingNow = !!on;
   }
 
   // The request is over: the buddy shows a check, then leaves. Drawings and guides stay.
@@ -418,7 +400,7 @@ class Overlay {
   hide() {
     this.markCancel();
     this.clear();
-    this.caption({ hide: true });
+    this.hud({ hide: true });
     this.buddy(null);
   }
 

@@ -15,7 +15,7 @@ const DEFAULTS = {
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
     wake: { enabled: false, phrase: 'hey jarvis' }, // listen for a wake phrase while Relay is idle (on-device)
-    buddyAlways: true, // the ring stays beside the pointer all the time, not only while Relay works
+    assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
     buddy: true, // a small helper follows your pointer while Relay works
     speakReplies: false,
     dictation: true, // off: the Dictate shortcut (right ⌘) does nothing

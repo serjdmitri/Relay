@@ -126,7 +126,7 @@ function rebuildTray() {
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
     { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
-    { label: 'Show Jarvis beside my pointer', type: 'checkbox', checked: store.get('settings.buddyAlways') !== false && store.get('settings.buddy') !== false, click: (item) => { store.set('settings.buddy', true); store.set('settings.buddyAlways', item.checked); overlay.applyMode(); broadcast(); rebuildTray(); } },
+    { label: 'Show the cursor buddy', type: 'checkbox', checked: store.get('settings.buddy') !== false, click: (item) => { store.set('settings.buddy', item.checked); overlay.applyMode(); broadcast(); rebuildTray(); } },
     { type: 'separator' },
     { label: 'Open Relay', click: () => openMain('home') },
     { label: 'Settings…', accelerator: 'Cmd+,', click: () => openMain('general') },
@@ -202,7 +202,7 @@ function registerIpc() {
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
     store.set(key, value);
     applyDockAndLogin();
-    if (key === 'settings.buddy' || key === 'settings.buddyAlways' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
@@ -464,7 +464,7 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, isAlways: () => store.get('settings.buddyAlways') !== false, getLook: () => store.get('settings.look') || 'jarvis' });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getLook: () => store.get('settings.look') || 'jarvis' });
   overlay.watchDisplays();
   overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });

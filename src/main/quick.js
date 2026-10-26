@@ -7,6 +7,7 @@
 const { normalize } = require('./commands');
 const { parseDuration, parseWhen, splitReminder, localIso } = require('./when');
 const { humanDuration } = require('./timers');
+const { parseWindowCommand, layoutRect, pickArea, NAMES: WINDOW_NAMES } = require('./windows');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -112,6 +113,10 @@ function parseQuick(text, now = new Date()) {
 
   // Everything below is about apps and the system; web addresses and paths are never app names.
   if (/[a-z0-9-]\.[a-z]{2,}\b|https?:|\//i.test(String(text))) return null;
+
+  // ----- windows: halves, corners, thirds, centre, full -----
+  const win = parseWindowCommand(n);
+  if (win) return { type: 'window', position: win.position, app: win.app ? (ALIASES[win.app] || titleCase(win.app)) : null };
 
   if ((m = n.match(/^(?:set |turn )?(?:the )?(?:volume|sound)(?: to)? (\d{1,3})(?: percent)?$/))) return { type: 'volume', op: 'set', value: Math.min(100, +m[1]) };
   if ((m = n.match(/^(?:turn )?(?:the )?(?:volume|sound) (up|down)$/)) || (m = n.match(/^turn (up|down) the (?:volume|sound)$/))) return { type: 'volume', op: m[1] };
@@ -222,6 +227,22 @@ async function runQuick(cmd, mac, ctx = {}) {
       return {
         tool: 'open_app', input: { name: cmd.name }, reply: `Opened ${cmd.name}.`,
         undo: wasRunning ? undefined : async () => { await mac.quitApp(cmd.name); return `Closed ${cmd.name}.`; }
+      };
+    }
+    case 'window': {
+      const app = cmd.app || ctx.prevApp;
+      if (!app) return null; // no idea which window: the model can ask or look
+      let before;
+      try {
+        before = await mac.windowFrame(app);
+      } catch (e) {
+        return { tool: 'arrange_window', input: { app, position: cmd.position }, reply: e.message, readonly: true };
+      }
+      const area = pickArea(ctx.displays ? ctx.displays() : [], before, 'this');
+      const after = await mac.setWindowFrame(app, layoutRect(cmd.position, area));
+      return {
+        tool: 'arrange_window', input: { app, position: cmd.position }, reply: `Moved ${app} to ${WINDOW_NAMES[cmd.position]}.`,
+        undo: async () => { await mac.setWindowFrame(app, before); return `Put ${app} back where it was.`; }
       };
     }
     case 'open-site': {

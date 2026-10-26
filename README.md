@@ -15,7 +15,7 @@ A menu bar assistant that opens apps, writes notes and reminders, reads your cal
   <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/arm64%20%7C%20x64-dmg-FF9F0A">
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-191%20passing-30D158">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-196%20passing-30D158">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey"></a>
 </p>
 
@@ -27,7 +27,7 @@ Dictation is built in (Apple's on-device speech recognition), so a separate dict
 
 **[Website](https://serjdmitri.github.io/Relay/)** | **[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
 
-> **Status: early (v0.6.0).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
+> **Status: early (v0.7.0).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
 
 > **How it runs.** Relay uses your own [Claude Code](https://claude.ai/code), signed in to your Claude plan (Pro or Max), so you need no API key. Relay never sees your password; it runs the real `claude` program. Relay is an independent project and is not made or endorsed by Anthropic, and Anthropic's rules for third-party apps can change. If they do, an **API key** (Anthropic, OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek or any OpenAI-compatible address) or a local **Ollama** model keeps Relay working: Account > "Use an API key or a local model instead".
 
@@ -115,8 +115,11 @@ All three can be changed in Shortcuts. Anything that sends a message, moves thin
 
 Ask "where do I turn on Night Shift?" or "walk me through connecting a printer". Relay points at the exact element (found through the accessibility tree, so it works even with models that cannot see images), can draw boxes, circles, arrows and labels over your screen, and for several steps shows a small card and outlines each step in turn. Click the outlined spot, or say "next", to go on; "back" and "stop" work too. Relay checks what you do: if you go another way, or the next control is not where it expected, it looks at the screen and rewrites the remaining steps. Elements are found through the accessibility tree (a small native helper, `relay-ax`, that answers in about half a second), or by reading the text on the screen when an app has no accessibility names. Marks stay about 30 seconds, or until you press **Esc** or start a new request. While Relay listens and works, a small buddy follows your pointer. Both can be switched off in General (Relay cursor, Buddy cursor). They work on every display and are hidden while Relay takes a screenshot, so the model never sees them.
 
-### Talk to the ring
-The ring stays beside your pointer, moves with your voice while you talk, and pulses while Relay speaks. Turn on **Listen for “Hey Jarvis”** (General, or the menu bar icon) to start without a key: Relay listens on this Mac for your wake phrase (nothing is recorded or sent), chimes, then takes your request and stops on its own when you stop talking. What Relay hears and answers shows in a small card beside the ring. Typing (⌥T) and Allow / Cancel questions still use the pill.
+### The reactor
+When you ask by voice, a big Jarvis arc reactor appears in the middle of your screen (no window behind it) and follows your voice; your words appear under it. When you stop talking it shrinks to the top left corner and keeps working there until the task is done, then the answer appears beside it. A small arrow follows your pointer like a second cursor and flies to what Relay points at; put it away with General > Cursor buddy. Turn on **Listen for “Hey Jarvis”** (General, or the menu bar icon) to start without a key: Relay listens on this Mac for your wake phrase (nothing is recorded or sent), chimes, then takes your request and stops on its own when you stop talking. Typing (⌥T) and Allow / Cancel questions still use the pill.
+
+### Move windows
+"Snap this window to the left", "put Chrome on the right half", "move Spotify to the top right corner", "maximize this window", "center Notes", "right third". Instant, no model, and "undo that" puts the window back.
 
 ### Remember a task by name
 After Relay does something, say "remember this as morning setup". Next time you say "morning setup" it repeats the exact actions with no model and no waiting; anything that sends or deletes still asks first. "Forget morning setup" removes it.
@@ -186,7 +189,7 @@ Every tool call with its arguments and result. If something does not work, look 
 
 ## What is verified and what is not
 
-Verified on a Mac (`npm test`, 191 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
+Verified on a Mac (`npm test`, 196 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
 
 Not verified by script: real calls to the OpenAI-compatible services (OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek), live microphone dictation end to end, music control, spoken-command dictation and word fixes with a real voice, the clipboard and selection tools, permission prompts, global shortcut detection, the AppleScript against Notes, Reminders, Calendar, Messages and Finder beyond what you have tried by hand. `scripts/e2e.mjs` and `scripts/screenshots.mjs` predate dictation and the Claude sign-in and have not been updated or re-run. The Actions tab and `Console.app` (filter "Relay") are where errors show up.
 
