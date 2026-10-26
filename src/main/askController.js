@@ -19,7 +19,7 @@ const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = requ
 const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
 const usage = require('./usage');
 const { buildCard } = require('./cards/card');
-const { findStl, downloadStl } = require('./models/lookup');
+const { findStls, downloadStl } = require('./models/lookup');
 const { normalizeParts } = require('./models/shapes');
 const { NotionApi, notionTools } = require('./connectors/notion');
 const { GoogleApi, googleTools } = require('./connectors/google');
@@ -112,7 +112,7 @@ class AskController {
     this.lastDictation = null;
     this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); this.statusChanged(); }, onFinish: (a) => this.agentFinished(a) });
     this.cardPanel = null; // set by the app: the answer card window
-    this.modelPanel = null; // set by the app: the 3D viewer window
+    this.holos = null; // set by the app: the holograms
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
@@ -396,7 +396,7 @@ class AskController {
     if (name === 'cancel' || (name === 'type' && kind === 'press')) this.interruptSpeech();
     if (name === 'cancel') {
       this.cardPanel?.hide();
-      this.modelPanel?.hide();
+      this.holos?.hideUnpinned();
       this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
       else if (this.overlay.hasMarks()) this.overlay.clear(); // Esc closes drawings and guides
@@ -508,25 +508,33 @@ class AskController {
   // A real model from Wikimedia Commons if there is a fitting one, else what the model built from shapes. Returns what happened, in
   // words, so the model can say it honestly.
   async show3d(raw = {}) {
-    if (!this.modelPanel || this.store.get('settings.models3d') === false) return '3D models are turned off.';
-    const title = String(raw.title || raw.query || '3D model').slice(0, 80);
+    if (!this.holos || this.store.get('settings.models3d') === false) return '3D models are turned off.';
+    const title = String(raw.title || raw.query || '3D model').slice(0, 60);
     const parts = normalizeParts(raw.parts);
-    let found = null;
+    // The options: up to four real models for the same thing, then the one built from shapes (when there are shapes).
+    const options = [];
     if (raw.query) {
-      try {
-        const m = await findStl(raw.query);
-        if (m) { found = { m, bytes: await downloadStl(m.url) }; }
-      } catch { found = null; }
+      try { for (const m of await findStls(raw.query, { n: 4 })) options.push({ kind: 'stl', title: m.title, url: m.url, credit: m.credit }); } catch { /* no real models */ }
     }
-    if (found) {
-      await this.modelPanel.show({ kind: 'stl', title, subtitle: found.m.title, credit: found.m.credit, bytes: found.bytes });
-      return `Showing a real 3D model, "${found.m.title}" (${found.m.credit}). The user can drag to turn it, scroll to zoom, and press Turn upright if it lies on its side. Answer in one short sentence, and say so if the model looks like a different thing than they asked for.`;
+    if (parts.length) options.push({ kind: 'shapes', title, parts, credit: 'Built by Relay from simple shapes' });
+    if (!options.length) return 'No real 3D model of that exists on Wikimedia Commons. Call show_3d again with parts to build a simple one from shapes, or tell the user there is none.';
+    let item;
+    let first = 0;
+    for (; first < options.length; first++) { // the best one that actually downloads
+      const c = options[first];
+      try { item = c.kind === 'stl' ? { kind: 'stl', title: c.title, credit: c.credit, url: c.url, bytes: await downloadStl(c.url) } : { kind: 'shapes', title: c.title, credit: c.credit, parts: c.parts }; break; } catch { item = null; }
     }
-    if (parts.length) {
-      await this.modelPanel.show({ kind: 'shapes', title, subtitle: String(raw.note || 'Built from simple shapes').slice(0, 100), credit: 'Built by Relay from simple shapes', parts });
-      return `No real model was found, so Relay built a simple one from ${parts.length} shapes. Tell the user it is a simple stand-in. They can drag to turn it and scroll to zoom.`;
+    if (!item) return 'The 3D models found could not be downloaded. Try again in a moment.';
+    const stand = item.kind === 'shapes';
+    // "Add it to the one already on screen": the new model sits next to the others in the same hologram.
+    const into = raw.combine ? this.holos.latest() : null;
+    if (into && (await this.holos.add(into.id, item))) {
+      return `Added "${item.title}" next to "${into.title.split(' + ')[0]}" in the same hologram. The user can drag the base to move it, drag the model to turn it, and drop holograms on each other to combine them.${stand ? ' It is a simple stand-in built from shapes.' : ''}`;
     }
-    return 'No real 3D model of that exists on Wikimedia Commons. Call show_3d again with parts to build a simple one from shapes, or tell the user there is none.';
+    const id = await this.holos.show({ title, items: [item], options: { list: options, index: first } });
+    if (raw.keep) this.holos.pin(id, true);
+    const more = options.length > 1 ? ` There are ${options.length - 1} other option${options.length === 2 ? '' : 's'} for it: the user can press the arrows under the hologram to switch.` : '';
+    return `Showing a hologram of ${stand ? 'a simple stand-in built from shapes' : `a real 3D model, "${item.title}" (${item.credit})`}.${more} They can drag the glowing base to move it anywhere on the screen, drag the model to turn it, scroll to resize, pin it to keep it, and drop it on another hologram to combine them. Answer in one short sentence${stand ? ', and say it is a stand-in' : ', and say so if it looks like a different thing than they asked for'}.`;
   }
 
   // ----- answer cards -----
@@ -800,7 +808,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], models: this.modelPanel && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1121,7 +1129,7 @@ class AskController {
     this.push({ label: 'Thinking', text: opts.shown || text });
 
     if (!opts.scheduled) this.unattended = false;
-    if (!opts.drain) { this.cardPanel?.hide(); this.modelPanel?.hide(); } // a new request takes the last card away
+    if (!opts.drain) { this.cardPanel?.hide(); this.holos?.hideUnpinned(); } // a new request takes the last card and the holograms you did not pin away
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.0
+
+- **3D models are now holograms, not a window.** No menu, no border, no background: the model is drawn as light (a glowing see-through surface with scanlines and a soft edge glow, standing on a glowing projector base) directly on your screen. It builds itself from the bottom up when it appears.
+- **Move them anywhere.** Drag the glowing base to carry a hologram across the screen. Drag the model to turn it, scroll to resize, double-click to reset. Clicks outside the model fall straight through to your apps (only the model, the base and the little controls take the pointer).
+- **Keep them.** The pin button keeps a hologram on screen: a new request or Esc no longer takes it away, and it comes back where you left it after a restart (only a link to the model is saved, never the file), without the Jarvis reactor. Say "keep it up" and Relay pins it. Unpinned holograms still go when you ask the next thing.
+- **Other models.** When Relay finds several real models for a thing, arrows under the hologram step through them (1 / 4), and the simple built-from-shapes version is one of the options.
+- **Combine.** Drag one hologram over another and a pulsing "Release to combine" appears; let go and both models stand together in one hologram (up to four). Or say "add a heart to it" and Relay adds one next to it. Taking one model back out of a combined hologram is not built yet: close it and ask again.
+- **Solid or hologram:** the half-moon button switches to solid shading. Turn upright still fixes models that lie on their side. Up to six holograms at once; the menu bar icon has Clear Holograms.
+
 ## 0.17.0
 
 - **3D models you can turn.** Ask "show me a 3D model of a skull", "what does the Eiffel Tower look like in 3D", or "show me the solar system in 3D", and a black glass viewer pops out on the right. Drag to turn it, scroll to zoom, double-click to reset, and it spins by itself until you touch it. Esc or × closes it.
