@@ -299,7 +299,7 @@ const PAGES = {
     const card = h('<div class="card flat"></div>');
     const talk = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Talking</div><div class="seg">${[['tap-or-hold', 'Tap or hold'], ['tap', 'Tap'], ['hold', 'Hold']].map(([v, l]) => `<button data-v="${v}" class="${S.settings.talking === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Tap to start and tap to send, or hold while you talk and let go.</div></div>`);
     talk.onclick = (e) => e.target.dataset.v && relay.set('settings.talking', e.target.dataset.v);
-    card.append(talk, toggleRow('Play sounds', '', 'settings.playSounds'), toggleRow('Lower other audio while listening', '', 'settings.duckAudio'), toggleRow('Dictation', 'Right ⌘ types what you say. Off: the shortcut is disabled.', 'settings.dictation'), toggleRow('Keep dictation history', 'Off: dictated text is typed but not saved in History.', 'settings.saveDictation'));
+    card.append(talk, toggleRow('Play sounds', '', 'settings.playSounds'), toggleRow('Lower the volume while I talk', 'Turns the volume down to 30% while Relay listens and puts it back exactly when you stop. Off: your volume is never touched.', 'settings.duckAudio'), toggleRow('Dictation', 'Right ⌘ types what you say. Off: the shortcut is disabled.', 'settings.dictation'), toggleRow('Keep dictation history', 'Off: dictated text is typed but not saved in History.', 'settings.saveDictation'));
     c.append(card);
 
     title('Ask Relay');

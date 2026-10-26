@@ -316,7 +316,8 @@ function registerIpc() {
   ipcMain.handle('speech:set-locale', async (_e, id) => {
     store.set('settings.speech.locale', id);
     ask.wake.disarm();
-    prepareSpeech().finally(() => ask.wake.refresh()); // a new language: "Hey Jarvis" listens in it once the model is ready
+    ask.ducker.recover(); // a run that ended while the volume was lowered: put it back
+  prepareSpeech().finally(() => ask.wake.refresh()); // a new language: "Hey Jarvis" listens in it once the model is ready
     broadcast();
   });
 
@@ -556,6 +557,7 @@ app.on('second-instance', () => openMain('home'));
 app.on('activate', () => openMain('home'));
 app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the menu bar
 app.on('before-quit', () => {
+  try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
   quitting = true;
   hotkeys?.stop();
   bridge?.stop();
