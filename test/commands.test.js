@@ -37,3 +37,17 @@ test('plain request goes to the agent unchanged', () => {
 test('splitSteps', () => {
   assert.deepEqual(splitSteps('open notes, then open mail'), ['open notes', 'open mail']);
 });
+
+// ---- remembering a task under a name
+test('remember, learn and keep work like save, and forget removes a saved task by name', () => {
+  const { parseCommand } = require('../src/main/commands');
+  const routines = [{ id: '1', name: 'Morning setup', steps: ['open mail'] }];
+  for (const phrase of ['Remember this as morning setup', 'learn that as Morning Setup.', 'Save it as morning setup', 'keep this as morning setup']) {
+    assert.deepEqual(parseCommand(phrase, routines), { type: 'routine-save', name: phrase.toLowerCase().replace(/[.]/g, '').replace(/^.*? as /, ''), source: 'last' }, phrase);
+  }
+  assert.equal(parseCommand('Forget morning setup', routines).type, 'routine-delete');
+  assert.equal(parseCommand('delete the routine morning setup', routines).routine.id, '1');
+  assert.equal(parseCommand('forget my morning setup task', routines).type, 'routine-delete');
+  assert.equal(parseCommand('forget about the meeting', routines).type, 'agent', 'not a saved name: left for the model');
+  assert.equal(parseCommand('run morning setup', routines).type, 'routine-run');
+});

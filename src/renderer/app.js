@@ -100,6 +100,8 @@ function render() {
   c.scrollTop = top;
 }
 
+const KOKORO_VOICES = [['af_heart', 'Heart (US, warm)'], ['af_bella', 'Bella (US)'], ['af_nicole', 'Nicole (US, calm)'], ['af_sarah', 'Sarah (US)'], ['af_sky', 'Sky (US)'], ['af_nova', 'Nova (US)'], ['am_michael', 'Michael (US)'], ['am_adam', 'Adam (US)'], ['am_eric', 'Eric (US)'], ['bf_emma', 'Emma (UK)'], ['bf_isabella', 'Isabella (UK)'], ['bm_george', 'George (UK)']];
+
 /* ---------- helpers ---------- */
 function toggleRow(title, desc, key) {
   const on = key.split('.').reduce((o, k) => o[k], S);
@@ -223,7 +225,7 @@ const PAGES = {
     const list = h('<div class="card"></div>');
     if (!S.routines.length) list.append(h('<div class="empty" style="text-align:center">None yet. Make one with the buttons above, by voice, or from an idea below.</div>'));
     for (const r of S.routines) {
-      const el = h(`<div class="routine"><div class="rn"><span>${esc(r.name)}</span><span style="display:flex;gap:8px"><button class="btn" data-a="run">Run</button><button class="btn" data-a="edit">Edit</button><button class="btn danger" data-a="del">Delete</button></span></div><ol>${r.steps.map((s, i) => `<li><span>${i + 1}</span>${esc(s)}</li>`).join('')}</ol></div>`);
+      const el = h(`<div class="routine"><div class="rn"><span>${esc(r.name)}${r.learned && r.learned.length ? ` <span class="note" style="font-weight:400" title="Repeats the exact actions it took before, without asking the model">· learned, ${r.learned.length} action${r.learned.length === 1 ? '' : 's'}, no model</span>` : ''}</span><span style="display:flex;gap:8px"><button class="btn" data-a="run">Run</button><button class="btn" data-a="edit">Edit</button><button class="btn danger" data-a="del">Delete</button></span></div><ol>${r.steps.map((s, i) => `<li><span>${i + 1}</span>${esc(s)}</li>`).join('')}</ol></div>`);
       el.onclick = (e) => {
         const a = e.target.dataset.a;
         if (a === 'run') relay.runRoutine(r.id);
@@ -391,6 +393,61 @@ const PAGES = {
     rrow.onclick = (e) => e.target.dataset.v && relay.set('settings.voiceRate', e.target.dataset.v);
     vcard.append(rrow);
     c.append(vcard);
+    // ---- more natural voices ----
+    c.append(h('<div class="section-title">More natural voices</div>'));
+    const T = S.settings.tts || { engine: 'system' };
+    const ecard = h('<div class="card"></div>');
+    const ENGINES = [['system', 'Mac voice'], ['kokoro', 'On this Mac'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const eseg = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Voice engine</div><div class="seg">${ENGINES.map(([v, l]) => `<button data-v="${v}" class="${T.engine === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">${{
+      system: 'The voice chosen above. Free and instant.',
+      kokoro: 'A natural voice that runs on this Mac. Free, no key, and your replies never leave your Mac. Apple Silicon only.',
+      openai: 'Natural voices from OpenAI, using your own OpenAI API key. OpenAI bills your account; Relay takes nothing.',
+      elevenlabs: 'Some of the most human-sounding voices, using your own ElevenLabs key. ElevenLabs bills your account; Relay takes nothing.'
+    }[T.engine] || ''}</div></div>`);
+    eseg.onclick = (e) => e.target.dataset.v && relay.set('settings.tts.engine', e.target.dataset.v);
+    ecard.append(eseg);
+    const field = (label, value, key, { type = 'text', ph = '', wide } = {}) => {
+      const row = h(`<div class="row"><div class="grow"><div class="t">${label}</div></div><input class="field" type="${type}" style="width:${wide || 240}px" placeholder="${esc(ph)}" value="${esc(value || '')}"></div>`);
+      $('input', row).onchange = (e) => relay.set(key, e.target.value.trim());
+      return row;
+    };
+    const keyRow = (engine, name, url) => {
+      const has = S.hasTtsKeys && S.hasTtsKeys[engine];
+      const row = h(`<div class="row"><div class="grow"><div class="t">${name} key</div><div class="d">${has ? 'Saved on this Mac (encrypted with your Keychain).' : `Needed. <span class="link" data-get>Get one</span>`}</div></div><input class="field" type="password" style="width:200px" placeholder="${has ? '••••••••••••' : 'Paste your key'}"><button class="btn">Save</button></div>`);
+      $('[data-get]', row) && ($('[data-get]', row).onclick = () => relay.openExternal(url));
+      $('button', row).onclick = async () => { const v = $('input', row).value.trim(); if (v) { await relay.setTtsKey(engine, v); } };
+      return row;
+    };
+    if (T.engine === 'openai') {
+      ecard.append(keyRow('openai', 'OpenAI', 'https://platform.openai.com/api-keys'));
+      const vsel = h(`<div class="row"><div class="grow"><div class="t">Voice</div></div><div class="select" style="margin:0"><span>${esc(T.openai.voice)}</span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select>${['coral', 'marin', 'cedar', 'alloy', 'ash', 'ballad', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'].map((v) => `<option ${v === T.openai.voice ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>`);
+      $('select', vsel).onchange = (e) => relay.set('settings.tts.openai.voice', e.target.value);
+      ecard.append(vsel, field('Model', T.openai.model, 'settings.tts.openai.model'), field('Style', T.openai.instructions, 'settings.tts.openai.instructions', { ph: 'How it should speak', wide: 320 }));
+    } else if (T.engine === 'elevenlabs') {
+      ecard.append(keyRow('elevenlabs', 'ElevenLabs', 'https://elevenlabs.io/app/settings/api-keys'));
+      const vrow2 = field('Voice ID', T.elevenlabs.voiceId, 'settings.tts.elevenlabs.voiceId', { ph: 'Copy it from your voice library' });
+      ecard.append(vrow2, field('Model', T.elevenlabs.model, 'settings.tts.elevenlabs.model'));
+      ecard.append(h('<div class="row"><div class="grow"><div class="d">Pick a voice in the <span class="link" data-lib>ElevenLabs voice library</span>, add it to your voices, and paste its ID here.</div></div></div>'));
+      $('[data-lib]', ecard).onclick = () => relay.openExternal('https://elevenlabs.io/app/voice-library');
+    } else if (T.engine === 'kokoro') {
+      const k = S.kokoro || {};
+      if (!k.supported) ecard.append(h('<div class="row"><div class="grow"><div class="d">The on-device voice needs an Apple Silicon Mac. Use a Mac voice or an online voice instead.</div></div></div>'));
+      else if (k.installed) {
+        const sel = h(`<div class="row"><div class="grow"><div class="t">Voice</div><div class="d">Installed. Runs fully on this Mac.</div></div><div class="select" style="margin:0"><span>${esc((KOKORO_VOICES.find(([v]) => v === T.kokoro.voice) || KOKORO_VOICES[0])[1])}</span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select>${KOKORO_VOICES.map(([v, l]) => `<option value="${v}" ${v === T.kokoro.voice ? 'selected' : ''}>${l}</option>`).join('')}</select></div><button class="btn" data-rm>Remove</button></div>`);
+        $('select', sel).onchange = (e) => relay.set('settings.tts.kokoro.voice', e.target.value);
+        $('[data-rm]', sel).onclick = () => relay.removeKokoro();
+        ecard.append(sel);
+      } else {
+        const pct = Math.round((k.progress || 0) * 100);
+        const row = h(`<div class="row"><div class="grow"><div class="t">Download the voice</div><div class="d">${k.installing ? `Downloading… ${pct}%${k.stage ? ` (${esc(k.stage)})` : ''}` : 'About 270 MB, once. Needs internet only for this download.'}</div></div><button class="btn primary" ${k.installing ? 'disabled' : ''}>${k.installing ? 'Downloading…' : 'Download'}</button></div>`);
+        $('button', row).onclick = () => relay.installKokoro();
+        ecard.append(row);
+      }
+    }
+    const trow = h(`<div class="row"><div class="grow"><div class="t">Try it</div><div class="d" id="tstatus" style="${S.voiceProblem ? 'color:var(--orange)' : ''}">${esc(S.voiceProblem || 'Plays a short sentence in the voice above.')}</div></div><button class="btn">Test voice</button></div>`);
+    $('button', trow).onclick = async () => { $('#tstatus', trow).textContent = 'Speaking…'; const r = await relay.testTts(); if (r && r.ok) $('#tstatus', trow).textContent = 'That is the voice. Turn on Speak replies in General to hear it on every answer.'; };
+    ecard.append(trow);
+    c.append(ecard);
     // ---- dictation style by app ----
     c.append(h('<div class="section-title">Dictation style by app</div>'));
     const STYLE_OPTS = [['default', 'As spoken'], ['casual', 'Casual'], ['chat', 'Chat (press Return)']];

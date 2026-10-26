@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const perms = require('./permissions');
@@ -21,7 +22,8 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro;
+let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
 let mainWin = null;
@@ -75,6 +77,11 @@ function publicState() {
   const d = JSON.parse(JSON.stringify(store.data));
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
+  const hasTtsKeys = {};
+  for (const id of ['openai', 'elevenlabs']) {
+    hasTtsKeys[id] = !!decryptKey(d.settings.tts[id].keyEnc);
+    delete d.settings.tts[id].keyEnc;
+  }
   const hasKeys = {};
   for (const [id, s] of Object.entries(d.settings.model.presets)) {
     hasKeys[id] = !!decryptKey(s.keyEnc);
@@ -84,6 +91,9 @@ function publicState() {
     ...d,
     hasKey,
     hasKeys,
+    hasTtsKeys,
+    voiceProblem,
+    kokoro: kokoro.status(),
     presetInfo: PRESETS,
     history: d.history.slice(0, 200),
     actions: d.actions.slice(0, 300),
@@ -268,7 +278,37 @@ function registerIpc() {
     voices: (await speaker.voiceList()).filter((v) => v.kind !== 'Novelty' && v.lang.startsWith('en')),
     picked: await speaker.resolve(store.get('settings.voice'))
   }));
+  ipcMain.handle('tts:set-key', (_e, engine, key) => {
+    if (!['openai', 'elevenlabs'].includes(engine)) return;
+    store.set(`settings.tts.${engine}.keyEnc`, encryptKey(String(key || '').trim()));
+    voiceProblem = '';
+    broadcast();
+  });
+  ipcMain.handle('tts:test', async () => {
+    const r = await speaker.test('Hi, this is how I will sound when I answer you.', { voice: store.get('settings.voice'), rate: store.get('settings.voiceRate') });
+    voiceProblem = r.ok ? '' : r.message;
+    broadcast();
+    return r;
+  });
+  ipcMain.handle('tts:kokoro-install', async () => {
+    try {
+      await kokoro.install();
+      store.set('settings.tts.engine', 'kokoro');
+    } catch (e) {
+      voiceProblem = e.message;
+    }
+    broadcast();
+  });
+  ipcMain.handle('tts:kokoro-remove', () => {
+    kokoro.remove();
+    if (store.get('settings.tts.engine') === 'kokoro') store.set('settings.tts.engine', 'system');
+    broadcast();
+  });
   ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', { voice, rate }));
+  ipcMain.handle('app:open-link', (_e, url) => {
+    // Only the key and voice pages of the voice providers; nothing a page could choose.
+    if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
+  });
   ipcMain.handle('voice:open-settings', () => shell.openExternal('x-apple.systempreferences:com.apple.Accessibility-Settings.extension'));
   ipcMain.handle('speech:locales', () => speech.locales().catch(() => []));
   ipcMain.handle('speech:set-locale', async (_e, id) => {
@@ -429,7 +469,15 @@ app.whenReady().then(() => {
     speechInfo = { ...speechInfo, preparing: f };
     broadcast();
   });
-  speaker = new Speaker();
+  kokoro = new KokoroVoice({ dir: path.join(app.getPath('userData'), 'voices', 'kokoro'), onProgress: () => broadcast() });
+  speaker = new Speaker({
+    kokoro,
+    getTts: () => {
+      const t = store.get('settings.tts');
+      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) } };
+    },
+    onProblem: (m) => { voiceProblem = m; broadcast(); }
+  });
   timers = new Timers({
     store,
     onFire: (t) => {

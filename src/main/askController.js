@@ -18,6 +18,7 @@ const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain } = require('./meta');
 const { Guide } = require('./guide');
+const { learnFrom, describeStep } = require('./learned');
 const { markRegion } = require('./overlayGeometry');
 
 const PILL_W = 480;
@@ -95,6 +96,7 @@ class AskController {
     this.lastDictation = null;
     this.lastAction = null; // { kind: quick | model | dictation, ts, undo? }: what "undo that" would reverse
     this.lastRequestText = '';
+    this.lastLearned = null; // { text, steps } for the last model request that can be repeated with no model
     this.warm = null; // a Claude process started before the request is ready
     this.warming = false;
     this.warmTimer = null;
@@ -663,6 +665,12 @@ class AskController {
       case 'routine-inline':
         this.upsertRoutine(cmd.name, cmd.steps);
         return this.finish(entry, { status: 'done', reply: `Saved routine "${cmd.name}" with ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'}.` });
+      case 'routine-delete': {
+        const left = this.store.get('routines').filter((r) => r.id !== cmd.routine.id);
+        this.store.set('routines', left);
+        this.onChange();
+        return this.finish(entry, { status: 'done', reply: `Forgot "${cmd.routine.name}".` });
+      }
       case 'routine-run':
         return this.runRoutine(cmd.routine, entry);
       default: {
@@ -736,11 +744,11 @@ class AskController {
     return this.finish(entry, { status: 'done', reply: r.reply, actions: 1 });
   }
 
-  upsertRoutine(name, steps) {
+  upsertRoutine(name, steps, learned = null) {
     const routines = this.store.get('routines');
     const existing = routines.find((r) => r.name.toLowerCase() === name.toLowerCase());
-    if (existing) existing.steps = steps;
-    else routines.push({ id: crypto.randomUUID(), name, steps });
+    if (existing) { existing.steps = steps; existing.learned = learned || undefined; existing.misses = 0; }
+    else routines.push({ id: crypto.randomUUID(), name, steps, ...(learned ? { learned } : {}) });
     this.store.save();
     this.onChange();
   }
@@ -748,8 +756,11 @@ class AskController {
   saveRoutine(cmd) {
     const steps = cmd.source === 'recording' ? this.recording : this.lastOk ? [this.lastOk] : [];
     if (!steps || !steps.length) return { status: 'failed', reply: 'There is nothing to save yet.' };
-    this.upsertRoutine(cmd.name, steps);
+    // A request the model carried out with plain, repeatable actions is saved as those actions: next time, no model.
+    const learned = cmd.source !== 'recording' && this.lastLearned && this.lastLearned.text === this.lastOk ? this.lastLearned.steps : null;
+    this.upsertRoutine(cmd.name, steps, learned);
     this.recording = null;
+    if (learned) return { status: 'done', reply: `Saved "${cmd.name}". Next time I will just do it, with no waiting on the model.` };
     return { status: 'done', reply: `Saved routine "${cmd.name}" with ${steps.length} step${steps.length === 1 ? '' : 's'}.` };
   }
 
@@ -759,9 +770,45 @@ class AskController {
     if (this.prevApp) this.mac.focusApp(this.prevApp).catch(() => {});
   }
 
+  // Repeats what Relay did before, action by action, without asking the model. Anything that sends or deletes still asks first.
+  // Returns { status, reply } or { failed: true, reply } when a step could not run, so the caller can ask the model instead.
+  async replay(routine, entry) {
+    const tools = Object.fromEntries(this.makeTools(true).map((t) => [t.name, t]));
+    const signal = this.abort.signal;
+    for (let i = 0; i < routine.learned.length; i++) {
+      const step = routine.learned[i];
+      const tool = tools[step.tool];
+      if (!tool) return { failed: true, reply: `The step "${step.tool}" is not available any more.` };
+      this.push({ label: `${routine.name}: step ${i + 1} of ${routine.learned.length}`, text: describeStep(step) });
+      const question = tool.confirm ? tool.confirm(step.input) : null;
+      if (question && !(await this.askConfirm({ question }))) return { status: 'stopped', reply: 'Skipped.', actions: i };
+      try {
+        const result = await tool.run(step.input, { signal });
+        this.store.addAction({ id: crypto.randomUUID(), requestId: entry.id, tool: step.tool, input: step.input, result: typeof result === 'string' ? result : 'ok', ok: true, ts: Date.now() });
+      } catch (e) {
+        if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: i };
+        this.store.addAction({ id: crypto.randomUUID(), requestId: entry.id, tool: step.tool, input: step.input, result: e.message, ok: false, ts: Date.now() });
+        return { failed: true, reply: `Step ${i + 1} (${step.tool.replace(/_/g, ' ')}) did not work: ${e.message}` };
+      }
+    }
+    this.onChange();
+    return { status: 'done', reply: `Done: ${routine.name}.`, actions: routine.learned.length };
+  }
+
   async runRoutine(routine, entry) {
     this.refocus();
     this.abort = new AbortController();
+    if (routine.learned && routine.learned.length) {
+      const r = await this.replay(routine, entry);
+      if (!r.failed) return this.finish(entry, r);
+      // The saved actions no longer work here (an app changed, a name moved): let the model do it from the words, and after
+      // two misses in a row stop trusting the saved actions.
+      routine.misses = (routine.misses || 0) + 1;
+      if (routine.misses >= 2) { routine.learned = undefined; routine.misses = 0; }
+      this.store.save();
+      this.onChange();
+      this.push({ label: 'Asking the model', text: r.reply });
+    }
     let last = { status: 'done', reply: '' };
     for (let i = 0; i < routine.steps.length; i++) {
       this.push({ label: `${routine.name}: step ${i + 1} of ${routine.steps.length}`, text: routine.steps[i] });
@@ -779,6 +826,9 @@ class AskController {
     const res = await this.execute(text, entry.id);
     if (res.status === 'done' && !internal) {
       this.lastOk = text;
+      const calls = this.store.get('actions').filter((a) => a.requestId === entry.id).reverse();
+      const steps = learnFrom(calls);
+      this.lastLearned = steps ? { text, steps } : null;
       if (this.recording) this.recording.push(text);
     }
     if (res.status === 'done') this.lastAction = internal ? null : { kind: 'model', ts: Date.now() };
