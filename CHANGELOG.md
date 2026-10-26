@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.21.0
+
+- **Holograms have no edge at all now.** Each hologram used to live in a small see-through window, so it was clipped at that window's edge and the glowing base looked like a border and a background. The base is gone, and the hologram is drawn on a see-through layer as big as the display, so a model and its pieces can go anywhere on the screen (and across displays). I checked with real screen captures: only the light is there.
+- **Turn it every way.** Drag the model up, down, sideways or diagonally and it turns about all axes, so you can look underneath. The new "turn back to the front" button resets it.
+- **Double-click to pull it apart** (or the four-diamond button); double-click a piece to put it back together. **Each piece moves on its own:** drag any piece anywhere while it is apart.
+- **Take a piece out, put the rest back.** Drag a piece far out (the hologram says "Release to take it out") and it becomes its own hologram right there; let it go over another hologram and it joins that one, placed by the AI and flying in. The hologram it came from stays pulled apart; put it back together and it closes up without the missing piece.
+- **Move a hologram** by dragging its name or the move button (or hold Option and drag the model).
+- **Hover a button to see what it does:** each control shows its name above it.
+- **Faster, truer dictation.** I read how Talkify does its speech recognition. Relay's engine was already the same one (Apple's on-device SpeechAnalyzer, warmed up ahead of time, microphone read before the recognizer is attached, finished with a flush), so I measured it on a spoken sentence: a file transcribes in about a quarter of a second. What Talkify did better was starting: it opens the microphone the instant you press the key. Relay waited for the window, the frontmost-app lookup and the sound first, so the first word or two could be lost. The microphone now opens first, while the rest gets ready beside it.
+- **No more zebra for a robot.** A photo is now used only when its title (or the Wikipedia page) has the words you asked for, so "Spot robot" can no longer bring back a zebra called Spot. If nothing matches Relay says so instead of guessing.
+- Safety: a hologram window that hangs stops holding your clicks.
+- Honest limits: tested in real Electron windows with injected mouse events and real screen captures, not with a hand on a real mouse. Dictation: timing was measured on a file, and I could not play speech into the microphone from here, so the real-use gain is by design, not yet measured.
+
 ## 0.20.0
 
 - **Pull a hologram apart.** The new button under a hologram (four diamonds) explodes it into its parts. Hover a piece and it brightens, click to select it, then drag it out: it becomes its own hologram that follows your pointer, and what is left stays behind as a hologram of its own. Click the button again to put it back together.

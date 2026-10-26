@@ -26,6 +26,15 @@ test('Commons photos are picked by title match and size, with credit', async () 
   assert.deepEqual(got, [{ url: 'https://thumb.wikimedia.org/a/960px-a.jpg', title: 'VEX Robotics Competition Robot', credit: 'Jane · CC BY 4.0 · Wikimedia Commons', page: 'https://commons/x' }]);
 });
 
+test('a photo of something else that shares one word is not used (a zebra named Spot is not the Spot robot)', async () => {
+  const mk = (title) => ({ title: `File:${title}.jpg`, imageinfo: [{ mime: 'image/jpeg', width: 3000, height: 2000, thumburl: `https://thumb.wikimedia.org/${encodeURIComponent(title)}.jpg` }] });
+  const pages = [mk('Spot the zebra at the zoo'), mk('Spot-breasted Fantail'), mk('Spot robot Royal Air Force')];
+  const wiki = { query: { pages: [{ title: 'Zebra', extract: 'Zebras are African equines with black and white stripes.', thumbnail: { source: 'https://upload.wikimedia.org/z.jpg', width: 900, height: 600 }, canonicalurl: 'https://en.wikipedia.org/wiki/Zebra' }] } };
+  const f = async (u) => (String(u).includes('commons.wikimedia.org') ? json({ query: { pages } }) : json(wiki));
+  const got = await findPhotos('Spot robot', { fetchImpl: f });
+  assert.deepEqual(got.map((p) => p.title), ['Spot robot Royal Air Force'], 'only the title that has both words, and the zebra page is not borrowed');
+});
+
 test('a photo is fetched only when it is a real image of a sensible size', async () => {
   const img = Buffer.alloc(5000, 1);
   const f = (type, buf = img) => async () => ({ ok: true, status: 200, headers: { get: () => type }, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) });

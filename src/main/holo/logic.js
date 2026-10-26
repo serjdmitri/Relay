@@ -30,10 +30,10 @@ function layoutX(widths, gap = 0.25) {
 
 const cycle = (i, n, dir) => (n <= 0 ? 0 : (i + dir + n) % n);
 
-// What is kept for a pinned hologram: where it is, how big, and how to make it again (a link, not the model's bytes).
+// What is kept for a pinned hologram: where its middle is, how big, and how to make it again (a link, not the model's bytes).
 function toSaved(h) {
   return {
-    id: h.id, title: h.title, pinned: true, x: Math.round(h.x), y: Math.round(h.y), scale: +(h.scale || 1).toFixed(3), solid: !!h.solid,
+    id: h.id, title: h.title, pinned: true, center: true, x: Math.round(h.x), y: Math.round(h.y), scale: +(h.scale || 1).toFixed(3), solid: !!h.solid,
     items: h.items.map((i) => ({ ...(i.kind === 'stl' ? { kind: 'stl', title: i.title, url: i.url, credit: i.credit } : i.kind === 'glb' ? { kind: 'glb', title: i.title, file: i.file, credit: i.credit } : { kind: 'shapes', title: i.title, parts: i.parts, credit: i.credit }), ...(i.placement ? { placement: i.placement } : {}) }))
   };
 }

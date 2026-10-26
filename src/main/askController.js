@@ -1000,10 +1000,17 @@ class AskController {
     this.listenStartedAt = Date.now();
     this.state = 'listening';
     this.speaker?.stop(); // the microphone must not hear Relay talking
+    // The microphone opens first and at once, while the window and the rest get ready beside it: the recognizer keeps what
+    // was said from the first instant, so the first words are not lost to the screen drawing. (The same order Talkify uses.)
+    let mic = null;
+    if (await this.micAllowed()) {
+      mic = this.speech.listen(this.store.get('settings.speech.input') || 'auto');
+      mic.catch(() => {}); // handled below, or dropped if this was cancelled meanwhile
+    }
     this.prefetch();
     if (mode === 'ask') this.warmUp();
     this.prevApp = await this.frontP;
-    if (this.state !== 'listening') return; // cancelled while we looked
+    if (this.state !== 'listening') { if (mic) this.speech.cancel(); return; } // cancelled while we looked
     const win = this.ensureWindow();
     await this.ready;
     win.setFocusable(false);
@@ -1011,9 +1018,8 @@ class AskController {
     this.sound('Tink');
     this.duck();
     try {
-      if (!(await this.micAllowed())) throw new Error('Microphone access is off. Turn it on in Permissions.');
-      if (this.state !== 'listening') return;
-      await this.speech.listen(this.store.get('settings.speech.input') || 'auto');
+      if (!mic) throw new Error('Microphone access is off. Turn it on in Permissions.');
+      await mic;
     } catch (e) {
       return this.listenFailed(e);
     }

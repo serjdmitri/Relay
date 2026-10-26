@@ -34,7 +34,7 @@ test('options cycle round in both directions', () => {
 
 test('a pinned hologram is saved as links, and the saved list is cleaned', () => {
   const saved = toSaved({ id: 'h1', title: 'Skull and heart', x: 100.4, y: 200.6, scale: 1.23456, solid: false, items: [{ kind: 'stl', title: 'Skull', url: 'https://upload.wikimedia.org/a.stl', credit: 'x', bytes: Buffer.from('big') }, { kind: 'shapes', title: 'Atom', parts: [{ shape: 'sphere' }], credit: 'y' }] });
-  assert.deepEqual(saved, { id: 'h1', title: 'Skull and heart', pinned: true, x: 100, y: 201, scale: 1.235, solid: false, items: [{ kind: 'stl', title: 'Skull', url: 'https://upload.wikimedia.org/a.stl', credit: 'x' }, { kind: 'shapes', title: 'Atom', parts: [{ shape: 'sphere' }], credit: 'y' }] });
+  assert.deepEqual(saved, { id: 'h1', title: 'Skull and heart', pinned: true, center: true, x: 100, y: 201, scale: 1.235, solid: false, items: [{ kind: 'stl', title: 'Skull', url: 'https://upload.wikimedia.org/a.stl', credit: 'x' }, { kind: 'shapes', title: 'Atom', parts: [{ shape: 'sphere' }], credit: 'y' }] });
   assert.ok(!JSON.stringify(saved).includes('big'), 'no model bytes are stored');
   const list = [saved, { ...saved, id: 'bad', items: [{ kind: 'stl', title: 'x', url: 'https://evil.example/a.stl' }] }, { ...saved, id: 'unpinned', pinned: false }, null, { pinned: true, items: [] }];
   assert.deepEqual(cleanSaved(list).map((h) => h.id), ['h1']);

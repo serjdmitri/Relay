@@ -1,6 +1,7 @@
 /* global relay */
-// One hologram. Drag the model to turn it, drag the glowing base to move it across the screen, scroll to resize, double-click to reset.
-// Drop it on another hologram to combine them. Everything is drawn as light on a fully transparent window.
+// One hologram, drawn at one spot of a window as big as the display, so nothing is cut off. Drag the model to turn it every way,
+// drag its name (or hold Option) to move it, scroll to resize, double-click to pull it apart. Drag a piece anywhere; drag one far out to
+// take it out, or onto another hologram to combine. Everything is drawn as light on a fully transparent window.
 import * as THREE from './vendor/three/three.module.min.js';
 import { STLLoader } from './vendor/three/STLLoader.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
@@ -10,23 +11,27 @@ import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
 const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, premultipliedAlpha: true });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1)); // the window is the whole display, so the pixel count is kept in check
 renderer.setClearColor(0x000000, 0);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-camera.position.set(0, 0.35, 6.4);
-camera.lookAt(0, -0.1, 0);
+const PPU = 138; // pixels to a unit at the middle of the scene: a model two units across is about 276 pixels
+const FOV = 30;
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 200);
+const pos = { x: 300, y: 300 }; // where the middle of the hologram is, in this window's pixels
 scene.add(new THREE.HemisphereLight(0xcfe9ff, 0x101820, 1.0));
 const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3, 5, 4); scene.add(key);
 
 const CYAN = new THREE.Color(0x00d4ff);
-const uniforms = { time: { value: 0 }, reveal: { value: -2 } };
+const uniforms = { time: { value: 0 }, reveal: { value: -2 }, originY: { value: 0 } };
 let solid = false;
 let items = [];
-let holo = new THREE.Group(); // everything that turns
-scene.add(holo);
+const anchor = new THREE.Group(); // sits at the hologram's spot on the screen
+scene.add(anchor);
+let holo = new THREE.Group(); // everything that turns (about its middle)
+anchor.add(holo);
 let userScale = 1;
-let spin = 0;
+let kFit = 1;
+const orient = new THREE.Quaternion(); // how it is turned
 let reveal0 = 0;
 
 // ---------- the hologram material: fresnel glow, scanlines, a sweep that builds it from the bottom up ----------
@@ -37,7 +42,7 @@ function holoMaterial(tint, map, body = 0) {
     // a real-looking model (body 1) is drawn solid with the hologram effects over it; the light-only kind is see-through and additive
     transparent: body < 1, depthWrite: body >= 1, blending: body >= 1 ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; vN = normalize(normalMatrix * normal); vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform float time; uniform float reveal; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float body; uniform float boost; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { if (vY > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, vY); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb * 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge) + vec3(0.0, 0.35, 0.5) * boost; gl_FragColor = vec4(lit * flick1, 1.0); return; }  float a = (0.10 + body + f * 0.9) * scan + edge * 0.9 + boost * 0.5; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge) + vec3(0.0, 0.4, 0.6) * boost, a * flick); }'
+    fragmentShader: 'uniform float time; uniform float reveal; uniform float originY; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float body; uniform float boost; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { float ry = vY - originY; if (ry > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, ry); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb * 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge) + vec3(0.0, 0.35, 0.5) * boost; gl_FragColor = vec4(lit * flick1, 1.0); return; }  float a = (0.10 + body + f * 0.9) * scan + edge * 0.9 + boost * 0.5; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge) + vec3(0.0, 0.4, 0.6) * boost, a * flick); }'
   });
 }
 function solidMaterial(color) { return new THREE.MeshStandardMaterial({ color: color || 0xd7e3ea, roughness: 0.5, metalness: 0.15 }); }
@@ -131,9 +136,9 @@ async function rebuild() {
   labels.length = 0;
   const wraps = await Promise.all(items.map(buildItem));
   if (mine !== building) return; // a newer one was asked for while this loaded
-  scene.remove(holo);
   holo.traverse((o) => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.map?.dispose?.() || m?.dispose?.()); });
-  holo = new THREE.Group();
+  const inner = new THREE.Group(); // the models, put side by side; centred and turned in the pivot made below
+  holo = inner;
   const sizes = wraps.map((w) => w.userData.size);
   const placed = placeItems(sizes, items.map((it) => it.placement || null));
   const now = performance.now();
@@ -153,38 +158,23 @@ async function rebuild() {
   document.body.classList.remove('exploded');
   $('explode').classList.remove('on');
   relay.holoSizes(sizes.map((z) => ({ w: +z.w.toFixed(3), h: +z.h.toFixed(3), d: +z.d.toFixed(3) })));
-  // The whole group turns about its middle, so it has to fit while turning: its reach from the middle, sideways and front to back,
-  // must stay inside the view, and it must not be taller than the stand allows. It then stands on the base.
+  // It turns about its middle in every direction, so what has to fit is the sphere around it, not a width and a height.
   const box = new THREE.Box3().setFromObject(holo);
   const size = box.getSize(new THREE.Vector3());
-  const reach = Math.hypot(Math.max(Math.abs(box.min.x), Math.abs(box.max.x)), Math.max(Math.abs(box.min.z), Math.abs(box.max.z)));
-  const k = Math.min(1, 1.45 / Math.max(reach, 1e-6), 2.2 / Math.max(size.y, 1e-6));
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.length() / 2, 1e-6);
+  kFit = Math.min(1.25, 1.3 / radius);
   const pivot = new THREE.Group();
-  holo.position.y = -box.min.y;
+  holo.position.copy(centre).multiplyScalar(-1);
   pivot.add(holo);
-  pivot.scale.setScalar(k);
-  pivot.position.y = -1.05;
-  pivot.userData.height = size.y * k;
+  pivot.quaternion.copy(orient);
+  anchor.remove(...anchor.children);
   holo = pivot;
-  scene.add(holo);
-  holo.rotation.y = spin;
+  anchor.add(holo);
+  applyScale();
   reveal0 = performance.now();
   $('upright').hidden = !items.some((i) => i.kind === 'stl');
 }
-
-// ---------- the base: the projector the hologram stands on ----------
-const baseGroup = new THREE.Group();
-baseGroup.position.y = -1.08;
-function ringLine(r, op) { const g = new THREE.RingGeometry(r, r + 0.012, 128); const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x38d8ff, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; return m; }
-baseGroup.add(ringLine(1.45, 0.9), ringLine(1.25, 0.45), ringLine(0.85, 0.25));
-const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,212,255,.55)'); gr.addColorStop(1, 'rgba(0,212,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
-const glowDisc = new THREE.Mesh(new THREE.CircleGeometry(1.55, 64), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-glowDisc.rotation.x = -Math.PI / 2; glowDisc.position.y = -0.005;
-baseGroup.add(glowDisc);
-const baseHit = new THREE.Mesh(new THREE.CircleGeometry(1.6, 32), new THREE.MeshBasicMaterial({ visible: false }));
-baseHit.rotation.x = -Math.PI / 2; baseHit.position.y = 0.01;
-baseGroup.add(baseHit);
-scene.add(baseGroup);
 
 // ---------- pulling it apart ----------
 const EXPLODE_MS = 700;
@@ -222,6 +212,7 @@ function splitMesh(mesh) {
 }
 
 let hintText = '';
+let zonePx = 200; // how far from the middle a piece can be carried and still count as part of the hologram
 function collectParts() {
   parts = [];
   hintText = '';
@@ -254,6 +245,7 @@ function computeOffsets() {
   const wc = whole.getCenter(new THREE.Vector3());
   const ws = whole.getSize(new THREE.Vector3());
   const world = explodeOffsets(centres.map((c) => [c.x, c.y, c.z]), [wc.x, wc.y, wc.z], Math.max(ws.x, ws.y, ws.z), 0.9);
+  zonePx = 60 + PPU * Math.max(...centres.map((c, i) => c.distanceTo(wc) + Math.hypot(...world[i])), 0.5);
   parts.forEach((p, i) => {
     const inv = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().copy(p.obj.parent.matrixWorld).invert());
     p.off = new THREE.Vector3(...world[i]).applyMatrix3(inv); // the same push, in the piece's own space
@@ -279,7 +271,7 @@ function toggleExplode() {
   exploded = !exploded;
   $('explode').classList.toggle('on', exploded);
   document.body.classList.toggle('exploded', exploded);
-  $('hint2').textContent = exploded ? `Click a piece, then drag it out${hintText ? ` · ${hintText}` : ''}` : '';
+  $('hint2').textContent = exploded ? `Drag pieces around · far out takes one out · double-click puts it back${hintText ? ` · ${hintText}` : ''}` : '';
 }
 
 // What a piece looks like to a file: plain materials (the hologram shader cannot be saved), in the position it has when together.
@@ -304,31 +296,34 @@ function exportGlb(list, g) {
 }
 
 let extracting = false;
-async function extractSelected() {
-  if (!selected || extracting) return;
+// Takes a piece out of this hologram (it becomes its own, or joins the one it was let go over). The rest stays where it is, pulled apart.
+async function takeOut(part, at) {
+  if (extracting) return;
   extracting = true;
-  const part = selected;
   try {
     const g = itemWraps[part.item].userData.g;
     const same = parts.filter((p) => p.item === part.item);
     const rest = same.filter((p) => p !== part);
     const [partBytes, restBytes] = await Promise.all([exportGlb([part], g), rest.length ? exportGlb(rest, g) : null]);
-    relay.holoExtract({ item: part.item, name: part.name, part: new Uint8Array(partBytes), rest: restBytes ? new Uint8Array(restBytes) : null });
+    parts = parts.filter((p) => p !== part);
+    part.obj.removeFromParent();
+    if (selected === part) selected = null;
+    if (hovered === part) hovered = null;
+    relay.holoExtract({ item: part.item, name: part.name, part: new Uint8Array(partBytes), rest: restBytes ? new Uint8Array(restBytes) : null, x: at.x, y: at.y });
   } catch { $('err').textContent = 'Could not take that piece out.'; }
   extracting = false;
 }
 
-// ---------- pointer: turn the model, move the window by its base, scroll to resize, pick pieces ----------
+// ---------- pointer: turn the model every way, move the hologram by its name, scroll to resize, carry pieces ----------
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 let over = false;
-let dragging = null; // 'rotate' | 'move' | 'arm' (a selected piece that will come out when dragged)
+let dragging = null; // 'rotate' | 'move' | 'piece'
 let last = null;
-let downAt = null;
+let carried = null; // { part, outside, lastSent }
 
 function setRay(e) {
-  const r = cv.getBoundingClientRect();
-  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -((e.clientY / innerHeight) * 2 - 1));
   ray.setFromCamera(ndc, camera);
 }
 function pickPart(e) {
@@ -338,58 +333,127 @@ function pickPart(e) {
   return hit ? parts.find((p) => p.meshes.includes(hit.object)) : null;
 }
 function pick(e) {
+  const ui = document.elementFromPoint(e.clientX, e.clientY);
+  if (ui && ui.closest('#move, #title')) return 'move';
+  if (ui && ui.closest('.btn')) return 'ui';
   setRay(e);
-  if (ray.intersectObject(baseHit).length) return 'base';
   const meshes = [];
   holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
   if (ray.intersectObjects(meshes, false).length) return 'model';
-  const ui = document.elementFromPoint(e.clientX, e.clientY);
-  if (ui && ui.closest('.btn')) return 'ui';
   return null;
 }
 function setOver(on) { if (on !== over) { over = on; relay.holoHit(on); } }
+const nearStage = (e) => Math.abs(e.clientX - pos.x) < 260 && e.clientY > pos.y - 220 * userScale && e.clientY < pos.y + 170 * userScale + 120;
+// What a control does, shown above it while the pointer is on it (the window never takes focus, so the browser's own tooltips never appear).
+const tip = $('tip');
+function showTip(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-tip]');
+  if (!el || dragging) { tip.classList.remove('show'); return; }
+  const dyn = el.id === 'explode' && exploded ? 'Put it back together (or double-click)' : el.id === 'pin' && el.classList.contains('on') ? 'Let it go when I ask something else' : el.id === 'solid' && el.classList.contains('on') ? 'Back to hologram' : '';
+  tip.textContent = dyn || el.dataset.tip;
+  const r = el.getBoundingClientRect();
+  tip.classList.add('show');
+  const w = tip.offsetWidth;
+  tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  tip.style.top = `${r.top - 34}px`;
+}
 addEventListener('mousemove', (e) => {
-  const near = e.clientY > innerHeight * 0.45 || !!pick(e);
-  document.body.classList.toggle('near', near || !!dragging);
-  if (dragging) return;
+  showTip(e);
   const p = pick(e);
+  document.body.classList.toggle('near', nearStage(e) || !!p || !!dragging);
+  if (dragging) return;
   setOver(!!p);
   const part = p === 'model' ? pickPart(e) : null;
   setHover(part);
-  cv.style.cursor = p === 'base' ? 'move' : part ? 'pointer' : p === 'model' ? 'grab' : 'default';
+  cv.style.cursor = p === 'move' ? 'move' : part ? 'pointer' : p === 'model' ? 'grab' : 'default';
 });
-addEventListener('mouseleave', () => { if (!dragging) { document.body.classList.remove('near'); setHover(null); } });
+addEventListener('mouseleave', () => { tip.classList.remove('show'); if (!dragging) { document.body.classList.remove('near'); setHover(null); } });
 addEventListener('pointerdown', (e) => {
   const p = pick(e);
-  if (p === 'base') { dragging = 'move'; relay.holoDrag('start'); }
+  if (p === 'move' || (p === 'model' && e.altKey)) { dragging = 'move'; relay.holoDrag('start'); }
   else if (p === 'model') {
     const part = pickPart(e);
-    if (part && part === selected) { dragging = 'arm'; downAt = { x: e.clientX, y: e.clientY }; }
-    else { if (part) select(part); else if (selected) select(null); dragging = 'rotate'; last = e.clientX; cv.style.cursor = 'grabbing'; }
+    if (part && !e.shiftKey && explodeT > 0.9) { select(part); dragging = 'piece'; carried = { part, outside: false, sent: 0 }; last = { x: e.clientX, y: e.clientY }; cv.style.cursor = 'grabbing'; }
+    else { if (selected) select(null); dragging = 'rotate'; last = { x: e.clientX, y: e.clientY }; cv.style.cursor = 'grabbing'; }
   }
   if (dragging) { e.preventDefault(); document.body.setPointerCapture?.(e.pointerId); spinPause = true; }
 });
+const qDrag = new THREE.Quaternion();
+const axisX = new THREE.Vector3(1, 0, 0);
+const axisY = new THREE.Vector3(0, 1, 0);
+const tmpA = new THREE.Vector3();
+const tmpB = new THREE.Vector3();
 addEventListener('pointermove', (e) => {
-  if (dragging === 'rotate') { spin += (e.clientX - last) * 0.012; last = e.clientX; holo.rotation.y = spin; }
-  else if (dragging === 'arm' && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 12) {
-    dragging = 'move'; // it comes out: the new hologram follows the pointer until it is let go
-    extractSelected();
+  if (dragging === 'rotate') {
+    // up, down, sideways and diagonal alike: the model turns the way the pointer pushes it, about the screen's own axes
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    last = { x: e.clientX, y: e.clientY };
+    qDrag.setFromAxisAngle(axisY, dx * 0.011).multiply(new THREE.Quaternion().setFromAxisAngle(axisX, dy * 0.011));
+    holo.quaternion.premultiply(qDrag).normalize();
+    orient.copy(holo.quaternion);
+  } else if (dragging === 'piece' && carried) {
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    last = { x: e.clientX, y: e.clientY };
+    const part = carried.part;
+    // the piece goes where the pointer goes, in the plane of the screen, whatever way the hologram is turned
+    holo.updateMatrixWorld(true);
+    part.obj.getWorldPosition(tmpA);
+    tmpB.copy(tmpA).add(new THREE.Vector3(dx / PPU, -dy / PPU, 0));
+    const lp = part.obj.parent.worldToLocal(tmpB.clone());
+    part.off.add(lp.sub(part.obj.position));
+    part.obj.position.copy(part.base).add(part.off);
+    const c = new THREE.Box3().setFromObject(part.obj).getCenter(new THREE.Vector3()).project(camera);
+    const px = (c.x + 1) / 2 * innerWidth, py = (1 - c.y) / 2 * innerHeight;
+    carried.at = { x: px, y: py };
+    carried.outside = Math.hypot(px - pos.x, py - pos.y) > zonePx;
+    const now = performance.now();
+    if (now - carried.sent > 40) { carried.sent = now; relay.holoPiece({ phase: 'move', x: px, y: py, outside: carried.outside }).then((r) => { if (carried) { carried.over = !!r?.over; $('merge').textContent = r?.over ? 'Release to combine' : 'Release to take it out'; document.body.classList.toggle('merging', !!r?.over || carried.outside); } }).catch(() => {}); }
   }
 });
-function endDrag() { if (!dragging) return; if (dragging === 'move') relay.holoDrag('end'); dragging = null; spinPause = false; }
+async function endDrag() {
+  if (!dragging) return;
+  const d = dragging;
+  dragging = null;
+  spinPause = false;
+  if (d === 'move') { relay.holoDrag('end'); return; }
+  if (d === 'piece' && carried) {
+    const c = carried;
+    carried = null;
+    document.body.classList.remove('merging');
+    $('merge').textContent = 'Release to combine';
+    const r = await relay.holoPiece({ phase: 'drop', x: c.at?.x ?? pos.x, y: c.at?.y ?? pos.y, outside: c.outside }).catch(() => null);
+    if (r?.take) takeOut(c.part, c.at || pos);
+    else relay.holoPiece({ phase: 'cancel' });
+  }
+}
 addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
 addEventListener('blur', endDrag);
 addEventListener('wheel', (e) => { e.preventDefault(); userScale = Math.min(3, Math.max(0.4, userScale * Math.exp(-e.deltaY * 0.0015))); applyScale(); relay.holoScale(userScale); }, { passive: false });
-addEventListener('dblclick', () => { userScale = 1; spin = 0; applyScale(); relay.holoScale(1); });
+addEventListener('dblclick', (e) => { if (!pick(e) || pick(e) === 'ui' || pick(e) === 'move') return; toggleExplode(); });
 let spinPause = false;
-function applyScale() { camera.position.z = 6.4 / userScale; camera.lookAt(0, -0.1, 0); }
+
+// The model's size, and the box that holds the name and the controls round it, follow the zoom.
+function applyScale() {
+  holo.scale.setScalar(kFit * userScale);
+  const R = 150 * userScale + 40;
+  const st = $('stage');
+  st.style.left = `${pos.x - 230}px`; st.style.top = `${pos.y - R}px`; st.style.height = `${2 * R}px`;
+}
+let anchorY = 0;
+function setPos(x, y) {
+  pos.x = x; pos.y = y;
+  anchorY = -(y - innerHeight / 2) / PPU;
+  anchor.position.set((x - innerWidth / 2) / PPU, anchorY, 0);
+  applyScale();
+}
 
 // ---------- controls ----------
 $('close').onclick = () => relay.holoClose();
 $('pin').onclick = () => { const on = !$('pin').classList.contains('on'); $('pin').classList.toggle('on', on); relay.holoPin(on); };
 $('solid').onclick = () => { solid = !solid; $('solid').classList.toggle('on', solid); rebuild().catch(() => {}); relay.holoSolid(solid); };
 $('explode').onclick = toggleExplode;
+$('reset').onclick = () => { orient.identity(); holo.quaternion.identity(); userScale = 1; applyScale(); relay.holoScale(1); };
 $('upright').onclick = () => { upright = (upright + 1) % 3; rebuild().catch(() => {}); };
 $('prev').onclick = () => relay.holoOption(-1);
 $('next').onclick = () => relay.holoOption(1);
@@ -402,7 +466,7 @@ function setOptions(o) {
 
 relay.onHolo((m, d) => {
   if (m === 'init' || m === 'items') {
-    if (m === 'init') { solid = !!d.solid; userScale = d.scale || 1; applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
+    if (m === 'init') { solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
     items = d.items;
     $('title').textContent = d.title || '';
     $('credit').textContent = items.map((i) => i.credit).filter(Boolean).join('  ·  ');
@@ -410,22 +474,33 @@ relay.onHolo((m, d) => {
     setOptions(d.options);
     rebuild().catch(() => { $('err').textContent = 'Could not draw that model.'; });
   } else if (m === 'merge-hint') { document.body.classList.toggle('merging', !!d); $('merge').textContent = d === 'fit' ? 'Fitting…' : 'Release to combine'; }
+  else if (m === 'pos') setPos(d.x, d.y);
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
   else if (m === 'error') $('err').textContent = d;
 });
 
-function resize() { const w = cv.clientWidth, h = cv.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.position.set(0, 0, h / (2 * PPU * Math.tan(rad(FOV / 2)))); // far enough that a unit is PPU pixels at the middle of the scene
+  camera.updateProjectionMatrix();
+  setPos(pos.x, pos.y);
+}
 addEventListener('resize', resize);
 resize();
 
 let prev = performance.now();
+const qSpin = new THREE.Quaternion();
 function frame(now) {
   const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
   uniforms.time.value = now / 1000;
   const t = Math.min(1, (now - reveal0) / 1100);
-  uniforms.reveal.value = -1.2 + (1 - Math.pow(1 - t, 3)) * 4.4; // the build sweep
-  if (!spinPause) { spin += dt * 0.35; holo.rotation.y = spin; }
-  holo.position.y = -1.05 + Math.sin(now / 900) * 0.025;
+  const span = 1.3 * kFit * userScale;
+  uniforms.originY.value = anchor.position.y - span;
+  uniforms.reveal.value = -0.2 + (1 - Math.pow(1 - t, 3)) * (2 * span + 0.6); // the build sweep, from the bottom up
+  if (!spinPause && !exploded && !carried) { qSpin.setFromAxisAngle(axisY, dt * 0.35); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
+  anchor.position.y = anchorY + Math.sin(now / 900) * 0.03;
   if (parts.length) {
     const goal = exploded ? 1 : 0;
     explodeT += Math.sign(goal - explodeT) * Math.min(Math.abs(goal - explodeT), (dt * 1000) / EXPLODE_MS);
@@ -440,13 +515,17 @@ function frame(now) {
     if (t >= 1) intros.splice(i, 1);
   }
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
-  baseGroup.children[0].rotation.z += dt * 0.25;
   renderer.render(scene, camera);
-  // A hook for the real-window tests: where each piece is on screen, and the state of the pull-apart. Nothing here changes anything.
-window.__holoTest = {
-  state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length }),
-  where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); const r = cv.getBoundingClientRect(); return { x: (c.x + 1) / 2 * r.width + r.left, y: (1 - c.y) / 2 * r.height + r.top }; }
-};
-requestAnimationFrame(frame);
+  requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+// A hook for the real-window tests: where each piece is on screen, and the state of the pull-apart. Nothing here changes anything.
+window.__holoTest = {
+  state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length, pos: { ...pos }, zonePx, q: holo.quaternion.toArray() }),
+  where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
+  fps: () => fps,
+  carried: () => (carried ? { at: carried.at, outside: carried.outside, over: carried.over, part: parts.indexOf(carried.part) } : null)
+};
+let fps = 0; let fpsN = 0; let fpsT = performance.now();
+const _frame = frame;
+requestAnimationFrame(function counted(now) { fpsN++; if (now - fpsT > 1000) { fps = fpsN; fpsN = 0; fpsT = now; } requestAnimationFrame(counted); });
+requestAnimationFrame(_frame);

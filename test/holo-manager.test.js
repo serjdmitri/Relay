@@ -66,14 +66,15 @@ test('stepping through options loads the next model and wraps round', async () =
   assert.equal(lastSent(wins[0], 'items')[2].options.index, 0);
 });
 
-test('dragging by the base moves the window, and dropping on another combines them', async () => {
+test('dragging by the name moves the hologram, and dropping on another combines them', async () => {
   const { m, wins, cur, tick, saved } = make();
   const a = await m.show({ title: 'Skull', items: [stl('Skull')], x: 100, y: 100 });
   const b = await m.show({ title: 'Heart', items: [stl('Heart')], x: 900, y: 100 });
   cur.x = 150; cur.y = 150;
   m.startDrag(m.get(a));
   cur.x = 600; cur.y = 200; tick();
-  assert.deepEqual([wins[0].bounds.x, wins[0].bounds.y], [550, 150], 'it follows the pointer');
+  assert.deepEqual([m.get(a).x, m.get(a).y], [550, 150], 'it follows the pointer');
+  assert.deepEqual(lastSent(wins[0], 'pos')[2], { x: 550, y: 150 }, 'and the page is told where, in its own pixels');
   cur.x = 1000; cur.y = 200; tick(); // over the heart
   assert.deepEqual(lastSent(wins[1], 'merge-hint')[2], true, 'the one underneath is told to show it will combine');
   m.stopDrag();
@@ -121,7 +122,8 @@ test('pinned ones stay when the rest are taken away, are saved as links, and com
   assert.equal(back.title, 'Skull');
   assert.equal(back.pinned, true);
   assert.equal(back.scale, 1.4);
-  assert.deepEqual([second.wins[0].bounds.x, second.wins[0].bounds.y], [300, 120]);
+  assert.deepEqual([back.x, back.y], [300, 120]);
+  assert.deepEqual(second.wins[0].bounds, { x: 0, y: 0, width: 1800, height: 1100 }, 'the window covers the display');
   assert.equal(back.items[0].bytes.toString(), 'bytes of https://upload.wikimedia.org/Skull.stl');
   m.close(keep);
   assert.deepEqual(saved(), [], 'closing a pinned one forgets it');
@@ -210,22 +212,53 @@ test('if the model cannot answer, the pieces still combine', async () => {
   assert.equal(m.get(b).items[1].placement, null);
 });
 
-test('a piece pulled out becomes its own hologram under the pointer, and the rest of the first stays', async () => {
-  const { m, wins, cur, files } = fitted();
-  const a = await m.show({ title: 'Robot', items: [{ kind: 'glb', title: 'Robot', credit: 'c', bytes: Buffer.from('whole'), file: '/cache/0.glb' }], x: 300, y: 100 });
-  cur.x = 700; cur.y = 400;
-  const id = await m.extract(m.get(a), { item: 0, name: 'Piece 2', part: new Uint8Array(Buffer.from('arm')), rest: new Uint8Array(Buffer.from('body')) });
+test('a piece let go outside becomes its own hologram right there, and the rest of the first stays', async () => {
+  const { m, files } = fitted();
+  const a = await m.show({ title: 'Robot', items: [{ kind: 'glb', title: 'Robot', credit: 'c', bytes: Buffer.from('whole'), file: '/cache/0.glb' }], x: 300, y: 300 });
+  const id = await m.extract(m.get(a), { item: 0, name: 'Piece 2', part: new Uint8Array(Buffer.from('arm')), rest: new Uint8Array(Buffer.from('body')), x: 900, y: 700 });
   const piece = m.get(id);
   assert.equal(piece.title, 'Piece 2 of Robot');
   assert.equal(piece.items[0].bytes.toString(), 'arm');
-  assert.deepEqual([wins[1].bounds.x, wins[1].bounds.y], [470, -32], 'the new one is centred on the pointer, its base under it');
+  assert.deepEqual([piece.x, piece.y], [900, 700], 'its middle is where it was let go');
   assert.equal(m.get(a).items[0].bytes.toString(), 'body', 'the first keeps the rest');
   assert.deepEqual(files, ['arm', 'body']);
-  assert.ok(m.dragging && m.dragging.id === id, 'it follows the pointer until it is let go');
-  m.stopDrag();
+  assert.equal(m.dragging, null, 'nothing follows the pointer: it was let go');
   // taking out the last piece closes the first
-  const only = await m.show({ title: 'Single', items: [{ kind: 'glb', title: 'Single', credit: 'c', bytes: Buffer.from('x') }] });
-  await m.extract(m.get(only), { item: 0, name: 'Piece 1', part: new Uint8Array(Buffer.from('p')), rest: null });
+  const only = await m.show({ title: 'Single', items: [{ kind: 'glb', title: 'Single', credit: 'c', bytes: Buffer.from('x') }], x: 1400, y: 300 });
+  await m.extract(m.get(only), { item: 0, name: 'Piece 1', part: new Uint8Array(Buffer.from('p')), rest: null, x: 100, y: 900 });
   assert.equal(m.get(only), null);
-  m.stopDrag();
+});
+
+test('a piece let go over another hologram joins it, flying in from where it was let go', async () => {
+  const { m, wins, asked } = fitted();
+  const a = await m.show({ title: 'Robot', items: [{ kind: 'glb', title: 'Robot', credit: 'c', bytes: Buffer.from('whole') }], x: 300, y: 300 });
+  const b = await m.show({ title: 'Skull', items: [stl('Skull')], x: 900, y: 300 });
+  const hover = m.pieceMove(m.get(a), { x: 960, y: 320 }, false);
+  assert.deepEqual(hover, { over: true, take: true }, 'over another hologram: it will be taken');
+  assert.equal(lastSent(wins[1], 'merge-hint')[2], true);
+  assert.deepEqual(m.pieceMove(m.get(a), { x: 500, y: 320 }, false), { over: false, take: false }, 'inside its own, not over another: it stays a part');
+  assert.equal(lastSent(wins[1], 'merge-hint')[2], false);
+  assert.deepEqual(m.pieceMove(m.get(a), { x: 500, y: 800 }, true), { over: false, take: true }, 'far out: it is taken out');
+  const id = await m.extract(m.get(a), { item: 0, name: 'Piece 1', part: new Uint8Array(Buffer.from('arm')), rest: new Uint8Array(Buffer.from('body')), x: 960, y: 320 });
+  assert.equal(id, b);
+  assert.equal(m.get(b).items.length, 2);
+  assert.equal(asked.length, 1, 'the model was asked where it goes');
+  assert.ok(m.get(b).items[1].from[0] > 0, 'it comes in from the right, where it was let go');
+});
+
+test('a hologram carried to another display moves its window there', async () => {
+  const wins = [];
+  const cur = { x: 0, y: 0 };
+  const timers = [];
+  const screens = [{ x: 0, y: 0, width: 1800, height: 1100 }, { x: 1800, y: 0, width: 2560, height: 1440 }];
+  const m = new HoloManager({
+    createWindow: () => { const w = fakeWin(); wins.push(w); return w; }, cursor: () => cur, area: () => screens[0], displayFor: (p) => screens.find((d) => p.x >= d.x && p.x < d.x + d.width) || screens[0],
+    download: async (u) => Buffer.from(u), saved: () => [], save: () => {}, setTimer: (fn) => { timers.push(fn); return 1; }, clearTimer: () => {}
+  });
+  const a = await m.show({ title: 'A', items: [stl('A')], x: 1700, y: 500 });
+  cur.x = 1700; cur.y = 500;
+  m.startDrag(m.get(a));
+  cur.x = 2300; timers.at(-1)();
+  assert.deepEqual(wins[0].bounds, screens[1], 'the window is on the display it is over');
+  assert.deepEqual(lastSent(wins[0], 'pos')[2], { x: 500, y: 500 }, 'and the position is in that display\'s own pixels');
 });
