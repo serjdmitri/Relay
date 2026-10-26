@@ -121,7 +121,19 @@ Ask "where do I turn on Night Shift?" or "walk me through connecting a printer".
   <sub>The real overlay page, rendered over a sample wallpaper.</sub>
 </p>
 
-When you ask by voice, a big Jarvis arc reactor appears in the middle of your screen (no window behind it) and follows your voice; your words appear under it. When you stop talking it shrinks to the top left corner and keeps working there until the task is done, then the answer appears beside it. A small arrow follows your pointer like a second cursor and flies to what Relay points at; put it away with General > Cursor buddy. Turn on **Listen for “Hey Jarvis”** (General, or the menu bar icon) to start without a key: Relay listens on this Mac for your wake phrase (nothing is recorded or sent), chimes, then takes your request and stops on its own when you stop talking. Typing (⌥T) and Allow / Cancel questions still use the pill.
+When you ask by voice, a big Jarvis arc reactor appears in the middle of your screen (no window behind it) and follows your voice; your words appear under it. When you stop talking it stays there while Relay works in the background, shows the answer, and goes away when the task is done. A small arrow follows your pointer like a second cursor and flies to what Relay points at; put it away with General > Cursor buddy. Turn on **Listen for “Hey Jarvis”** (General, or the menu bar icon) to start without a key: Relay listens on this Mac for your wake phrase (nothing is recorded or sent), chimes, then takes your request and stops on its own when you stop talking. Typing (⌥T) and Allow / Cancel questions still use the pill.
+
+### Several asks at once
+Ask for another thing while Relay is working: tap the ask key again and say it. Requests run one after another, and the ones you asked this round are listed as bullets on the middle left of the screen (the running one bright, waiting ones dim, finished ones ticked). Esc stops the work and drops the waiting ones.
+
+### Interrupt it
+Esc, ⌥T, or starting to talk again cuts Relay off mid-sentence; the menu bar icon has Stop Speaking too. (Relay does not listen for your voice while it talks, so it cannot hear "stop".)
+
+### Drop files on it
+Drag files or a folder onto the menu bar icon (or anywhere on the Relay window) and Relay asks what to do with them. It can read text, PDFs, Word and RTF files, and pictures, and only the ones you dropped. They stay available for ten minutes.
+
+### Dictation learns your words
+After you dictate, Relay looks at the same text in the field a few seconds later. A word you fixed by hand, twice, becomes a word fix in Vocabulary. Only the changed words are kept, password fields are never read, and General > Learn my words from corrections turns it off.
 
 ### Move windows
 "Snap this window to the left", "put Chrome on the right half", "move Spotify to the top right corner", "maximize this window", "center Notes", "right third". Instant, no model, and "undo that" puts the window back.

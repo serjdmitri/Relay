@@ -299,7 +299,7 @@ const PAGES = {
     const card = h('<div class="card flat"></div>');
     const talk = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Talking</div><div class="seg">${[['tap-or-hold', 'Tap or hold'], ['tap', 'Tap'], ['hold', 'Hold']].map(([v, l]) => `<button data-v="${v}" class="${S.settings.talking === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Tap to start and tap to send, or hold while you talk and let go.</div></div>`);
     talk.onclick = (e) => e.target.dataset.v && relay.set('settings.talking', e.target.dataset.v);
-    card.append(talk, toggleRow('Play sounds', '', 'settings.playSounds'), toggleRow('Recent asks on the left edge', 'Rest the pointer on the left edge of the screen to open a list of what you asked lately. Click one to ask it again.', 'settings.recent'), toggleRow('Lower the volume while I talk', 'Turns the volume down to 30% while Relay listens and puts it back exactly when you stop. Off: your volume is never touched.', 'settings.duckAudio'), toggleRow('Dictation', 'Right ⌘ types what you say. Off: the shortcut is disabled.', 'settings.dictation'), toggleRow('Keep dictation history', 'Off: dictated text is typed but not saved in History.', 'settings.saveDictation'));
+    card.append(talk, toggleRow('Play sounds', '', 'settings.playSounds'), toggleRow('Recent asks on the left edge', 'Rest the pointer on the left edge of the screen to open a list of what you asked lately. Click one to ask it again.', 'settings.recent'), toggleRow('Lower the volume while I talk', 'Turns the volume down to 30% while Relay listens and puts it back exactly when you stop. Off: your volume is never touched.', 'settings.duckAudio'), toggleRow('Dictation', 'Right ⌘ types what you say. Off: the shortcut is disabled.', 'settings.dictation'), toggleRow('Learn my words from corrections', 'After you dictate, Relay looks at that text in the field. A word you fixed by hand twice becomes a word fix in Vocabulary. Only the changed words are kept; password fields are never read.', 'settings.learnWords'), toggleRow('Keep dictation history', 'Off: dictated text is typed but not saved in History.', 'settings.saveDictation'));
     c.append(card);
 
     title('Ask Relay');
@@ -748,3 +748,11 @@ window.addEventListener('keyup', (e) => {
     if (p.accessibility !== perms.accessibility || p.screen !== perms.screen || p.micStatus !== perms.micStatus) { perms = p; render(); }
   }, 2000);
 })();
+
+// Files dropped anywhere on this window go to Relay, which asks what to do with them.
+addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+addEventListener('drop', (e) => {
+  if (!e.dataTransfer?.files?.length) return;
+  e.preventDefault();
+  window.relay.dropFiles?.(e.dataTransfer.files);
+});

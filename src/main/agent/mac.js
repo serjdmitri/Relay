@@ -445,6 +445,15 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       return parseFrame(out);
     },
     findText,
+    // The text of the field being typed in, with the app it is in. null when there is none or it cannot be read.
+    async focusedText() {
+      if (!hasAx()) return null;
+      const out = String(await ax(['focused']));
+      const nl = out.indexOf('\n');
+      if (nl < 0) return null;
+      const value = out.slice(nl + 1).replace(/\n$/, '');
+      return value === 'none' ? null : { app: out.slice(0, nl), text: value };
+    },
     // All the text in a picture ({ data: base64 }), read on this Mac. For models that cannot see images.
     async readText(shot) {
       if (!hasAx()) return '';

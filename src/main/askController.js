@@ -17,6 +17,7 @@ const { createMac } = require('./agent/mac');
 const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain } = require('./meta');
+const { corrections, noteCorrection } = require('./learn');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
@@ -100,6 +101,10 @@ class AskController {
     this.lastLevelPush = 0;
     this.lastApps = [];
     this.lastDictation = null;
+    this.tasks = []; // what was asked this round: { id, text, status: 'queued' | 'running' | 'done' | 'failed' }, shown as bullets
+    this.queue = []; // requests waiting for the one that is running
+    this.runningTask = null;
+    this.pendingFinish = null; // a task finished while you were asking for the next one
     this.lastAction = null; // { kind: quick | model | dictation, ts, undo? }: what "undo that" would reverse
     this.lastRequestText = '';
     this.lastLearned = null; // { text, steps } for the last model request that can be repeated with no model
@@ -225,7 +230,7 @@ class AskController {
 
   captionState(extra) {
     const sc = require('./shortcuts');
-    return { state: this.state, mode: this.mode, askLabel: sc.label(this.store.get('settings.shortcuts.ask')), dictateLabel: sc.label(this.store.get('settings.shortcuts.dictate')), ...extra };
+    return { state: this.state, mode: this.mode, askLabel: sc.label(this.store.get('settings.shortcuts.ask')), dictateLabel: sc.label(this.store.get('settings.shortcuts.dictate')), tasks: this.taskList(), ...extra };
   }
 
   reveal(extra = {}, mode = 'inactive') {
@@ -272,6 +277,7 @@ class AskController {
   }
 
   push(extra = {}) {
+    if (extra.label !== undefined && this.state === 'working') this.workView = { label: extra.label, text: extra.text ?? this.workView?.text };
     if (!extra.hide && this.passiveUI()) {
       if (this.visible) this.hideSoft();
       this.overlay.hud(this.captionState(extra));
@@ -332,6 +338,8 @@ class AskController {
       else if (kind === 'hold-end') this.finishMark();
       return;
     }
+    // Any of these cuts a spoken reply off mid-sentence, whatever else it then does (see interruptSpeech).
+    if (name === 'cancel' || (name === 'type' && kind === 'press')) this.interruptSpeech();
     if (name === 'cancel') {
       this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
@@ -355,7 +363,12 @@ class AskController {
     if (kind === 'tap' && mode === 'hold') return;
     if ((kind === 'hold-start' || kind === 'hold-end') && mode === 'tap') return;
 
-    if (this.state === 'working' || this.state === 'confirm') {
+    if (this.state === 'working') {
+      // Another request while one is running: Relay listens, and it joins the list. Esc stops the work.
+      if (name === 'ask' && start) return this.listen('ask', kind === 'hold-start');
+      return;
+    }
+    if (this.state === 'confirm') {
       if (name === 'ask' && start) this.stop();
       return;
     }
@@ -376,6 +389,81 @@ class AskController {
       if (this.state === 'idle' || this.state === 'done') return this.listen(name, kind === 'hold-start');
       if (this.state === 'input' && name === 'ask' && kind === 'tap') return this.requestSubmit();
     }
+  }
+
+  // Learning your words: a little after typing, look at the same text in the field. A word you fixed by hand is noted, and on
+  // its second sighting it becomes a word fix (Vocabulary). Only the words that changed are kept, never the text around them.
+  watchCorrections(typed, app) {
+    if (this.store.get('settings.learnWords') === false || !this.mac.focusedText || !this.onLearn) return;
+    clearTimeout(this.learnTimers?.[0]);
+    clearTimeout(this.learnTimers?.[1]);
+    const seen = new Set(); // one edit seen at both checks counts once
+    const check = async () => {
+      const f = await this.mac.focusedText().catch(() => null);
+      if (!f || (app && f.app && f.app.toLowerCase() !== String(app).toLowerCase())) return;
+      const counts = this.store.get('corrections') || {};
+      for (const c of corrections(typed, f.text)) {
+        const key = `${c.from.toLowerCase()}>${c.to}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const rule = noteCorrection(counts, c);
+        if (rule && !(this.store.get('replacements') || []).some((r) => r.from.toLowerCase() === rule.from)) this.onLearn(rule.from, rule.to);
+      }
+      this.store.set('corrections', counts);
+    };
+    this.learnTimers = [setTimeout(check, 12000), setTimeout(check, 45000)];
+  }
+
+  // ----- files dropped on the menu bar icon or the window -----
+  freshFiles() {
+    return this.files && Date.now() - this.files.ts < 600000 ? this.files : null;
+  }
+
+  filesHint() {
+    const f = this.freshFiles();
+    return f ? { paths: f.paths, ageSec: Math.round((Date.now() - f.ts) / 1000) } : null;
+  }
+
+  // Files were dropped: remember them for the next request and ask what to do with them.
+  async attachFiles(paths) {
+    const list = [...new Set((paths || []).filter((p) => typeof p === 'string' && p))].slice(0, 12);
+    if (!list.length) return;
+    this.files = { ts: Date.now(), paths: list };
+    const names = list.map((p) => path.basename(p));
+    const hint = `${list.length === 1 ? names[0] : `${list.length} files`} ready. Type what to do with ${list.length === 1 ? 'it' : 'them'}, or Esc and say it.`;
+    if (this.state === 'idle' || this.state === 'done') await this.open({ typed: true, hint });
+    else this.notice(`${list.length === 1 ? names[0] : `${list.length} files`} ready for your next request.`, 'done');
+  }
+
+  // ----- several requests at once: one runs, the rest wait, and all are listed on the left -----
+  taskList() {
+    return this.tasks.map((t) => ({ id: t.id, text: t.text.length > 70 ? `${t.text.slice(0, 69)}…` : t.text, status: t.status }));
+  }
+
+  enqueue(text, opts = {}) {
+    const task = { id: crypto.randomUUID(), text: opts.shown || text, status: 'queued' };
+    this.tasks.push(task);
+    this.queue.push({ id: task.id, text, opts });
+    this.sound('Tink');
+    this.resumeWork();
+  }
+
+  // Back to showing the work in progress (after asking for another request, or giving up on one).
+  resumeWork() {
+    if (!this.runningTask) {
+      const p = this.pendingFinish; // it finished while you were asking: show how it ended
+      if (p) { this.pendingFinish = null; this.state = 'done'; this.push({ reply: p.reply, status: p.status }); clearTimeout(this.doneTimer); this.doneTimer = setTimeout(() => { if (this.state === 'done') this.close(); }, Math.min(9000, 2200 + p.reply.length * 45)); return; }
+      return this.close();
+    }
+    this.state = 'working';
+    this.reveal({ ...(this.workView || { label: 'Working' }) }, 'inactive');
+  }
+
+  // Esc, the typing key, or starting to talk stops Relay mid-sentence. True when something was being said.
+  interruptSpeech() {
+    const was = !!this.speaker?.speaking;
+    if (was) this.speaker.stop();
+    return was;
   }
 
   // The mark key was released: look at what was circled and keep it for the next request.
@@ -404,6 +492,11 @@ class AskController {
   cancelAll() {
     this.speaker?.stop();
     this.overlay.hide();
+    if (this.runningTask && ['listening', 'finishing', 'input'].includes(this.state)) {
+      this.speech.cancel();
+      this.unduck();
+      return this.resumeWork(); // the work goes on; only the new ask is dropped
+    }
     if (this.state === 'working' || this.state === 'confirm') return this.stop();
     if (this.state === 'listening' || this.state === 'finishing') {
       this.speech.cancel();
@@ -413,7 +506,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -548,6 +641,7 @@ class AskController {
     this.unduck();
     this.speech.cancel();
     if (this.state === 'idle') return;
+    if (this.runningTask) return this.resumeWork();
     // Fall back to the typing box so the request is not lost.
     this.state = 'input';
     this.mode = 'type';
@@ -569,7 +663,7 @@ class AskController {
     }
     this.unduck();
     if (this.state !== 'finishing') return; // cancelled
-    if (!text) return this.close(); // heard nothing: the reactor just fades away where it is, it does not fly to the corner
+    if (!text) return this.runningTask ? this.resumeWork() : this.close(); // heard nothing: the reactor just fades away where it is
     text = applyReplacements(text, this.store.get('replacements'));
     if (this.mode === 'dictate') return this.insertDictation(text);
     this.state = 'input';
@@ -600,6 +694,7 @@ class AskController {
         await this.mac.pressKeys('return');
       }
       this.lastDictation = { id: entry.id, ts: Date.now(), app, returned: shaped.pressReturn };
+      this.watchCorrections(shaped.text, front || app);
       this.lastAction = { kind: 'dictation', ts: Date.now() };
       this.sound('Pop');
     } catch (e) {
@@ -639,7 +734,7 @@ class AskController {
   }
 
   // ----- lifecycle -----
-  async open({ typed = false } = {}) {
+  async open({ typed = false, hint = '' } = {}) {
     clearTimeout(this.doneTimer);
     if (this.state === 'working' || this.state === 'confirm') return;
     this.speaker?.stop();
@@ -652,13 +747,14 @@ class AskController {
     await this.ready;
     this.state = 'input';
     win.setFocusable(true);
-    this.reveal({ typed: true, reset: true }, 'focus');
+    this.reveal({ typed: true, reset: true, ...(hint ? { hint } : {}) }, 'focus');
     this.sound('Tink');
   }
 
   close() {
     clearTimeout(this.doneTimer);
     this.state = 'idle';
+    if (!this.runningTask) { this.tasks = []; this.queue = []; this.pendingFinish = null; }
     this.overlay.hud({ hide: true });
     this.dropWarm();
     this.hideSoft();
@@ -670,6 +766,8 @@ class AskController {
   }
 
   stop() {
+    this.queue = [];
+    this.tasks = this.tasks.filter((t) => t.status !== 'queued');
     this.abort?.abort();
     if (this.pendingConfirm) {
       this.pendingConfirm(false);
@@ -679,7 +777,8 @@ class AskController {
 
   async submit(raw) {
     const text = String(raw || '').trim();
-    if (!text) return this.close();
+    if (!text) return this.runningTask ? this.resumeWork() : this.close();
+    if (this.runningTask && this.state === 'working') return this.enqueue(text); // typed or re-asked while one is running
     if (this.state !== 'input') return;
 
     if (!this.store.get('settings.actEnabled')) {
@@ -695,6 +794,13 @@ class AskController {
   // opts.shown: what to show and record instead of the text itself, for requests Relay makes on its own.
   async handleText(text, opts = {}) {
     this.ensureWindow(); // the pill window is created even when the ring shows everything, because other code reads it
+    if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
+    if (!opts.drain) { this.queue = []; this.tasks = []; }
+    if (!opts.shown) {
+      const waiting = opts.drain && opts.drain !== true ? opts.drain : null; // a task that was already on the list
+      this.runningTask = waiting || { id: crypto.randomUUID(), text, status: 'running' };
+      if (!waiting) this.tasks.push(this.runningTask);
+    }
     const routines = this.store.get('routines');
     const cmd = parseCommand(text, routines, { recording: !!this.recording });
     this.state = 'working';
@@ -956,7 +1062,7 @@ class AskController {
         }
         const route = routeModel(text, model.claudeModel);
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal });
         return result;
       } catch (e) {
@@ -970,7 +1076,7 @@ class AskController {
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
-      frontmost: this.prevApp, runningApps, mark: this.markHint(),
+      frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'),
       firefoxConnected: this.bridge.isConnected(), screen: display.size, visionCapable: vision
     });
@@ -1004,16 +1110,33 @@ class AskController {
     this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}) });
     this.store.set('lastReply', reply);
     this.abort = null;
+    if (this.runningTask) { this.runningTask.status = res.status === 'done' ? 'done' : 'failed'; this.runningTask = null; }
+    this.onChange();
+    // Asking for the next one right now: remember how this one ended and leave the screen to the new ask.
+    if (['listening', 'finishing', 'input'].includes(this.state)) {
+      this.pendingFinish = { reply, status: res.status };
+      this.push({});
+      return res;
+    }
+    const next = this.queue.shift();
+    if (next && res.status !== 'stopped') { // the next waiting request starts, and the reactor stays where it is
+      const task = this.tasks.find((t) => t.id === next.id);
+      if (task) task.status = 'running';
+      this.state = 'working';
+      this.sound('Pop');
+      this.handleText(next.text, { ...next.opts, drain: task || true });
+      return res;
+    }
+    this.pendingFinish = null;
     this.state = 'done';
     this.push({ reply, status: res.status });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     if (this.store.get('settings.speakReplies') && res.status === 'done') this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
-    this.onChange();
     clearTimeout(this.doneTimer);
     this.doneTimer = setTimeout(() => {
       if (this.state === 'done') this.close();
-    }, Math.min(12000, 4000 + reply.length * 40));
+    }, Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes
     return res;
   }
 

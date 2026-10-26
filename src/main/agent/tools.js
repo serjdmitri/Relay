@@ -3,6 +3,7 @@ const web = require('./web');
 const { toGlobal, normalizeShapes, guideSteps, KINDS } = require('../overlayGeometry');
 const { Guide } = require('../guide');
 const { layoutRect, pickArea, NAMES: WINDOW_NAMES } = require('../windows');
+const { readDropped } = require('./files');
 
 const str = (description) => ({ type: 'string', description });
 const num = (description) => ({ type: 'number', description });
@@ -12,7 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -276,6 +277,20 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       run: (i) => mac.runShell(i.command)
     }
   ];
+
+  // Files dropped on Relay (the menu bar icon, or its window): readable by name, and nothing else on the disk.
+  tools.push({
+    name: 'read_file',
+    description: 'Read a file or folder the user dropped on Relay: text, PDF, Word/RTF/HTML, or a picture. Only the dropped files (and what is inside a dropped folder) can be read.',
+    input_schema: obj({ path: str('Absolute path of a dropped file or a file inside a dropped folder') }, ['path']),
+    describe: (i) => `Reading ${String(i.path || '').split('/').pop()}`,
+    run: async (i) => {
+      const dropped = getFiles();
+      if (!dropped.length) return 'The user has not dropped any files on Relay.';
+      const r = await readDropped(i.path, dropped);
+      return r.image && visionCapable ? r : `${r.text}${r.image ? '\n(This model cannot see pictures.)' : ''}`;
+    }
+  });
 
   // What the user marked with the mark key: a picture of that area, or its text for a model that cannot see images.
   tools.push({

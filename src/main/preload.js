@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 const on = (channel, cb) => {
@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('relay', {
   inputDevice: () => invoke('speech:device'),
   inputDevices: () => invoke('speech:inputs'),
   voices: () => invoke('voice:list'),
+  dropFiles: (files) => invoke('files:drop', Array.from(files || []).map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
   recentSize: (h) => invoke('recent:size', h),
   recentHit: (on) => invoke('recent:hit', on),
   recentAsk: (text) => invoke('recent:ask', text),

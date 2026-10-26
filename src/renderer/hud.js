@@ -9,7 +9,7 @@
   const statusEl = document.getElementById('hudstatus');
   const lineEl = document.getElementById('hudline');
   const subEl = document.getElementById('hudsub');
-  const capEl = document.getElementById('hudcap');
+  const tasksEl = document.getElementById('hudtasks');
   const inEl = document.getElementById('hudin');
   const btns = document.getElementById('hudbtns');
   const sendBtn = document.getElementById('hudyes');
@@ -51,8 +51,6 @@
   let cursorPos = null;
   let busySince = 0;
   let shownState = '';
-  let steps = []; // what it has done so far for this request, newest last
-  let request = '';
 
   const rad = (d) => (d * Math.PI) / 180;
 
@@ -227,6 +225,16 @@
     raf = requestAnimationFrame(frame);
   }
 
+  function renderTasks(tasks) {
+    tasksEl.replaceChildren();
+    for (const t of tasks) {
+      const li = document.createElement('li');
+      li.className = t.status;
+      li.textContent = t.text;
+      tasksEl.append(li);
+    }
+  }
+
   function setMode(m) {
     mode = m;
     hud.classList.toggle('center', m === 'center');
@@ -238,7 +246,7 @@
     if (!msg || msg.hide) {
       on = false;
       hud.classList.remove('on');
-      capEl.classList.remove('on');
+      tasksEl.replaceChildren();
       busySince = 0;
       speaking = false;
       level = 0;
@@ -273,19 +281,19 @@
       level = 0;
       line = `${msg.label || 'Working'}…`;
       sub = msg.text || '';
-      setMode('corner');
+      setMode('center'); // it stays big in the middle while it works, and goes when it is done
       if (!busySince) busySince = Date.now();
     } else if (s === 'done') {
       status = msg.status && msg.status !== 'done' ? 'ATTENTION' : 'COMPLETE';
       level = 0;
       line = msg.reply || '';
-      setMode('corner');
+      setMode('center');
       busySince = 0;
     } else if (s === 'input') {
       status = 'TYPE A REQUEST';
       level = 0;
-      line = msg.notice || '';
-      lineClass = line ? 'warn' : '';
+      line = msg.notice || msg.hint || '';
+      lineClass = msg.notice ? 'warn' : line ? 'dim' : '';
       sub = 'Return to send · Esc to close';
       setMode('center');
       busySince = 0;
@@ -301,22 +309,8 @@
       return;
     }
     wave.style.display = s === 'listening' ? 'block' : 'none';
-    // Captions in the top right: the request, the steps as they happen, then the answer.
-    if (s === 'listening' || s === 'input') { steps = []; request = ''; }
-    if (s === 'working') {
-      if (msg.text) request = msg.text;
-      const step = (msg.label || '').trim();
-      if (step && step !== 'Thinking' && step !== 'Working' && steps[steps.length - 1] !== step) steps = [...steps, step].slice(-4);
-    }
-    capEl.replaceChildren();
-    hud.classList.toggle('replying', s === 'done'); // the answer sits beside the reactor, the steps go top right
-    if (s === 'working') {
-      const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; capEl.append(d); };
-      if (request) add('req', `“${request.length > 90 ? request.slice(0, 90) + '…' : request}”`);
-      if (!steps.length) add('step now', `${(msg.label || 'Thinking').replace(/…$/, '')}…`);
-      steps.forEach((t, i) => add(`step${i === steps.length - 1 ? ' now' : ''}`, i === steps.length - 1 ? `${t}…` : t));
-      capEl.classList.add('on');
-    } else capEl.classList.remove('on');
+    // The list of what was asked, in bullets at the middle left: the running one bright, the waiting ones dim, the finished ones ticked.
+    if (Array.isArray(msg.tasks)) renderTasks(msg.tasks);
     const typing = s === 'input';
     const asking = s === 'confirm';
     inEl.style.display = typing ? 'block' : 'none';

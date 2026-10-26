@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+- **The reactor stays in the middle while it works.** It no longer flies to the corner: Relay does the task in the background, shows the answer under the reactor, and the reactor goes away once the task is complete.
+- **Ask for several things in a row.** While Relay works, tap the ask key and say the next request. They run one after another, and the ones from this round are listed as bullets on the middle left of the screen: the running one bright, the waiting ones dim, the done ones ticked. Esc stops the work and clears the waiting ones. (They run one at a time, not in parallel, so two tasks never fight over your mouse and keyboard.)
+- **Interrupt Relay mid-sentence.** Esc, ⌥T or starting to talk stops a spoken reply at once (Esc used to do nothing when the reactor was already gone), and the menu bar icon has Stop Speaking.
+- **Dictation learns your words.** After you dictate, Relay reads the same text in the field a few seconds later; a word you fixed by hand twice becomes a word fix in Vocabulary, and a notification says so. Only the changed words are kept, password fields are never read, and General > Learn my words from corrections turns it off.
+- **Drop files on Relay.** Drag files or a folder onto the menu bar icon, or onto the Relay window, and it asks what to do with them. The model gets a `read_file` tool that reads text, PDF, Word/RTF/HTML and pictures, and only the files you dropped (they stay available for ten minutes).
+- The top right captions from 0.8 are gone; the reactor's own line shows the step it is on.
+
 ## 0.8.3
 
 - **Circling is back to the line trail** (the smoke puffs are gone), and the trail is shorter: it fades away about half as fast behind the pointer.

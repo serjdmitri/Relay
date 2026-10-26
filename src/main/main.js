@@ -124,6 +124,7 @@ function rebuildTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
     { label: 'Type a Request…', click: () => ask.open() },
+    { label: 'Stop Speaking', enabled: !!speaker?.speaking, click: () => ask.interruptSpeech() },
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
@@ -454,6 +455,7 @@ function registerIpc() {
   });
   ipcMain.handle('recent:size', (_e, h) => recent?.setPanelHeight(h));
   ipcMain.handle('recent:hit', (_e, on) => recent?.setHit(!!on));
+  ipcMain.handle('files:drop', (_e, paths) => ask.attachFiles(paths));
   ipcMain.handle('ask:submit', (_e, text) => ask.submit(text));
   ipcMain.handle('ask:cancel', () => ask.cancelAll());
   ipcMain.handle('ask:confirm', (_e, yes) => ask.pendingConfirm?.(!!yes));
@@ -506,6 +508,16 @@ app.whenReady().then(() => {
   glass = new Glass({ binPath: glassBinPath() });
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
   timers.start();
+  ask.onLearn = (from, to) => { // a word you keep fixing by hand becomes a word fix
+    const list = (store.data.replacements || []).filter((r) => r.from.toLowerCase() !== from.toLowerCase());
+    list.unshift({ id: crypto.randomUUID(), from, to });
+    store.data.replacements = list;
+    store.save();
+    schedulePrepareSpeech();
+    broadcast();
+    if (Notification.isSupported()) new Notification({ title: 'Learned a word', body: `"${from}" will now be typed as "${to}".`, silent: true }).show();
+  };
+  if (speaker) { const was = speaker.onState; speaker.onState = (on) => { was?.(on); rebuildTray(); }; } // the Stop Speaking item follows whether it is talking
   // Start the glass helper now rather than at the first pill, and give focus straight back if it took it:
   // a new helper started by the front app can end up in front, which would send a dictation nowhere.
   if (glass.supported && store.get('settings.glass') !== false) {
@@ -524,6 +536,7 @@ app.whenReady().then(() => {
   icon.setTemplateImage(true);
   tray = new Tray(icon);
   tray.setToolTip('Relay');
+  tray.on('drop-files', (_e, files) => ask.attachFiles(files)); // drag files onto the menu bar icon
   const statusIcon = (name) => nativeImage.createFromPath(path.join(__dirname, `../../assets/${name}.png`));
   const trayIcons = { idle: icon, listening: [statusIcon('trayListening-1'), statusIcon('trayListening-2')], working: statusIcon('trayWorking') };
   let trayPulse = null;

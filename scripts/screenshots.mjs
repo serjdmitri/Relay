@@ -113,10 +113,10 @@ await send({ type: 'clear' });
 // the reactor HUD: listening in the middle, working in the top left, and an answer
 await send({ type: 'hud', state: { state: 'listening', mode: 'ask', partial: 'Open Notes and make a note called groceries', level: 0.7, askLabel: 'Right ⌥', dictateLabel: 'Right ⌘', name: 'J.A.R.V.I.S' } });
 await snap('hud-listening', 1400);
-await send({ type: 'hud', state: { state: 'working', label: 'Opening Notes', text: 'Open Notes and make a note called groceries', name: 'J.A.R.V.I.S' } });
-await send({ type: 'hud', state: { state: 'working', label: 'Creating a note', name: 'J.A.R.V.I.S' } });
+const tasks = [{ id: 'a', text: 'Open Notes and make a note called groceries', status: 'running' }, { id: 'b', text: 'Set a timer for 10 minutes', status: 'queued' }, { id: 'c', text: 'Pause the music', status: 'queued' }];
+await send({ type: 'hud', state: { state: 'working', label: 'Creating a note', text: tasks[0].text, tasks, name: 'J.A.R.V.I.S' } });
 await snap('hud-working', 1600);
-await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', name: 'J.A.R.V.I.S' } });
+await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', tasks: tasks.map((t) => ({ ...t, status: 'done' })), name: 'J.A.R.V.I.S' } });
 await snap('hud-done', 600);
 await send({ type: 'hud', hide: true });
 await send({ type: 'hud', state: { state: 'input', mode: 'type', reset: true, name: 'J.A.R.V.I.S' } });
