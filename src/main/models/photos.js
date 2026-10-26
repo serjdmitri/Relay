@@ -6,6 +6,10 @@ const { UA, strip, wikiLookup } = require('../cards/lookup');
 const MAX_PHOTO = 8 * 1024 * 1024;
 const words = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((w) => w.length > 2);
 
+// How many of a query's words a photo's title (or a page's text) must contain: all of a short one, most of a long one. "Spot robot" must
+// not bring back "Spot-breasted Fantail" or a zebra named Spot: one shared word is not the same thing.
+const needed = (n) => (n <= 2 ? n : Math.ceil(n * 0.67));
+
 // https only, and not this machine or your own network (no IP addresses, no .local or .internal names, no localhost).
 function safePhotoUrl(u) {
   try {
@@ -32,7 +36,7 @@ async function findPhotos(query, { fetchImpl = fetch, n = 3 } = {}) {
         if (!ii || !/^image\/(jpeg|png)$/.test(ii.mime || '') || !ii.thumburl || (ii.width || 0) < 500 || (ii.height || 0) < 400) continue;
         const t = new Set(words(String(p.title).replace(/^File:/, '').replace(/\.\w+$/, '')));
         const hits = qw.filter((w) => t.has(w)).length;
-        if (!hits) continue;
+        if (hits < Math.max(1, needed(qw.length))) continue;
         const m = ii.extmetadata || {};
         scored.push({ score: hits / qw.length - t.size * 0.01, photo: { url: ii.thumburl.split('?')[0], title: String(p.title).replace(/^File:/, '').replace(/\.\w+$/, ''), credit: [strip(m.Artist?.value).slice(0, 40), strip(m.LicenseShortName?.value), 'Wikimedia Commons'].filter(Boolean).join(' · '), page: ii.descriptionurl || '' } });
       }
@@ -43,7 +47,9 @@ async function findPhotos(query, { fetchImpl = fetch, n = 3 } = {}) {
   if (out.length < n) { // a Wikipedia page's main picture
     try {
       const w = await wikiLookup(query, { fetchImpl, width: 900 });
-      if (w?.image?.url && !out.some((p) => p.url === w.image.url)) out.push({ url: w.image.url, title: w.title, credit: 'Wikipedia', page: w.url });
+      const have = new Set(words(`${w?.title || ''} ${w?.summary || ''}`));
+      const qw = words(query);
+      if (w?.image?.url && qw.filter((x) => have.has(x)).length >= Math.max(1, needed(qw.length)) && !out.some((p) => p.url === w.image.url)) out.push({ url: w.image.url, title: w.title, credit: 'Wikipedia', page: w.url });
     } catch { /* none */ }
   }
   return out.slice(0, n);

@@ -9,37 +9,47 @@
   html, body { height: 100%; background: transparent; overflow: hidden; font: 13px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; color: #bff4ff; -webkit-font-smoothing: antialiased; user-select: none; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .glow { text-shadow: 0 0 6px rgba(0, 212, 255, .9), 0 0 16px rgba(0, 160, 230, .6); }
-  #cap { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; pointer-events: none; transition: opacity .3s; }
-  #title { font-size: 15px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
-  #credit { margin-top: 3px; font-size: 10.5px; letter-spacing: .04em; opacity: .65; }
+  /* the labels and controls travel with the model: the stage is a box around it, put in place by the page */
+  #stage { position: absolute; width: 460px; pointer-events: none; }
+  #cap { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; transition: opacity .3s; }
+  #title { display: inline-block; padding: 2px 10px; font-size: 15px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; cursor: move; pointer-events: auto; }
+  #credit { margin-top: 3px; font-size: 10.5px; letter-spacing: .04em; opacity: .65; pointer-events: none; }
   #ctl { position: absolute; left: 0; right: 0; bottom: 56px; display: flex; justify-content: center; gap: 4px; opacity: 0; transition: opacity .25s; }
   body.near #ctl { opacity: 1; }
-  .btn { min-width: 32px; height: 30px; padding: 0 9px; display: grid; place-items: center; font-size: 17px; cursor: pointer; border-radius: 999px; color: #8be9ff; text-shadow: 0 0 8px rgba(0, 212, 255, .95); }
+  .btn { min-width: 32px; height: 30px; padding: 0 9px; display: grid; place-items: center; font-size: 17px; cursor: pointer; border-radius: 999px; color: #8be9ff; text-shadow: 0 0 8px rgba(0, 212, 255, .95); pointer-events: auto; }
   .btn:hover { color: #fff; background: rgba(0, 212, 255, .18); box-shadow: 0 0 14px rgba(0, 212, 255, .45); }
   .btn.on { color: #fff; text-shadow: 0 0 10px #00d4ff, 0 0 22px #00d4ff; }
   .btn[hidden] { display: none; }
+  #move { cursor: move; }
   #opt { font-size: 12px; letter-spacing: .08em; align-self: center; padding: 0 2px; min-width: 34px; text-align: center; }
-  #merge { position: absolute; left: 0; right: 0; top: 12px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #merge { position: absolute; left: 0; right: 0; top: -4px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
   body.merging #merge { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
-  #hint2 { position: absolute; left: 0; right: 0; top: 12px; text-align: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: 0; transition: opacity .25s; pointer-events: none; } body.exploded #hint2 { opacity: .85; } body.merging #hint2 { opacity: 0; }
+  #hint2 { position: absolute; left: -60px; right: -60px; top: -26px; text-align: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: 0; transition: opacity .25s; pointer-events: none; } body.exploded #hint2 { opacity: .85; } body.merging #hint2 { opacity: 0; }
+  #tip { position: absolute; left: 0; top: 0; padding: 4px 10px; border-radius: 999px; background: rgba(4, 18, 28, .78); font-size: 12px; letter-spacing: .04em; white-space: nowrap; opacity: 0; transition: opacity .12s; pointer-events: none; color: #d9f8ff; }
+  #tip.show { opacity: 1; }
   #err { position: absolute; left: 0; right: 0; top: 46%; text-align: center; color: #ffcc66; }
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
-<div id="merge" class="glow">Release to combine</div>
-<div id="hint2" class="glow"></div>
-<div id="err" class="glow"></div>
-<div id="ctl" class="glow">
-  <div class="btn" id="prev" hidden title="Another model">&#8249;</div><div id="opt" hidden></div><div class="btn" id="next" hidden title="Another model">&#8250;</div>
-  <div class="btn" id="explode" title="Pull it apart into pieces">&#10070;</div>
-  <div class="btn" id="upright" hidden title="Turn upright">&#8635;</div>
-  <div class="btn" id="solid" title="Solid or hologram">&#9680;</div>
-  <div class="btn" id="pin" title="Keep on my screen">&#9906;</div>
-  <div class="btn" id="close" title="Take it away">&#10005;</div>
+<div id="stage">
+  <div id="merge" class="glow">Release to combine</div>
+  <div id="hint2" class="glow"></div>
+  <div id="err" class="glow"></div>
+  <div id="ctl" class="glow">
+    <div class="btn" id="move" data-tip="Move: drag this to put it anywhere">&#10021;</div>
+    <div class="btn" id="prev" hidden data-tip="Previous model">&#8249;</div><div id="opt" hidden></div><div class="btn" id="next" hidden data-tip="Next model">&#8250;</div>
+    <div class="btn" id="explode" data-tip="Pull it apart into pieces (or double-click it)">&#10070;</div>
+    <div class="btn" id="reset" data-tip="Turn it back to the front">&#8982;</div>
+    <div class="btn" id="upright" hidden data-tip="Turn it upright">&#8635;</div>
+    <div class="btn" id="solid" data-tip="Switch between hologram and solid">&#9680;</div>
+    <div class="btn" id="pin" data-tip="Keep it on my screen">&#9906;</div>
+    <div class="btn" id="close" data-tip="Close it">&#10005;</div>
+  </div>
+  <div id="cap" class="glow"><div id="title" data-tip="Drag the name to move it anywhere"></div><div id="credit"></div></div>
 </div>
-<div id="cap" class="glow"><div id="title"></div><div id="credit"></div></div>
+<div id="tip"></div>
 <script type="module" src="holo.js"></script>
 </body>
 </html>

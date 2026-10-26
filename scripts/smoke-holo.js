@@ -35,11 +35,11 @@ app.whenReady().then(async () => {
     await wait(2800);
     await shot(mgr.get(a), 'holo-1-skull.png');
     await shot(mgr.get(b), 'holo-2-shapes.png');
-    // the pointer: over the middle of the skull the window takes clicks; off in a corner it lets them through
+    // the pointer: over the middle of the skull the window takes clicks; off in a corner of the (display-sized) window it lets them through
     const wa = mgr.get(a).win;
     const mine = () => ignoreLog.filter((l) => l[0] === wa.webContents.id).map((l) => l[1]);
     ignoreLog.length = 0;
-    wa.webContents.sendInputEvent({ type: 'mouseMove', x: 230, y: 330 });
+    wa.webContents.sendInputEvent({ type: 'mouseMove', x: mgr.get(a).x, y: mgr.get(a).y });
     await wait(900);
     const over = mine();
     ignoreLog.length = 0;

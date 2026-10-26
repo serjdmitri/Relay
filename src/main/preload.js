@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('relay', {
   holoClose: () => invoke('holo:close'),
   holoSizes: (sizes) => invoke('holo:sizes', sizes),
   holoExtract: (d) => invoke('holo:extract', d),
+  holoPiece: (d) => invoke('holo:piece', d),
   addSchedule: (text) => invoke('schedule:add', text),
   removeSchedule: (id) => invoke('schedule:remove', id),
   toggleSchedule: (id, on) => invoke('schedule:toggle', id, on),
