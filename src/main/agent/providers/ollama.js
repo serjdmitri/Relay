@@ -70,7 +70,7 @@ class OllamaProvider {
     const assistantContent = [];
     if (msg.content) assistantContent.push({ type: 'text', text: msg.content });
     for (const c of calls) assistantContent.push({ type: 'tool_use', id: c.id, name: c.name, input: c.input });
-    return { text: msg.content || '', toolCalls: calls, assistantContent: assistantContent.length ? assistantContent : [{ type: 'text', text: '' }] };
+    return { text: msg.content || '', toolCalls: calls, assistantContent: assistantContent.length ? assistantContent : [{ type: 'text', text: '' }], usage: { in: json.prompt_eval_count || 0, out: json.eval_count || 0, model: json.model || this.model || '' } };
   }
 }
 

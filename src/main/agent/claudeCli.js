@@ -191,6 +191,7 @@ function buildArgs({ model, system, config }) {
     '--input-format', 'stream-json', // stays open: messages and model changes arrive later, so it can start before you finish talking
     '--output-format', 'stream-json',
     '--verbose',
+    '--include-partial-messages', // the answer arrives in pieces, so long ones can be shown as they are written
     '--mcp-config', JSON.stringify(config),
     '--strict-mcp-config',
     '--tools', '', // none of Claude Code's own tools: Relay's Mac tools only
@@ -222,6 +223,9 @@ class ClaudeSession {
     host.run = this.run;
     this.turn = null;
     this.turns = 0; // requests answered so far: a session with turns remembers the conversation
+    this.costQueue = []; // one callback per request, called when its result (with the cost) arrives, which can be after the answer
+    this.rate = null; // the latest plan limit report from the CLI
+    this.onRate = null;
     this.stale = 0; // results still to come from turns that were answered early or stopped
     this.dead = false;
     this.exitMessage = '';
@@ -286,7 +290,7 @@ class ClaudeSession {
 
   // Sends one message and resolves with { status, reply, actions, toolCalls, toolErrors, interrupted }.
   // watch(stats) may return true to interrupt a run that is going nowhere.
-  async ask(text, { model, confirm, onEvent = () => {}, signal, watch } = {}) {
+  async ask(text, { model, confirm, onEvent = () => {}, signal, watch, onCost } = {}) {
     if (this.dead) throw new Error(this.exitMessage || 'Claude is not running.');
     if (this.turn) throw new Error('Claude is already busy with a request.');
     if (model) await this.setModel(model);
@@ -294,7 +298,9 @@ class ClaudeSession {
     this.turns++;
     return new Promise((resolve) => {
       const stats = { toolCalls: 0, toolErrors: 0 };
-      const turn = { resolve, stats, settled: false, interrupted: false, finalTimer: null, timer: null, onAbort: null, signal };
+      this.costQueue.push(onCost || null);
+      this._acc = '';
+      const turn = { resolve, stats, usage: { in: 0, out: 0, model: '' }, settled: false, interrupted: false, finalTimer: null, timer: null, onAbort: null, signal };
       this.turn = turn;
       this.run.confirm = confirm || (async () => false);
       this.run.counter = { actions: 0 };
@@ -311,6 +317,7 @@ class ClaudeSession {
         }
       };
       this._onThought = (t) => onEvent({ type: 'thought', text: t });
+      this._onDelta = (t) => onEvent({ type: 'text-delta', text: t });
       turn.timer = setTimeout(() => this._finish({ status: 'failed', reply: 'Claude took too long and I stopped waiting.' }), this.timeoutMs);
       if (signal) {
         if (signal.aborted) return this._finish({ status: 'stopped', reply: 'Stopped.' });
@@ -333,7 +340,7 @@ class ClaudeSession {
     t.signal?.removeEventListener?.('abort', t.onAbort);
     this.turn = null;
     if (!viaResult) this.stale++; // the CLI will still report a result for this turn: ignore it later
-    t.resolve({ actions: this.run.counter.actions, toolCalls: t.stats.toolCalls, toolErrors: t.stats.toolErrors, interrupted: t.interrupted, ...res });
+    t.resolve({ usage: t.usage, actions: this.run.counter.actions, toolCalls: t.stats.toolCalls, toolErrors: t.stats.toolErrors, interrupted: t.interrupted, ...res });
   }
 
   _onData(chunk) {
@@ -361,7 +368,24 @@ class ClaudeSession {
     } else if (ev.type === 'system' && ev.subtype === 'init') {
       const relay = (ev.mcp_servers || []).find((s) => s.name === 'relay');
       if (relay && relay.status !== 'connected') this._finish({ status: 'failed', fatal: true, reply: "Claude could not reach Relay's tools. Quit and reopen Relay." });
+    } else if (ev.type === 'stream_event') {
+      const e = ev.event || {};
+      if (e.type === 'message_start') this._acc = '';
+      else if (e.type === 'content_block_delta' && e.delta?.type === 'text_delta' && t && !t.interrupted) {
+        this._acc = (this._acc || '') + e.delta.text;
+        this._onDelta?.(this._acc);
+      }
+    } else if (ev.type === 'rate_limit_event') {
+      const r = ev.rate_limit_info || {};
+      this.rate = { type: r.rateLimitType, util: r.utilization, resetsAt: r.resetsAt, ts: Date.now() };
+      this.onRate?.(this.rate);
     } else if (ev.type === 'assistant' && t && !t.interrupted) {
+      const u = ev.message?.usage;
+      if (u) {
+        t.usage.in += (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+        t.usage.out += u.output_tokens || 0;
+      }
+      if (ev.message?.model) t.usage.model = ev.message.model;
       const blocks = ev.message?.content || [];
       const text = blocks.filter((c) => c.type === 'text').map((c) => c.text).join(' ').trim();
       if (blocks.some((c) => c.type === 'tool_use')) {
@@ -374,6 +398,8 @@ class ClaudeSession {
         t.finalTimer = setTimeout(() => this._finish({ status: 'done', reply: text }), FINAL_GRACE_MS);
       }
     } else if (ev.type === 'result') {
+      const costCb = this.costQueue.shift();
+      if (costCb && typeof ev.total_cost_usd === 'number') costCb({ cost: ev.total_cost_usd, ms: ev.duration_ms });
       if (this.stale > 0) {
         this.stale--;
         return;
@@ -427,17 +453,17 @@ const flailing = (stats) => stats.toolCalls > 8 || stats.toolErrors >= 3;
 
 // Runs a request on the model the router picked. When it starts on the fast model and struggles, the same
 // conversation (so nothing already done is repeated) is handed to Sonnet. escalate=false keeps one model.
-async function runSmart({ session, text, context = '', model, escalate = false, confirm, onEvent = () => {}, signal }) {
+async function runSmart({ session, text, context = '', model, escalate = false, confirm, onEvent = () => {}, signal, onCost }) {
   const prompt = context ? `${context}\n\nRequest: ${text}` : text;
-  const first = await session.ask(prompt, { model, confirm, onEvent, signal, watch: escalate ? flailing : undefined });
+  const first = await session.ask(prompt, { model, confirm, onEvent, signal, onCost, watch: escalate ? flailing : undefined });
   const reason = escalate ? escalationReason(first) : null;
   if (!reason || signal?.aborted || !session.alive) return { ...first, model, escalated: false };
   onEvent({ type: 'escalate', reason });
   const second = await session.ask(
     `The faster assistant did not manage this: ${reason}. Carry on from where things stand now, using what has already been done (do not repeat completed actions), and finish the original request: ${text}`,
-    { model: 'sonnet', confirm, onEvent, signal }
+    { model: 'sonnet', confirm, onEvent, signal, onCost }
   );
-  return { ...second, actions: first.actions + second.actions, toolCalls: first.toolCalls + second.toolCalls, model: 'sonnet', escalated: true };
+  return { ...second, usage: { in: (first.usage?.in || 0) + (second.usage?.in || 0), out: (first.usage?.out || 0) + (second.usage?.out || 0), model: second.usage?.model || first.usage?.model || '' }, actions: first.actions + second.actions, toolCalls: first.toolCalls + second.toolCalls, model: 'sonnet', escalated: true };
 }
 
 module.exports = { findClaude, authStatus, login, logout, McpHost, ClaudeSession, handleRpc, buildArgs, runClaude, runSmart, escalationReason, toMcpContent, friendlyError };

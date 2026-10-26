@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0
+
+- **Usage after every ask, never spoken.** A small dim line under the answer: the model, how long it took, tokens in and out, what it would cost at API prices (a Claude plan does not bill you per request), and how much of your Claude 5-hour limit is used. The cost arrives a moment after the answer and is added to the line. It is also kept under each request in History. Turn it off in General > Show usage after each ask. Other model services show the model, time and tokens they report.
+- **Speed controls.** Say "use the fast model" (Haiku), "use the smarter model" (Sonnet), "use deep" (Opus) or "use auto", or pick Model Speed in the menu bar. The Account page keeps the same choice.
+- **Try again.** "Try again" (or "think harder", "that's wrong") runs the last request once more on the next model up: Haiku to Sonnet to Opus. "Do it again" still repeats it as it was.
+- **Answers appear as they are written.** While Claude is writing a long answer, the text shows under the reactor as it comes instead of after it is finished.
+- Behind the scenes: Claude's own CLI now reports partial text, usage and plan limits, which Relay reads. Replies are not spoken until they are complete.
+
 ## 0.12.0
 
 - **Background agents.** Say "in the background, research the best noise cancelling headphones and save it in a note", or "start an agent to summarize my trip notes". Relay answers at once and the agent works by itself while you keep going. Its progress is in the top right of the screen: what it is on now, how long it has been running, then a short result when it is done (the card goes after 15 seconds, a notification and a History entry stay). "What are my agents doing?" lists them; "stop all agents" or "stop the agent working on headphones" ends them; the menu bar icon has Stop Background Agents.

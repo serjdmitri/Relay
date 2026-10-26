@@ -84,7 +84,7 @@ class OpenAICompatProvider {
     const assistantContent = [];
     if (text) assistantContent.push({ type: 'text', text });
     for (const c of calls) assistantContent.push({ type: 'tool_use', id: c.id, name: c.name, input: c.input });
-    return { text, toolCalls: calls, assistantContent: assistantContent.length ? assistantContent : [{ type: 'text', text: '' }] };
+    return { text, toolCalls: calls, assistantContent: assistantContent.length ? assistantContent : [{ type: 'text', text: '' }], usage: { in: json.usage?.prompt_tokens || 0, out: json.usage?.completion_tokens || 0, model: json.model || this.model || '' } };
   }
 }
 

@@ -40,7 +40,8 @@ class AnthropicProvider {
     return {
       text: content.filter((b) => b.type === 'text').map((b) => b.text).join('\n'),
       toolCalls: content.filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, input: b.input || {} })),
-      assistantContent: content.length ? content : [{ type: 'text', text: '' }]
+      assistantContent: content.length ? content : [{ type: 'text', text: '' }],
+      usage: { in: (json.usage?.input_tokens || 0) + (json.usage?.cache_creation_input_tokens || 0) + (json.usage?.cache_read_input_tokens || 0), out: json.usage?.output_tokens || 0, model: json.model || this.model }
     };
   }
 }

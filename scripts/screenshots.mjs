@@ -116,7 +116,7 @@ await snap('hud-listening', 1400);
 const tasks = [{ id: 'a', text: 'Open Notes and make a note called groceries', status: 'running' }, { id: 'b', text: 'Set a timer for 10 minutes', status: 'queued' }, { id: 'c', text: 'Pause the music', status: 'queued' }];
 await send({ type: 'hud', state: { state: 'working', label: 'Creating a note', text: tasks[0].text, tasks, name: 'J.A.R.V.I.S' } });
 await snap('hud-working', 1600);
-await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', tasks: tasks.map((t) => ({ ...t, status: 'done' })), name: 'J.A.R.V.I.S' } });
+await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', usage: 'Haiku · 2.1s · 2.7k in · 90 out · ≈ $0.0003 at API prices · 5-hour limit 62% used', tasks: tasks.map((t) => ({ ...t, status: 'done' })), name: 'J.A.R.V.I.S' } });
 await snap('hud-done', 600);
 await send({ type: 'hud', hide: true });
 await send({ type: 'agents', list: [
