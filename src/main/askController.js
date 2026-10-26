@@ -20,6 +20,7 @@ const { isUndo, isAgain } = require('./meta');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
+const { Ducker } = require('./duck');
 const { markRegion } = require('./overlayGeometry');
 
 const PILL_W = 480;
@@ -90,8 +91,12 @@ class AskController {
     this.scale = 1;
     this.doneTimer = null;
     this.heldStart = false; // the current listening session was started by holding the key
-    this.ducked = null;
-    this.duckChain = Promise.resolve();
+    this.ducker = new Ducker({
+      osa: (script) => this.mac.osa(script),
+      getEnabled: () => !!this.store.get('settings.duckAudio'),
+      load: () => (this.store.data.duckRestore == null ? null : this.store.data.duckRestore),
+      save: (v) => { this.store.data.duckRestore = v; this.store.save(); }
+    });
     this.lastLevelPush = 0;
     this.lastApps = [];
     this.lastDictation = null;
@@ -291,30 +296,13 @@ class AskController {
   }
 
   // ----- lower other audio while listening -----
+  // Lowering the volume while listening, and putting it back (see duck.js).
   duck() {
-    if (!this.store.get('settings.duckAudio')) return;
-    this.duckChain = this.duckChain.then(async () => {
-      if (this.ducked !== null) return;
-      try {
-        const v = Number(await this.mac.osa('output volume of (get volume settings)'));
-        if (Number.isFinite(v) && v > 20) {
-          this.ducked = v;
-          await this.mac.osa(`set volume output volume ${Math.round(v * 0.3)}`);
-        }
-      } catch {}
-    });
+    return this.ducker.duck();
   }
 
   unduck() {
-    this.duckChain = this.duckChain.then(async () => {
-      if (this.ducked === null) return;
-      const v = this.ducked;
-      this.ducked = null;
-      try {
-        await this.mac.osa(`set volume output volume ${v}`);
-      } catch {}
-    });
-    return this.duckChain;
+    return this.ducker.restore();
   }
 
   // Every change of state goes through here: it drives the menu bar icon, the ring, and whether "Hey Jarvis" is listening.
@@ -328,6 +316,7 @@ class AskController {
     if (changed) {
       this.onState?.(v);
       this.wakeSoon();
+      if (v !== 'listening' && v !== 'finishing') this.ducker?.restore(); // however listening ended, the volume comes back
     }
     if (v === 'listening') this.overlay?.buddy('listening');
     else if (v === 'finishing' || v === 'working' || v === 'confirm') this.overlay?.buddy('thinking');

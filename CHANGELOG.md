@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- **The volume always comes back.** Relay lowers the volume to 30% while it listens (General > Lower the volume while I talk). It could be left low when listening ended in an unusual way, or when Relay quit mid-listen. Now the original volume is saved to disk before it is lowered, it is put back whenever listening stops by any route, again at launch and at quit if it was left low, and a volume you changed yourself in the meantime is left alone. The switch has a clearer name and description; off means your volume is never touched.
+
 ## 0.7.2
 
 - The reactor now appears in the middle of the screen at once, with no sliding. It only slides when it goes from the middle to the top left corner to work. (Before, it could appear to drop in from the top left, because it started from where it was last left.)
