@@ -135,6 +135,9 @@ Drag files or a folder onto the menu bar icon (or anywhere on the Relay window) 
 ### Dictation learns your words
 After you dictate, Relay looks at the same text in the field a few seconds later. A word you fixed by hand, twice, becomes a word fix in Vocabulary. Only the changed words are kept, password fields are never read, and General > Learn my words from corrections turns it off.
 
+### Memory
+"Remember that my sister is Anna." Relay keeps short facts you tell it, uses them in later requests, and shows them in Settings > Memory, where you can add, delete, forget all, or turn it off. "Forget that…", "what do you remember about me?" and "forget everything" work by voice. Passwords and card numbers are refused. It stays on your Mac.
+
 ### Move windows
 "Snap this window to the left", "put Chrome on the right half", "move Spotify to the top right corner", "maximize this window", "center Notes", "right third". Instant, no model, and "undo that" puts the window back.
 

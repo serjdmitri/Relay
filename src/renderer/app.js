@@ -20,12 +20,12 @@ function setCapturing(v) {
 const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 
 const NAV = [
-  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary']],
+  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory']],
   [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions']],
   [['account', 'Account']]
 ];
 const TITLES = Object.fromEntries(NAV.flat());
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -291,6 +291,32 @@ const PAGES = {
     const rc = h(`<div class="card">${rules.length ? rules.map((r) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="t">${esc(r.from)} <span style="color:var(--dim)">→</span> ${esc(r.to)}</div><button class="btn" data-del="${esc(r.id)}">Remove</button></div>`).join('') : '<div class="empty">None yet. Use Fix a Word… on a line in History › Dictation, or add one above.</div>'}</div>`);
     rc.onclick = (e) => e.target.dataset.del && relay.removeReplacement(e.target.dataset.del);
     c.append(rc);
+  },
+
+  memory(c) {
+    c.append(h('<div class="lead">What Relay knows about you. Tell it by saying “remember that my sister is Anna”, or add it here. Relay uses these in every request, and keeps them only on this Mac. Say “forget …” or delete one here. It never keeps passwords or card numbers.</div>'));
+    const on = S.settings.memory !== false;
+    const sw = h('<div class="card flat" style="margin-bottom:18px"></div>');
+    sw.append(toggleRow('Remember things about me', 'Off: Relay does not use or collect memories, and “remember …” does nothing.', 'settings.memory'));
+    c.append(sw);
+    const row = h('<div class="field-row" style="margin-bottom:22px"><input class="field" id="min" placeholder="Something to remember, e.g. I am vegetarian"><button class="btn primary" id="madd" style="height:28px">Add</button></div>');
+    const add = () => {
+      const v = $('#min', row).value;
+      if (v.trim()) relay.addMemory(v).then((r) => { $('#min', row).value = ''; if (r && r.status === 'failed') alert(r.reply); });
+    };
+    $('#madd', row).onclick = add;
+    $('#min', row).onkeydown = (e) => e.key === 'Enter' && add();
+    c.append(row);
+    const list = S.memories || [];
+    c.append(h(`<div class="section-title" style="margin-top:0"><span>${list.length} thing${list.length === 1 ? '' : 's'}${on ? '' : ' (off)'}</span>${list.length ? '<button class="btn" id="mall">Forget all</button>' : ''}</div>`));
+    if (!list.length) c.append(h('<div class="note" style="font-size:15px">Nothing yet.</div>'));
+    else {
+      const card = h(`<div class="card">${list.map((m) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="t">${esc(m.text)}</div><button class="btn" data-del="${esc(m.id)}">Forget</button></div>`).join('')}</div>`);
+      card.onclick = (e) => e.target.dataset.del && relay.removeMemory(e.target.dataset.del);
+      c.append(card);
+    }
+    const all = $('#mall', c);
+    if (all) all.onclick = () => confirm('Forget everything Relay remembers about you?') && relay.clearMemory();
   },
 
   general(c) {

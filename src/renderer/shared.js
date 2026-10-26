@@ -26,6 +26,7 @@ const GLYPHS = {
   history: '<circle cx="12" cy="12" r="9" fill="#fff"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="var(--bc)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   routines: '<rect x="8" y="2.8" width="8" height="2.2" rx="1.1" fill="#fff" opacity=".75"/><rect x="5" y="6.2" width="14" height="15" rx="3" fill="#fff"/><path d="M10.2 10.6v6.6l5.3-3.3z" fill="var(--bc)"/>',
   vocab: '<path fill="#fff" d="M7 3.5h10A1.5 1.5 0 0118.5 5v14.2a1.3 1.3 0 01-1.3 1.3H7A2 2 0 015 18.5V5.5a2 2 0 012-2z"/><path d="M9.2 15.2l2.8-7.2 2.8 7.2M10.2 13h3.6" fill="none" stroke="var(--bc)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  memory: '<path fill="#fff" d="M7 3.2h10a1.2 1.2 0 011.2 1.2V21l-6.2-4.3L5.8 21V4.4A1.2 1.2 0 017 3.2z"/>',
   general: '<g fill="#fff"><circle cx="12" cy="12" r="6.6"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2" transform="rotate(45 12 12)"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2" transform="rotate(90 12 12)"/><rect x="10.4" y="2.6" width="3.2" height="18.8" rx="1.2" transform="rotate(135 12 12)"/></g><circle cx="12" cy="12" r="2.9" fill="var(--bc)"/>',
   speech: '<g stroke="#fff" stroke-width="1.9" stroke-linecap="round"><path d="M4 11v2M7 8.5v7M10 5v14M13 7.5v9M16 5.5v13M19 9v6M21 11.5v1"/></g>',
   shortcuts: '<g fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V6.5A2.5 2.5 0 106.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1117.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 11-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 116.5 15H9z"/></g>',
@@ -45,7 +46,7 @@ const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="rl-bg" x1="7"
 
 // Every page has its own colour pair: it tints the tile, the selected item, buttons, toggles and the glow behind the page.
 const THEME = {
-  home: ['#1c8fd6', '#4cc2ff'], history: ['#2a9ee0', '#5fb4ff'], routines: ['#1f86cf', '#3fb6e8'], vocab: ['#2aa5d8', '#58cdf0'],
+  home: ['#1c8fd6', '#4cc2ff'], history: ['#2a9ee0', '#5fb4ff'], routines: ['#1f86cf', '#3fb6e8'], vocab: ['#2aa5d8', '#58cdf0'], memory: ['#2490d4', '#58cdf0'],
   general: ['#2490d4', '#4cc2ff'], speech: ['#2aa5d8', '#4cc2ff'], shortcuts: ['#1f86cf', '#4cc2ff'], permissions: ['#2a9ee0', '#4cc2ff'], account: ['#1c8fd6', '#5fb4ff']
 };
 const COLORS = Object.fromEntries(Object.entries(THEME).map(([id, [a]]) => [id, a]));
