@@ -241,6 +241,7 @@
       return;
     }
     if (typeof msg.name === 'string' && msg.name) name = msg.name;
+    if (!on) hud.classList.add('snap'); // appearing from nothing: take its place at once, with no sliding
     const s = msg.state;
     let label = '';
     let line = '';
@@ -311,6 +312,8 @@
     lineEl.className = lineClass;
     subEl.textContent = sub;
     subEl.style.display = sub ? 'block' : 'none';
+    void hud.offsetWidth; // the new place is applied now, before sliding is allowed again
+    hud.classList.remove('snap');
     if (!on) {
       on = true;
       started = performance.now();
