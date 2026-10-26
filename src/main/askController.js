@@ -520,7 +520,7 @@ class AskController {
     const now = Date.now();
     if (a.floor === null) a.floor = level;
     a.floor = Math.min(a.floor, level) * 0.98 + level * 0.02; // the room's background level
-    const voice = level > a.floor * 2.2 + 0.05;
+    const voice = level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
     if (voice) { a.spoke = true; a.lastVoice = now; }
     if (a.spoke && now - a.lastVoice > 1300) { this.autoEnd = null; this.finishListening(); }
     else if (!a.spoke && now - a.startedAt > 7000) { this.autoEnd = null; this.cancelAll(); }
