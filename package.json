@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Voice-first Mac agent. Dictate with Talkify, Relay does the rest.",
   "main": "src/main/main.js",
   "scripts": {

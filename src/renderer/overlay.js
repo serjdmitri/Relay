@@ -206,32 +206,32 @@ function showCard(c) {
 
 // ----- the mark key: a trail that follows the pointer while the key is held, and fades -----
 const markLayer = $('markLayer');
-const TRAIL_MS = 520; // how long a stroke lives: it is drawn at the pointer and fades away behind it
-const TRAIL_PARTS = 9;
+const TRAIL_MS = 760; // how long a puff lives: it appears at the pointer and thins out behind it
+const PUFF_GAP = 8; // spacing between puffs along the path
 let trail = []; // { x, y, t }
 let marking = false;
 let trailRaf = 0;
 
-// A comet: the newest part of the stroke is solid and thick, and the tail thins and fades until it is gone.
+// A smoke trail like Voice OS: soft blue puffs that start at the pointer, grow thinner and fainter as they age, and are gone.
+const defs = el('defs', {});
+const grad = el('radialGradient', { id: 'puff' });
+grad.append(el('stop', { offset: '0', 'stop-color': '#7fb2ff', 'stop-opacity': '1' }), el('stop', { offset: '.45', 'stop-color': '#2f6bff', 'stop-opacity': '.65' }), el('stop', { offset: '1', 'stop-color': '#1d46d8', 'stop-opacity': '0' }));
+defs.append(grad);
+markLayer.append(defs);
+
 function drawTrail(now) {
   trail = trail.filter((q) => now - q.t < TRAIL_MS);
-  markLayer.replaceChildren();
-  if (trail.length > 1) {
-    const n = trail.length;
-    for (let i = 0; i < TRAIL_PARTS; i++) {
-      const from = Math.floor((i * (n - 1)) / TRAIL_PARTS);
-      const to = Math.min(n, Math.floor(((i + 1) * (n - 1)) / TRAIL_PARTS) + 2);
-      if (to - from < 2) continue;
-      const k = (i + 1) / TRAIL_PARTS; // 0 at the tail, 1 at the pointer
-      const pts = trail.slice(from, to).map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' ');
-      const under = el('polyline', { class: 'u', points: pts });
-      const over = el('polyline', { class: 'o', points: pts });
-      under.style.opacity = String(0.8 * k * k);
-      under.style.strokeWidth = String(2 + 6 * k);
-      over.style.opacity = String(Math.min(1, 0.15 + k * 1.1));
-      over.style.strokeWidth = String(1 + 3.2 * k);
-      markLayer.append(under, over);
-    }
+  markLayer.replaceChildren(defs);
+  let last = null;
+  for (let i = trail.length - 1; i >= 0; i--) { // newest first, so the puff at the pointer is always there
+    const q = trail[i];
+    if (last && Math.hypot(q.x - last.x, q.y - last.y) < PUFF_GAP) continue;
+    last = q;
+    const life = 1 - (now - q.t) / TRAIL_MS; // 1 new, 0 gone
+    const r = 3 + 11 * life * life;
+    const c = el('circle', { cx: q.x.toFixed(1), cy: q.y.toFixed(1), r: r.toFixed(1), fill: 'url(#puff)' });
+    c.style.opacity = String(Math.min(1, life * 1.3));
+    markLayer.append(c);
   }
   if (marking || trail.length) trailRaf = requestAnimationFrame(() => drawTrail(performance.now()));
   else trailRaf = 0;
@@ -240,16 +240,12 @@ function drawTrail(now) {
 function markStart() {
   marking = true;
   trail = [];
-  markLayer.replaceChildren();
+  markLayer.replaceChildren(defs);
   if (!trailRaf) trailRaf = requestAnimationFrame(() => drawTrail(performance.now()));
 }
 
 function markPoint(x, y) {
   trail.push({ x, y, t: performance.now() });
-  if (jarvis) { // the pen triangle rides at the head of the trail
-    pen.style.transform = `translate(${x}px, ${y}px)`;
-    pen.classList.add('on');
-  }
 }
 
 function markEnd(cancel) {
@@ -335,7 +331,7 @@ window.relay.onOverlay((m) => {
       break;
     case 'mark-clear':
       trail = [];
-      markLayer.replaceChildren();
+      markLayer.replaceChildren(defs);
       break;
     case 'look':
       jarvis = m.look === 'jarvis';

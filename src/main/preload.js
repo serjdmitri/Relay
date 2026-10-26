@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('relay', {
   inputDevice: () => invoke('speech:device'),
   inputDevices: () => invoke('speech:inputs'),
   voices: () => invoke('voice:list'),
+  recentSize: (h) => invoke('recent:size', h),
+  recentHit: (on) => invoke('recent:hit', on),
   recentAsk: (text) => invoke('recent:ask', text),
   onRecent: (cb) => on('recent:state', cb),
   openExternal: (url) => invoke('app:open-link', url),
