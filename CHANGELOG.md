@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- **Scheduled requests, by asking.** "Every weekday at 8, open my email." "Every Monday and Thursday at 9, play focus music." "Every morning, read me my calendar." "Schedule open my email for tomorrow at 7am." Relay saves it, runs it by itself at that time, and says what it scheduled. "What's scheduled?" lists them, "cancel the email schedule" removes one, "cancel all my schedules" asks first. The model can also schedule something from a looser sentence (it asks you to confirm).
+- **A Scheduled list in Settings > Routines:** add one by typing it, turn each on or off, delete it, and see when it runs next.
+- **Safe by design:** a scheduled request runs only when Relay is free and the Mac is on. Anything that sends or deletes is declined unless you answer within 90 seconds, so nothing is sent or deleted while you are away. If the Mac was asleep or Relay was closed for more than 45 minutes past the time, that run is skipped and you get a notification instead of a surprise later.
+- Plain reminders ("remind me to call mom at 5") still go to Reminders, and one-off requests like "open Notes at 5" are not turned into schedules unless you say "schedule".
+
 ## 0.10.0
 
 - **Relay remembers you.** Say "remember that my sister is Anna" or "I'm vegetarian, remember that", and Relay keeps it and uses it in every later request (for example "text my sister" knows who that is). "Forget that I'm vegetarian" removes it, "what do you remember about me?" reads it back, and "forget everything" asks before wiping it all. The model can also save a lasting fact when you state one. It never keeps passwords, card or ID numbers.

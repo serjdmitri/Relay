@@ -13,7 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -298,6 +298,29 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         input_schema: obj({ match: str('Words from the fact') }, ['match']),
         describe: () => 'Forgetting that',
         run: (i) => memory.remove(i.match)
+      }
+    );
+  }
+
+  // Requests that run later or on repeat, while the Mac is on and Relay is open. They run unattended, so what sends or deletes
+  // is declined unless the user answers within 90 seconds.
+  if (schedules) {
+    tools.push(
+      {
+        name: 'schedule_task',
+        description: 'Run a request later or on repeat, e.g. "open my email" every weekday at 08:00. time is 24-hour "HH:MM". repeat: once, daily, weekdays, weekends or weekly (weekly needs days). For a single run give date as YYYY-MM-DD, or leave it out for the next time that clock shows. The task is written as the request Relay will get then.',
+        input_schema: obj({ task: str('The request to run, in the user\'s words'), repeat: str('once | daily | weekdays | weekends | weekly'), time: str('HH:MM, 24-hour'), days: { type: 'array', items: { type: 'string' }, description: 'For weekly: day names' }, date: str('YYYY-MM-DD, for once') }, ['task', 'time']),
+        confirm: (i) => `Schedule "${i.task}" (${i.repeat || 'once'} at ${i.time})?`,
+        describe: () => 'Scheduling that',
+        run: async (i) => schedules.add(i)
+      },
+      { name: 'list_schedules', description: 'List the scheduled requests.', input_schema: obj({}), run: async () => schedules.list() },
+      {
+        name: 'cancel_schedule',
+        description: 'Cancel scheduled requests whose text has all of these words.',
+        input_schema: obj({ match: str('Words from the scheduled request') }, ['match']),
+        describe: () => 'Cancelling that schedule',
+        run: async (i) => schedules.remove(i.match)
       }
     );
   }

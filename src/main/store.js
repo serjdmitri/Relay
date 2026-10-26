@@ -62,6 +62,7 @@ const DEFAULTS = {
   replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
   memories: [], // {id, text, ts}: what you told Relay to remember
+  schedules: [], // requests to run later or on repeat: see schedule.js
   corrections: {}, // fixes seen once, waiting for a second sighting: { 'from>to': count }
   lastReply: ''
 };
