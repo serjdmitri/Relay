@@ -305,7 +305,7 @@ const PAGES = {
     title('Ask Relay');
     const ask = h('<div class="card flat"></div>');
     const lookNow = S.settings.look === 'classic' ? 'classic' : 'jarvis';
-    const look = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Look</div><div class="seg">${[['jarvis', 'Jarvis'], ['classic', 'Classic']].map(([v, l]) => `<button data-v="${v}" class="${lookNow === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Jarvis: a cyan HUD ring follows your pointer, and the pill and guides pop up as HUD panels. Classic: the soft indigo orb.</div></div>`);
+    const look = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Look</div><div class="seg">${[['jarvis', 'Jarvis'], ['classic', 'Classic']].map(([v, l]) => `<button data-v="${v}" class="${lookNow === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Jarvis: a reactor appears in the middle of the screen while you talk, then works in the top left corner. Classic: the compact pill.</div></div>`);
     look.onclick = (e) => e.target.dataset.v && relay.set('settings.look', e.target.dataset.v);
     ask.append(
       look,
@@ -556,8 +556,8 @@ const PAGES = {
     const m = S.settings.model;
     c.append(h('<div class="section-title" style="margin-top:0">Account</div>'));
     const card = h('<div class="card"></div>');
-    const av = `<div class="av">${icon('lock').replace('<svg', '<svg stroke="#ddd" fill="none" stroke-width="1.8"')}</div>`;
-    const person = `<div class="av"><svg viewBox="0 0 24 24" fill="#ddd"><circle cx="12" cy="9" r="3.6"/><path d="M5 20c1-3.6 3.8-5.2 7-5.2s6 1.6 7 5.2z"/></svg></div>`;
+    const av = `<div class="av">${icon('lock').replace('<svg', '<svg stroke="currentColor" fill="none" stroke-width="1.8"')}</div>`;
+    const person = `<div class="av"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="9" r="3.6"/><path d="M5 20c1-3.6 3.8-5.2 7-5.2s6 1.6 7 5.2z"/></svg></div>`;
     if (!cl.checked) {
       card.append(h(`<div class="who">${av}<div><div class="nm">Checking…</div></div></div>`));
     } else if (!cl.installed) {

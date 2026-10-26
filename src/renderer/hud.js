@@ -309,13 +309,12 @@
       if (step && step !== 'Thinking' && step !== 'Working' && steps[steps.length - 1] !== step) steps = [...steps, step].slice(-4);
     }
     capEl.replaceChildren();
-    if (s === 'working' || s === 'done') {
+    hud.classList.toggle('replying', s === 'done'); // the answer sits beside the reactor, the steps go top right
+    if (s === 'working') {
       const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; capEl.append(d); };
       if (request) add('req', `“${request.length > 90 ? request.slice(0, 90) + '…' : request}”`);
-      if (s === 'working') {
-        if (!steps.length) add('step now', `${(msg.label || 'Thinking').replace(/…$/, '')}…`);
-        steps.forEach((t, i) => add(`step${i === steps.length - 1 ? ' now' : ''}`, i === steps.length - 1 ? `${t}…` : t));
-      } else add('ans', msg.reply || '');
+      if (!steps.length) add('step now', `${(msg.label || 'Thinking').replace(/…$/, '')}…`);
+      steps.forEach((t, i) => add(`step${i === steps.length - 1 ? ' now' : ''}`, i === steps.length - 1 ? `${t}…` : t));
       capEl.classList.add('on');
     } else capEl.classList.remove('on');
     const typing = s === 'input';

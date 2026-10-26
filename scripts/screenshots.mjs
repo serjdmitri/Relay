@@ -12,7 +12,7 @@ const mock = fs.readFileSync(path.join(root, 'scripts/mock-relay.js'), 'utf8');
 const url = (f, q = '') => 'file://' + path.join(root, 'src/renderer', f) + q;
 
 const browser = await launch();
-const ctx = await browser.newContext({ viewport: { width: 820, height: 620 }, deviceScaleFactor: 2 });
+const ctx = await browser.newContext({ viewport: { width: 820, height: 620 }, deviceScaleFactor: 2, colorScheme: 'dark' });
 await ctx.addInitScript(mock);
 
 const main = await ctx.newPage();
@@ -24,6 +24,17 @@ for (const p of ['home', 'history', 'routines', 'vocab', 'general', 'speech', 's
   await main.waitForTimeout(150);
   await main.screenshot({ path: path.join(out, `main-${p}.png`) });
 }
+
+// the same pages in the system's light appearance
+const lctx = await browser.newContext({ viewport: { width: 820, height: 620 }, deviceScaleFactor: 2, colorScheme: 'light' });
+await lctx.addInitScript(mock);
+const lmain = await lctx.newPage();
+for (const p of ['home', 'general', 'permissions']) {
+  await lmain.goto(url('index.html', `?page=${p}`));
+  await lmain.waitForTimeout(150);
+  await lmain.screenshot({ path: path.join(out, `main-${p}-light.png`) });
+}
+await lctx.close();
 
 // sidebar collapsed: the main area takes the whole window
 await main.goto(url('index.html', '?page=home'));
