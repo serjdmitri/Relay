@@ -22,15 +22,18 @@
   #merge { position: absolute; left: 0; right: 0; top: 12px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
   body.merging #merge { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
+  #hint2 { position: absolute; left: 0; right: 0; top: 12px; text-align: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: 0; transition: opacity .25s; pointer-events: none; } body.exploded #hint2 { opacity: .85; } body.merging #hint2 { opacity: 0; }
   #err { position: absolute; left: 0; right: 0; top: 46%; text-align: center; color: #ffcc66; }
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="merge" class="glow">Release to combine</div>
+<div id="hint2" class="glow"></div>
 <div id="err" class="glow"></div>
 <div id="ctl" class="glow">
   <div class="btn" id="prev" hidden title="Another model">&#8249;</div><div id="opt" hidden></div><div class="btn" id="next" hidden title="Another model">&#8250;</div>
+  <div class="btn" id="explode" title="Pull it apart into pieces">&#10070;</div>
   <div class="btn" id="upright" hidden title="Turn upright">&#8635;</div>
   <div class="btn" id="solid" title="Solid or hologram">&#9680;</div>
   <div class="btn" id="pin" title="Keep on my screen">&#9906;</div>

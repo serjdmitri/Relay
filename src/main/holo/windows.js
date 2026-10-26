@@ -26,7 +26,10 @@ const area = () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).
 function registerHoloIpc(mgr) {
   const of = (e) => mgr.forSender(e.sender.id);
   ipcMain.handle('holo:hit', (e, on) => { const h = of(e); if (h && !h.win.isDestroyed()) h.win.setIgnoreMouseEvents(!on, { forward: true }); });
-  ipcMain.handle('holo:drag', (e, phase) => { const h = of(e); if (!h) return; if (phase === 'start') mgr.startDrag(h); else mgr.stopDrag(); });
+  // Letting go always ends the drag, even when the hologram that started it is gone (a piece pulled out of the last one).
+  ipcMain.handle('holo:drag', (e, phase) => { if (phase !== 'start') return mgr.stopDrag(); const h = of(e); if (h) mgr.startDrag(h); });
+  ipcMain.handle('holo:sizes', (e, sizes) => { const h = of(e); if (h) mgr.setSizes(h.id, sizes); });
+  ipcMain.handle('holo:extract', (e, d) => { const h = of(e); if (h && d) return mgr.extract(h, d).then(() => true); });
   ipcMain.handle('holo:scale', (e, v) => { const h = of(e); if (h && Number.isFinite(v)) mgr.setScale(h.id, v); });
   ipcMain.handle('holo:solid', (e, on) => { const h = of(e); if (h) mgr.setSolid(h.id, on); });
   ipcMain.handle('holo:pin', (e, on) => { const h = of(e); if (h) mgr.pin(h.id, on); });

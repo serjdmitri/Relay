@@ -13,11 +13,13 @@ const MAX_ITEMS = 4;
 class HoloManager {
   // createWindow(): a window-like object; cursor(): { x, y }; area(): the work area to place new ones in; download(url) -> Buffer;
   // saved(): the stored list; save(list): store it.
-  constructor({ createWindow, cursor, area, download, generate = async () => { throw new Error('No generator.'); }, readFile = () => null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
+  constructor({ createWindow, cursor, area, download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
     this.createWindow = createWindow;
     this.cursor = cursor;
     this.area = area;
     this.download = download;
+    this.fit = fit; // (base, item, hint) -> how the item joins the base: { anchor, scale, rotate } or null
+    this.putFile = putFile; // bytes -> a file in the model cache (so a pinned hologram can come back)
     this.generate = generate; // a photo candidate -> a real-looking model (a GLB item)
     this.readFile = readFile; // a saved GLB's file -> its bytes
     this.saved = saved;
@@ -72,10 +74,11 @@ class HoloManager {
   }
 
   // Another model next to the ones already there ("add a heart to it").
-  async add(id, item) {
+  async add(id, item, hint = '') {
     const h = this.holos.get(id);
     if (!h) return false;
     if (h.items.length >= MAX_ITEMS) return false;
+    item = { ...item, placement: await this.placement(h, item, h.items.length, hint), from: [1, 0.35] }; // flies in from the right
     h.items.push(item);
     h.title = [...new Set(h.items.map((i) => i.title))].join(' + ').slice(0, 70);
     h.options = null;
@@ -106,19 +109,38 @@ class HoloManager {
   }
 
   // Drop one on another: everything of the first joins the second, and the first goes.
-  merge(srcId, dstId) {
+  // Where an incoming model goes, decided by the model (or a simple rule): see fit.js.
+  async placement(h, item, index, hint) {
+    const unit = { w: 2, h: 2, d: 2 };
+    const base = { title: h.items[0]?.title || h.title, size: h.sizes?.[0] || unit };
+    try { return (await this.fit(base, { title: item.title, size: item.size || unit }, hint)) || null; } catch { return null; }
+  }
+
+  async merge(srcId, dstId, hint = '') {
     const s = this.holos.get(srcId);
     const d = this.holos.get(dstId);
     if (!s || !d || s === d) return false;
     const room = MAX_ITEMS - d.items.length;
     if (room <= 0) return false;
-    d.items.push(...s.items.slice(0, room));
+    // the direction the dropped one came from, on the screen, so it can fly in from there
+    const sb = s.win.getBounds();
+    const db = d.win.getBounds();
+    const dx = sb.x + sb.width / 2 - (db.x + db.width / 2);
+    const dy = sb.y + sb.height / 2 - (db.y + db.height / 2);
+    const len = Math.hypot(dx, dy) || 1;
+    const from = [dx / len, dy / len];
+    if (!d.win.isDestroyed()) d.win.webContents.send('holo:state', 'merge-hint', 'fit');
+    const incoming = [];
+    for (const [i, it] of s.items.slice(0, room).entries()) incoming.push({ ...it, size: s.sizes?.[i], placement: await this.placement(d, { ...it, size: s.sizes?.[i] }, d.items.length + i, hint), from });
+    for (const it of incoming) delete it.size;
+    if (!this.holos.has(dstId)) return false;
+    d.items.push(...incoming);
     d.title = [...new Set(d.items.map((i) => i.title))].join(' + ').slice(0, 70);
     d.options = null;
     d.pinned = d.pinned || s.pinned;
     this.close(srcId);
     this.push(d);
-    d.win.webContents.send('holo:state', 'pinned', d.pinned);
+    if (!d.win.isDestroyed()) { d.win.webContents.send('holo:state', 'merge-hint', false); d.win.webContents.send('holo:state', 'pinned', d.pinned); }
     this.persist();
     return true;
   }
@@ -154,8 +176,7 @@ class HoloManager {
     this.dragging = null;
     const h = this.holos.get(d.id);
     if (d.target) {
-      this.holos.get(d.target)?.win.webContents.send('holo:state', 'merge-hint', false);
-      this.merge(d.id, d.target);
+      this.merge(d.id, d.target).catch(() => {});
     } else if (h && !h.win.isDestroyed()) {
       const b = h.win.getBounds();
       h.x = b.x;
@@ -168,6 +189,29 @@ class HoloManager {
   pin(id, on) {
     const h = this.holos.get(id);
     if (h) { h.pinned = !!on; this.persist(); this.onChange(); }
+  }
+
+  setSizes(id, sizes) {
+    const h = this.holos.get(id);
+    if (h && Array.isArray(sizes)) h.sizes = sizes;
+  }
+
+  // A piece pulled out of a hologram becomes its own hologram under the pointer, which follows it until it is let go (so it can be dropped
+  // straight onto another). What is left of the first one is updated, or it goes when nothing is left.
+  async extract(h, { item, name, part, rest }) {
+    const src = h.items[item];
+    if (!src || !part) return null;
+    const bytes = Buffer.from(part);
+    const c = this.cursor();
+    const piece = { kind: 'glb', title: `${name} of ${src.title}`.slice(0, 60), credit: src.credit, bytes, file: this.putFile(bytes) };
+    const id = await this.show({ title: piece.title, items: [piece], x: Math.round(c.x - W / 2), y: Math.round(c.y - H * 0.8) });
+    if (rest) { const rb = Buffer.from(rest); h.items[item] = { kind: 'glb', title: src.title, credit: src.credit, bytes: rb, file: this.putFile(rb), ...(src.placement ? { placement: src.placement } : {}) }; }
+    else h.items.splice(item, 1);
+    h.options = null;
+    if (!h.items.length) this.close(h.id); else { h.title = [...new Set(h.items.map((i) => i.title))].join(' + ').slice(0, 70); this.push(h); this.persist(); }
+    const made = this.holos.get(id);
+    if (made) this.startDrag(made);
+    return id;
   }
 
   setScale(id, v) {

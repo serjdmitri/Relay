@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.0
+
+- **Pull a hologram apart.** The new button under a hologram (four diamonds) explodes it into its parts. Hover a piece and it brightens, click to select it, then drag it out: it becomes its own hologram that follows your pointer, and what is left stays behind as a hologram of its own. Click the button again to put it back together.
+- **Real parts where they exist.** A model made of separate bodies (an assembly, anything built from shapes) splits along those bodies. A single solid model (a skull, a photo-made robot) is cut into regions by position, so the pieces are chunks with open seams, not real anatomy. Very large models (over 250,000 triangles) are not split.
+- **Combine with AI.** Drag a hologram, or a piece you pulled out, onto another and let go: Relay asks Claude (the small fast model, 12 second limit, with a simple built-in fallback) where it belongs: on top, beside, in front, inside, how big and which way up. The piece then flies in and settles in place. Say "put the heart inside the skull" or "add wheels to it" and the same placement is used. Nothing is rebuilt when pieces are combined: only their positions are chosen.
+- **Honest limits:** a piece pulled out of a model is saved as a plain model (no part names, colors are kept for photo models). I tested the explode, select, pull-out, drop and combine steps in the real app with a stand-in for the mouse pointer on a built model, a skull and a photo-made robot; I did not test a hand drag with a real mouse or asking by voice.
+- The test command now also runs the `.mjs` tests.
+
 ## 0.19.0
 
 - **Realistic holograms, researched.** Relay no longer makes a real object out of boxes and cylinders. For a specific thing (a VEX V5 robot, a car, a building, a gadget) it first researches what it really looks like, then: (1) uses a ready-made real 3D model from Wikimedia Commons when one clearly is that thing, else (2) finds real photos of it (Wikipedia, Commons, or a photo link it found while researching) and **turns a photo into a realistic, textured 3D model** with the free Stable Fast 3D service on Hugging Face, and only (3) builds from simple shapes for abstract things and diagrams (an atom, the planets), without labels unless you ask. I tried it on a real VEX robot photo: it came back in about 4 seconds as a recognizable VEX robot with wheels, metal frame and red and blue pieces.

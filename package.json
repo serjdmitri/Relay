@@ -1,12 +1,12 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Voice-first Mac agent. Dictate with Talkify, Relay does the rest.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node --test \"test/*.test.js\" \"test/*.test.mjs\"",
     "shots": "node scripts/screenshots.mjs",
     "icons": "node scripts/make-icons.mjs",
     "pack": "bash scripts/pack-mac.sh",

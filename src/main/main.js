@@ -581,6 +581,7 @@ app.whenReady().then(() => {
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
     cursor: holoWin.cursor, area: holoWin.area, download: (u) => downloadStl(u),
     generate: (c) => ask.generatePhotoModel(c), readFile: (f) => ask.modelCache?.readInside(f),
+    fit: (base, item, hint) => ask.fitModels(base, item, hint), putFile: (b) => ask.modelCache?.put(ask.modelCache.key('part', b.length, b.slice(0, 64).toString('hex'), b.slice(-64).toString('hex')), b) || '',
     saved: () => store.get('holograms') || [], save: (l) => { store.data.holograms = l; store.save(); }
   });
   holoWin.registerHoloIpc(holos);
