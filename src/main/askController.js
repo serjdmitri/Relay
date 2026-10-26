@@ -111,6 +111,7 @@ class AskController {
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
+    if (this.speaker) this.speaker.onState = (on) => this.overlay.speaking(on);
     this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
@@ -210,7 +211,24 @@ class AskController {
 
   // Shows the pill. A pill that was hidden drops out of the notch; one already showing just updates.
   // mode: 'inactive' keeps focus in your app, 'show' brings the window forward, 'focus' also takes keyboard focus.
+  // Jarvis look: talking, working and answers show on the ring and its caption beside the pointer. The pill is kept for
+  // typing a request and for questions that need a button (Allow / Cancel), which need the keyboard or the mouse.
+  passiveUI() {
+    return this.store.get('settings.look') !== 'classic' && this.store.get('settings.buddy') !== false && !!this.store.get('settings.cursor') &&
+      this.state !== 'input' && this.state !== 'confirm' && this.mode !== 'type';
+  }
+
+  captionState(extra) {
+    const sc = require('./shortcuts');
+    return { state: this.state, mode: this.mode, askLabel: sc.label(this.store.get('settings.shortcuts.ask')), dictateLabel: sc.label(this.store.get('settings.shortcuts.dictate')), ...extra };
+  }
+
   reveal(extra = {}, mode = 'inactive') {
+    if (this.passiveUI() && !extra.question) {
+      if (this.visible) this.hideSoft();
+      this.overlay.caption(this.captionState({ ...extra, ...(extra.show ? {} : {}) }));
+      return;
+    }
     clearTimeout(this.hideTimer);
     const win = this.ensureWindow();
     const fresh = !this.visible;
@@ -249,6 +267,11 @@ class AskController {
   }
 
   push(extra = {}) {
+    if (!extra.hide && this.passiveUI()) {
+      if (this.visible) this.hideSoft();
+      this.overlay.caption(this.captionState(extra));
+      return;
+    }
     if (!this.win || this.win.isDestroyed()) return;
     this.win.webContents.send('ask:state', {
       state: this.state,
@@ -611,6 +634,7 @@ class AskController {
   close() {
     clearTimeout(this.doneTimer);
     this.state = 'idle';
+    this.overlay.caption({ hide: true });
     this.dropWarm();
     this.hideSoft();
   }
@@ -645,6 +669,7 @@ class AskController {
 
   // opts.shown: what to show and record instead of the text itself, for requests Relay makes on its own.
   async handleText(text, opts = {}) {
+    this.ensureWindow(); // the pill window is created even when the ring shows everything, because other code reads it
     const routines = this.store.get('routines');
     const cmd = parseCommand(text, routines, { recording: !!this.recording });
     this.state = 'working';

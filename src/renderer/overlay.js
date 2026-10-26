@@ -13,6 +13,10 @@ let flyTo = null; // { x, y, until }: the buddy is pointing at something
 let state = null;
 let jarvis = false;
 let raf = 0;
+const capEl = $('cap');
+let capOn = false;
+let capPos = null;
+const CAP_GAP = { x: 76, y: 14 }; // the caption sits to the right of the ring, a little lower
 
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
@@ -24,15 +28,65 @@ function frame(now) {
     buddy.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
   }
   // Once the buddy has caught up with the pointer there is nothing to animate, so the loop rests until the pointer moves.
+  // the caption follows the pointer too, and flips to the left near the right edge of the screen
+  let capMoving = false;
+  if (capOn && cursor) {
+    const w = capEl.offsetWidth || 240;
+    const goalCap = cursor.x + CAP_GAP.x + w > innerWidth - 12 ? { x: cursor.x - 36 - w, y: cursor.y + CAP_GAP.y } : { x: cursor.x + CAP_GAP.x, y: cursor.y + CAP_GAP.y };
+    if (!capPos) capPos = { ...goalCap };
+    capPos.x += (goalCap.x - capPos.x) * 0.3;
+    capPos.y += (goalCap.y - capPos.y) * 0.3;
+    capEl.style.transform = `translate(${Math.max(8, capPos.x).toFixed(1)}px, ${Math.max(8, Math.min(innerHeight - capEl.offsetHeight - 8, capPos.y)).toFixed(1)}px)`;
+    capMoving = Math.abs(goalCap.x - capPos.x) > 0.4 || Math.abs(goalCap.y - capPos.y) > 0.4;
+  }
   const expired = flyTo && flyTo.until <= now;
   if (expired) flyTo = null;
   const still = !expired && !flyTo && goal && pos && Math.abs(goal.x - pos.x) < 0.4 && Math.abs(goal.y - pos.y) < 0.4;
-  raf = state && !still ? requestAnimationFrame(frame) : 0;
+  raf = (state && !still) || capMoving ? requestAnimationFrame(frame) : 0;
+}
+
+// Draws the caption from the full state Relay sends (the same fields the pill used).
+function renderCap(c) {
+  if (!c || c.hide) {
+    capOn = false;
+    capEl.classList.remove('on');
+    capPos = null;
+    buddy.style.setProperty('--lvl', '0');
+    return;
+  }
+  const row = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; return d; };
+  capEl.replaceChildren();
+  capEl.classList.toggle('bad', c.state === 'done' && c.status && c.status !== 'done');
+  if (c.state === 'listening') {
+    const dictating = c.mode === 'dictate';
+    capEl.append(row('st', dictating ? 'Dictating' : 'Listening'));
+    if (c.preparing !== undefined && !c.partial) capEl.append(row('tx dim', `Getting speech ready ${Math.round(c.preparing * 100)}%`));
+    else capEl.append(row(c.partial ? 'tx' : 'tx dim', c.partial || (dictating ? 'Say what to type…' : 'Say what you want…')));
+    capEl.append(row('sub', `${dictating ? c.dictateLabel : c.askLabel} to ${dictating ? 'finish' : 'send'}`));
+    buddy.style.setProperty('--lvl', String(Math.min(1, c.level || 0)));
+  } else if (c.state === 'finishing') {
+    capEl.append(row('st', 'Processing'));
+    capEl.append(row('tx dim', 'Finishing…'));
+  } else if (c.state === 'working') {
+    capEl.append(row('st', 'Working'));
+    capEl.append(row('tx', `${c.label || 'Working'}…`));
+    if (c.text) capEl.append(row('sub', c.text));
+  } else if (c.state === 'done') {
+    capEl.append(row('st', c.status && c.status !== 'done' ? 'Attention' : 'Complete'));
+    capEl.append(row('tx', c.reply || ''));
+  } else {
+    capOn = false;
+    capEl.classList.remove('on');
+    return;
+  }
+  capOn = true;
+  capEl.classList.add('on');
+  if (cursor && !raf) raf = requestAnimationFrame(frame);
 }
 
 function setState(s) {
   state = s;
-  buddy.classList.remove('idle', 'listening', 'thinking', 'done');
+  buddy.classList.remove('idle', 'listening', 'thinking', 'done', 'speaking');
   if (!s) {
     buddy.classList.remove('on');
     cancelAnimationFrame(raf);
@@ -262,7 +316,7 @@ window.relay.onOverlay((m) => {
     case 'cursor':
       cursor = { x: m.x, y: m.y };
       if (state) buddy.classList.add('on');
-      if (state && !raf) raf = requestAnimationFrame(frame);
+      if ((state || capOn) && !raf) raf = requestAnimationFrame(frame);
       break;
     case 'buddy-state':
       setState(m.state);
@@ -286,6 +340,9 @@ window.relay.onOverlay((m) => {
       break;
     case 'clear':
       clearAll();
+      break;
+    case 'caption':
+      renderCap(m.hide ? null : m.state);
       break;
     case 'mark-start':
       markStart();

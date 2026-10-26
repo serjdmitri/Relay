@@ -90,6 +90,19 @@ await snap('draw', 1300);
 await send({ type: 'guide', card: { steps: ['Open System Settings', 'Click Displays', 'Click Night Shift', 'Turn on Schedule'], current: 1, total: 4 } });
 await snap('guide', 700);
 await send({ type: 'clear' });
+// the caption beside the ring: listening (with the mic level), working, and an answer
+await send({ type: 'cursor', x: 360, y: 300 });
+await send({ type: 'buddy-state', state: 'listening' });
+await send({ type: 'caption', state: { state: 'listening', mode: 'ask', partial: 'Open Notes and make a note called groceries', level: 0.7, askLabel: 'Right ⌥', dictateLabel: 'Right ⌘' } });
+await snap('caption-listening', 500);
+await send({ type: 'buddy-state', state: 'thinking' });
+await send({ type: 'caption', state: { state: 'working', label: 'Opening Notes', text: 'Open Notes and make a note called groceries' } });
+await snap('caption-working', 500);
+await send({ type: 'buddy-state', state: 'speaking' });
+await send({ type: 'caption', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.' } });
+await snap('caption-done', 500);
+await send({ type: 'caption', hide: true });
+await send({ type: 'buddy-state', state: null });
 // the mark key: a freehand circle drawn while it is held
 await send({ type: 'mark-start' });
 const ring = Array.from({ length: 41 }, (_, i) => [610 + 150 * Math.cos((i / 40) * 6.4), 300 + 95 * Math.sin((i / 40) * 6.4)]);
