@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.0
+
+- **Realistic holograms, researched.** Relay no longer makes a real object out of boxes and cylinders. For a specific thing (a VEX V5 robot, a car, a building, a gadget) it first researches what it really looks like, then: (1) uses a ready-made real 3D model from Wikimedia Commons when one clearly is that thing, else (2) finds real photos of it (Wikipedia, Commons, or a photo link it found while researching) and **turns a photo into a realistic, textured 3D model** with the free Stable Fast 3D service on Hugging Face, and only (3) builds from simple shapes for abstract things and diagrams (an atom, the planets), without labels unless you ask. I tried it on a real VEX robot photo: it came back in about 4 seconds as a recognizable VEX robot with wheels, metal frame and red and blue pieces.
+- **Options are real choices now:** the arrows under a hologram step through ready-made models and models made from other photos of the same thing. A model is made once and kept in a cache, so stepping back and pinning do not call the service again.
+- **Looks:** models with real colors are drawn solid with the hologram glow, scanlines and build-up sweep over them; the half-moon button still switches between hologram and plain solid.
+- **Honest limits:** a model made from one photo guesses the hidden sides and fine detail, so it can be blobby (Relay says so). The free service can be busy or out of its daily limit; then Relay tells you and tries another option. Settings > General > Make 3D models from real photos turns this off: only the public photo is sent to Hugging Face, never anything about you.
+
 ## 0.18.0
 
 - **3D models are now holograms, not a window.** No menu, no border, no background: the model is drawn as light (a glowing see-through surface with scanlines and a soft edge glow, standing on a glowing projector base) directly on your screen. It builds itself from the bottom up when it appears.

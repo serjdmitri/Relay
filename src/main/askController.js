@@ -20,6 +20,8 @@ const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
 const usage = require('./usage');
 const { buildCard } = require('./cards/card');
 const { findStls, downloadStl } = require('./models/lookup');
+const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
+const { photoToGlb } = require('./models/sf3d');
 const { normalizeParts } = require('./models/shapes');
 const { NotionApi, notionTools } = require('./connectors/notion');
 const { GoogleApi, googleTools } = require('./connectors/google');
@@ -113,6 +115,7 @@ class AskController {
     this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); this.statusChanged(); }, onFinish: (a) => this.agentFinished(a) });
     this.cardPanel = null; // set by the app: the answer card window
     this.holos = null; // set by the app: the holograms
+    this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
@@ -507,34 +510,66 @@ class AskController {
   // ----- 3D models -----
   // A real model from Wikimedia Commons if there is a fitting one, else what the model built from shapes. Returns what happened, in
   // words, so the model can say it honestly.
+  // A real-looking model made from a photo of the real thing, kept in the cache so it is only made once.
+  async generatePhotoModel(c) {
+    const key = this.modelCache?.key(c.url, 'sf3d-v1');
+    const credit = `${c.credit ? `${c.credit} · ` : ''}made into 3D from a photo`;
+    const hit = key && this.modelCache.get(key);
+    if (hit) return { kind: 'glb', title: c.title, credit, file: this.modelCache.file(key), bytes: hit };
+    const photo = await fetchPhoto(c.url);
+    if (!photo) throw new Error('That photo could not be fetched.');
+    const bytes = await photoToGlb(photo);
+    const file = this.modelCache ? this.modelCache.put(key, bytes) : '';
+    this.modelCache?.trim();
+    return { kind: 'glb', title: c.title, credit, ...(file ? { file } : {}), bytes };
+  }
+
+  // Looks for the most realistic model: a real one from Wikimedia Commons when its title matches well, otherwise a model made from a
+  // real photo of the thing (found on Commons or Wikipedia, or a photo link the model found while researching), and only if both fail
+  // the model's own build from shapes. The rest are kept as options to step through. Returns what happened, in words.
   async show3d(raw = {}) {
     if (!this.holos || this.store.get('settings.models3d') === false) return '3D models are turned off.';
     const title = String(raw.title || raw.query || '3D model').slice(0, 60);
     const parts = normalizeParts(raw.parts);
-    // The options: up to four real models for the same thing, then the one built from shapes (when there are shapes).
-    const options = [];
-    if (raw.query) {
-      try { for (const m of await findStls(raw.query, { n: 4 })) options.push({ kind: 'stl', title: m.title, url: m.url, credit: m.credit }); } catch { /* no real models */ }
+    const fromPhotos = this.store.get('settings.models3dFromPhotos') !== false;
+    let stls = [];
+    let photos = [];
+    if (raw.query) { try { stls = await findStls(raw.query, { n: 3 }); } catch { stls = []; } }
+    if (fromPhotos) {
+      if (raw.photo_url && safePhotoUrl(raw.photo_url)) photos.push({ url: safePhotoUrl(raw.photo_url), title, credit: 'A photo Relay found while researching' });
+      try { photos.push(...(await findPhotos(raw.photo_query || raw.query || title, { n: 3 }))); } catch { /* no photos */ }
+      photos = photos.filter((p, i) => photos.findIndex((x) => x.url === p.url) === i).slice(0, 3);
     }
+    const stl = (m) => ({ kind: 'stl', title: m.title, url: m.url, credit: m.credit });
+    // a ready-made model goes first only when its title clearly is the thing: most of the words, or half of them in a short title ("Eiffel")
+    const strong = stls.filter((m) => m.match >= 0.6 || (m.match >= 0.5 && m.titleWords <= 2)).slice(0, 1);
+    const options = [...strong.map(stl), ...photos.map((p) => ({ kind: 'photo', title: p.title, url: p.url, credit: p.credit })), ...stls.filter((m) => !strong.includes(m)).map(stl)];
     if (parts.length) options.push({ kind: 'shapes', title, parts, credit: 'Built by Relay from simple shapes' });
-    if (!options.length) return 'No real 3D model of that exists on Wikimedia Commons. Call show_3d again with parts to build a simple one from shapes, or tell the user there is none.';
-    let item;
+    if (!options.length) return 'No real 3D model or photo of that was found. Call show_3d again with a better query (the exact product or place name), a photo_url from your research, or parts to build a simple one from shapes; or tell the user there is none.';
+    let item = null;
     let first = 0;
-    for (; first < options.length; first++) { // the best one that actually downloads
+    let problem = '';
+    for (; first < options.length; first++) { // the best one that actually loads
       const c = options[first];
-      try { item = c.kind === 'stl' ? { kind: 'stl', title: c.title, credit: c.credit, url: c.url, bytes: await downloadStl(c.url) } : { kind: 'shapes', title: c.title, credit: c.credit, parts: c.parts }; break; } catch { item = null; }
+      try {
+        item = c.kind === 'stl' ? { kind: 'stl', title: c.title, credit: c.credit, url: c.url, bytes: await downloadStl(c.url) }
+          : c.kind === 'photo' ? (c.item = await this.generatePhotoModel(c))
+            : { kind: 'shapes', title: c.title, credit: c.credit, parts: c.parts };
+        break;
+      } catch (e) { item = null; if (/free 3D service/.test(e.message || '')) problem = e.message; }
     }
-    if (!item) return 'The 3D models found could not be downloaded. Try again in a moment.';
+    if (!item) return `${problem || 'The 3D models found could not be loaded.'} Tell the user, or call show_3d again with parts to build a simple one from shapes.`;
     const stand = item.kind === 'shapes';
-    // "Add it to the one already on screen": the new model sits next to the others in the same hologram.
     const into = raw.combine ? this.holos.latest() : null;
     if (into && (await this.holos.add(into.id, item))) {
       return `Added "${item.title}" next to "${into.title.split(' + ')[0]}" in the same hologram. The user can drag the base to move it, drag the model to turn it, and drop holograms on each other to combine them.${stand ? ' It is a simple stand-in built from shapes.' : ''}`;
     }
     const id = await this.holos.show({ title, items: [item], options: { list: options, index: first } });
     if (raw.keep) this.holos.pin(id, true);
-    const more = options.length > 1 ? ` There are ${options.length - 1} other option${options.length === 2 ? '' : 's'} for it: the user can press the arrows under the hologram to switch.` : '';
-    return `Showing a hologram of ${stand ? 'a simple stand-in built from shapes' : `a real 3D model, "${item.title}" (${item.credit})`}.${more} They can drag the glowing base to move it anywhere on the screen, drag the model to turn it, scroll to resize, pin it to keep it, and drop it on another hologram to combine them. Answer in one short sentence${stand ? ', and say it is a stand-in' : ', and say so if it looks like a different thing than they asked for'}.`;
+    const more = options.length > 1 ? ` There are ${options.length - 1} other option${options.length === 2 ? '' : 's'} (real models, or generated from other photos): the user can press the arrows under the hologram to switch.` : '';
+    const what = stand ? 'a simple stand-in built from shapes' : item.kind === 'glb' ? `a realistic model generated from a real photo ("${item.title}")` : `a real 3D model, "${item.title}" (${item.credit})`;
+    const caution = stand ? 'say it is a simple stand-in' : item.kind === 'glb' ? 'say it was generated from one photo, so hidden sides and fine details are guessed' : 'say so if it looks like a different thing than they asked for';
+    return `Showing a hologram of ${what}.${more} They can drag the glowing base to move it anywhere on the screen, drag the model to turn it, scroll to resize, pin it to keep it, and drop it on another hologram to combine them. Answer in one short sentence, and ${caution}.`;
   }
 
   // ----- answer cards -----

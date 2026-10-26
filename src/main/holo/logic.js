@@ -34,13 +34,13 @@ const cycle = (i, n, dir) => (n <= 0 ? 0 : (i + dir + n) % n);
 function toSaved(h) {
   return {
     id: h.id, title: h.title, pinned: true, x: Math.round(h.x), y: Math.round(h.y), scale: +(h.scale || 1).toFixed(3), solid: !!h.solid,
-    items: h.items.map((i) => (i.kind === 'stl' ? { kind: 'stl', title: i.title, url: i.url, credit: i.credit } : { kind: 'shapes', title: i.title, parts: i.parts, credit: i.credit }))
+    items: h.items.map((i) => (i.kind === 'stl' ? { kind: 'stl', title: i.title, url: i.url, credit: i.credit } : i.kind === 'glb' ? { kind: 'glb', title: i.title, file: i.file, credit: i.credit } : { kind: 'shapes', title: i.title, parts: i.parts, credit: i.credit }))
   };
 }
 
 // The saved list, cleaned: only pinned entries with something to show, at most 8.
 function cleanSaved(list) {
-  return (Array.isArray(list) ? list : []).filter((h) => h && h.pinned && Array.isArray(h.items) && h.items.length && h.items.every((i) => (i.kind === 'stl' && /^https:\/\/upload\.wikimedia\.org\//.test(i.url || '')) || (i.kind === 'shapes' && Array.isArray(i.parts)))).slice(0, 8);
+  return (Array.isArray(list) ? list : []).filter((h) => h && h.pinned && Array.isArray(h.items) && h.items.length && h.items.every((i) => (i.kind === 'stl' && /^https:\/\/upload\.wikimedia\.org\//.test(i.url || '')) || (i.kind === 'glb' && typeof i.file === 'string' && i.file.endsWith('.glb')) || (i.kind === 'shapes' && Array.isArray(i.parts)))).slice(0, 8);
 }
 
 module.exports = { overlapRatio, mergeTarget, layoutX, cycle, toSaved, cleanSaved };

@@ -22,14 +22,14 @@ function pickModels(pages, query, n = 4) {
     const hits = q.filter((w) => t.has(w) || [...t].some((x) => x.startsWith(w) || w.startsWith(x) && x.length > 3)).length;
     if (!hits) continue;
     const ideal = ii.size >= 100 * 1024 && ii.size <= 15 * 1024 * 1024 ? 1 : 0;
-    scored.push({ p, ii, score: hits * 10 + ideal * 3 - (t.size - hits) * 0.3 });
+    scored.push({ p, ii, hits, tw: t.size, score: hits * 10 + ideal * 3 - (t.size - hits) * 0.3 });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, n).map((best) => {
     const m = best.ii.extmetadata || {};
     const who = strip(m.Artist?.value).slice(0, 40);
     const lic = strip(m.LicenseShortName?.value);
-    return { title: best.p.title.replace(/^File:/, '').replace(/\.stl$/i, ''), url: best.ii.url, size: best.ii.size, credit: [who, lic, 'Wikimedia Commons'].filter(Boolean).join(' · '), page: best.ii.descriptionurl || '' };
+    return { title: best.p.title.replace(/^File:/, '').replace(/\.stl$/i, ''), url: best.ii.url, size: best.ii.size, credit: [who, lic, 'Wikimedia Commons'].filter(Boolean).join(' · '), page: best.ii.descriptionurl || '', match: +(best.hits / q.length).toFixed(2), titleWords: best.tw };
   });
 }
 

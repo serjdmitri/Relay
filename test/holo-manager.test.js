@@ -135,3 +135,33 @@ test('only six holograms at once: the oldest unpinned one makes room', async () 
   assert.ok(m.get(ids[0]), 'the pinned one stayed');
   assert.equal(m.get(ids[1]), null, 'the oldest unpinned went');
 });
+
+test('a photo option is made once on first use, and a pinned made-from-photo hologram comes back from its file', async () => {
+  const made = [];
+  const wins = [];
+  const mk = (saved = [], readFile = () => Buffer.from('cached glb')) => {
+    let stored = saved;
+    const m = new HoloManager({
+      createWindow: () => { const w = fakeWin(); wins.push(w); return w; }, cursor: () => ({ x: 0, y: 0 }), area: () => ({ x: 0, y: 0, width: 1800, height: 1100 }),
+      download: async (u) => Buffer.from(u), generate: async (c) => { made.push(c.title); return { kind: 'glb', title: c.title, credit: 'photo', file: '/cache/abc.glb', bytes: Buffer.from('glb') }; }, readFile,
+      saved: () => stored, save: (l) => { stored = l; }, setTimer: () => 1, clearTimer: () => {}
+    });
+    return { m, saved: () => stored };
+  };
+  const { m, saved } = mk();
+  const list = [{ kind: 'stl', title: 'A', url: 'https://upload.wikimedia.org/A.stl', credit: 'x' }, { kind: 'photo', title: 'Robot photo', photoUrl: 'https://upload.wikimedia.org/p.jpg', credit: 'y' }];
+  const id = await m.show({ title: 'VEX robot', items: [{ kind: 'stl', title: 'A', credit: 'x', url: list[0].url, bytes: Buffer.from('a') }], options: { list, index: 0 } });
+  await m.step(id, 1);
+  assert.equal(m.get(id).items[0].kind, 'glb');
+  await m.step(id, 1);
+  await m.step(id, 1);
+  assert.deepEqual(made, ['Robot photo'], 'generated once, not every time round');
+  m.pin(id, true);
+  assert.deepEqual(saved()[0].items[0], { kind: 'glb', title: 'Robot photo', file: '/cache/abc.glb', credit: 'photo' });
+  const again = mk(saved());
+  await again.m.restore();
+  assert.equal(again.m.latest().items[0].bytes.toString(), 'cached glb');
+  const gone = mk(saved(), () => null);
+  await gone.m.restore();
+  assert.equal(gone.m.latest(), null, 'a pinned model whose file is gone is skipped, not a crash');
+});

@@ -3,6 +3,7 @@
 // Drop it on another hologram to combine them. Everything is drawn as light on a fully transparent window.
 import * as THREE from './vendor/three/three.module.min.js';
 import { STLLoader } from './vendor/three/STLLoader.js';
+import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
@@ -27,12 +28,14 @@ let spin = 0;
 let reveal0 = 0;
 
 // ---------- the hologram material: fresnel glow, scanlines, a sweep that builds it from the bottom up ----------
-function holoMaterial(tint) {
+// tint: a colour; map: a texture (a real model keeps its own colours, with the glow and scanlines over them); body: how solid it looks.
+function holoMaterial(tint, map, body = 0) {
   return new THREE.ShaderMaterial({
-    uniforms: { ...uniforms, tint: { value: new THREE.Color(tint || 0x00d4ff).lerp(CYAN, 0.55) } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; void main() { vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; vN = normalize(normalMatrix * normal); vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform float time; uniform float reveal; uniform vec3 tint; varying vec3 vN; varying vec3 vV; varying float vY; void main() { if (vY > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, vY); float a = (0.10 + f * 0.9) * scan + edge * 0.9; float flick = 0.94 + 0.06 * sin(time * 37.0); gl_FragColor = vec4(tint * (0.55 + f) + vec3(edge), a * flick); }'
+    uniforms: { ...uniforms, tint: { value: new THREE.Color(tint || 0x00d4ff).lerp(CYAN, map ? 0.15 : 0.55) }, map: { value: map || null }, hasMap: { value: map ? 1 : 0 }, body: { value: body } },
+    // a real-looking model (body 1) is drawn solid with the hologram effects over it; the light-only kind is see-through and additive
+    transparent: body < 1, depthWrite: body >= 1, blending: body >= 1 ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; vN = normalize(normalMatrix * normal); vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform float time; uniform float reveal; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float body; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { if (vY > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, vY); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb * 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge); gl_FragColor = vec4(lit * flick1, 1.0); return; } float a = (0.10 + body + f * 0.9) * scan + edge * 0.9; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge), a * flick); }'
   });
 }
 function solidMaterial(color) { return new THREE.MeshStandardMaterial({ color: color || 0xd7e3ea, roughness: 0.5, metalness: 0.15 }); }
@@ -61,9 +64,20 @@ function label(text) {
 function makeMat(color) { return solid ? solidMaterial(color) : holoMaterial(color); }
 
 // One item as a group, scaled so its biggest side is 2 units.
-function buildItem(it) {
+async function buildItem(it) {
   const g = new THREE.Group();
-  if (it.kind === 'stl') {
+  if (it.kind === 'glb') {
+    // A real-looking model (from a photo): it keeps its own colours and shape; the hologram look is light over them.
+    const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(it.bytes.buffer.slice(it.bytes.byteOffset, it.bytes.byteOffset + it.bytes.byteLength), '', resolve, reject));
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = Array.isArray(o.material) ? o.material[0] : o.material;
+      o.userData.orig = m;
+      if (!solid) o.material = holoMaterial(m.color ? m.color.getHex() : 0xffffff, m.map || null, 1);
+      else if (m.isMeshBasicMaterial || !m.isMeshStandardMaterial) o.material = new THREE.MeshStandardMaterial({ map: m.map || null, color: m.color || 0xffffff, roughness: 0.6 });
+    });
+    g.add(gltf.scene);
+  } else if (it.kind === 'stl') {
     const geo = new STLLoader().parse(it.bytes.buffer.slice(it.bytes.byteOffset, it.bytes.byteOffset + it.bytes.byteLength));
     if (!geo.attributes.normal) geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, makeMat(0xd7e3ea));
@@ -106,13 +120,16 @@ function layoutX(widths, gap = 0.3) {
   return widths.map((w) => { const c = x + w / 2; x += w + gap; return c; });
 }
 
-function rebuild() {
+let building = 0;
+async function rebuild() {
+  const mine = ++building;
+  animated.length = 0; // the parts that spin and the name tags belong to what is built next
+  labels.length = 0;
+  const wraps = await Promise.all(items.map(buildItem));
+  if (mine !== building) return; // a newer one was asked for while this loaded
   scene.remove(holo);
   holo.traverse((o) => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.map?.dispose?.() || m?.dispose?.()); });
   holo = new THREE.Group();
-  animated.length = 0;
-  labels.length = 0;
-  const wraps = items.map(buildItem);
   const xs = layoutX(wraps.map((w) => w.userData.width));
   wraps.forEach((w, i) => { w.position.x = xs[i]; holo.add(w); });
   // The whole group turns about its middle, so it has to fit while turning: its reach from the middle, sideways and front to back,
@@ -198,8 +215,8 @@ function applyScale() { camera.position.z = 6.4 / userScale; camera.lookAt(0, -0
 // ---------- controls ----------
 $('close').onclick = () => relay.holoClose();
 $('pin').onclick = () => { const on = !$('pin').classList.contains('on'); $('pin').classList.toggle('on', on); relay.holoPin(on); };
-$('solid').onclick = () => { solid = !solid; $('solid').classList.toggle('on', solid); rebuild(); relay.holoSolid(solid); };
-$('upright').onclick = () => { upright = (upright + 1) % 3; rebuild(); };
+$('solid').onclick = () => { solid = !solid; $('solid').classList.toggle('on', solid); rebuild().catch(() => {}); relay.holoSolid(solid); };
+$('upright').onclick = () => { upright = (upright + 1) % 3; rebuild().catch(() => {}); };
 $('prev').onclick = () => relay.holoOption(-1);
 $('next').onclick = () => relay.holoOption(1);
 
@@ -217,7 +234,7 @@ relay.onHolo((m, d) => {
     $('credit').textContent = items.map((i) => i.credit).filter(Boolean).join('  ·  ');
     $('err').textContent = '';
     setOptions(d.options);
-    try { rebuild(); } catch { $('err').textContent = 'Could not draw that model.'; }
+    rebuild().catch(() => { $('err').textContent = 'Could not draw that model.'; });
   } else if (m === 'merge-hint') document.body.classList.toggle('merging', !!d);
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
   else if (m === 'error') $('err').textContent = d;
