@@ -393,6 +393,21 @@ function registerIpc() {
     schedulePrepareSpeech();
     broadcast();
   });
+  ipcMain.handle('memory:add', (_e, text) => {
+    const r = ask.rememberFact(String(text || ''));
+    broadcast();
+    return r;
+  });
+  ipcMain.handle('memory:remove', (_e, id) => {
+    store.data.memories = (store.data.memories || []).filter((m) => m.id !== id);
+    store.save();
+    broadcast();
+  });
+  ipcMain.handle('memory:clear', () => {
+    store.data.memories = [];
+    store.save();
+    broadcast();
+  });
   ipcMain.handle('vocab:remove', (_e, t) => {
     store.data.vocabulary = store.get('vocabulary').filter((x) => x !== t);
     store.save();

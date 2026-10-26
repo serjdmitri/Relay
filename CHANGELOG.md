@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- **Relay remembers you.** Say "remember that my sister is Anna" or "I'm vegetarian, remember that", and Relay keeps it and uses it in every later request (for example "text my sister" knows who that is). "Forget that I'm vegetarian" removes it, "what do you remember about me?" reads it back, and "forget everything" asks before wiping it all. The model can also save a lasting fact when you state one. It never keeps passwords, card or ID numbers.
+- **A Memory page in Settings** lists everything it knows, lets you add or delete facts, forget all, or turn memory off completely.
+- The memories live only on your Mac, in Relay's own data, and travel only as part of a request to the model you chose. "Remember to call mom at 5" is still a reminder, and "remember this as morning setup" still saves a routine.
+- Fix: the file-drop and the new memory text were not reaching models other than Claude's own app runner; they are now part of every provider's prompt.
+
 ## 0.9.1
 
 - **Marking just says "Marked" beside the cursor that follows you,** instead of bringing up the whole reactor. (With that cursor turned off it falls back to the old message.)

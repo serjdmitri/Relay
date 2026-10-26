@@ -18,6 +18,7 @@ const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain } = require('./meta');
 const { corrections, noteCorrection } = require('./learn');
+const mem = require('./memory');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
@@ -415,6 +416,44 @@ class AskController {
     this.learnTimers = [setTimeout(check, 12000), setTimeout(check, 45000)];
   }
 
+  // ----- what Relay remembers about you -----
+  memoryText() {
+    return this.store.get('settings.memory') === false ? '' : mem.memoryContext(this.store.get('memories') || []);
+  }
+
+  rememberFact(fact) {
+    if (mem.isSecret(fact)) return { status: 'failed', reply: "I don't keep passwords, card numbers or other secrets." };
+    const { list, added } = mem.addFact(this.store.get('memories') || [], fact, { id: crypto.randomUUID() });
+    if (added) { this.store.set('memories', list); this.onChange(); }
+    return { status: 'done', reply: added ? "Okay, I'll remember that." : 'I already knew that.' };
+  }
+
+  forgetFact(query) {
+    const { list, removed } = mem.removeFacts(this.store.get('memories') || [], query);
+    if (!removed.length) return { status: 'done', reply: "I don't have anything about that." };
+    this.store.set('memories', list);
+    this.onChange();
+    return { status: 'done', reply: removed.length === 1 ? 'Forgot it.' : `Forgot ${removed.length} things.` };
+  }
+
+  // A spoken or typed memory command ("remember that...", "forget...", "what do you remember"), handled without the model.
+  async runMemory(cmd) {
+    if (cmd.type === 'remember') return { ...this.rememberFact(cmd.fact), actions: 0 };
+    if (cmd.type === 'forget') return { ...this.forgetFact(cmd.query), actions: 0 };
+    if (cmd.type === 'recall') {
+      const list = this.store.get('memories') || [];
+      return { status: 'done', actions: 0, reply: list.length ? `I remember ${list.length} thing${list.length === 1 ? '' : 's'}: ${list.slice(0, 5).map((f) => f.text).join('; ')}${list.length > 5 ? '; and more in Settings > Memory' : ''}.` : "I don't remember anything yet. Say \"remember that…\" to tell me something." };
+    }
+    if (cmd.type === 'forget-all') {
+      if (!(this.store.get('memories') || []).length) return { status: 'done', actions: 0, reply: 'There was nothing to forget.' };
+      if (!(await this.askConfirm({ question: 'Forget everything Relay remembers about you?' }))) return { status: 'done', actions: 0, reply: 'Okay, I kept it all.' };
+      this.store.set('memories', []);
+      this.onChange();
+      return { status: 'done', actions: 0, reply: 'Forgot everything.' };
+    }
+    return { status: 'failed', actions: 0, reply: 'I did not understand that.' };
+  }
+
   // ----- files dropped on the menu bar icon or the window -----
   freshFiles() {
     return this.files && Date.now() - this.files.ts < 600000 ? this.files : null;
@@ -509,7 +548,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -840,6 +879,10 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
+        if (!opts.shown && this.store.get('settings.memory') !== false) {
+          const m = mem.parseMemory(effective);
+          if (m) return this.finish(entry, await this.runMemory(m));
+        }
         if (opts.shown) return this.runRequest(effective, entry);
         this.lastRequestText = effective;
         const quick = await this.tryQuick(effective, entry);
@@ -1065,7 +1108,7 @@ class AskController {
         }
         const route = routeModel(text, model.claudeModel);
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal });
         return result;
       } catch (e) {
@@ -1079,7 +1122,7 @@ class AskController {
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
-      frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(),
+      frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'),
       firefoxConnected: this.bridge.isConnected(), screen: display.size, visionCapable: vision
     });

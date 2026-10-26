@@ -16,6 +16,7 @@ const DEFAULTS = {
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
     wake: { enabled: false, phrase: 'hey jarvis' }, // listen for a wake phrase while Relay is idle (on-device)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
+    memory: true, // remember facts you tell it, and use them in every request
     learnWords: true, // after you dictate, notice words you fixed by hand and learn them
     recent: true, // a glass list of recent asks opens when you rest the pointer on the left edge
     buddy: true, // a small helper follows your pointer while Relay works
@@ -60,6 +61,7 @@ const DEFAULTS = {
   timers: [], // {id, endsAt, seconds, label}
   replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
+  memories: [], // {id, text, ts}: what you told Relay to remember
   corrections: {}, // fixes seen once, waiting for a second sighting: { 'from>to': count }
   lastReply: ''
 };

@@ -6,7 +6,7 @@
     schema: 3,
     onboardingDone: true,
     settings: {
-      talking: 'tap-or-hold', playSounds: true, duckAudio: true, recent: true, learnWords: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
+      talking: 'tap-or-hold', playSounds: true, duckAudio: true, recent: true, memory: true, learnWords: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
       glass: true, voice: 'auto', voiceRate: 'normal', openAtLogin: true, showInDock: false, look: 'jarvis', buddy: true, assistantName: 'J.A.R.V.I.S',
       wake: { enabled: false, phrase: 'hey jarvis' },
       tts: { engine: 'system', kokoro: { voice: 'af_heart' }, openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally.' }, elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2' } },
@@ -17,6 +17,7 @@
         presets: { openai: { model: 'gpt-4.1-mini' }, gemini: { model: 'gemini-3.8-flash' }, groq: { model: 'llama-3.3-70b-versatile' }, mistral: { model: 'mistral-large-latest' }, xai: { model: 'grok-4' }, deepseek: { model: 'deepseek-chat' }, custom: { model: '', url: '' } } },
       firefox: { enabled: true, port: 47831 }
     },
+    memories: [{ id: 'm1', text: 'my name is Sergey', ts: 1 }, { id: 'm2', text: 'I am vegetarian', ts: 2 }, { id: 'm3', text: 'my sister Anna lives in Boston', ts: 3 }],
     history: [
       { id: '1', text: 'Remind me to call mom at 5pm', status: 'done', reply: 'Reminder set: call mom, today at 5:00 PM.', ts: now - 4 * min },
       { id: '2', text: 'What is on my calendar tomorrow?', status: 'done', reply: 'Tomorrow you have a design review at 10:00 and lunch with Sam at 12:30.', ts: now - 19 * min },
@@ -121,6 +122,9 @@
       interactive: async () => {}, hidden: async () => {},
       onState: (cb) => { window.__askState = cb; return () => {}; }
     },
+    addMemory: async (t) => { state.memories.unshift({ id: String(Math.random()), text: t, ts: Date.now() }); emit(); return { status: 'done', reply: 'ok' }; },
+    removeMemory: async (id) => { state.memories = state.memories.filter((m) => m.id !== id); emit(); },
+    clearMemory: async () => { state.memories = []; emit(); },
     recentAsk: async () => {},
     onRecent: (cb) => { window.__recent = cb; },
     onStateChanged: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },

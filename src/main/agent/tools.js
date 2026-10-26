@@ -13,7 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -281,6 +281,26 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       run: (i) => mac.runShell(i.command)
     }
   ];
+
+  // Things the user wants Relay to remember about them (kept on this Mac, shown with every request).
+  if (memory) {
+    tools.push(
+      {
+        name: 'remember',
+        description: 'Keep a short fact about the user for later requests, e.g. "name is Sergey", "vegetarian", "sister Anna lives in Boston". Only when they ask you to remember something or state a lasting fact about themselves. Never secrets.',
+        input_schema: obj({ fact: str('One short fact, in plain words') }, ['fact']),
+        describe: () => 'Remembering that',
+        run: (i) => memory.add(i.fact)
+      },
+      {
+        name: 'forget_memory',
+        description: 'Forget remembered facts that have all of these words.',
+        input_schema: obj({ match: str('Words from the fact') }, ['match']),
+        describe: () => 'Forgetting that',
+        run: (i) => memory.remove(i.match)
+      }
+    );
+  }
 
   // Files dropped on Relay (the menu bar icon, or its window): readable by name, and nothing else on the disk.
   tools.push({
