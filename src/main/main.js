@@ -115,6 +115,8 @@ function rebuildTray() {
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
+    { label: 'Show Jarvis beside my pointer', type: 'checkbox', checked: store.get('settings.buddyAlways') !== false && store.get('settings.buddy') !== false, click: (item) => { store.set('settings.buddy', true); store.set('settings.buddyAlways', item.checked); overlay.applyMode(); broadcast(); rebuildTray(); } },
+    { type: 'separator' },
     { label: 'Open Relay', click: () => openMain('home') },
     { label: 'Settings…', accelerator: 'Cmd+,', click: () => openMain('general') },
     { label: 'Welcome Guide…', click: () => openOnboarding() },
@@ -189,6 +191,7 @@ function registerIpc() {
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
     store.set(key, value);
     applyDockAndLogin();
+    if (key === 'settings.buddy' || key === 'settings.buddyAlways' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
   });
@@ -418,8 +421,9 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getLook: () => store.get('settings.look') || 'jarvis' });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, isAlways: () => store.get('settings.buddyAlways') !== false, getLook: () => store.get('settings.look') || 'jarvis' });
   overlay.watchDisplays();
+  overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
     speechInfo = { ...speechInfo, preparing: f };

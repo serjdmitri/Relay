@@ -16,19 +16,23 @@ let raf = 0;
 
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
-  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - (jarvis ? 40 : 30), y: flyTo.y + (jarvis ? 40 : 30) } : cursor && (jarvis ? { x: cursor.x + 30, y: cursor.y + 33 } : { x: cursor.x + 15, y: cursor.y + 17 });
+  const goal = flyTo && flyTo.until > now ? { x: flyTo.x - (jarvis ? 40 : 30), y: flyTo.y + (jarvis ? 40 : 30) } : cursor && (jarvis ? { x: cursor.x + 44, y: cursor.y + 46 } : { x: cursor.x + 15, y: cursor.y + 17 });
   if (goal) {
     if (!pos) pos = { ...goal };
     pos.x += (goal.x - pos.x) * 0.35; // a soft lag, so it trails the pointer instead of sticking to it
     pos.y += (goal.y - pos.y) * 0.35;
     buddy.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
   }
-  raf = state ? requestAnimationFrame(frame) : 0;
+  // Once the buddy has caught up with the pointer there is nothing to animate, so the loop rests until the pointer moves.
+  const expired = flyTo && flyTo.until <= now;
+  if (expired) flyTo = null;
+  const still = !expired && !flyTo && goal && pos && Math.abs(goal.x - pos.x) < 0.4 && Math.abs(goal.y - pos.y) < 0.4;
+  raf = state && !still ? requestAnimationFrame(frame) : 0;
 }
 
 function setState(s) {
   state = s;
-  buddy.classList.remove('listening', 'thinking', 'done');
+  buddy.classList.remove('idle', 'listening', 'thinking', 'done');
   if (!s) {
     buddy.classList.remove('on');
     cancelAnimationFrame(raf);
@@ -258,6 +262,7 @@ window.relay.onOverlay((m) => {
     case 'cursor':
       cursor = { x: m.x, y: m.y };
       if (state) buddy.classList.add('on');
+      if (state && !raf) raf = requestAnimationFrame(frame);
       break;
     case 'buddy-state':
       setState(m.state);

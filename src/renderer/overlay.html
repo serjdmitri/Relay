@@ -63,7 +63,7 @@
   #reticle, #ring2, #ptr, #pen { display: none; }
   .jarvis .orb, .jarvis .spin, .jarvis .chk { display: none !important; }
   .jarvis #reticle { display: block; position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); }
-  .jarvis #ptr { display: block; position: absolute; left: -17px; top: -18px; width: 15px; height: 15px; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); }
+  .jarvis #ptr { display: block; position: absolute; left: -33px; top: -33px; width: 15px; height: 15px; overflow: visible; filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); }
   #ptr path, #pen path { fill: var(--cy); stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
   #reticle g { transform-box: fill-box; transform-origin: center; }
   #reticle circle { fill: none; stroke: var(--cy); }
@@ -78,6 +78,9 @@
   @keyframes breathe { 0%, 100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.14); opacity: 1; } }
   #buddy.listening #reticle .c { animation: breathe .55s ease-in-out infinite; stroke-dasharray: none; }
   #buddy.listening #reticle .core { animation: breathe .55s ease-in-out infinite; }
+  #buddy.idle { opacity: .85; }
+  #buddy.idle #reticle g, #buddy.idle #reticle .core { animation-play-state: paused; }
+  #buddy.idle .orb { opacity: .8; }
   #buddy.thinking #reticle .a { animation-duration: 3s; }
   #buddy.thinking #reticle .b { animation-duration: 1.6s; }
   #buddy.thinking #reticle .c { animation-duration: 1.1s; }

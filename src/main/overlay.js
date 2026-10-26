@@ -7,7 +7,8 @@ const { displayAt, normalizeStrokes, strokesBox, lastBurst } = require('./overla
 //  - the halo: a ring where Relay is about to click or wants to point,
 //  - marks: drawings and a step-by-step guide card, which stay until dismissed (Esc, the next request, or a timeout).
 // All coordinates in and out of this class are global screen points; each window gets its own display's local ones.
-const FOLLOW_MS = 33; // the buddy follows the pointer about 30 times a second, and only while it is on screen
+const FOLLOW_MS = 33; // the buddy follows the pointer about 30 times a second while the pointer moves
+const FOLLOW_IDLE_MS = 160; // and checks about 6 times a second once it has been still for a while
 const HALO_MS = 2500;
 const MARKS_MS = 30000;
 const MARK_POLL_MS = 16; // how often the pointer is read while the mark key is held
@@ -16,14 +17,16 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic' }) {
+  constructor({ isEnabled, isBuddy = () => true, isAlways = () => false, getLook = () => 'classic' }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
+    this.isAlways = isAlways; // "Always show Jarvis": the ring stays beside the pointer even when Relay is idle
     this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
     this.wins = new Map(); // display id -> { win, display, shapes, card, halo, buddy, haloTimer }
     this.buddyState = null;
     this.followTimer = null;
     this.lastCursor = null;
+    this.idleTicks = 0;
     this.marksTimer = null;
     this.doneTimer = null;
     this.captureHidden = false;
@@ -132,13 +135,14 @@ class Overlay {
     return true;
   }
 
-  // ----- the buddy: follows the pointer while Relay is listening, thinking or has just finished -----
+  // ----- the buddy: follows the pointer. 'idle' (always on), 'listening', 'thinking' or 'done' -----
   buddy(state) {
     clearTimeout(this.doneTimer);
     clearTimeout(this.buddyWatchdog);
-    if (!state || !this.isBuddy()) {
+    const want = this.isBuddy() ? state || (this.isAlways() ? 'idle' : null) : null;
+    if (!want) {
       this.buddyState = null;
-      clearInterval(this.followTimer);
+      clearTimeout(this.followTimer);
       this.followTimer = null;
       this.lastCursor = null;
       for (const e of this.wins.values()) {
@@ -149,16 +153,30 @@ class Overlay {
       }
       return;
     }
-    this.buddyState = state;
-    this.buddyWatchdog = setTimeout(() => this.buddy(null), BUDDY_MAX_MS);
-    for (const e of this.wins.values()) this.send(e, { type: 'buddy-state', state });
-    if (!this.followTimer) this.followTimer = setInterval(() => this.follow(), FOLLOW_MS);
+    this.buddyState = want;
+    if (want !== 'idle') this.buddyWatchdog = setTimeout(() => this.buddy(null), BUDDY_MAX_MS);
+    for (const e of this.wins.values()) this.send(e, { type: 'buddy-state', state: want });
+    this.idleTicks = 0;
+    if (!this.followTimer) this.followTimer = setTimeout(() => this.tick(), FOLLOW_MS);
     this.follow(true);
   }
 
+  // The settings changed (or the app just started): show or hide the always-on ring to match.
+  applyMode() {
+    if (!this.buddyState || this.buddyState === 'idle') this.buddy(null);
+    else this.buddy(this.buddyState);
+  }
+
+  tick() {
+    const moved = this.follow();
+    this.idleTicks = moved ? 0 : this.idleTicks + 1;
+    this.followTimer = this.buddyState ? setTimeout(() => this.tick(), this.idleTicks > 15 ? FOLLOW_IDLE_MS : FOLLOW_MS) : null;
+  }
+
+  // Moves the buddy to the pointer. Returns whether the pointer had moved.
   follow(force = false) {
     const p = screen.getCursorScreenPoint();
-    if (!force && this.lastCursor && this.lastCursor.x === p.x && this.lastCursor.y === p.y) return;
+    if (!force && this.lastCursor && this.lastCursor.x === p.x && this.lastCursor.y === p.y) return false;
     this.lastCursor = p;
     const d = screen.getDisplayNearestPoint(p);
     const here = this.entry(d);
@@ -176,11 +194,12 @@ class Overlay {
       this.refresh(here);
     }
     this.send(here, { type: 'cursor', ...this.local(here, p) });
+    return true;
   }
 
   // The request is over: the buddy shows a check, then leaves. Drawings and guides stay.
   workDone() {
-    if (!this.buddyState) return;
+    if (!this.buddyState || this.buddyState === 'idle') return;
     this.buddy('done');
     this.doneTimer = setTimeout(() => this.buddy(null), 1600);
   }
