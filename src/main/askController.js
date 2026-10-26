@@ -19,6 +19,7 @@ const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = requ
 const { isUndo, isAgain } = require('./meta');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
+const { WakeWord } = require('./wake');
 const { markRegion } = require('./overlayGeometry');
 
 const PILL_W = 480;
@@ -111,13 +112,24 @@ class AskController {
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
-    if (this.speaker) this.speaker.onState = (on) => this.overlay.speaking(on);
+    if (this.speaker) this.speaker.onState = (on) => { this.overlay.speaking(on); this.wakeSoon(); };
+    // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
+    this.wake = new WakeWord({
+      speech,
+      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis' }),
+      canListen: () => !this.suspended && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
+      getDevice: () => this.store.get('settings.speech.input') || 'auto',
+      onArmed: (on) => this.overlay.setArmed(on),
+      onWake: () => this.wakeTriggered(),
+      log: console
+    });
     this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
       if (this.state === 'listening') this.push({ partial: text });
     });
     speech.on('level', (v) => {
+      this.checkAutoEnd(v);
       const now = Date.now();
       if (this.state === 'listening' && now - this.lastLevelPush > 60) {
         this.lastLevelPush = now;
@@ -130,17 +142,6 @@ class AskController {
     speech.on('exit', () => {
       if (this.state === 'listening' || this.state === 'finishing') this.listenFailed(new Error('The dictation helper stopped.'));
     });
-  }
-
-  // The state drives the menu bar icon, so every change goes through here.
-  get state() {
-    return this._state;
-  }
-
-  set state(v) {
-    if (v === this._state) return;
-    this._state = v;
-    this.onState?.(v);
   }
 
   // Name of the app in front right now.
@@ -317,13 +318,18 @@ class AskController {
     return this.duckChain;
   }
 
-  // The buddy follows the state, so no way out of a state can leave it on screen.
+  // Every change of state goes through here: it drives the menu bar icon, the ring, and whether "Hey Jarvis" is listening.
   get state() {
     return this._state;
   }
 
   set state(v) {
+    const changed = v !== this._state;
     this._state = v;
+    if (changed) {
+      this.onState?.(v);
+      this.wakeSoon();
+    }
     if (v === 'listening') this.overlay?.buddy('listening');
     else if (v === 'finishing' || v === 'working' || v === 'confirm') this.overlay?.buddy('thinking');
     else if (v === 'done') this.overlay?.workDone();
@@ -492,7 +498,38 @@ class AskController {
     return status === 'granted';
   }
 
-  async listen(mode, held) {
+  // Re-check, a moment after something changed, whether "Hey Jarvis" should be listening. The pause keeps it from
+  // opening the microphone while a reply is still being shown or spoken.
+  wakeSoon(delay = 700) {
+    if (!this.wake) return;
+    clearTimeout(this.wakeTimer);
+    this.wakeTimer = setTimeout(() => this.wake.refresh(), this.wake.armed && !this.wake.canListen() ? 0 : delay);
+  }
+
+  // The phrase was heard: chime, then listen for the request. It ends by itself when the user stops talking.
+  async wakeTriggered() {
+    if (this.state !== 'idle' && this.state !== 'done') return;
+    await new Promise((r) => setTimeout(r, 150)); // let the listening session close before a new one opens
+    await this.listen('ask', false, { auto: true });
+  }
+
+  // While a wake-started request is being spoken: end it after a pause, or give up if nothing is said.
+  checkAutoEnd(level) {
+    const a = this.autoEnd;
+    if (!a || this.state !== 'listening') return;
+    const now = Date.now();
+    if (a.floor === null) a.floor = level;
+    a.floor = Math.min(a.floor, level) * 0.98 + level * 0.02; // the room's background level
+    const voice = level > a.floor * 2.2 + 0.05;
+    if (voice) { a.spoke = true; a.lastVoice = now; }
+    if (a.spoke && now - a.lastVoice > 1300) { this.autoEnd = null; this.finishListening(); }
+    else if (!a.spoke && now - a.startedAt > 7000) { this.autoEnd = null; this.cancelAll(); }
+    else if (now - a.startedAt > 25000) { this.autoEnd = null; this.finishListening(); }
+  }
+
+  async listen(mode, held, opts = {}) {
+    this.wake?.disarm(); // the microphone is needed for this
+    this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null } : null;
     clearTimeout(this.doneTimer);
     this.mode = mode;
     this.heldStart = held;

@@ -341,6 +341,9 @@ window.relay.onOverlay((m) => {
     case 'clear':
       clearAll();
       break;
+    case 'armed':
+      buddy.classList.toggle('armed', !!m.on);
+      break;
     case 'caption':
       renderCap(m.hide ? null : m.state);
       break;

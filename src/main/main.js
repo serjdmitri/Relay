@@ -125,6 +125,7 @@ function rebuildTray() {
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
+    { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
     { label: 'Show Jarvis beside my pointer', type: 'checkbox', checked: store.get('settings.buddyAlways') !== false && store.get('settings.buddy') !== false, click: (item) => { store.set('settings.buddy', true); store.set('settings.buddyAlways', item.checked); overlay.applyMode(); broadcast(); rebuildTray(); } },
     { type: 'separator' },
     { label: 'Open Relay', click: () => openMain('home') },
@@ -202,6 +203,7 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.buddyAlways' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
   });
@@ -313,7 +315,7 @@ function registerIpc() {
   ipcMain.handle('speech:locales', () => speech.locales().catch(() => []));
   ipcMain.handle('speech:set-locale', async (_e, id) => {
     store.set('settings.speech.locale', id);
-    prepareSpeech();
+    prepareSpeech().finally(() => ask.wake.refresh()); // "Hey Jarvis" starts listening once the speech model is ready
     broadcast();
   });
 

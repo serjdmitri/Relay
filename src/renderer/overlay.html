@@ -94,6 +94,8 @@
   #buddy.speaking #reticle .b { animation-duration: 3.5s; }
   @keyframes speak { 0%, 100% { transform: scale(1); } 35% { transform: scale(1.28); } 70% { transform: scale(1.08); } }
   #buddy.idle { opacity: .85; }
+  #buddy.armed #reticle .dot { fill: #9fdcff; r: 3.6; }
+  #buddy.armed.idle #reticle .core { fill: rgba(76, 194, 255, .38); }
   #buddy.idle #reticle g, #buddy.idle #reticle .core { animation-play-state: paused; }
   #buddy.idle .orb { opacity: .8; }
   #buddy.thinking #reticle .a { animation-duration: 3s; }
