@@ -10,7 +10,8 @@ const words = (s) => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').sp
 
 // The best STL for some words, or null. A title has to contain at least one of the words, and what matches more wins; a size
 // between 100 KB and 15 MB is preferred (big enough to look like something, small enough to load fast).
-function pickModel(pages, query) {
+// pickModels gives the best few, for "another model" options; pickModel is the best one.
+function pickModels(pages, query, n = 4) {
   const q = words(query);
   if (!q.length) return null;
   const scored = [];
@@ -24,20 +25,28 @@ function pickModel(pages, query) {
     scored.push({ p, ii, score: hits * 10 + ideal * 3 - (t.size - hits) * 0.3 });
   }
   scored.sort((a, b) => b.score - a.score);
-  const best = scored[0];
-  if (!best) return null;
-  const m = best.ii.extmetadata || {};
-  const who = strip(m.Artist?.value).slice(0, 40);
-  const lic = strip(m.LicenseShortName?.value);
-  return { title: best.p.title.replace(/^File:/, '').replace(/\.stl$/i, ''), url: best.ii.url, size: best.ii.size, credit: [who, lic, 'Wikimedia Commons'].filter(Boolean).join(' · '), page: best.ii.descriptionurl || '' };
+  return scored.slice(0, n).map((best) => {
+    const m = best.ii.extmetadata || {};
+    const who = strip(m.Artist?.value).slice(0, 40);
+    const lic = strip(m.LicenseShortName?.value);
+    return { title: best.p.title.replace(/^File:/, '').replace(/\.stl$/i, ''), url: best.ii.url, size: best.ii.size, credit: [who, lic, 'Wikimedia Commons'].filter(Boolean).join(' · '), page: best.ii.descriptionurl || '' };
+  });
 }
 
-async function findStl(query, { fetchImpl = fetch } = {}) {
+function pickModel(pages, query) {
+  return pickModels(pages, query, 1)[0] || null;
+}
+
+async function findStls(query, { fetchImpl = fetch, n = 4 } = {}) {
   const q = new URLSearchParams({ action: 'query', generator: 'search', gsrnamespace: '6', gsrsearch: `${String(query).slice(0, 80)} filetype:3d`, gsrlimit: '15', prop: 'imageinfo', iiprop: 'url|size|extmetadata|mime', format: 'json', formatversion: '2', origin: '*' });
   const res = await fetchImpl(`https://commons.wikimedia.org/w/api.php?${q}`, { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const j = await res.json();
-  return pickModel(j.query?.pages, query);
+  return pickModels(j.query?.pages, query, n);
+}
+
+async function findStl(query, opts = {}) {
+  return (await findStls(query, { ...opts, n: 1 }))[0] || null;
 }
 
 // The file's bytes (a Buffer), only from Wikimedia's own servers and never over the size limit.
@@ -52,4 +61,4 @@ async function downloadStl(url, { fetchImpl = fetch } = {}) {
   return buf;
 }
 
-module.exports = { findStl, downloadStl, pickModel, words, MAX_BYTES };
+module.exports = { findStl, findStls, downloadStl, pickModel, pickModels, words, MAX_BYTES };

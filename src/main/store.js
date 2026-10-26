@@ -70,6 +70,7 @@ const DEFAULTS = {
   replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
   memories: [], // {id, text, ts}: what you told Relay to remember
+  holograms: [], // pinned holograms: where they are and links to their models (never the model files)
   remoteDevices: [], // paired phones: { id, name, hash, created, lastSeen } (only a hash of each token)
   schedules: [], // requests to run later or on repeat: see schedule.js
   corrections: {}, // fixes seen once, waiting for a second sighting: { 'from>to': count }

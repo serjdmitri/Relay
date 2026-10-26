@@ -138,8 +138,8 @@ After you dictate, Relay looks at the same text in the field a few seconds later
 ### Relay Remote (your phone)
 Settings > Remote: turn it on, press Pair a phone, scan the QR code in Safari, tap Pair, then Share > Add to Home Screen. The phone page shows the reactor; type or hold it and talk, and your Mac does the work and sends the answer back as text and speech. It controls your Mac, not the phone's own apps. Away from home, install Tailscale on both (free): it makes the connection private and encrypted, and gives the phone the secure address its microphone needs for hold to talk. See the changelog for the security details. `node scripts/remote-e2e.mjs` runs the phone page in a phone-sized browser against the real server.
 
-### 3D models
-"Show me a 3D model of a skull", "what does the Eiffel Tower look like in 3D", "show me the solar system in 3D": a viewer pops out that you can drag to turn and scroll to zoom. Relay looks for a real model on Wikimedia Commons first (the maker and license are shown) and otherwise builds a simple one from shapes, saying so. Real models exist only for some things; Turn upright fixes the ones that lie on their side.
+### 3D holograms
+"Show me a 3D model of a skull", "what does the Eiffel Tower look like in 3D", "show me the solar system in 3D": a hologram floats on your screen, with no window around it. Drag its glowing base to move it anywhere, drag the model to turn it, scroll to resize, pin it to keep it (even after restarts), step through other models with the arrows, and drop one hologram on another to combine them (or say "add a heart to it"). Relay looks for real models on Wikimedia Commons first (the maker and license are shown) and otherwise builds a simple one from shapes, saying so.
 
 ### Answer cards
 "Who is Gustave Eiffel?", "what does the Eiffel Tower look like?", "show me things to see in Boston": a black glass card with a picture, facts and links pops out on the right while Relay answers in one sentence. Pictures come from Wikipedia and Wikimedia Commons (photographer and license shown), downloaded by Relay itself. Esc or × closes it; General turns it off.

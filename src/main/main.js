@@ -15,7 +15,9 @@ const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
 const { CardPanel } = require('./cards/panel');
-const { ModelPanel } = require('./models/panel');
+const { HoloManager } = require('./holo/manager');
+const holoWin = require('./holo/windows');
+const { downloadStl } = require('./models/lookup');
 const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { connectAccount: connectGoogle } = require('./connectors/google');
@@ -29,7 +31,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, modelPanel, remote;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -137,6 +139,7 @@ function rebuildTray() {
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
     { label: 'Type a Request…', click: () => ask.open() },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
+    { label: holos?.holos.size ? `Clear ${holos.holos.size} Hologram${holos.holos.size === 1 ? '' : 's'}` : 'No Holograms', enabled: !!holos?.holos.size, click: () => holos.closeAll() },
     { label: 'Stop Speaking', enabled: !!speaker?.speaking, click: () => ask.interruptSpeech() },
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
@@ -457,8 +460,6 @@ function registerIpc() {
   ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
-  ipcMain.handle('model:close', () => modelPanel?.hide());
-  ipcMain.handle('model:hover', (_e, on) => modelPanel?.setHover(on));
   ipcMain.handle('card:close', () => cardPanel?.hide());
   ipcMain.handle('card:open', (_e, url) => cardPanel?.open(url));
   ipcMain.handle('card:size', (_e, h) => cardPanel?.setSize(h));
@@ -575,7 +576,13 @@ app.whenReady().then(() => {
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
   recent.start();
   cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js') });
-  modelPanel = new ModelPanel({ preload: path.join(__dirname, 'preload.js') });
+  holos = new HoloManager({
+    createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
+    cursor: holoWin.cursor, area: holoWin.area, download: (u) => downloadStl(u),
+    saved: () => store.get('holograms') || [], save: (l) => { store.data.holograms = l; store.save(); }
+  });
+  holoWin.registerHoloIpc(holos);
+  holos.restore().catch(() => {}); // pinned holograms come back where they were
   overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
@@ -607,7 +614,7 @@ app.whenReady().then(() => {
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
-  ask.modelPanel = modelPanel;
+  ask.holos = holos;
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
@@ -694,6 +701,7 @@ app.on('before-quit', () => {
   quitting = true;
   recent?.stop();
   remote?.stop();
+  holos?.persist?.();
   hotkeys?.stop();
   bridge?.stop();
   speaker?.stop();
