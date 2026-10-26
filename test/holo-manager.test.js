@@ -77,12 +77,14 @@ test('dragging by the base moves the window, and dropping on another combines th
   cur.x = 1000; cur.y = 200; tick(); // over the heart
   assert.deepEqual(lastSent(wins[1], 'merge-hint')[2], true, 'the one underneath is told to show it will combine');
   m.stopDrag();
+  await new Promise((r) => setImmediate(r)); // the fit may take a moment
   assert.equal(m.get(a), null, 'the dragged one is gone');
   assert.equal(m.get(b).title, 'Heart + Skull');
   assert.equal(m.get(b).items.length, 2);
   assert.equal(wins[0].destroyed, true);
   assert.deepEqual(lastSent(wins[1], 'merge-hint')[2], false);
   assert.deepEqual(saved(), [], 'nothing pinned, nothing saved');
+  assert.ok(m.get(b).items[1].from, 'the new one flies in from where it was dropped');
 });
 
 test('letting go away from the others just leaves it there; a drag that never ends is let go', async () => {
@@ -164,4 +166,66 @@ test('a photo option is made once on first use, and a pinned made-from-photo hol
   const gone = mk(saved(), () => null);
   await gone.m.restore();
   assert.equal(gone.m.latest(), null, 'a pinned model whose file is gone is skipped, not a crash');
+});
+
+function fitted(over = {}) {
+  const wins = [];
+  const cur = { x: 0, y: 0 };
+  const asked = [];
+  const files = [];
+  const m = new HoloManager({
+    createWindow: () => { const w = fakeWin(); wins.push(w); return w; }, cursor: () => cur, area: () => ({ x: 0, y: 0, width: 1800, height: 1100 }),
+    download: async (u) => Buffer.from(u), saved: () => [], save: () => {}, setTimer: () => 1, clearTimer: () => {},
+    fit: async (base, item, hint) => { asked.push([base.title, base.size, item.title, item.size, hint]); return { anchor: 'top', scale: 0.5, rotate: [0, 0, 0] }; },
+    putFile: (b) => { files.push(b.toString()); return `/cache/${files.length}.glb`; }, ...over
+  });
+  return { m, wins, cur, asked, files };
+}
+
+test('when one is dropped on another the model decides how they fit, from the names and sizes', async () => {
+  const { m, wins, cur, asked, files } = fitted();
+  const a = await m.show({ title: 'Claw', items: [stl('Claw')], x: 100, y: 100 });
+  const b = await m.show({ title: 'Robot', items: [stl('Robot')], x: 900, y: 100 });
+  m.setSizes(a, [{ w: 0.8, h: 0.5, d: 0.6 }]);
+  m.setSizes(b, [{ w: 2, h: 1.2, d: 1.6 }]);
+  cur.x = 150; cur.y = 150;
+  m.startDrag(m.get(a));
+  cur.x = 1000; cur.y = 200; m.tickDrag?.call(m);
+  m.stopDrag();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(asked[0].slice(0, 4), ['Robot', { w: 2, h: 1.2, d: 1.6 }, 'Claw', { w: 0.8, h: 0.5, d: 0.6 }]);
+  const item = m.get(b).items[1];
+  assert.deepEqual(item.placement, { anchor: 'top', scale: 0.5, rotate: [0, 0, 0] });
+  assert.ok(Math.abs(Math.hypot(...item.from) - 1) < 1e-6, 'a unit direction on the screen, where it was dropped from');
+  assert.ok(!('size' in item));
+  assert.equal(lastSent(wins[1], 'merge-hint', true)?.[2] ?? false, false);
+});
+
+test('if the model cannot answer, the pieces still combine', async () => {
+  const { m } = fitted({ fit: async () => { throw new Error('no model'); } });
+  const a = await m.show({ title: 'A', items: [stl('A')] });
+  const b = await m.show({ title: 'B', items: [stl('B')] });
+  assert.equal(await m.merge(a, b), true);
+  assert.equal(m.get(b).items.length, 2);
+  assert.equal(m.get(b).items[1].placement, null);
+});
+
+test('a piece pulled out becomes its own hologram under the pointer, and the rest of the first stays', async () => {
+  const { m, wins, cur, files } = fitted();
+  const a = await m.show({ title: 'Robot', items: [{ kind: 'glb', title: 'Robot', credit: 'c', bytes: Buffer.from('whole'), file: '/cache/0.glb' }], x: 300, y: 100 });
+  cur.x = 700; cur.y = 400;
+  const id = await m.extract(m.get(a), { item: 0, name: 'Piece 2', part: new Uint8Array(Buffer.from('arm')), rest: new Uint8Array(Buffer.from('body')) });
+  const piece = m.get(id);
+  assert.equal(piece.title, 'Piece 2 of Robot');
+  assert.equal(piece.items[0].bytes.toString(), 'arm');
+  assert.deepEqual([wins[1].bounds.x, wins[1].bounds.y], [470, -32], 'the new one is centred on the pointer, its base under it');
+  assert.equal(m.get(a).items[0].bytes.toString(), 'body', 'the first keeps the rest');
+  assert.deepEqual(files, ['arm', 'body']);
+  assert.ok(m.dragging && m.dragging.id === id, 'it follows the pointer until it is let go');
+  m.stopDrag();
+  // taking out the last piece closes the first
+  const only = await m.show({ title: 'Single', items: [{ kind: 'glb', title: 'Single', credit: 'c', bytes: Buffer.from('x') }] });
+  await m.extract(m.get(only), { item: 0, name: 'Piece 1', part: new Uint8Array(Buffer.from('p')), rest: null });
+  assert.equal(m.get(only), null);
+  m.stopDrag();
 });

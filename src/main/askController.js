@@ -12,7 +12,7 @@ const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
 const { OpenAICompatProvider } = require('./agent/providers/openai');
 const { PRESETS, isPreset } = require('./agent/providers/presets');
-const { McpHost, ClaudeSession, runSmart, findClaude } = require('./agent/claudeCli');
+const { McpHost, ClaudeSession, runSmart, findClaude, runClaude } = require('./agent/claudeCli');
 const { createMac } = require('./agent/mac');
 const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
@@ -22,6 +22,7 @@ const { buildCard } = require('./cards/card');
 const { findStls, downloadStl } = require('./models/lookup');
 const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
 const { photoToGlb } = require('./models/sf3d');
+const { fitPrompt, parsePlacement, heuristicPlacement } = require('./holo/fit');
 const { normalizeParts } = require('./models/shapes');
 const { NotionApi, notionTools } = require('./connectors/notion');
 const { GoogleApi, googleTools } = require('./connectors/google');
@@ -510,6 +511,33 @@ class AskController {
   // ----- 3D models -----
   // A real model from Wikimedia Commons if there is a fitting one, else what the model built from shapes. Returns what happened, in
   // words, so the model can say it honestly.
+  // One question to the model with no tools: used to decide how two 3D models fit together. Fast model, short wait.
+  async askOnce(text, system) {
+    const model = this.store.get('settings.model');
+    if (model.provider === 'claude') {
+      const claudePath = await findClaude();
+      if (!claudePath) throw new Error('no claude');
+      const host = new McpHost();
+      await host.start();
+      try {
+        const r = await runClaude({ claudePath, host, system, tools: [], text, model: 'haiku', confirm: async () => false, timeoutMs: 30000 });
+        return r.reply || '';
+      } finally { host.stop(); }
+    }
+    const { provider } = this.buildProvider();
+    const res = await provider.step({ system, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(30000) });
+    return res.text || '';
+  }
+
+  // How one model joins another: the model's choice when it answers in time, otherwise a simple rule.
+  async fitModels(base, item, hint = '') {
+    const fallback = heuristicPlacement(base, item);
+    try {
+      const reply = await Promise.race([this.askOnce(fitPrompt(base, item, hint), 'You decide how 3D models are put together. Answer only with the JSON object asked for.'), new Promise((_, no) => setTimeout(() => no(new Error('slow')), 12000))]);
+      return parsePlacement(reply) || fallback;
+    } catch { return fallback; }
+  }
+
   // A real-looking model made from a photo of the real thing, kept in the cache so it is only made once.
   async generatePhotoModel(c) {
     const key = this.modelCache?.key(c.url, 'sf3d-v1');
@@ -561,7 +589,7 @@ class AskController {
     if (!item) return `${problem || 'The 3D models found could not be loaded.'} Tell the user, or call show_3d again with parts to build a simple one from shapes.`;
     const stand = item.kind === 'shapes';
     const into = raw.combine ? this.holos.latest() : null;
-    if (into && (await this.holos.add(into.id, item))) {
+    if (into && (await this.holos.add(into.id, item, String(raw.attach || '')))) {
       return `Added "${item.title}" next to "${into.title.split(' + ')[0]}" in the same hologram. The user can drag the base to move it, drag the model to turn it, and drop holograms on each other to combine them.${stand ? ' It is a simple stand-in built from shapes.' : ''}`;
     }
     const id = await this.holos.show({ title, items: [item], options: { list: options, index: first } });

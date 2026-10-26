@@ -4,6 +4,8 @@
 import * as THREE from './vendor/three/three.module.min.js';
 import { STLLoader } from './vendor/three/STLLoader.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
+import { GLTFExporter } from './vendor/three/GLTFExporter.js';
+import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
 
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
@@ -31,11 +33,11 @@ let reveal0 = 0;
 // tint: a colour; map: a texture (a real model keeps its own colours, with the glow and scanlines over them); body: how solid it looks.
 function holoMaterial(tint, map, body = 0) {
   return new THREE.ShaderMaterial({
-    uniforms: { ...uniforms, tint: { value: new THREE.Color(tint || 0x00d4ff).lerp(CYAN, map ? 0.15 : 0.55) }, map: { value: map || null }, hasMap: { value: map ? 1 : 0 }, body: { value: body } },
+    uniforms: { ...uniforms, tint: { value: new THREE.Color(tint || 0x00d4ff).lerp(CYAN, map ? 0.15 : 0.55) }, map: { value: map || null }, hasMap: { value: map ? 1 : 0 }, body: { value: body }, boost: { value: 0 } },
     // a real-looking model (body 1) is drawn solid with the hologram effects over it; the light-only kind is see-through and additive
     transparent: body < 1, depthWrite: body >= 1, blending: body >= 1 ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; vN = normalize(normalMatrix * normal); vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform float time; uniform float reveal; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float body; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { if (vY > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, vY); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb * 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge); gl_FragColor = vec4(lit * flick1, 1.0); return; } float a = (0.10 + body + f * 0.9) * scan + edge * 0.9; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge), a * flick); }'
+    fragmentShader: 'uniform float time; uniform float reveal; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float body; uniform float boost; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { if (vY > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, vY); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb * 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge) + vec3(0.0, 0.35, 0.5) * boost; gl_FragColor = vec4(lit * flick1, 1.0); return; }  float a = (0.10 + body + f * 0.9) * scan + edge * 0.9 + boost * 0.5; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge) + vec3(0.0, 0.4, 0.6) * boost, a * flick); }'
   });
 }
 function solidMaterial(color) { return new THREE.MeshStandardMaterial({ color: color || 0xd7e3ea, roughness: 0.5, metalness: 0.15 }); }
@@ -66,6 +68,7 @@ function makeMat(color) { return solid ? solidMaterial(color) : holoMaterial(col
 // One item as a group, scaled so its biggest side is 2 units.
 async function buildItem(it) {
   const g = new THREE.Group();
+  const ud = { kind: it.kind, g, holders: [], meshes: [] }; // what the pull-apart needs to find later
   if (it.kind === 'glb') {
     // A real-looking model (from a photo): it keeps its own colours and shape; the hologram look is light over them.
     const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(it.bytes.buffer.slice(it.bytes.byteOffset, it.bytes.byteOffset + it.bytes.byteLength), '', resolve, reject));
@@ -77,6 +80,8 @@ async function buildItem(it) {
       else if (m.isMeshBasicMaterial || !m.isMeshStandardMaterial) o.material = new THREE.MeshStandardMaterial({ map: m.map || null, color: m.color || 0xffffff, roughness: 0.6 });
     });
     g.add(gltf.scene);
+    ud.meshes = [];
+    gltf.scene.traverse((o) => { if (o.isMesh) ud.meshes.push(o); });
   } else if (it.kind === 'stl') {
     const geo = new STLLoader().parse(it.bytes.buffer.slice(it.bytes.byteOffset, it.bytes.byteOffset + it.bytes.byteLength));
     if (!geo.attributes.normal) geo.computeVertexNormals();
@@ -84,10 +89,12 @@ async function buildItem(it) {
     mesh.rotation.set(...ORIENTS[upright]);
     mesh.userData.stl = true;
     g.add(mesh);
+    ud.stlMesh = mesh;
     if (!solid && geo.attributes.position.count < 240000) {
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 38), new THREE.LineBasicMaterial({ color: 0x59dcff, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false }));
       edges.rotation.copy(mesh.rotation);
       g.add(edges);
+      ud.edges = edges;
     }
   } else {
     for (const p of it.parts || []) {
@@ -95,6 +102,8 @@ async function buildItem(it) {
       mesh.rotation.set(rad(p.rotation[0]), rad(p.rotation[1]), rad(p.rotation[2]));
       const holder = new THREE.Group();
       holder.add(mesh);
+      ud.holders.push(holder);
+      mesh.userData.color = p.color;
       if (p.label) { const l = label(p.label); holder.add(l); labels.push({ sprite: l, radius: p.shape === 'sphere' ? p.size[0] : Math.max(...p.size) / 2, group: g }); }
       if (p.orbit) { const pivot = new THREE.Group(); pivot.position.set(...p.orbit.center); pivot.rotation.x = rad(p.orbit.tilt); holder.position.set(p.orbit.radius, 0, 0); pivot.add(holder); g.add(pivot); animated.push({ o: pivot, spin: [0, p.orbit.speed, 0] }); if (p.spin) animated.push({ o: mesh, spin: p.spin }); }
       else { holder.position.set(...p.position); g.add(holder); if (p.spin) animated.push({ o: mesh, spin: p.spin }); }
@@ -109,18 +118,13 @@ async function buildItem(it) {
   wrap.add(g);
   wrap.scale.setScalar(s);
   for (const l of labels) if (l.group === g) { l.sprite.scale.set(0.8 / s, 0.2 / s, 1); l.sprite.position.y = l.radius + 0.2 / s; }
-  wrap.userData.width = Math.max(size.x, size.z) * s; // it turns, so its front-to-back reach counts too
-  wrap.userData.height = size.y * s;
+  Object.assign(wrap.userData, ud, { size: { w: size.x * s, h: size.y * s, d: size.z * s }, width: Math.max(size.x, size.z) * s, height: size.y * s });
   return wrap;
 }
 
-function layoutX(widths, gap = 0.3) {
-  const total = widths.reduce((s, w) => s + w, 0) + gap * Math.max(0, widths.length - 1);
-  let x = -total / 2;
-  return widths.map((w) => { const c = x + w / 2; x += w + gap; return c; });
-}
-
 let building = 0;
+let itemWraps = [];
+const intros = []; // models flying in to join
 async function rebuild() {
   const mine = ++building;
   animated.length = 0; // the parts that spin and the name tags belong to what is built next
@@ -130,8 +134,25 @@ async function rebuild() {
   scene.remove(holo);
   holo.traverse((o) => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.map?.dispose?.() || m?.dispose?.()); });
   holo = new THREE.Group();
-  const xs = layoutX(wraps.map((w) => w.userData.width));
-  wraps.forEach((w, i) => { w.position.x = xs[i]; holo.add(w); });
+  const sizes = wraps.map((w) => w.userData.size);
+  const placed = placeItems(sizes, items.map((it) => it.placement || null));
+  const now = performance.now();
+  intros.length = 0;
+  wraps.forEach((w, i) => {
+    const p = placed[i];
+    w.position.set(...p.position);
+    w.rotation.set(rad(p.rotationDeg[0]), rad(p.rotationDeg[1]), rad(p.rotationDeg[2]));
+    w.scale.multiplyScalar(p.scale);
+    holo.add(w);
+    // a model that has just joined flies in from the side it was dropped from, and settles
+    if (items[i].from) intros.push({ w, t0: now, to: w.position.clone(), s1: w.scale.x, from: new THREE.Vector3(items[i].from[0] * 3.2, -items[i].from[1] * 2.2, 0).add(w.position) });
+  });
+  items.forEach((it) => { delete it.from; }); // flown in once; a later rebuild (solid, upright) must not do it again
+  itemWraps = wraps;
+  exploded = false; explodeT = 0; parts = []; selected = null; hovered = null;
+  document.body.classList.remove('exploded');
+  $('explode').classList.remove('on');
+  relay.holoSizes(sizes.map((z) => ({ w: +z.w.toFixed(3), h: +z.h.toFixed(3), d: +z.d.toFixed(3) })));
   // The whole group turns about its middle, so it has to fit while turning: its reach from the middle, sideways and front to back,
   // must stay inside the view, and it must not be taller than the stand allows. It then stands on the base.
   const box = new THREE.Box3().setFromObject(holo);
@@ -165,17 +186,159 @@ baseHit.rotation.x = -Math.PI / 2; baseHit.position.y = 0.01;
 baseGroup.add(baseHit);
 scene.add(baseGroup);
 
-// ---------- pointer: turn the model, move the window by its base, scroll to resize ----------
+// ---------- pulling it apart ----------
+const EXPLODE_MS = 700;
+let exploded = false;
+let explodeT = 0; // 0 together, 1 fully apart
+let parts = []; // { obj, meshes, item, base, off, name }
+let selected = null;
+let hovered = null;
+
+const ease = (t) => 1 - Math.pow(1 - t, 3);
+
+// A solid model has nothing to pull apart along, so it is cut into regions; a model made of several bodies splits along them.
+function splitMesh(mesh) {
+  const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+  const pos = geo.attributes.position.array;
+  const res = splitTriangles(pos, { regions: 5 });
+  if (!res) return null;
+  const nor = geo.attributes.normal?.array;
+  const uv = geo.attributes.uv?.array;
+  const meshes = res.groups.map((grp) => {
+    const P = new Float32Array(grp.length * 9);
+    const N = nor ? new Float32Array(grp.length * 9) : null;
+    const U = uv ? new Float32Array(grp.length * 6) : null;
+    grp.forEach((t, i) => { P.set(pos.subarray(t * 9, t * 9 + 9), i * 9); if (N) N.set(nor.subarray(t * 9, t * 9 + 9), i * 9); if (U) U.set(uv.subarray(t * 6, t * 6 + 6), i * 6); });
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    if (N) g2.setAttribute('normal', new THREE.BufferAttribute(N, 3)); else g2.computeVertexNormals();
+    if (U) g2.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+    const m2 = new THREE.Mesh(g2, mesh.material.clone());
+    m2.position.copy(mesh.position); m2.rotation.copy(mesh.rotation); m2.scale.copy(mesh.scale);
+    m2.userData = { ...mesh.userData, orig: mesh.userData.orig };
+    return m2;
+  });
+  return { kind: res.kind, meshes };
+}
+
+let hintText = '';
+function collectParts() {
+  parts = [];
+  hintText = '';
+  itemWraps.forEach((wrap, ii) => {
+    const ud = wrap.userData;
+    if (ud.kind === 'shapes') { ud.holders.forEach((h, i) => parts.push({ obj: h, meshes: h.children.filter((c) => c.isMesh), item: ii, name: `Part ${i + 1}` })); return; }
+    const meshes = ud.kind === 'stl' ? (ud.stlMesh ? [ud.stlMesh] : []) : ud.meshes;
+    let pieces = [];
+    if (meshes.length >= 2) pieces = meshes;
+    else if (meshes.length === 1) {
+      const sp = splitMesh(meshes[0]);
+      if (sp) {
+        const parent = meshes[0].parent;
+        parent.remove(meshes[0]);
+        sp.meshes.forEach((m) => parent.add(m));
+        pieces = sp.meshes;
+        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : '';
+      }
+    }
+    if (ud.edges) ud.edges.visible = false;
+    pieces.forEach((m, i) => parts.push({ obj: m, meshes: [m], item: ii, name: `Piece ${i + 1}` }));
+  });
+  for (const p of parts) p.base = p.obj.position.clone();
+}
+
+function computeOffsets() {
+  holo.updateMatrixWorld(true);
+  const centres = parts.map((p) => new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()));
+  const whole = new THREE.Box3().setFromObject(holo);
+  const wc = whole.getCenter(new THREE.Vector3());
+  const ws = whole.getSize(new THREE.Vector3());
+  const world = explodeOffsets(centres.map((c) => [c.x, c.y, c.z]), [wc.x, wc.y, wc.z], Math.max(ws.x, ws.y, ws.z), 0.9);
+  parts.forEach((p, i) => {
+    const inv = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().copy(p.obj.parent.matrixWorld).invert());
+    p.off = new THREE.Vector3(...world[i]).applyMatrix3(inv); // the same push, in the piece's own space
+  });
+}
+
+function setBoost(part, v) {
+  for (const m of part.meshes) {
+    const mat = m.material;
+    if (mat.uniforms?.boost) mat.uniforms.boost.value = v;
+    else if (mat.emissive) mat.emissive.setRGB(0, 0.3 * v, 0.45 * v);
+  }
+}
+function setHover(p) { if (hovered && hovered !== selected) setBoost(hovered, 0); hovered = p; if (p && p !== selected) setBoost(p, 0.55); }
+function select(p) { if (selected) setBoost(selected, 0); selected = p; if (p) setBoost(p, 1); }
+
+function toggleExplode() {
+  if (!exploded) {
+    if (!parts.length) collectParts();
+    if (parts.length < 2) { $('err').textContent = 'That one is too detailed to pull apart.'; setTimeout(() => { $('err').textContent = ''; }, 2500); return; }
+    computeOffsets();
+  } else { select(null); setHover(null); }
+  exploded = !exploded;
+  $('explode').classList.toggle('on', exploded);
+  document.body.classList.toggle('exploded', exploded);
+  $('hint2').textContent = exploded ? `Click a piece, then drag it out${hintText ? ` · ${hintText}` : ''}` : '';
+}
+
+// What a piece looks like to a file: plain materials (the hologram shader cannot be saved), in the position it has when together.
+function exportMaterial(m) {
+  const orig = m.userData.orig;
+  if (orig && !orig.isShaderMaterial) return orig;
+  const c = m.userData.color || (m.material.uniforms ? m.material.uniforms.tint.value.getHex() : 0xd7e3ea);
+  return new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.15 });
+}
+function relMatrix(o, top) { const m = new THREE.Matrix4(); for (let x = o; x && x !== top; x = x.parent) { x.updateMatrix(); m.premultiply(x.matrix); } return m; }
+function exportGlb(list, g) {
+  const root = new THREE.Group();
+  for (const p of list) for (const mesh of p.meshes) {
+    const c = new THREE.Mesh(mesh.geometry, exportMaterial(mesh));
+    const savedPos = p.obj.position.clone();
+    p.obj.position.copy(p.base); // measured where it sits when everything is together
+    relMatrix(mesh, g).decompose(c.position, c.quaternion, c.scale);
+    p.obj.position.copy(savedPos);
+    root.add(c);
+  }
+  return new Promise((resolve, reject) => new GLTFExporter().parse(root, resolve, reject, { binary: true }));
+}
+
+let extracting = false;
+async function extractSelected() {
+  if (!selected || extracting) return;
+  extracting = true;
+  const part = selected;
+  try {
+    const g = itemWraps[part.item].userData.g;
+    const same = parts.filter((p) => p.item === part.item);
+    const rest = same.filter((p) => p !== part);
+    const [partBytes, restBytes] = await Promise.all([exportGlb([part], g), rest.length ? exportGlb(rest, g) : null]);
+    relay.holoExtract({ item: part.item, name: part.name, part: new Uint8Array(partBytes), rest: restBytes ? new Uint8Array(restBytes) : null });
+  } catch { $('err').textContent = 'Could not take that piece out.'; }
+  extracting = false;
+}
+
+// ---------- pointer: turn the model, move the window by its base, scroll to resize, pick pieces ----------
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 let over = false;
-let dragging = null; // 'rotate' | 'move'
+let dragging = null; // 'rotate' | 'move' | 'arm' (a selected piece that will come out when dragged)
 let last = null;
+let downAt = null;
 
-function pick(e) {
+function setRay(e) {
   const r = cv.getBoundingClientRect();
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
   ray.setFromCamera(ndc, camera);
+}
+function pickPart(e) {
+  if (!exploded) return null;
+  setRay(e);
+  const hit = ray.intersectObjects(parts.flatMap((p) => p.meshes), false)[0];
+  return hit ? parts.find((p) => p.meshes.includes(hit.object)) : null;
+}
+function pick(e) {
+  setRay(e);
   if (ray.intersectObject(baseHit).length) return 'base';
   const meshes = [];
   holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
@@ -191,17 +354,27 @@ addEventListener('mousemove', (e) => {
   if (dragging) return;
   const p = pick(e);
   setOver(!!p);
-  cv.style.cursor = p === 'base' ? 'move' : p === 'model' ? 'grab' : 'default';
+  const part = p === 'model' ? pickPart(e) : null;
+  setHover(part);
+  cv.style.cursor = p === 'base' ? 'move' : part ? 'pointer' : p === 'model' ? 'grab' : 'default';
 });
-addEventListener('mouseleave', () => { if (!dragging) { document.body.classList.remove('near'); } });
+addEventListener('mouseleave', () => { if (!dragging) { document.body.classList.remove('near'); setHover(null); } });
 addEventListener('pointerdown', (e) => {
   const p = pick(e);
   if (p === 'base') { dragging = 'move'; relay.holoDrag('start'); }
-  else if (p === 'model') { dragging = 'rotate'; last = e.clientX; cv.style.cursor = 'grabbing'; }
+  else if (p === 'model') {
+    const part = pickPart(e);
+    if (part && part === selected) { dragging = 'arm'; downAt = { x: e.clientX, y: e.clientY }; }
+    else { if (part) select(part); else if (selected) select(null); dragging = 'rotate'; last = e.clientX; cv.style.cursor = 'grabbing'; }
+  }
   if (dragging) { e.preventDefault(); document.body.setPointerCapture?.(e.pointerId); spinPause = true; }
 });
 addEventListener('pointermove', (e) => {
   if (dragging === 'rotate') { spin += (e.clientX - last) * 0.012; last = e.clientX; holo.rotation.y = spin; }
+  else if (dragging === 'arm' && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 12) {
+    dragging = 'move'; // it comes out: the new hologram follows the pointer until it is let go
+    extractSelected();
+  }
 });
 function endDrag() { if (!dragging) return; if (dragging === 'move') relay.holoDrag('end'); dragging = null; spinPause = false; }
 addEventListener('pointerup', endDrag);
@@ -216,6 +389,7 @@ function applyScale() { camera.position.z = 6.4 / userScale; camera.lookAt(0, -0
 $('close').onclick = () => relay.holoClose();
 $('pin').onclick = () => { const on = !$('pin').classList.contains('on'); $('pin').classList.toggle('on', on); relay.holoPin(on); };
 $('solid').onclick = () => { solid = !solid; $('solid').classList.toggle('on', solid); rebuild().catch(() => {}); relay.holoSolid(solid); };
+$('explode').onclick = toggleExplode;
 $('upright').onclick = () => { upright = (upright + 1) % 3; rebuild().catch(() => {}); };
 $('prev').onclick = () => relay.holoOption(-1);
 $('next').onclick = () => relay.holoOption(1);
@@ -235,7 +409,7 @@ relay.onHolo((m, d) => {
     $('err').textContent = '';
     setOptions(d.options);
     rebuild().catch(() => { $('err').textContent = 'Could not draw that model.'; });
-  } else if (m === 'merge-hint') document.body.classList.toggle('merging', !!d);
+  } else if (m === 'merge-hint') { document.body.classList.toggle('merging', !!d); $('merge').textContent = d === 'fit' ? 'Fitting…' : 'Release to combine'; }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
   else if (m === 'error') $('err').textContent = d;
 });
@@ -252,9 +426,27 @@ function frame(now) {
   uniforms.reveal.value = -1.2 + (1 - Math.pow(1 - t, 3)) * 4.4; // the build sweep
   if (!spinPause) { spin += dt * 0.35; holo.rotation.y = spin; }
   holo.position.y = -1.05 + Math.sin(now / 900) * 0.025;
+  if (parts.length) {
+    const goal = exploded ? 1 : 0;
+    explodeT += Math.sign(goal - explodeT) * Math.min(Math.abs(goal - explodeT), (dt * 1000) / EXPLODE_MS);
+    for (const p of parts) if (p.off) p.obj.position.copy(p.base).addScaledVector(p.off, ease(explodeT));
+  }
+  for (let i = intros.length - 1; i >= 0; i--) { // a model flying in to join: it arrives on a curve and settles
+    const it = intros[i];
+    const t = Math.min(1, (now - it.t0) / 900);
+    const e = ease(t);
+    it.w.position.lerpVectors(it.from, it.to, e);
+    it.w.scale.setScalar(it.s1 * (0.55 + 0.45 * e));
+    if (t >= 1) intros.splice(i, 1);
+  }
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   baseGroup.children[0].rotation.z += dt * 0.25;
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  // A hook for the real-window tests: where each piece is on screen, and the state of the pull-apart. Nothing here changes anything.
+window.__holoTest = {
+  state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length }),
+  where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); const r = cv.getBoundingClientRect(); return { x: (c.x + 1) / 2 * r.width + r.left, y: (1 - c.y) / 2 * r.height + r.top }; }
+};
+requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

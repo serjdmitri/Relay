@@ -141,6 +141,9 @@ Settings > Remote: turn it on, press Pair a phone, scan the QR code in Safari, t
 ### 3D holograms (realistic)
 For a specific real thing Relay researches what it looks like, then shows the best of: a ready-made real 3D model (Wikimedia Commons), or a realistic model **made from a real photo** (Stable Fast 3D, a free Hugging Face service; only the public photo is sent), or a simple build from shapes for abstract things. Models made from one photo guess the hidden sides, and the service can be busy or out of its free limit.
 
+### Pull a hologram apart
+The four-diamond button under a hologram explodes it into parts. Click a piece, drag it out into its own hologram, and drop it on another hologram: Relay asks Claude where it belongs (on top, beside, inside, how big) and it flies in. Assemblies split into their real bodies; a single solid model is cut into regions. See the changelog for limits.
+
 ### 3D holograms
 "Show me a 3D model of a skull", "what does the Eiffel Tower look like in 3D", "show me the solar system in 3D": a hologram floats on your screen, with no window around it. Drag its glowing base to move it anywhere, drag the model to turn it, scroll to resize, pin it to keep it (even after restarts), step through other models with the arrows, and drop one hologram on another to combine them (or say "add a heart to it"). Relay looks for real models on Wikimedia Commons first (the maker and license are shown) and otherwise builds a simple one from shapes, saying so.
 
