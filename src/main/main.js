@@ -315,7 +315,8 @@ function registerIpc() {
   ipcMain.handle('speech:locales', () => speech.locales().catch(() => []));
   ipcMain.handle('speech:set-locale', async (_e, id) => {
     store.set('settings.speech.locale', id);
-    prepareSpeech().finally(() => ask.wake.refresh()); // "Hey Jarvis" starts listening once the speech model is ready
+    ask.wake.disarm();
+    prepareSpeech().finally(() => ask.wake.refresh()); // a new language: "Hey Jarvis" listens in it once the model is ready
     broadcast();
   });
 
@@ -538,7 +539,7 @@ app.whenReady().then(() => {
   rebuildTray();
   startHotkeysWhenTrusted();
   refreshClaude().then(broadcast);
-  prepareSpeech();
+  prepareSpeech().finally(() => ask.wake.refresh()); // "Hey Jarvis" starts listening once the speech model is ready
   // Headsets come and go: keep the microphone label in the title bar current.
   setInterval(async () => {
     if (!speech.child) return;
