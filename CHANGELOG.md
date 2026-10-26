@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1
+
+- **Circling now looks like Voice OS:** a smoke of soft blue puffs that follows the pointer, biggest at the pointer and thinning out behind it, instead of a drawn line. (No pen triangle either.)
+- **The Recent menu is black and centered on the left edge,** like a Dock, in the same black as the notch. It pops out of the edge and tucks back in like liquid glass: it squashes, blurs and overshoots, with a bright rim and a sheen that sweeps across. Clicks pass through everything around it.
+
 ## 0.8.0
 
 - **Recent asks on the left edge.** Rest the pointer on the left edge of the screen and a glass list of what you asked lately slides out (real macOS blur, a soft highlight that follows the pointer, items that swell toward it). Click one to ask it again. Turn it off in General > Recent asks on the left edge, or from the menu bar icon.

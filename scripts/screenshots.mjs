@@ -66,10 +66,10 @@ for (const [name, msg] of Object.entries(states)) {
 }
 // the Recent menu on the left edge: the real window blurs what is behind it, here a wallpaper stands in
 const rec = await ctx.newPage();
-await rec.setViewportSize({ width: 344, height: 560 });
+await rec.setViewportSize({ width: 344, height: 700 });
 rec.on('pageerror', (e) => errors.push('recent: ' + e.message));
 await rec.goto(url('recent.html'));
-await rec.evaluate(() => { document.documentElement.style.background = 'radial-gradient(500px 420px at 30% 30%, #1c5f84, #0a2a42 60%, #05131f)'; document.querySelector('.glass').style.backdropFilter = 'blur(24px) saturate(1.4)'; });
+await rec.evaluate(() => { document.documentElement.style.background = 'radial-gradient(600px 500px at 60% 40%, #3a6f93, #1b3b52 60%, #0e1f2d)'; });
 await rec.evaluate(() => window.__recent('show'));
 await rec.waitForTimeout(1400);
 await rec.screenshot({ path: path.join(out, 'recent-menu.png') });

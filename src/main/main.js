@@ -451,6 +451,8 @@ function registerIpc() {
     recent?.close();
     if (typeof text === 'string' && text.trim()) await ask.submit(text);
   });
+  ipcMain.handle('recent:size', (_e, h) => recent?.setPanelHeight(h));
+  ipcMain.handle('recent:hit', (_e, on) => recent?.setHit(!!on));
   ipcMain.handle('ask:submit', (_e, text) => ask.submit(text));
   ipcMain.handle('ask:cancel', () => ask.cancelAll());
   ipcMain.handle('ask:confirm', (_e, yes) => ask.pendingConfirm?.(!!yes));

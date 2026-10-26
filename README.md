@@ -133,10 +133,10 @@ After Relay does something, say "remember this as morning setup". Next time you 
 Speech > More natural voices: OpenAI or ElevenLabs voices with your own key (they bill you, Relay takes nothing), or a free on-device voice (Kokoro, Apple Silicon, about 270 MB, downloaded when you press the button and checked against a pinned hash).
 
 ### Recent asks
-Rest the pointer on the left edge of the screen for a moment and a glass list of your latest asks slides out. Click one to ask it again; move away and it slides back. Turn it off in General or from the menu bar icon.
+Rest the pointer on the left edge of the screen for a moment and a black panel, centered on the edge like a Dock, pops out with your latest asks. Click one to ask it again; move away and it slides back. Turn it off in General or from the menu bar icon.
 
 ### Mark the screen
-Hold the mark key (**Left ⌃** by default) and move the pointer round something (no clicking; a cyan comet trail shows the stroke being drawn and fades away behind the pointer), let go, then ask: "what is this?", "why is this red?", "fix this". Relay looks at the area you marked (with some of its surroundings) instead of guessing from a whole-screen picture. A model that cannot see images gets the text inside the area instead. The mark lasts three minutes, and Esc cancels it. Change the key under Shortcuts (use one modifier key on its own).
+Hold the mark key (**Left ⌃** by default) and move the pointer round something (no clicking; a smoke of soft blue puffs follows it and thins out behind it), let go, then ask: "what is this?", "why is this red?", "fix this". Relay looks at the area you marked (with some of its surroundings) instead of guessing from a whole-screen picture. A model that cannot see images gets the text inside the area instead. The mark lasts three minutes, and Esc cancels it. Change the key under Shortcuts (use one modifier key on its own).
 
 ### Instant commands
 These run at once, with no model call (about a third of a second):
