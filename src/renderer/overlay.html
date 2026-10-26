@@ -67,6 +67,7 @@
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); will-change: transform; }
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)); }
   /* a glow in the reactor's own cyan, and a soft dark shadow so it reads on a white window too */
+  #hud.snap #hudR, #hud.snap #hudT { transition: none !important; }
   #hudc { width: 810px; height: 810px; display: block; filter: drop-shadow(0 0 5px rgba(0, 212, 255, .85)) drop-shadow(0 0 20px rgba(0, 160, 230, .55)) drop-shadow(0 2px 5px rgba(0, 12, 28, .8)); }
   #hudT { position: absolute; left: 50%; top: calc(50% - 40px + 270px * var(--k) + 22px); width: 640px; margin-left: -320px; text-align: center; transition: top .8s cubic-bezier(.22, .9, .3, 1), left .8s cubic-bezier(.22, .9, .3, 1), margin-left .8s cubic-bezier(.22, .9, .3, 1), width .8s ease; }
   #hud.corner #hudT { left: 196px; top: 72px; margin-left: 0; width: 460px; text-align: left; text-shadow: 0 1px 3px rgba(0, 8, 20, .95), 0 0 10px rgba(0, 8, 20, .75), 0 0 22px rgba(0, 8, 20, .5); }

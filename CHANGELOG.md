@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+
+- The reactor now appears in the middle of the screen at once, with no sliding. It only slides when it goes from the middle to the top left corner to work. (Before, it could appear to drop in from the top left, because it started from where it was last left.)
+
 ## 0.7.1
 
 - The reactor is brighter, with a soft cyan glow and a dark shadow so it reads on a white window too. In the top left corner there is no panel behind it any more, just a shadow behind the reactor and the text. (The dark blue veil behind the big reactor in the middle stays.)
