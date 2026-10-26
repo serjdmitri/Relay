@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('relay', {
   cardSize: (h) => invoke('card:size', h),
   cardHover: (on) => invoke('card:hover', on),
   setRemote: (patch) => invoke('remote:set', patch),
+  shortcutKey: () => invoke('remote:shortcut'),
   pairPhone: () => invoke('remote:pair'),
   removePhone: (id) => invoke('remote:remove', id),
   remoteTailscale: (on) => invoke('remote:tailscale', on),

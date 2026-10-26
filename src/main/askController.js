@@ -483,8 +483,8 @@ class AskController {
 
   // A request from the phone goes the same way as one from the Mac's own shortcut: it joins the list if something is running, and
   // waits a moment if you are in the middle of talking or typing here. Returns its id at once; the answer comes back as an event.
-  async remoteAsk(text, device) {
-    const id = crypto.randomUUID();
+  async remoteAsk(text, device, given) {
+    const id = given || crypto.randomUUID();
     const go = (tries = 0) => {
       if (this.runningTask) return this.enqueue(text, { remote: id });
       if (['idle', 'done'].includes(this.state)) {

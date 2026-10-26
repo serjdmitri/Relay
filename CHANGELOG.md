@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.2
+
+- **"Hey Siri, Relay": talk to Relay from the iPhone without any secure address.** Safari hides its speech recognition on plain http, so hold to talk needs Tailscale. A Shortcut does not: say "Hey Siri, Relay" (or use the Action Button, Back Tap or a Home Screen icon), talk, and the answer is spoken back. Settings > Remote > Hey Siri, Relay makes a key and lists the six steps to build the Shortcut (Dictate Text, Get Contents of URL, Get Dictionary Value, Speak Text).
+- To make that possible `/api/ask` can now wait: with `wait: true` the call returns the answer itself instead of just an id (up to about two minutes, then a polite "still working"). The key is saved as a paired phone called Siri Shortcut: unpair it to cancel it.
+- Away from home the same Shortcut works with the Tailscale address (http://100.x.x.x:47900).
+
 ## 0.16.1
 
 - **Hold to talk is tried on any browser that has speech recognition** (Safari does), instead of being switched off on plain Wi-Fi before it was tried. If the browser blocks the microphone on that address, the phone says so in words (use the Tailscale https link, or type) rather than doing nothing. A browser with no speech recognition at all is told to open Relay in Safari.

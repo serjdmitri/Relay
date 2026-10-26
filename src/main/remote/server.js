@@ -1,6 +1,7 @@
 // Relay Remote's server: a small web server inside Relay that your phone talks to. The phone page is plain files; everything else
 // needs a paired phone's token. Nothing here thinks: it passes your words to the same request path as the Mac's own shortcuts.
 
+const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +21,7 @@ class RemoteServer {
     this.host = host;
     this.port = port;
     this.clients = new Set();
+    this.waiters = new Map(); // requests that asked to wait for the answer (iPhone Shortcuts): id -> resolve
     this.server = null;
     this.ping = null;
   }
@@ -43,6 +45,7 @@ class RemoteServer {
 
   // Everything you want the phones to see goes through here.
   broadcast(event) {
+    if (event.type === 'result' && event.id && this.waiters.has(event.id)) { this.waiters.get(event.id)({ id: event.id, reply: event.reply, status: event.status }); this.waiters.delete(event.id); } // the waiter's own timer is cleared by it
     const line = `data: ${JSON.stringify(event)}\n\n`;
     for (const c of this.clients) c.res.write(line);
   }
@@ -98,7 +101,15 @@ class RemoteServer {
       const b = await this.body(req).catch(() => null);
       const text = String(b?.text || '').trim().slice(0, 2000);
       if (!text) return this.json(res, 400, { error: 'Say or type something first.' });
-      return this.json(res, 200, { id: await this.control.ask(text, device) });
+      const id = crypto.randomUUID();
+      if (b?.wait !== true) return this.json(res, 200, { id: await this.control.ask(text, device, id) });
+      // wait: hold the answer back until the request is done, so one call can carry a whole question and answer (iPhone Shortcuts).
+      const answer = new Promise((resolve) => {
+        const timer = setTimeout(() => { if (this.waiters.delete(id)) resolve({ id, status: 'working', reply: 'Still working on it. Ask again in a moment.' }); }, this.waitMs ?? 110000);
+        this.waiters.set(id, (r) => { clearTimeout(timer); resolve(r); });
+      });
+      await this.control.ask(text, device, id);
+      return this.json(res, 200, await answer);
     }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {
