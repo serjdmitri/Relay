@@ -116,6 +116,11 @@ All three can be changed in Shortcuts. Anything that sends a message, moves thin
 Ask "where do I turn on Night Shift?" or "walk me through connecting a printer". Relay points at the exact element (found through the accessibility tree, so it works even with models that cannot see images), can draw boxes, circles, arrows and labels over your screen, and for several steps shows a small card and outlines each step in turn. Click the outlined spot, or say "next", to go on; "back" and "stop" work too. Relay checks what you do: if you go another way, or the next control is not where it expected, it looks at the screen and rewrites the remaining steps. Elements are found through the accessibility tree (a small native helper, `relay-ax`, that answers in about half a second), or by reading the text on the screen when an app has no accessibility names. Marks stay about 30 seconds, or until you press **Esc** or start a new request. While Relay listens and works, a small buddy follows your pointer. Both can be switched off in General (Relay cursor, Buddy cursor). They work on every display and are hidden while Relay takes a screenshot, so the model never sees them.
 
 ### The reactor
+<p align="center">
+  <img src="docs/img/overlay-hud.png" alt="The Jarvis reactor in the middle of the screen while Relay listens: spinning rings, a core with the name, level bars and the words being heard" width="720"><br>
+  <sub>The real overlay page, rendered over a sample wallpaper.</sub>
+</p>
+
 When you ask by voice, a big Jarvis arc reactor appears in the middle of your screen (no window behind it) and follows your voice; your words appear under it. When you stop talking it shrinks to the top left corner and keeps working there until the task is done, then the answer appears beside it. A small arrow follows your pointer like a second cursor and flies to what Relay points at; put it away with General > Cursor buddy. Turn on **Listen for “Hey Jarvis”** (General, or the menu bar icon) to start without a key: Relay listens on this Mac for your wake phrase (nothing is recorded or sent), chimes, then takes your request and stops on its own when you stop talking. Typing (⌥T) and Allow / Cancel questions still use the pill.
 
 ### Move windows
