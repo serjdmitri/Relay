@@ -206,24 +206,34 @@ function showCard(c) {
 
 // ----- the mark key: a trail that follows the pointer while the key is held, and fades -----
 const markLayer = $('markLayer');
-const TRAIL_MS = 1600;
+const TRAIL_MS = 520; // how long a stroke lives: it is drawn at the pointer and fades away behind it
+const TRAIL_PARTS = 9;
 let trail = []; // { x, y, t }
 let marking = false;
 let trailRaf = 0;
 
+// A comet: the newest part of the stroke is solid and thick, and the tail thins and fades until it is gone.
 function drawTrail(now) {
-  // While the key is held the trail only ages as the pointer moves, so a circle stays up if the pointer then rests.
-  const ref = marking && trail.length ? trail[trail.length - 1].t : now;
-  const alive = trail.filter((q) => ref - q.t < TRAIL_MS);
-  trail = alive;
+  trail = trail.filter((q) => now - q.t < TRAIL_MS);
   markLayer.replaceChildren();
-  if (alive.length > 1) {
-    const pts = alive.map((q) => `${q.x},${q.y}`).join(' ');
-    const under = el('polyline', { class: 'u', points: pts });
-    const over = el('polyline', { class: 'o', points: pts });
-    markLayer.append(under, over);
+  if (trail.length > 1) {
+    const n = trail.length;
+    for (let i = 0; i < TRAIL_PARTS; i++) {
+      const from = Math.floor((i * (n - 1)) / TRAIL_PARTS);
+      const to = Math.min(n, Math.floor(((i + 1) * (n - 1)) / TRAIL_PARTS) + 2);
+      if (to - from < 2) continue;
+      const k = (i + 1) / TRAIL_PARTS; // 0 at the tail, 1 at the pointer
+      const pts = trail.slice(from, to).map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' ');
+      const under = el('polyline', { class: 'u', points: pts });
+      const over = el('polyline', { class: 'o', points: pts });
+      under.style.opacity = String(0.8 * k * k);
+      under.style.strokeWidth = String(2 + 6 * k);
+      over.style.opacity = String(Math.min(1, 0.15 + k * 1.1));
+      over.style.strokeWidth = String(1 + 3.2 * k);
+      markLayer.append(under, over);
+    }
   }
-  if (marking || alive.length) trailRaf = requestAnimationFrame((t) => drawTrail(performance.now()));
+  if (marking || trail.length) trailRaf = requestAnimationFrame(() => drawTrail(performance.now()));
   else trailRaf = 0;
 }
 

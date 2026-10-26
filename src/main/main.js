@@ -13,6 +13,7 @@ const { Speaker } = require('./voice');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
+const { RecentPanel } = require('./recent');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
@@ -22,7 +23,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -126,6 +127,7 @@ function rebuildTray() {
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
     { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
+    { label: 'Recent asks on the left edge', type: 'checkbox', checked: store.get('settings.recent') !== false, click: (item) => { store.set('settings.recent', item.checked); broadcast(); rebuildTray(); } },
     { label: 'Show the cursor buddy', type: 'checkbox', checked: store.get('settings.buddy') !== false, click: (item) => { store.set('settings.buddy', item.checked); overlay.applyMode(); broadcast(); rebuildTray(); } },
     { type: 'separator' },
     { label: 'Open Relay', click: () => openMain('home') },
@@ -445,6 +447,10 @@ function registerIpc() {
     await ask.open();
     if (text) await ask.submit(text);
   });
+  ipcMain.handle('recent:ask', async (_e, text) => {
+    recent?.close();
+    if (typeof text === 'string' && text.trim()) await ask.submit(text);
+  });
   ipcMain.handle('ask:submit', (_e, text) => ask.submit(text));
   ipcMain.handle('ask:cancel', () => ask.cancelAll());
   ipcMain.handle('ask:confirm', (_e, yes) => ask.pendingConfirm?.(!!yes));
@@ -467,6 +473,8 @@ app.whenReady().then(() => {
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
   overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getLook: () => store.get('settings.look') || 'jarvis' });
   overlay.watchDisplays();
+  recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
+  recent.start();
   overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
@@ -559,6 +567,7 @@ app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the m
 app.on('before-quit', () => {
   try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
   quitting = true;
+  recent?.stop();
   hotkeys?.stop();
   bridge?.stop();
   speaker?.stop();

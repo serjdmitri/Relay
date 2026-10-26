@@ -64,6 +64,15 @@ for (const [name, msg] of Object.entries(states)) {
   const pad = 70; // keep the whole soft shadow so it fades out instead of being cut off
   await pill.screenshot({ path: path.join(out, `pill-${name}.png`), omitBackground: true, clip: { x: Math.max(0, r.x - pad), y: Math.max(0, r.y - pad), width: r.w + 2 * pad, height: r.h + 2 * pad } });
 }
+// the Recent menu on the left edge: the real window blurs what is behind it, here a wallpaper stands in
+const rec = await ctx.newPage();
+await rec.setViewportSize({ width: 344, height: 560 });
+rec.on('pageerror', (e) => errors.push('recent: ' + e.message));
+await rec.goto(url('recent.html'));
+await rec.evaluate(() => { document.documentElement.style.background = 'radial-gradient(500px 420px at 30% 30%, #1c5f84, #0a2a42 60%, #05131f)'; document.querySelector('.glass').style.backdropFilter = 'blur(24px) saturate(1.4)'; });
+await rec.evaluate(() => window.__recent('show'));
+await rec.waitForTimeout(1400);
+await rec.screenshot({ path: path.join(out, 'recent-menu.png') });
 // the overlay (buddy, drawings and the step-by-step guide) drawn over a wallpaper, since the real window is transparent
 const ov = await ctx.newPage();
 await ov.setViewportSize({ width: 1000, height: 620 });
@@ -94,6 +103,7 @@ await send({ type: 'clear' });
 await send({ type: 'hud', state: { state: 'listening', mode: 'ask', partial: 'Open Notes and make a note called groceries', level: 0.7, askLabel: 'Right ⌥', dictateLabel: 'Right ⌘', name: 'J.A.R.V.I.S' } });
 await snap('hud-listening', 1400);
 await send({ type: 'hud', state: { state: 'working', label: 'Opening Notes', text: 'Open Notes and make a note called groceries', name: 'J.A.R.V.I.S' } });
+await send({ type: 'hud', state: { state: 'working', label: 'Creating a note', name: 'J.A.R.V.I.S' } });
 await snap('hud-working', 1600);
 await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', name: 'J.A.R.V.I.S' } });
 await snap('hud-done', 600);

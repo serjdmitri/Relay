@@ -12,7 +12,7 @@ const FOLLOW_IDLE_MS = 160; // and checks about 6 times a second once it has bee
 const HALO_MS = 2500;
 const MARKS_MS = 30000;
 const MARK_POLL_MS = 16; // how often the pointer is read while the mark key is held
-const MARK_TRAIL_MS = 1600; // the trail fades after this long, and only this much of the path counts as the mark
+const MARK_FADE_MS = 600; // the window goes once the stroke has faded away behind the pointer
 const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
@@ -389,7 +389,7 @@ class Overlay {
     this.markPts = [];
     const strokes = normalizeStrokes([recent]);
     const box = strokesBox(strokes);
-    e.markTimer = setTimeout(() => this.markFade(e), MARK_TRAIL_MS + 300); // the trail finishes fading, then the window goes
+    e.markTimer = setTimeout(() => this.markFade(e), MARK_FADE_MS); // the stroke finishes fading, then the window goes
     if (!box || box.w < MARK_MIN || box.h < MARK_MIN) return null; // a pointer that only passed by is not a circle
     return { display: e.display, box, strokes: 1 };
   }

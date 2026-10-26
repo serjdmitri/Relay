@@ -132,8 +132,11 @@ After Relay does something, say "remember this as morning setup". Next time you 
 ### Better voices
 Speech > More natural voices: OpenAI or ElevenLabs voices with your own key (they bill you, Relay takes nothing), or a free on-device voice (Kokoro, Apple Silicon, about 270 MB, downloaded when you press the button and checked against a pinned hash).
 
+### Recent asks
+Rest the pointer on the left edge of the screen for a moment and a glass list of your latest asks slides out. Click one to ask it again; move away and it slides back. Turn it off in General or from the menu bar icon.
+
 ### Mark the screen
-Hold the mark key (**Left ⌃** by default) and move the pointer round something (no clicking; a cyan trail follows it), let go, then ask: "what is this?", "why is this red?", "fix this". Relay looks at the area you marked (with some of its surroundings) instead of guessing from a whole-screen picture. A model that cannot see images gets the text inside the area instead. The mark lasts three minutes, and Esc cancels it. Change the key under Shortcuts (use one modifier key on its own).
+Hold the mark key (**Left ⌃** by default) and move the pointer round something (no clicking; a cyan comet trail shows the stroke being drawn and fades away behind the pointer), let go, then ask: "what is this?", "why is this red?", "fix this". Relay looks at the area you marked (with some of its surroundings) instead of guessing from a whole-screen picture. A model that cannot see images gets the text inside the area instead. The mark lasts three minutes, and Esc cancels it. Change the key under Shortcuts (use one modifier key on its own).
 
 ### Instant commands
 These run at once, with no model call (about a third of a second):
@@ -194,7 +197,7 @@ Every tool call with its arguments and result. If something does not work, look 
 
 ## What is verified and what is not
 
-Verified on a Mac (`npm test`, 196 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
+Verified on a Mac (`npm test`, 206 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
 
 Not verified by script: real calls to the OpenAI-compatible services (OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek), live microphone dictation end to end, music control, spoken-command dictation and word fixes with a real voice, the clipboard and selection tools, permission prompts, global shortcut detection, the AppleScript against Notes, Reminders, Calendar, Messages and Finder beyond what you have tried by hand. `scripts/e2e.mjs` and `scripts/screenshots.mjs` predate dictation and the Claude sign-in and have not been updated or re-run. The Actions tab and `Console.app` (filter "Relay") are where errors show up.
 

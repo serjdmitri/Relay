@@ -6,7 +6,7 @@
     schema: 3,
     onboardingDone: true,
     settings: {
-      talking: 'tap-or-hold', playSounds: true, duckAudio: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
+      talking: 'tap-or-hold', playSounds: true, duckAudio: true, recent: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
       glass: true, voice: 'auto', voiceRate: 'normal', openAtLogin: true, showInDock: false, look: 'jarvis', buddy: true, assistantName: 'J.A.R.V.I.S',
       wake: { enabled: false, phrase: 'hey jarvis' },
       tts: { engine: 'system', kokoro: { voice: 'af_heart' }, openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally.' }, elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2' } },
@@ -121,6 +121,8 @@
       interactive: async () => {}, hidden: async () => {},
       onState: (cb) => { window.__askState = cb; return () => {}; }
     },
+    recentAsk: async () => {},
+    onRecent: (cb) => { window.__recent = cb; },
     onStateChanged: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
     onNavigate: (cb) => { window.__navigate = cb; return () => {}; },
     onOverlay: (cb) => { window.__overlay = cb; return () => {}; }
