@@ -22,6 +22,12 @@ const DEFAULTS = {
     glass: true, // draw the pill as real see-through glass when this Mac can
     voice: 'auto', // auto, or a voice name from `say -v ?`
     voiceRate: 'normal', // slower | normal | faster
+    tts: { // which voice speaks replies: system | kokoro (on this Mac) | openai | elevenlabs (your own key)
+      engine: 'system',
+      kokoro: { voice: 'af_heart' },
+      openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
+      elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
+    },
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

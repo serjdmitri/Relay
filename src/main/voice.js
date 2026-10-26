@@ -2,6 +2,10 @@
 // (Siri, Premium and Enhanced) voices; an app cannot see them through the speech API.
 
 const { execFile, spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const cloud = require('./tts/cloud');
 
 // Novelty and robotic voices: never picked automatically.
 const NOVELTY = new Set(['Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos', 'Good News', 'Jester', 'Organ', 'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox', 'Fred', 'Junior', 'Kathy', 'Ralph', 'Grandma', 'Grandpa', 'Eddy', 'Flo', 'Reed', 'Rocko', 'Sandy', 'Shelley']);
@@ -60,12 +64,22 @@ function speakable(text) {
 }
 
 class Speaker {
-  constructor({ spawnFn = spawn, exec = execFile, log = console } = {}) {
+  // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
+  // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
+  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), kokoro = null, fetchFn = (...a) => fetch(...a), onProblem = null } = {}) {
     this.spawnFn = spawnFn;
     this.exec = exec;
     this.log = log;
+    this.getTts = getTts;
+    this.kokoro = kokoro;
+    this.fetchFn = fetchFn;
+    this.onProblem = onProblem; // called with a sentence when a better voice failed and the system voice took over
     this.child = null;
     this.voices = null;
+    this.token = 0; // bumped by stop() so a reply that is still being made is dropped
+    this.abort = null;
+    this.busy = false;
+    this.level = null; // set by the app: called with 0..1 while a voice is playing, for the ring
   }
 
   async voiceList() {
@@ -77,10 +91,99 @@ class Speaker {
     return pickVoice(await this.voiceList(), pref, process.env.RELAY_LOCALE || 'en_US');
   }
 
+  // Which engine will speak, and why not the one chosen (a missing key, a voice not downloaded).
+  engineFor(tts) {
+    const e = tts.engine;
+    if (e === 'openai' || e === 'elevenlabs') return tts[e] && tts[e].key ? e : 'system';
+    if (e === 'kokoro') return this.kokoro && this.kokoro.installed() ? 'kokoro' : 'system';
+    return 'system';
+  }
+
   async speak(text, { voice = 'auto', rate = 'normal' } = {}) {
     this.stop();
     const say = speakable(text);
     if (!say) return;
+    const tts = this.getTts() || { engine: 'system' };
+    const engine = this.engineFor(tts);
+    if (engine === 'system') return this.speakSystem(say, { voice, rate });
+    const token = ++this.token;
+    this.abort = new AbortController();
+    this.busy = true;
+    try {
+      await this.speakWith(engine, tts, say, rate, token, this.abort.signal);
+    } catch (e) {
+      if ((e && e.name === 'AbortError') || token !== this.token) return;
+      this.log.error?.('voice:', e.message);
+      if (this.onProblem) this.onProblem(e.message);
+      await this.speakSystem(say, { voice, rate }); // never leave the user without an answer
+    } finally {
+      if (token === this.token) this.busy = false;
+    }
+  }
+
+  // The "Test voice" button: the chosen engine only, and the reason in words when it does not work.
+  async test(text, { voice = 'auto', rate = 'normal' } = {}) {
+    this.stop();
+    const tts = this.getTts() || { engine: 'system' };
+    const wanted = tts.engine;
+    const engine = this.engineFor(tts);
+    if (wanted !== 'system' && engine === 'system') {
+      return { ok: false, message: wanted === 'kokoro' ? 'The on-device voice is not downloaded yet.' : `Add your ${cloud.NAMES[wanted] || wanted} key first.` };
+    }
+    if (engine === 'system') { await this.speakSystem(speakable(text), { voice, rate }); return { ok: true }; }
+    const token = ++this.token;
+    this.abort = new AbortController();
+    this.busy = true;
+    try {
+      await this.speakWith(engine, tts, speakable(text), rate, token, this.abort.signal);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: e.message };
+    } finally {
+      if (token === this.token) this.busy = false;
+    }
+  }
+
+  // Makes and plays a reply with one engine. Throws when the engine fails.
+  async speakWith(engine, tts, say, rate, token, signal) {
+    const make = (piece) => (engine === 'kokoro'
+      ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), rate })
+      : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
+    const pieces = cloud.sentences(say);
+    let pending = make(pieces[0]);
+    for (let i = 0; i < pieces.length; i++) {
+      const file = await pending;
+      if (token !== this.token) { this.discard(file); return; }
+      pending = i + 1 < pieces.length ? make(pieces[i + 1]) : null; // the next sentence is made while this one plays
+      if (pending) pending.catch(() => {});
+      await this.play(file, token);
+      this.discard(file);
+      if (token !== this.token) return;
+    }
+  }
+
+  writeTemp(buf, ext) {
+    const file = path.join(os.tmpdir(), `relay-voice-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`);
+    fs.writeFileSync(file, buf);
+    return file;
+  }
+
+  discard(file) {
+    try { fs.rmSync(file, { force: true }); } catch {}
+  }
+
+  play(file, token) {
+    return new Promise((resolve) => {
+      if (token !== this.token) return resolve();
+      const child = this.spawnFn('afplay', [file], { stdio: 'ignore' });
+      this.child = child;
+      const done = () => { if (this.child === child) this.child = null; resolve(); };
+      child.on('exit', done);
+      child.on('error', (e) => { this.log.error?.('afplay:', e.message); done(); });
+    });
+  }
+
+  async speakSystem(say, { voice, rate }) {
     const name = await this.resolve(voice);
     const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
     const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -92,10 +195,14 @@ class Speaker {
   }
 
   get speaking() {
-    return !!this.child;
+    return !!this.child || this.busy;
   }
 
   stop() {
+    this.token++;
+    this.busy = false;
+    try { this.abort && this.abort.abort(); } catch {}
+    this.abort = null;
     if (!this.child) return;
     try { this.child.kill('SIGTERM'); } catch {}
     this.child = null;

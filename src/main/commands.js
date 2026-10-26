@@ -21,9 +21,16 @@ function parseCommand(text, routines, state = {}) {
     return { type: 'routine-start' };
   }
 
-  const save = n.match(/^save (it|that) as (.+)$/);
+  const save = n.match(/^(?:save|remember|learn|keep) (it|that|this) as (.+)$/);
   if (save) {
     return { type: 'routine-save', name: save[2].trim(), source: state.recording ? 'recording' : 'last' };
+  }
+
+  // "forget morning setup": only when that is one of the saved names, so other uses of "forget" are left alone.
+  const forget = n.match(/^(?:forget|delete|remove) (?:the |my )?(?:routine |task )?(.+?)(?: routine| task)?$/);
+  if (forget) {
+    const r = routines.find((x) => normalize(x.name) === forget[1].trim());
+    if (r) return { type: 'routine-delete', routine: r };
   }
 
   const inline = n.match(/^when i say (.+?),? (?:open|do|run|tell|check|show|turn|set|quit|play|start)\b(.*)$/);
