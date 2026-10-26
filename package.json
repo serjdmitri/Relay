@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "0.15.2",
+  "version": "0.16.0",
   "description": "Voice-first Mac agent. Dictate with Talkify, Relay does the rest.",
   "main": "src/main/main.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "readme-images": "node scripts/readme-images.mjs"
   },
   "dependencies": {
+    "qrcode-generator": "^2.0.4",
     "uiohook-napi": "^1.5.4",
     "ws": "^8.18.0"
   },

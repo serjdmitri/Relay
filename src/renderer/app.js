@@ -20,12 +20,12 @@ function setCapturing(v) {
 const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 
 const NAV = [
-  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors']],
+  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors'], ['remote', 'Remote']],
   [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions']],
   [['account', 'Account']]
 ];
 const TITLES = Object.fromEntries(NAV.flat());
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -315,6 +315,72 @@ const PAGES = {
     const rc = h(`<div class="card">${rules.length ? rules.map((r) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="t">${esc(r.from)} <span style="color:var(--dim)">→</span> ${esc(r.to)}</div><button class="btn" data-del="${esc(r.id)}">Remove</button></div>`).join('') : '<div class="empty">None yet. Use Fix a Word… on a line in History › Dictation, or add one above.</div>'}</div>`);
     rc.onclick = (e) => e.target.dataset.del && relay.removeReplacement(e.target.dataset.del);
     c.append(rc);
+  },
+
+  remote(c) {
+    const R = S.remote || { enabled: false, urls: [], devices: [], tailscale: {} };
+    c.append(h('<div class="lead">Use Relay from your phone. The phone page shows your Jarvis reactor: hold it and talk, or type. Your Mac does the work with Claude, exactly as it does today, and the answer comes back as text and speech. Your Mac has to be on, with Relay open.</div>'));
+
+    const sw = h('<div class="card flat" style="margin-bottom:14px"></div>');
+    sw.append(h(`<div class="row"><div class="grow"><div class="t">Relay Remote</div><div class="d">${R.enabled ? (R.running ? `On, listening on port ${R.port}.` : esc(R.error || 'Starting…')) : 'Off. Nothing is listening.'}</div></div><div class="toggle ${R.enabled ? 'on' : ''}" id="rtog"></div></div>`));
+    sw.append(h(`<div class="row"><div class="grow"><div class="t">Allow on my home Wi-Fi</div><div class="d">Off: only reachable through Tailscale (nothing listens on your network). macOS may ask once whether Relay can accept connections: choose Allow.</div></div><div class="toggle ${R.lan ? 'on' : ''}" id="rlan"></div></div>`));
+    $('#rtog', sw).onclick = () => relay.setRemote({ enabled: !R.enabled });
+    $('#rlan', sw).onclick = () => relay.setRemote({ lan: !R.lan });
+    c.append(sw);
+
+    if (R.enabled && R.running) {
+      c.append(h('<div class="section-title" style="margin-top:0">Pair a phone</div>'));
+      const box = h('<div class="card" style="padding:14px"></div>');
+      box.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">1. On your iPhone, scan the code (or open the address below in Safari). 2. Tap Pair. 3. In Safari press Share, then <b>Add to Home Screen</b>, so it opens like an app.</div>'));
+      const go = h('<button class="btn primary" id="pairbtn">Pair a phone</button>');
+      const out = h('<div id="pairout" style="margin-top:14px"></div>');
+      go.onclick = async () => {
+        const r = await relay.pairPhone();
+        if (r.error) { out.textContent = r.error; return; }
+        out.innerHTML = '';
+        const row = h('<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap"></div>');
+        if (r.qr) { const q = h(`<div style="width:170px;height:170px;background:#fff;border-radius:12px;padding:6px">${r.qr}</div>`); row.append(q); }
+        const side = h('<div></div>');
+        side.append(h(`<div class="note">Code (works once, for 5 minutes)</div><div style="font:700 34px ui-monospace,Menlo,monospace;letter-spacing:.18em;margin:4px 0 8px">${esc(r.code)}</div>`));
+        for (const u of r.urls) side.append(h(`<div class="d" style="user-select:text">${esc(u)}</div>`));
+        if (!r.urls.length) side.append(h('<div class="d">No network address found. Connect this Mac to Wi-Fi, or use Tailscale below.</div>'));
+        row.append(side);
+        out.append(row);
+      };
+      box.append(go, out);
+      c.append(box);
+
+      c.append(h('<div class="section-title">Paired phones</div>'));
+      const dev = h('<div class="card"></div>');
+      if (!R.devices.length) dev.append(h('<div class="empty" style="text-align:center">None yet.</div>'));
+      for (const d of R.devices) {
+        const row = h(`<div class="row" style="min-height:44px;padding:8px 14px"><div class="grow"><div class="t">${esc(d.name)}</div><div class="d">Last used ${timeAgo(d.lastSeen)}</div></div><button class="btn" data-rm="${esc(d.id)}">Unpair</button></div>`);
+        row.onclick = (e) => e.target.dataset.rm && confirm(`Unpair ${d.name}? It will need a new code.`) && relay.removePhone(d.id);
+        dev.append(row);
+      }
+      c.append(dev);
+    }
+
+    c.append(h('<div class="section-title">Away from home: Tailscale</div>'));
+    const T = R.tailscale || {};
+    const ts = h('<div class="card" style="padding:14px"></div>');
+    if (!T.installed) ts.append(h('<div class="note" style="line-height:1.5">Tailscale is free. It joins your phone and Mac in a private, encrypted network, so Relay Remote works from anywhere, and it gives the phone the secure address its microphone needs for hold to talk. Install Tailscale on the Mac and on the phone (tailscale.com/download), sign in with the same account, then come back here.</div>'));
+    else if (!T.running) ts.append(h('<div class="note">Tailscale is installed but not connected. Open it and sign in, then come back here.</div>'));
+    else if (T.serving) {
+      ts.append(h(`<div class="t">Secure link on</div><div class="d" style="user-select:text;margin:4px 0 10px">${esc(T.https || '')}</div>`));
+      const off = h('<button class="btn">Turn off</button>');
+      off.onclick = () => relay.remoteTailscale(false);
+      ts.append(off);
+    } else {
+      ts.append(h(`<div class="note" style="margin-bottom:10px;line-height:1.5">Connected as ${esc(T.name || 'this Mac')}. This makes an https address on your tailnet for the phone page. In the Tailscale admin page, MagicDNS and HTTPS Certificates must be turned on first.</div>`));
+      const on = h('<button class="btn primary">Make the secure link</button>');
+      on.onclick = async () => { const r = await relay.remoteTailscale(true); if (!r.ok) alert(r.error); };
+      ts.append(on);
+    }
+    c.append(ts);
+
+    c.append(h('<div class="section-title">Good to know</div>'));
+    c.append(h('<div class="card" style="padding:12px 14px"><div class="d" style="line-height:1.7">Relay Remote controls your Mac, not the phone itself: it cannot open your phone\'s own apps. Anything that sends or deletes still asks for approval on the Mac. On home Wi-Fi the connection is not encrypted (the pairing token travels in the clear), so pair at home on a network you trust, and use Tailscale away from home. Only phones on your own network (or Tailscale) are allowed in. Unpair a phone any time.</div></div>'));
   },
 
   connectors(c) {

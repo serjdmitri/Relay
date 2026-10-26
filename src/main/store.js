@@ -34,6 +34,7 @@ const DEFAULTS = {
       openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
       elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
     },
+    remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone
     connectors: { // Notion (a token you paste) and Google (your own OAuth app, several accounts): secrets are encrypted
       notion: { tokenEnc: '', name: '' },
       google: { clientId: '', clientSecretEnc: '', accounts: [] } // accounts: { email, refreshEnc }
@@ -68,6 +69,7 @@ const DEFAULTS = {
   replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
   memories: [], // {id, text, ts}: what you told Relay to remember
+  remoteDevices: [], // paired phones: { id, name, hash, created, lastSeen } (only a hash of each token)
   schedules: [], // requests to run later or on repeat: see schedule.js
   corrections: {}, // fixes seen once, waiting for a second sighting: { 'from>to': count }
   lastReply: ''

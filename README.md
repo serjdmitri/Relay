@@ -135,6 +135,9 @@ Drag files or a folder onto the menu bar icon (or anywhere on the Relay window) 
 ### Dictation learns your words
 After you dictate, Relay looks at the same text in the field a few seconds later. A word you fixed by hand, twice, becomes a word fix in Vocabulary. Only the changed words are kept, password fields are never read, and General > Learn my words from corrections turns it off.
 
+### Relay Remote (your phone)
+Settings > Remote: turn it on, press Pair a phone, scan the QR code in Safari, tap Pair, then Share > Add to Home Screen. The phone page shows the reactor; type or hold it and talk, and your Mac does the work and sends the answer back as text and speech. It controls your Mac, not the phone's own apps. Away from home, install Tailscale on both (free): it makes the connection private and encrypted, and gives the phone the secure address its microphone needs for hold to talk. See the changelog for the security details. `node scripts/remote-e2e.mjs` runs the phone page in a phone-sized browser against the real server.
+
 ### Answer cards
 "Who is Gustave Eiffel?", "what does the Eiffel Tower look like?", "show me things to see in Boston": a black glass card with a picture, facts and links pops out on the right while Relay answers in one sentence. Pictures come from Wikipedia and Wikimedia Commons (photographer and license shown), downloaded by Relay itself. Esc or × closes it; General turns it off.
 
