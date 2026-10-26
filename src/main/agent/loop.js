@@ -24,30 +24,32 @@ async function runAgent({ text, provider, tools, system, confirm, onEvent = () =
   const byName = new Map(tools.map((t) => [t.name, t]));
   const messages = [{ role: 'user', content: [{ type: 'text', text }] }];
   let actions = 0;
+  const usage = { in: 0, out: 0, model: '' };
 
   for (let step = 0; step < maxSteps; step++) {
-    if (signal?.aborted) return { status: 'stopped', reply: 'Stopped.', actions };
+    if (signal?.aborted) return { status: 'stopped', reply: 'Stopped.', actions, usage };
 
     const res = await provider.step({ system, messages, tools, signal });
-    if (signal?.aborted) return { status: 'stopped', reply: 'Stopped.', actions };
+    if (res.usage) { usage.in += res.usage.in || 0; usage.out += res.usage.out || 0; usage.model = res.usage.model || usage.model; }
+    if (signal?.aborted) return { status: 'stopped', reply: 'Stopped.', actions, usage };
 
     messages.push({ role: 'assistant', content: res.assistantContent });
     if (!res.toolCalls.length) {
-      return { status: 'done', reply: (res.text || 'Done.').trim(), actions };
+      return { status: 'done', reply: (res.text || 'Done.').trim(), actions, usage };
     }
     if (res.text) onEvent({ type: 'thought', text: res.text });
 
     const results = [];
     for (const call of res.toolCalls) {
       const out = await callTool({ tool: byName.get(call.name), name: call.name, input: call.input, confirm, onEvent, signal });
-      if (out.aborted) return { status: 'stopped', reply: 'Stopped.', actions };
+      if (out.aborted) return { status: 'stopped', reply: 'Stopped.', actions, usage };
       if (out.ran) actions++;
       results.push({ type: 'tool_result', tool_use_id: call.id, content: out.content, ...(out.isError ? { is_error: true } : {}) });
     }
     messages.push({ role: 'user', content: results });
     trimImages(messages);
   }
-  return { status: 'failed', reply: `I stopped after ${maxSteps} steps without finishing.`, actions };
+  return { status: 'failed', reply: `I stopped after ${maxSteps} steps without finishing.`, actions, usage };
 }
 
 // Runs one tool call: unknown tool, confirmation gate, execution and event reporting.

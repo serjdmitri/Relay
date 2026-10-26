@@ -16,7 +16,8 @@ const { McpHost, ClaudeSession, runSmart, findClaude } = require('./agent/claude
 const { createMac } = require('./agent/mac');
 const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
-const { isUndo, isAgain } = require('./meta');
+const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
+const usage = require('./usage');
 const { corrections, noteCorrection } = require('./learn');
 const mem = require('./memory');
 const sched = require('./schedule');
@@ -159,6 +160,43 @@ class AskController {
     speech.on('exit', () => {
       if (this.state === 'listening' || this.state === 'finishing') this.listenFailed(new Error('The dictation helper stopped.'));
     });
+  }
+
+  // ----- usage, speed and streaming -----
+  model_isClaude() {
+    return this.store.get('settings.model.provider') === 'claude';
+  }
+
+  freshRate() {
+    return this.rate && typeof this.rate.util === 'number' && Date.now() - this.rate.ts < 6 * 3600e3 ? { type: this.rate.type, util: this.rate.util } : null;
+  }
+
+  // The cost arrives with the CLI's closing report, usually a moment after the answer is on screen: add it to the line.
+  costArrived(id, c) {
+    if (!this.lastUsage || this.lastUsage.id !== id || typeof c.cost !== 'number') return;
+    const used = { ...this.lastUsage.used, cost: c.cost };
+    this.lastUsage.used = used;
+    const text = usage.usageLine({ ...used, limit: this.freshRate() });
+    this.store.updateHistory(id, { usage: used, usageText: text });
+    if (this.state === 'done' && this.store.get('settings.showUsage') !== false) this.push({ usage: text });
+    this.onChange();
+  }
+
+  // The answer as it is written, shown while it is still coming (at most a dozen times a second).
+  streamText(text) {
+    const now = Date.now();
+    if (this.state !== 'working' || now - (this.lastStreamPush || 0) < 80) return;
+    this.lastStreamPush = now;
+    this.push({ stream: text });
+  }
+
+  // "Use the fast model", "use the smarter model", "use auto".
+  setModelTier(tier) {
+    if (!this.model_isClaude()) return { status: 'failed', actions: 0, reply: 'That choice is for Claude. You are using another model service, which you pick in Account.' };
+    this.store.set('settings.model.claudeModel', tier);
+    this.onChange();
+    const say = { haiku: 'Using the fast model (Haiku).', auto: 'Using Auto: fast for simple requests, stronger when it is harder.', sonnet: 'Using the smarter model (Sonnet).', opus: 'Using the deepest model (Opus). It is the slowest.' }[tier];
+    return { status: 'done', actions: 0, reply: say };
   }
 
   // Name of the app in front right now.
@@ -1006,7 +1044,17 @@ class AskController {
         return this.runRoutine(cmd.routine, entry);
       default: {
         if (isUndo(text)) return this.undoLast(entry);
+        const tier = !opts.shown ? parseModelCommand(text) : null;
+        if (tier) return this.finish(entry, this.setModelTier(tier));
         let effective = text;
+        if (!opts.shown && isRetry(text)) {
+          if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to try again yet.', actions: 0 });
+          effective = this.lastRequestText;
+          const up = this.model_isClaude() ? { haiku: 'sonnet', sonnet: 'opus', opus: 'opus' }[this.lastTier || 'haiku'] : null;
+          if (up) this.forceTier = up;
+          this.push({ label: up ? `Trying again with ${usage.modelName(up)}` : 'Trying again', text: effective });
+          return this.runRequest(effective, entry);
+        }
         if (isAgain(text)) {
           if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to repeat yet.', actions: 0 });
           effective = this.lastRequestText;
@@ -1228,7 +1276,8 @@ class AskController {
     const signal = this.abort.signal;
     const onEvent = (e) => {
       if (e.type === 'escalate') this.push({ label: 'Thinking harder' });
-      if (e.type === 'tool-start') this.push({ label: e.label || e.name.replace(/_/g, ' ') });
+      if (e.type === 'tool-start') this.push({ label: e.label || e.name.replace(/_/g, ' '), stream: '' });
+      if (e.type === 'text-delta') this.streamText(e.text);
       if (e.type === 'tool') {
         this.store.addAction({ id: crypto.randomUUID(), requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
         this.onChange();
@@ -1247,10 +1296,12 @@ class AskController {
           await this.mcp.start();
           session = new ClaudeSession({ claudePath, host: this.mcp, system: this.claudeSystem(), tools: this.makeTools(), model: 'haiku' });
         }
-        const route = routeModel(text, model.claudeModel);
+        const route = this.forceTier ? { model: this.forceTier, escalate: false } : routeModel(text, model.claudeModel);
+        this.forceTier = null;
+        session.onRate = (r) => { this.rate = r; };
         const fresh = session.turns === 0;
         const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
-        result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal });
+        result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
         return result;
       } catch (e) {
         if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: 0 };
@@ -1296,7 +1347,12 @@ class AskController {
 
   finish(entry, res) {
     const reply = res.reply || '';
-    this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}) });
+    const u = res.usage;
+    const used = u && (u.in || u.out) ? { model: u.model || '', ms: Date.now() - entry.ts, in: u.in, out: u.out } : null;
+    if (used) this.lastTier = ['haiku', 'sonnet', 'opus'].find((t) => String(used.model).toLowerCase().includes(t)) || this.lastTier;
+    const usageText = used ? usage.usageLine({ ...used, limit: this.freshRate() }) : '';
+    this.lastUsage = used ? { id: entry.id, used } : null;
+    this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
     this.store.set('lastReply', reply);
     this.abort = null;
     if (this.runningTask) { this.runningTask.status = res.status === 'done' ? 'done' : 'failed'; this.runningTask = null; }
@@ -1318,7 +1374,7 @@ class AskController {
     }
     this.pendingFinish = null;
     this.state = 'done';
-    this.push({ reply, status: res.status });
+    this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     if (this.store.get('settings.speakReplies') && res.status === 'done') this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });

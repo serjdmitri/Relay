@@ -279,7 +279,7 @@
     } else if (s === 'working') {
       status = 'PROCESSING';
       level = 0;
-      line = `${msg.label || 'Working'}…`;
+      line = msg.stream ? (msg.stream.length > 230 ? `…${msg.stream.slice(-228)}` : msg.stream) : `${msg.label || 'Working'}…`; // the answer as it is written, when it comes in pieces
       sub = msg.text || '';
       setMode('center'); // it stays big in the middle while it works, and goes when it is done
       if (!busySince) busySince = Date.now();
@@ -287,6 +287,7 @@
       status = msg.status && msg.status !== 'done' ? 'ATTENTION' : 'COMPLETE';
       level = 0;
       line = msg.reply || '';
+      sub = msg.usage || ''; // small and dim, never spoken
       setMode('center');
       busySince = 0;
     } else if (s === 'input') {
@@ -309,6 +310,7 @@
       return;
     }
     wave.style.display = s === 'listening' ? 'block' : 'none';
+    hud.classList.toggle('usage', s === 'done');
     // The list of what was asked, in bullets at the middle left: the running one bright, the waiting ones dim, the finished ones ticked.
     if (Array.isArray(msg.tasks)) renderTasks(msg.tasks);
     const typing = s === 'input';
