@@ -71,11 +71,23 @@
   #hud.corner #hudT { left: 196px; top: 72px; margin-left: 0; width: 460px; text-align: left; }
   #hudstatus { font: 700 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; color: #00d4ff; }
   #hudwave { display: block; width: 288px; height: 30px; margin: 10px auto 12px; }
-  #hud.corner #hudwave { display: none; }
+  #hud.corner #hudwave { display: none !important; }
   #hudline { font: 300 21px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; color: #d8f8ff; text-shadow: 0 0 12px rgba(0, 150, 190, .6); word-break: break-word;
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
   #hud.corner #hudline { font-size: 15px; margin-top: 4px; -webkit-line-clamp: 6; }
   #hudline.dim { color: #3a8a9a; }
+  #hudline.warn { color: #ffb347; font-size: 15px; }
+  #hudbg { position: fixed; inset: 0; background: rgba(0, 24, 48, .30); transition: opacity .6s ease; }
+  #hud.corner #hudbg { opacity: 0; }
+  #hudbgc { position: absolute; left: 14px; top: 46px; width: 650px; height: 190px; border-radius: 20px; background: rgba(0, 24, 48, .30); opacity: 0; transition: opacity .6s ease; }
+  #hud.corner #hudbgc { opacity: 1; }
+  #hud.corner #hudline { -webkit-line-clamp: 4; }
+  #hudin { display: none; width: 560px; margin: 10px auto 0; padding: 8px 4px; background: transparent; border: 0; border-bottom: 1px solid rgba(0, 212, 255, .6); outline: 0; color: #d8f8ff; text-align: center; font: 300 21px -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; pointer-events: auto; caret-color: #00d4ff; }
+  #hudin::placeholder { color: #3a8a9a; }
+  #hudbtns { display: none; gap: 14px; justify-content: center; margin-top: 16px; pointer-events: auto; }
+  #hudbtns button { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; padding: 9px 22px; border-radius: 4px; border: 1px solid rgba(0, 212, 255, .6); background: rgba(0, 24, 48, .5); color: #d8f8ff; cursor: pointer; }
+  #hudbtns button.yes { background: #00a6cf; color: #00141c; border-color: #00d4ff; }
+  #hud.corner #hudin, #hud.corner #hudbtns { display: none !important; }
   #hudsub { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #5ab8cc; margin-top: 6px; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* ===== Jarvis look: one cyan accent. The buddy is a small ring with a cursor triangle; the pen traces what Relay draws. ===== */
   :root { --mk: #6c63ff; --cy: #4cc2ff; --cy2: #9fdcff; --ink: #06121b; }
@@ -160,7 +172,7 @@
 <div id="buddy"><svg id="ptr" viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/><circle class="armdot" cx="12.5" cy="12.5" r="2.2"/></svg><svg id="reticle" viewBox="-50 -50 100 100" aria-hidden="true"><g class="a"><circle r="47"/></g><g class="b"><circle r="39"/></g><g class="t"><circle r="32"/></g><g class="c"><circle r="24"/></g><circle class="core" r="14"/><circle class="dot" r="3"/><path class="ok" d="M-9 1 l6.5 6.5 l12 -13"/></svg><div class="spin"></div><div class="orb"><div class="bars"><i></i><i></i><i></i></div></div>
   <svg class="chk" viewBox="0 0 30 30"><path d="M8.5 15.5l4.2 4.2 8.8-9.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="pen"><svg viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/></svg></div>
-<div id="hud" class="center"><div id="hudR"><canvas id="hudc"></canvas></div><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><div id="hudsub"></div></div></div>
+<div id="hud" class="center"><div id="hudbg"></div><div id="hudbgc"></div><div id="hudR"><canvas id="hudc"></canvas></div><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><input id="hudin" type="text" placeholder="Type a request" autocomplete="off" spellcheck="false"><div id="hudbtns"><button id="hudno">Cancel</button><button id="hudyes" class="yes">Allow</button></div><div id="hudsub"></div></div></div>
 <div id="card"></div>
 <script src="hud.js"></script>
 <script src="overlay.js"></script>

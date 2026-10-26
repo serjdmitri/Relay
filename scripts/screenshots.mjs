@@ -98,6 +98,11 @@ await snap('hud-working', 1600);
 await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', name: 'J.A.R.V.I.S' } });
 await snap('hud-done', 600);
 await send({ type: 'hud', hide: true });
+await send({ type: 'hud', state: { state: 'input', mode: 'type', reset: true, name: 'J.A.R.V.I.S' } });
+await snap('hud-input', 1200);
+await send({ type: 'hud', state: { state: 'confirm', question: 'Send "running late" to +1 305 555 0100?', name: 'J.A.R.V.I.S' } });
+await snap('hud-confirm', 1000);
+await send({ type: 'hud', hide: true });
 // the mark key: a freehand circle drawn while it is held
 await send({ type: 'mark-start' });
 const ring = Array.from({ length: 41 }, (_, i) => [610 + 150 * Math.cos((i / 40) * 6.4), 300 + 95 * Math.sin((i / 40) * 6.4)]);

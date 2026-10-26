@@ -215,8 +215,7 @@ class AskController {
   // Jarvis look: talking, working and answers show on the reactor (big in the middle while it listens, small in the top left while it works). The pill is kept for
   // typing a request and for questions that need a button (Allow / Cancel), which need the keyboard or the mouse.
   passiveUI() {
-    return this.store.get('settings.look') !== 'classic' &&
-      this.state !== 'input' && this.state !== 'confirm' && this.mode !== 'type';
+    return this.store.get('settings.look') !== 'classic';
   }
 
   captionState(extra) {
@@ -225,7 +224,7 @@ class AskController {
   }
 
   reveal(extra = {}, mode = 'inactive') {
-    if (this.passiveUI() && !extra.question) {
+    if (this.passiveUI()) {
       if (this.visible) this.hideSoft();
       this.overlay.hud(this.captionState(extra));
       return;
