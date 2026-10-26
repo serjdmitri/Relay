@@ -403,7 +403,7 @@ const PAGES = {
     c.append(h('<div class="section-title">More natural voices</div>'));
     const T = S.settings.tts || { engine: 'system' };
     const ecard = h('<div class="card"></div>');
-    const ENGINES = [['system', 'Mac voice'], ['kokoro', 'On this Mac'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const ENGINES = [['system', 'System'], ['kokoro', 'On-device'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
     const eseg = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Voice engine</div><div class="seg">${ENGINES.map(([v, l]) => `<button data-v="${v}" class="${T.engine === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">${{
       system: 'The voice chosen above. Free and instant.',
       kokoro: 'A natural voice that runs on this Mac. Free, no key, and your replies never leave your Mac. Apple Silicon only.',

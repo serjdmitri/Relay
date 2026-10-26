@@ -7,8 +7,10 @@
     onboardingDone: true,
     settings: {
       talking: 'tap-or-hold', playSounds: true, duckAudio: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
-      glass: true, voice: 'auto', voiceRate: 'normal', openAtLogin: true, showInDock: false,
-      shortcuts: { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] } },
+      glass: true, voice: 'auto', voiceRate: 'normal', openAtLogin: true, showInDock: false, look: 'jarvis', buddy: true, buddyAlways: true,
+      wake: { enabled: false, phrase: 'hey jarvis' },
+      tts: { engine: 'system', kokoro: { voice: 'af_heart' }, openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally.' }, elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2' } },
+      shortcuts: { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] }, mark: { code: 'ControlLeft', mods: [] } },
       speech: { locale: 'en-US', input: 'auto' },
       appStyles: [{ app: 'Messages', style: 'chat' }],
       model: { provider: 'claude', claudeModel: 'auto', anthropicModel: 'claude-sonnet-5-5', ollamaModel: 'qwen2.5:14b', ollamaUrl: 'http://127.0.0.1:11434',
@@ -51,7 +53,7 @@
       custom: { label: 'Custom address', keyUrl: '', vision: false, keyOptional: true }
     },
     stats: { requests: 42, actions: 97, words: 1850, minutesSaved: 31 },
-    labels: { ask: 'Right ⌥', dictate: 'Right ⌘', type: '⌥T' },
+    labels: { ask: 'Right ⌥', dictate: 'Right ⌘', type: '⌥T', mark: 'Left ⌃' },
     claude: { installed: true, loggedIn: true, checked: true, email: '', path: '/usr/local/bin/claude' },
     speech: { available: true, device: 'MacBook Pro Microphone', preparing: null, prepared: true, error: null },
     firefoxConnected: true, hotkeysRunning: true, hotkeysSeen: true, hotkeysError: null, version: '0.1.0', extensionPath: '/Applications/Relay.app/Contents/Resources/firefox-extension'
