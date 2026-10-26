@@ -4,10 +4,12 @@
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 
-const DWELL_MS = 380; // rest the pointer on the edge this long to open it
+const DWELL_MS = 140; // rest the pointer on the edge this long to open it (quick: it should feel like it was waiting for you)
 const LEAVE_MS = 700; // away from the panel this long to close it
 const MARGIN = 28; // how far past the panel still counts as being on it
 const WIDTH = 344; // the window; the panel inside is 320 wide
+const HANDLE_W = 14; // the tab that sticks out of the edge, and how tall it is: resting the pointer on it opens the menu too
+const HANDLE_H = 120;
 
 // Decides when to open and close from where the pointer is. Pure, so it can be tested.
 class EdgeHover {
@@ -25,7 +27,8 @@ class EdgeHover {
     const d = displays.find((s) => pointer.x >= s.bounds.x && pointer.x < s.bounds.x + s.bounds.width && pointer.y >= s.bounds.y && pointer.y < s.bounds.y + s.bounds.height);
     if (!panel) {
       this.away = null;
-      const onEdge = d && pointer.x <= d.bounds.x + 1;
+      const midY = d ? d.bounds.y + d.bounds.height / 2 : 0;
+      const onEdge = d && (pointer.x <= d.bounds.x + 1 || (pointer.x <= d.bounds.x + HANDLE_W + 4 && Math.abs(pointer.y - midY) <= HANDLE_H / 2 + 12));
       if (!onEdge) { this.since = null; return { action: null }; }
       if (this.since === null) this.since = now;
       if (now - this.since >= this.dwell) { this.since = null; return { action: 'open', display: d }; }
@@ -54,7 +57,9 @@ class RecentPanel {
 
   start() {
     if (this.timer) return;
-    this.timer = setInterval(() => this.poll(), 120);
+    this.timer = setInterval(() => this.poll(), 60);
+    this.syncHandles();
+    for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(ev, () => this.syncHandles());
   }
 
   stop() {
@@ -62,8 +67,42 @@ class RecentPanel {
     this.timer = null;
   }
 
+  // One small tab per display, sticking out of the left edge, centered on its height. Click-through: the pointer resting on it is
+  // what opens the menu. It slips away while the menu is open, and returns when it closes.
+  syncHandles() {
+    this.handles = this.handles || new Map();
+    const want = this.getEnabled();
+    const displays = want ? screen.getAllDisplays() : [];
+    for (const [id, w] of this.handles) {
+      if (!displays.some((d) => d.id === id) || w.isDestroyed()) { if (!w.isDestroyed()) w.close(); this.handles.delete(id); }
+    }
+    for (const d of displays) {
+      const wa = d.workArea;
+      const bounds = { x: d.bounds.x, y: wa.y + Math.round((wa.height - HANDLE_H) / 2), width: HANDLE_W, height: HANDLE_H };
+      let w = this.handles.get(d.id);
+      if (w && !w.isDestroyed()) { w.setBounds(bounds); continue; }
+      w = new BrowserWindow({ ...bounds, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false, movable: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
+      w.setIgnoreMouseEvents(true);
+      w.setAlwaysOnTop(true, 'screen-saver');
+      w.setHiddenInMissionControl?.(true);
+      w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      w.loadFile(path.join(__dirname, '../renderer/recent-tab.html'));
+      w.once('ready-to-show', () => { if (!this.rect) w.showInactive(); });
+      this.handles.set(d.id, w);
+    }
+  }
+
+  setHandlesAway(away) {
+    for (const w of this.handles?.values() || []) if (!w.isDestroyed()) {
+      if (away) w.webContents.executeJavaScript('window.__away(true)').catch(() => {});
+      else { w.showInactive(); w.webContents.executeJavaScript('window.__away(false)').catch(() => {}); }
+    }
+  }
+
   poll() {
-    if (!this.getEnabled()) {
+    const enabled = this.getEnabled();
+    if (enabled !== this.lastEnabled) { this.lastEnabled = enabled; this.syncHandles(); }
+    if (!enabled) {
       if (this.rect) this.close();
       return;
     }
@@ -101,6 +140,7 @@ class RecentPanel {
     this.strip = { x: wa.x, y: wa.y + Math.round((wa.height - height) / 2), width: WIDTH, height };
     this.panelH = this.panelH || 360;
     if (first) {
+      this.setHandlesAway(true);
       win.setBounds(this.strip);
       win.webContents.send('recent:state', 'show');
       win.showInactive();
@@ -128,7 +168,8 @@ class RecentPanel {
     this.win.webContents.send('recent:state', 'hide');
     this.win.setIgnoreMouseEvents(true, { forward: true });
     clearTimeout(this.hideTimer);
-    this.hideTimer = setTimeout(() => { if (!this.rect && this.win && !this.win.isDestroyed()) this.win.hide(); }, 520);
+    this.setHandlesAway(false);
+    this.hideTimer = setTimeout(() => { if (!this.rect && this.win && !this.win.isDestroyed()) this.win.hide(); }, 340);
   }
 
   toggle(display) {

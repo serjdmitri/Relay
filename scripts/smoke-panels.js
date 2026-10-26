@@ -35,9 +35,16 @@ app.whenReady().then(async () => {
     await wait(2200);
     fs.writeFileSync(path.join(out, 'real-card-list.png'), (await card.win.webContents.capturePage()).toPNG());
     card.hide();
+    recent.start();
+    await wait(1200);
+    const tab = [...recent.handles.values()][0];
+    fs.writeFileSync(path.join(out, 'real-tab.png'), (await tab.webContents.capturePage()).toPNG());
+    result.tab = { visible: tab.isVisible(), bounds: tab.getBounds() };
+    recent.stop(); // the real pointer is not at the edge, so the poll would close the menu again
     recent.open(screen.getPrimaryDisplay());
     await wait(2200);
     fs.writeFileSync(path.join(out, 'real-recent.png'), (await recent.win.webContents.capturePage()).toPNG());
+    result.tabAway = await tab.webContents.executeJavaScript('document.body.className');
     result.recent = { visible: recent.win.isVisible(), bounds: recent.win.getBounds(), page: await recent.win.webContents.executeJavaScript("JSON.stringify({ cls: document.body.className, op: getComputedStyle(document.getElementById('glass')).opacity, items: document.querySelectorAll('.item').length, err: window.__err || null })") };
     result.card.page = await card.win.webContents.executeJavaScript("JSON.stringify({ cls: document.body.className, h: document.getElementById('card').scrollHeight })").catch(() => null);
   } catch (e) {

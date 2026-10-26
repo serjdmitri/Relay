@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.2
+
+- **The left menu pops out faster.** It opens after resting the pointer on the edge for about a seventh of a second (it was over a third), the pointer is checked twice as often, and the pop-out and tuck-away animations are about twice as quick.
+- **A small black tab sticks out of the left edge** (one per screen, level with the middle of it), so you can see the menu is there, like Voice OS. Resting the pointer on the tab opens the menu too, and the tab slips away while the menu is open and comes back when it closes. It never blocks a click.
+
 ## 0.15.1
 
 - **Every card result is clickable.** Each option in a list now has an arrow and opens something in your own browser: the link the model gave, else its Wikipedia page, else a web search for it (DuckDuckGo, no account). A single-thing card always has a "Search the web" button next to its Wikipedia link, so you can keep researching on your own. The model is told to leave out a link unless it is sure it is real.

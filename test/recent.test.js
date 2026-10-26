@@ -41,3 +41,18 @@ test('an open panel stays while the pointer is on or near it, and closes after a
   back.update({ x: 100, y: 200 }, displays, panel, 500); // came back in time
   assert.equal(back.update({ x: 900, y: 200 }, displays, panel, 600).action, null, 'the timer started over');
 });
+
+test('resting on the tab that sticks out of the edge opens it, only near its height', () => {
+  const h = new EdgeHover({ dwell: 100 });
+  h.update({ x: 10, y: 450 }, displays, null, 0); // 10 points in, level with the middle of the screen: on the tab
+  assert.equal(h.update({ x: 10, y: 450 }, displays, null, 150).action, 'open');
+  const far = new EdgeHover({ dwell: 100 });
+  far.update({ x: 10, y: 100 }, displays, null, 0); // same distance in, but near the top: not on the tab
+  assert.equal(far.update({ x: 10, y: 100 }, displays, null, 150).action, null);
+});
+
+test('it opens quickly by default', () => {
+  const h = new EdgeHover();
+  h.update({ x: 0, y: 400 }, displays, null, 0);
+  assert.equal(h.update({ x: 0, y: 400 }, displays, null, 160).action, 'open');
+});
