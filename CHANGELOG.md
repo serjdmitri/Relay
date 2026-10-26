@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- **Circling is back to the line trail** (the smoke puffs are gone), and the trail is shorter: it fades away about half as fast behind the pointer.
+
 ## 0.8.2
 
 - **The reply now sits beside the reactor** in the top left corner, under the status ("COMPLETE"), instead of on the right. The top right keeps your request and the steps while Relay works.
