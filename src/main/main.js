@@ -14,6 +14,7 @@ const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
+const { Scheduler, describe: describeSchedule, parseScheduleCommand } = require('./schedule');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
@@ -91,6 +92,7 @@ function publicState() {
   }
   return {
     ...d,
+    schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
     hasKeys,
     hasTtsKeys,
@@ -408,6 +410,15 @@ function registerIpc() {
     store.save();
     broadcast();
   });
+  ipcMain.handle('schedule:add', (_e, text) => {
+    const cmd = parseScheduleCommand(String(text || ''));
+    if (!cmd || cmd.type !== 'schedule-add') return { ok: false, reply: 'Say it like: every weekday at 8am, open my email. (Or: schedule open my email for tomorrow at 7am.)' };
+    const s = ask.scheduler.add(cmd);
+    broadcast();
+    return s ? { ok: true } : { ok: false, reply: 'That time has already passed.' };
+  });
+  ipcMain.handle('schedule:remove', (_e, id) => { ask.scheduler.removeId(id); broadcast(); });
+  ipcMain.handle('schedule:toggle', (_e, id, on) => { ask.scheduler.setEnabled(id, on); broadcast(); });
   ipcMain.handle('vocab:remove', (_e, t) => {
     store.data.vocabulary = store.get('vocabulary').filter((x) => x !== t);
     store.save();
@@ -523,6 +534,14 @@ app.whenReady().then(() => {
   glass = new Glass({ binPath: glassBinPath() });
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
   timers.start();
+  // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
+  ask.scheduler = new Scheduler({ store });
+  setInterval(() => {
+    const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
+    for (const s of missed) if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: `"${s.text}" was due while the Mac was asleep or Relay was closed. It will run next time.` }).show();
+    for (const s of due) ask.runScheduled(s);
+    if (due.length || missed.length) broadcast();
+  }, 15000);
   ask.onLearn = (from, to) => { // a word you keep fixing by hand becomes a word fix
     const list = (store.data.replacements || []).filter((r) => r.from.toLowerCase() !== from.toLowerCase());
     list.unshift({ id: crypto.randomUUID(), from, to });

@@ -236,6 +236,30 @@ const PAGES = {
     }
     c.append(list);
 
+    c.append(h('<div class="section-title">Scheduled</div>'));
+    c.append(h('<div class="note" style="margin:-4px 4px 12px">Requests Relay runs by itself while the Mac is on and Relay is open. Say “every weekday at 8, open my email” or add one here. Anything that sends or deletes is declined unless you answer within 90 seconds.</div>'));
+    const srow = h('<div class="field-row" style="margin-bottom:14px"><input class="field" id="sin" placeholder="e.g. every weekday at 8am, open my email"><button class="btn primary" id="sadd" style="height:28px">Add</button></div>');
+    const addSched = () => {
+      const v = $('#sin', srow).value;
+      if (v.trim()) relay.addSchedule(v).then((r) => { if (r && r.ok) $('#sin', srow).value = ''; else if (r) alert(r.reply); });
+    };
+    $('#sadd', srow).onclick = addSched;
+    $('#sin', srow).onkeydown = (e) => e.key === 'Enter' && addSched();
+    c.append(srow);
+    const scheds = S.schedules || [];
+    const scard = h('<div class="card"></div>');
+    if (!scheds.length) scard.append(h('<div class="empty" style="text-align:center">Nothing scheduled.</div>'));
+    for (const s of scheds) {
+      const next = s.enabled && s.next ? ` · next ${new Date(s.next).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : s.enabled ? '' : ' · off';
+      const el = h(`<div class="row" style="min-height:52px;padding:8px 14px"><div class="grow"><div class="t">${esc(s.text)}</div><div class="d">${esc(s.when)}${esc(next)}</div></div><div class="toggle ${s.enabled ? 'on' : ''}" data-a="tog"></div><button class="btn" data-a="del" style="margin-left:10px">Delete</button></div>`);
+      el.onclick = (e) => {
+        if (e.target.dataset.a === 'tog') relay.toggleSchedule(s.id, !s.enabled);
+        if (e.target.dataset.a === 'del' && confirm(`Delete "${s.text}"?`)) relay.removeSchedule(s.id);
+      };
+      scard.append(el);
+    }
+    c.append(scard);
+
     c.append(h('<div class="section-title">Make one by voice</div>'));
     c.append(h(`<div class="card" style="padding:10px 14px">
       <div class="opt"><svg viewBox="0 0 24 24">${ICONS.record}</svg><div><div class="t">Record it</div><div class="d">Say “start a routine”, do each step, then “save it as start my day”.</div></div></div>

@@ -19,6 +19,7 @@ const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = requ
 const { isUndo, isAgain } = require('./meta');
 const { corrections, noteCorrection } = require('./learn');
 const mem = require('./memory');
+const sched = require('./schedule');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
@@ -102,6 +103,8 @@ class AskController {
     this.lastLevelPush = 0;
     this.lastApps = [];
     this.lastDictation = null;
+    this.scheduler = null; // set by the app: the list of scheduled requests
+    this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
     this.tasks = []; // what was asked this round: { id, text, status: 'queued' | 'running' | 'done' | 'failed' }, shown as bullets
     this.queue = []; // requests waiting for the one that is running
     this.runningTask = null;
@@ -416,6 +419,66 @@ class AskController {
     this.learnTimers = [setTimeout(check, 12000), setTimeout(check, 45000)];
   }
 
+  // ----- scheduled requests -----
+  async runSchedule(cmd) {
+    if (cmd.type === 'schedule-list') {
+      const list = this.scheduler.items;
+      return { status: 'done', actions: 0, reply: list.length ? `${list.length} scheduled: ${list.slice(0, 4).map((s) => `${s.text} (${sched.describe(s).toLowerCase()})`).join('; ')}${list.length > 4 ? '; and more in Settings > Routines' : ''}.` : 'Nothing is scheduled. Say "every weekday at 8, open my email".' };
+    }
+    if (cmd.type === 'schedule-cancel') {
+      const removed = this.scheduler.remove(cmd.query);
+      this.onChange();
+      return { status: 'done', actions: 0, reply: removed.length ? `Cancelled ${removed.length === 1 ? `"${removed[0].text}"` : `${removed.length} schedules`}.` : `I have no schedule about "${cmd.query}".` };
+    }
+    if (cmd.type === 'schedule-cancel-all') {
+      if (!this.scheduler.items.length) return { status: 'done', actions: 0, reply: 'Nothing is scheduled.' };
+      if (!(await this.askConfirm({ question: 'Cancel every scheduled request?' }))) return { status: 'done', actions: 0, reply: 'Okay, I kept them.' };
+      this.scheduler.clear();
+      this.onChange();
+      return { status: 'done', actions: 0, reply: 'Cancelled all schedules.' };
+    }
+    const s = this.scheduler.add(cmd);
+    if (!s) return { status: 'failed', actions: 0, reply: 'That time has already passed.' };
+    this.onChange();
+    return { status: 'done', actions: 0, reply: `Scheduled: ${s.text}. ${sched.describe(s)}.` };
+  }
+
+  // For the model: a schedule from fields it filled in. time is "HH:MM" (24 hours); days are names; date is "YYYY-MM-DD" for a single run.
+  scheduleTask({ task, repeat = 'once', time, days = [], date }) {
+    const m = String(time || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!task || !m) return 'I need the task and a time like 08:00.';
+    const hour = +m[1];
+    const minute = +m[2];
+    if (hour > 23 || minute > 59) return 'That is not a valid time.';
+    if (!['once', 'daily', 'weekdays', 'weekends', 'weekly'].includes(repeat)) return 'repeat must be once, daily, weekdays, weekends or weekly.';
+    const names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayIdx = [...new Set((days || []).map((d) => names.indexOf(String(d).toLowerCase())).filter((i) => i >= 0))];
+    if (repeat === 'weekly' && !dayIdx.length) return 'weekly needs days, like ["monday","thursday"].';
+    let at;
+    if (repeat === 'once') {
+      const base = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : new Date();
+      base.setHours(hour, minute, 0, 0);
+      if (!date && base.getTime() <= Date.now()) base.setDate(base.getDate() + 1);
+      at = base.getTime();
+    }
+    const s = this.scheduler.add({ text: String(task).trim(), repeat, hour, minute, days: dayIdx, at });
+    if (!s) return 'That time has already passed.';
+    this.onChange();
+    return `Scheduled: ${s.text}. ${sched.describe(s)}.`;
+  }
+
+  // The app's timer asks this before handing over a due request: only when nothing else is going on.
+  canRunScheduled() {
+    return !this.suspended && !this.runningTask && ['idle', 'done'].includes(this.state);
+  }
+
+  runScheduled(s) {
+    clearTimeout(this.doneTimer);
+    this.unattended = true;
+    this.sound('Tink');
+    return this.handleText(s.text, { scheduled: true });
+  }
+
   // ----- what Relay remembers about you -----
   memoryText() {
     return this.store.get('settings.memory') === false ? '' : mem.memoryContext(this.store.get('memories') || []);
@@ -548,7 +611,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -850,7 +913,8 @@ class AskController {
     this.win.setFocusable(false);
     this.push({ label: 'Thinking', text: opts.shown || text });
 
-    const entry = { id: crypto.randomUUID(), text: opts.shown || text, status: 'working', reply: '', ts: Date.now() };
+    if (!opts.scheduled) this.unattended = false;
+    const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now() };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);
     if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
@@ -878,6 +942,10 @@ class AskController {
           if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to repeat yet.', actions: 0 });
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
+        }
+        if (!opts.shown && !opts.scheduled && this.scheduler) {
+          const sc = sched.parseScheduleCommand(effective);
+          if (sc) return this.finish(entry, await this.runSchedule(sc));
         }
         if (!opts.shown && this.store.get('settings.memory') !== false) {
           const m = mem.parseMemory(effective);
@@ -1148,6 +1216,8 @@ class AskController {
       };
       this.reveal({ question: q.question }, 'show');
       this.sound('Tink');
+      // A scheduled request runs while nobody may be at the Mac: no answer in 90 seconds means no.
+      if (this.unattended) setTimeout(() => this.pendingConfirm && this.pendingConfirm(false), 90000);
     });
   }
 
