@@ -13,11 +13,13 @@ const MAX_ITEMS = 4;
 class HoloManager {
   // createWindow(): a window-like object; cursor(): { x, y }; area(): the work area to place new ones in; download(url) -> Buffer;
   // saved(): the stored list; save(list): store it.
-  constructor({ createWindow, cursor, area, download, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
+  constructor({ createWindow, cursor, area, download, generate = async () => { throw new Error('No generator.'); }, readFile = () => null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
     this.createWindow = createWindow;
     this.cursor = cursor;
     this.area = area;
     this.download = download;
+    this.generate = generate; // a photo candidate -> a real-looking model (a GLB item)
+    this.readFile = readFile; // a saved GLB's file -> its bytes
     this.saved = saved;
     this.save = save;
     this.setTimer = setTimer;
@@ -90,13 +92,16 @@ class HoloManager {
     const c = h.options.list[index];
     if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'error', 'Loading…');
     try {
-      const item = c.kind === 'stl' ? { kind: 'stl', title: c.title, credit: c.credit, url: c.url, bytes: await this.download(c.url) } : { kind: 'shapes', title: c.title, credit: c.credit, parts: c.parts };
+      let item;
+      if (c.kind === 'stl') item = { kind: 'stl', title: c.title, credit: c.credit, url: c.url, bytes: await this.download(c.url) };
+      else if (c.kind === 'photo') { if (!c.item) c.item = await this.generate(c); item = c.item; } // made once, then kept for next time round
+      else item = { kind: 'shapes', title: c.title, credit: c.credit, parts: c.parts };
       h.options.index = index;
       h.items = [item];
       this.push(h);
       this.persist();
-    } catch {
-      if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'error', 'Could not load that one.');
+    } catch (e) {
+      if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'error', e?.message && /free 3D service/.test(e.message) ? e.message : 'Could not load that one.');
     }
   }
 
@@ -207,7 +212,11 @@ class HoloManager {
   async restore() {
     for (const s of cleanSaved(this.saved())) {
       try {
-        const items = await Promise.all(s.items.map(async (i) => (i.kind === 'stl' ? { ...i, bytes: await this.download(i.url) } : i)));
+        const items = await Promise.all(s.items.map(async (i) => {
+          if (i.kind === 'stl') return { ...i, bytes: await this.download(i.url) };
+          if (i.kind === 'glb') { const bytes = this.readFile(i.file); if (!bytes) throw new Error('model file is gone'); return { ...i, bytes }; }
+          return i;
+        }));
         await this.show({ id: s.id, title: s.title, items, pinned: true, x: s.x, y: s.y, scale: s.scale, solid: s.solid });
       } catch { /* a model that cannot be fetched is skipped */ }
     }

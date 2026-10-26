@@ -18,6 +18,7 @@ const { CardPanel } = require('./cards/panel');
 const { HoloManager } = require('./holo/manager');
 const holoWin = require('./holo/windows');
 const { downloadStl } = require('./models/lookup');
+const { ModelCache } = require('./models/cache');
 const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { connectAccount: connectGoogle } = require('./connectors/google');
@@ -579,10 +580,10 @@ app.whenReady().then(() => {
   holos = new HoloManager({
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
     cursor: holoWin.cursor, area: holoWin.area, download: (u) => downloadStl(u),
+    generate: (c) => ask.generatePhotoModel(c), readFile: (f) => ask.modelCache?.readInside(f),
     saved: () => store.get('holograms') || [], save: (l) => { store.data.holograms = l; store.save(); }
   });
   holoWin.registerHoloIpc(holos);
-  holos.restore().catch(() => {}); // pinned holograms come back where they were
   overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
@@ -615,6 +616,8 @@ app.whenReady().then(() => {
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
   ask.holos = holos;
+  ask.modelCache = new ModelCache(path.join(app.getPath('userData'), 'holo-cache'));
+  holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };

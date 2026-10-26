@@ -138,6 +138,9 @@ After you dictate, Relay looks at the same text in the field a few seconds later
 ### Relay Remote (your phone)
 Settings > Remote: turn it on, press Pair a phone, scan the QR code in Safari, tap Pair, then Share > Add to Home Screen. The phone page shows the reactor; type or hold it and talk, and your Mac does the work and sends the answer back as text and speech. It controls your Mac, not the phone's own apps. Away from home, install Tailscale on both (free): it makes the connection private and encrypted, and gives the phone the secure address its microphone needs for hold to talk. See the changelog for the security details. `node scripts/remote-e2e.mjs` runs the phone page in a phone-sized browser against the real server.
 
+### 3D holograms (realistic)
+For a specific real thing Relay researches what it looks like, then shows the best of: a ready-made real 3D model (Wikimedia Commons), or a realistic model **made from a real photo** (Stable Fast 3D, a free Hugging Face service; only the public photo is sent), or a simple build from shapes for abstract things. Models made from one photo guess the hidden sides, and the service can be busy or out of its free limit.
+
 ### 3D holograms
 "Show me a 3D model of a skull", "what does the Eiffel Tower look like in 3D", "show me the solar system in 3D": a hologram floats on your screen, with no window around it. Drag its glowing base to move it anywhere, drag the model to turn it, scroll to resize, pin it to keep it (even after restarts), step through other models with the arrows, and drop one hologram on another to combine them (or say "add a heart to it"). Relay looks for real models on Wikimedia Commons first (the maker and license are shown) and otherwise builds a simple one from shapes, saying so.
 
