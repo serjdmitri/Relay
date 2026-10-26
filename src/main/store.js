@@ -14,6 +14,7 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
+    buddyAlways: true, // the ring stays beside the pointer all the time, not only while Relay works
     buddy: true, // a small helper follows your pointer while Relay works
     speakReplies: false,
     dictation: true, // off: the Dictate shortcut (right ⌘) does nothing
