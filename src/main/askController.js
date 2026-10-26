@@ -19,6 +19,8 @@ const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = requ
 const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
 const usage = require('./usage');
 const { buildCard } = require('./cards/card');
+const { findStl, downloadStl } = require('./models/lookup');
+const { normalizeParts } = require('./models/shapes');
 const { NotionApi, notionTools } = require('./connectors/notion');
 const { GoogleApi, googleTools } = require('./connectors/google');
 const { corrections, noteCorrection } = require('./learn');
@@ -110,6 +112,7 @@ class AskController {
     this.lastDictation = null;
     this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); this.statusChanged(); }, onFinish: (a) => this.agentFinished(a) });
     this.cardPanel = null; // set by the app: the answer card window
+    this.modelPanel = null; // set by the app: the 3D viewer window
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
@@ -393,6 +396,7 @@ class AskController {
     if (name === 'cancel' || (name === 'type' && kind === 'press')) this.interruptSpeech();
     if (name === 'cancel') {
       this.cardPanel?.hide();
+      this.modelPanel?.hide();
       this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
       else if (this.overlay.hasMarks()) this.overlay.clear(); // Esc closes drawings and guides
@@ -498,6 +502,31 @@ class AskController {
     };
     go();
     return id;
+  }
+
+  // ----- 3D models -----
+  // A real model from Wikimedia Commons if there is a fitting one, else what the model built from shapes. Returns what happened, in
+  // words, so the model can say it honestly.
+  async show3d(raw = {}) {
+    if (!this.modelPanel || this.store.get('settings.models3d') === false) return '3D models are turned off.';
+    const title = String(raw.title || raw.query || '3D model').slice(0, 80);
+    const parts = normalizeParts(raw.parts);
+    let found = null;
+    if (raw.query) {
+      try {
+        const m = await findStl(raw.query);
+        if (m) { found = { m, bytes: await downloadStl(m.url) }; }
+      } catch { found = null; }
+    }
+    if (found) {
+      await this.modelPanel.show({ kind: 'stl', title, subtitle: found.m.title, credit: found.m.credit, bytes: found.bytes });
+      return `Showing a real 3D model, "${found.m.title}" (${found.m.credit}). The user can drag to turn it, scroll to zoom, and press Turn upright if it lies on its side. Answer in one short sentence, and say so if the model looks like a different thing than they asked for.`;
+    }
+    if (parts.length) {
+      await this.modelPanel.show({ kind: 'shapes', title, subtitle: String(raw.note || 'Built from simple shapes').slice(0, 100), credit: 'Built by Relay from simple shapes', parts });
+      return `No real model was found, so Relay built a simple one from ${parts.length} shapes. Tell the user it is a simple stand-in. They can drag to turn it and scroll to zoom.`;
+    }
+    return 'No real 3D model of that exists on Wikimedia Commons. Call show_3d again with parts to build a simple one from shapes, or tell the user there is none.';
   }
 
   // ----- answer cards -----
@@ -771,7 +800,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], models: this.modelPanel && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1092,7 +1121,7 @@ class AskController {
     this.push({ label: 'Thinking', text: opts.shown || text });
 
     if (!opts.scheduled) this.unattended = false;
-    if (!opts.drain) this.cardPanel?.hide(); // a new request takes the last card away
+    if (!opts.drain) { this.cardPanel?.hide(); this.modelPanel?.hide(); } // a new request takes the last card away
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);

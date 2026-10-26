@@ -15,6 +15,7 @@ const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
 const { CardPanel } = require('./cards/panel');
+const { ModelPanel } = require('./models/panel');
 const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { connectAccount: connectGoogle } = require('./connectors/google');
@@ -28,7 +29,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, remote;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, modelPanel, remote;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -456,6 +457,8 @@ function registerIpc() {
   ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
+  ipcMain.handle('model:close', () => modelPanel?.hide());
+  ipcMain.handle('model:hover', (_e, on) => modelPanel?.setHover(on));
   ipcMain.handle('card:close', () => cardPanel?.hide());
   ipcMain.handle('card:open', (_e, url) => cardPanel?.open(url));
   ipcMain.handle('card:size', (_e, h) => cardPanel?.setSize(h));
@@ -572,6 +575,7 @@ app.whenReady().then(() => {
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
   recent.start();
   cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js') });
+  modelPanel = new ModelPanel({ preload: path.join(__dirname, 'preload.js') });
   overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
@@ -603,6 +607,7 @@ app.whenReady().then(() => {
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
+  ask.modelPanel = modelPanel;
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
