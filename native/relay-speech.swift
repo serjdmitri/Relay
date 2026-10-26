@@ -139,6 +139,7 @@ final class Mic: @unchecked Sendable {
   private var lastLevel = Date.distantPast
   private var observer: NSObjectProtocol?
   private var running = false
+  private var useDefault = false // set when the chosen device would not start
   private let lock = NSLock()
 
   init(output: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, device: AudioDeviceID?) {
@@ -149,12 +150,28 @@ final class Mic: @unchecked Sendable {
 
   private func selectDevice() {
     // Re-selecting the device that is already the default changes nothing but makes macOS announce a change.
-    guard let device, device != defaultInputID(), let unit = engine.inputNode.audioUnit else { return }
+    guard !useDefault, let device, device != defaultInputID(), let unit = engine.inputNode.audioUnit else { return }
     var d = device
     AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &d, UInt32(MemoryLayout<AudioDeviceID>.size))
   }
 
   func start() throws {
+    do {
+      try startOnce()
+    } catch {
+      // The microphone that was asked for cannot run next to the current speakers (a Bluetooth headset in call mode and the
+      // built-in microphone, for example: AVAudioEngine answers with -10868). Use the default input instead of failing.
+      guard device != nil, !useDefault else { throw error }
+      debug("falling back to the default input after: \(error.localizedDescription)")
+      useDefault = true
+      engine.inputNode.removeTap(onBus: 0)
+      engine = AVAudioEngine()
+      converter = nil
+      try startOnce()
+    }
+  }
+
+  private func startOnce() throws {
     selectDevice()
     let format = engine.inputNode.inputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
