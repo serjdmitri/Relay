@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0
+
+- **Relay Remote: use Relay from your phone.** A new Settings > Remote page. Turn it on, press **Pair a phone**, scan the QR code (or open the address) in Safari, tap Pair, then Share > Add to Home Screen. The phone page shows your Jarvis reactor: type, or hold the reactor and talk, and your Mac does the work with Claude exactly as it does today. You see PROCESSING, the task bullets and background agents, and the answer comes back as text and speech from the phone (the usage line stays silent). No app, no App Store, no developer account, no reinstalling.
+- **Everything runs on your Mac,** so the phone can have it open apps, write notes, read Gmail and Calendar, run background agents and more. It cannot control the phone's own apps. Anything that sends or deletes still asks for approval on the Mac.
+- **Security:** nothing listens until you turn it on. Pairing uses a six-digit code that works once for five minutes (five wrong guesses lock it), and each phone then holds a long random token (only a hash is kept on the Mac). Only phones on your own network or Tailscale may connect; anything else is refused. A request from a web page cannot drive it. Unpair a phone any time.
+- **Hold to talk** uses the phone's own speech recognition, which needs a secure connection: use Tailscale's https address. On plain home Wi-Fi, type or use the keyboard microphone. **Tailscale helper:** if Tailscale is installed, Relay can make the secure link for you with one button (you also need MagicDNS and HTTPS certificates turned on in the Tailscale admin page). Tailscale is not installed on the Mac I built this on, so that button is untested.
+- On plain home Wi-Fi the connection is not encrypted, so the pairing token travels in the clear on your network; pair at home on a network you trust, and use Tailscale away from home.
+
 ## 0.15.2
 
 - **The left menu pops out faster.** It opens after resting the pointer on the edge for about a seventh of a second (it was over a third), the pointer is checked twice as often, and the pop-out and tuck-away animations are about twice as quick.

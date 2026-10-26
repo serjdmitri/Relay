@@ -15,6 +15,7 @@ const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
 const { CardPanel } = require('./cards/panel');
+const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { connectAccount: connectGoogle } = require('./connectors/google');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand } = require('./schedule');
@@ -27,7 +28,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, remote;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -99,6 +100,7 @@ function publicState() {
   return {
     ...d,
     connectors,
+    remote: remote ? remote.info() : null,
     schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
     hasKeys,
@@ -141,6 +143,7 @@ function rebuildTray() {
     { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
     { label: 'Recent asks on the left edge', type: 'checkbox', checked: store.get('settings.recent') !== false, click: (item) => { store.set('settings.recent', item.checked); broadcast(); rebuildTray(); } },
     ...(store.get('settings.model.provider') === 'claude' ? [{ label: 'Model Speed', submenu: [['auto', 'Auto'], ['haiku', 'Fast (Haiku)'], ['sonnet', 'Smart (Sonnet)'], ['opus', 'Deep (Opus)']].map(([v, l]) => ({ label: l, type: 'radio', checked: store.get('settings.model.claudeModel') === v, click: () => { store.set('settings.model.claudeModel', v); broadcast(); } })) }] : []),
+    { label: 'Relay Remote (phone)', type: 'checkbox', checked: !!store.get('settings.remote.enabled'), click: async (item) => { store.set('settings.remote.enabled', item.checked); await remote.sync(); broadcast(); } },
     { label: 'Show the cursor buddy', type: 'checkbox', checked: store.get('settings.buddy') !== false, click: (item) => { store.set('settings.buddy', item.checked); overlay.applyMode(); broadcast(); rebuildTray(); } },
     { type: 'separator' },
     { label: 'Open Relay', click: () => openMain('home') },
@@ -442,6 +445,16 @@ function registerIpc() {
     if (hit) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decryptKey(hit.refreshEnc))}`, { method: 'POST' }).catch(() => {}); // best effort: take Relay's access away at Google too
     broadcast();
   });
+  // Relay Remote: the phone page, served by Relay on this Mac.
+  ipcMain.handle('remote:set', async (_e, patch) => {
+    for (const [k, v] of Object.entries(patch || {})) if (['enabled', 'lan'].includes(k)) store.set(`settings.remote.${k}`, !!v);
+    await remote.sync();
+    broadcast();
+  });
+  ipcMain.handle('remote:pair', async () => { await remote.sync(); return remote.server ? remote.pair() : { error: remote.error || 'Turn Relay Remote on first.' }; });
+  ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
+  ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
+  ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
   ipcMain.handle('card:close', () => cardPanel?.hide());
   ipcMain.handle('card:open', (_e, url) => cardPanel?.open(url));
   ipcMain.handle('card:size', (_e, h) => cardPanel?.setSize(h));
@@ -589,6 +602,8 @@ app.whenReady().then(() => {
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
+  remote = new RemoteService({ store, ask, broadcast });
+  remote.sync().then(broadcast);
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
@@ -672,6 +687,7 @@ app.on('before-quit', () => {
   try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
   quitting = true;
   recent?.stop();
+  remote?.stop();
   hotkeys?.stop();
   bridge?.stop();
   speaker?.stop();

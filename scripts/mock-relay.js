@@ -20,6 +20,7 @@
     memories: [{ id: 'm1', text: 'my name is Sergey', ts: 1 }, { id: 'm2', text: 'I am vegetarian', ts: 2 }, { id: 'm3', text: 'my sister Anna lives in Boston', ts: 3 }],
     schedules: [{ id: 's1', text: 'open my email', when: 'Every weekday at 8:00 AM', enabled: true, next: Date.now() + 36e5 }, { id: 's2', text: 'read me my calendar', when: 'Every day at 7:30 AM', enabled: false }],
     connectors: { notion: { connected: true, name: 'Sergey\'s workspace' }, google: { clientId: 'xxxx.apps.googleusercontent.com', hasSecret: true, accounts: ['sd2009main@gmail.com', 'sergey@school.edu'] } },
+    remote: { enabled: true, running: true, lan: true, port: 47900, error: '', urls: ['http://192.168.1.20:47900'], devices: [{ id: 'd1', name: "Sergey's iPhone", lastSeen: Date.now() - 3600e3 }], tailscale: { installed: false } },
     history: [
       { id: '1', text: 'Remind me to call mom at 5pm', status: 'done', reply: 'Reminder set: call mom, today at 5:00 PM.', ts: now - 4 * min },
       { id: '2', text: 'What is on my calendar tomorrow?', status: 'done', reply: 'Tomorrow you have a design review at 10:00 and lunch with Sam at 12:30.', ts: now - 19 * min },
@@ -125,6 +126,7 @@
       onState: (cb) => { window.__askState = cb; return () => {}; }
     },
     setNotionToken: async () => ({ ok: true }), clearNotion: async () => {}, setGoogleClient: async () => {}, connectGoogle: async () => ({ ok: true, email: 'x' }), removeGoogle: async () => {},
+    setRemote: async () => {}, pairPhone: async () => ({ code: '482913', expiresInMs: 300000, urls: ['http://192.168.1.20:47900'], qr: '' }), removePhone: async () => {}, remoteTailscale: async () => ({ ok: true }), copyText: async () => {},
     addSchedule: async (t) => ({ ok: true }),
     removeSchedule: async () => {},
     toggleSchedule: async () => {},

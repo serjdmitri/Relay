@@ -108,7 +108,7 @@ class AskController {
     this.lastLevelPush = 0;
     this.lastApps = [];
     this.lastDictation = null;
-    this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); }, onFinish: (a) => this.agentFinished(a) });
+    this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); this.statusChanged(); }, onFinish: (a) => this.agentFinished(a) });
     this.cardPanel = null; // set by the app: the answer card window
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -327,6 +327,7 @@ class AskController {
   }
 
   push(extra = {}) {
+    this.statusChanged();
     if (extra.label !== undefined && this.state === 'working') this.workView = { label: extra.label, text: extra.text ?? this.workView?.text };
     if (!extra.hide && this.passiveUI()) {
       if (this.visible) this.hideSoft();
@@ -463,6 +464,40 @@ class AskController {
       this.store.set('corrections', counts);
     };
     this.learnTimers = [setTimeout(check, 12000), setTimeout(check, 45000)];
+  }
+
+  // ----- Relay Remote (the phone) -----
+  statusChanged() {
+    if (!this.onStatus) return;
+    clearTimeout(this.statusTimer);
+    this.statusTimer = setTimeout(() => this.onStatus?.(this.remoteSnapshot()), 120);
+  }
+
+  remoteSnapshot() {
+    return { state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view() };
+  }
+
+  remoteRecent(n = 8) {
+    return (this.store.get('history') || []).slice(0, n).map((h) => ({ text: h.text, reply: h.reply, status: h.status, ts: h.ts }));
+  }
+
+  // A request from the phone goes the same way as one from the Mac's own shortcut: it joins the list if something is running, and
+  // waits a moment if you are in the middle of talking or typing here. Returns its id at once; the answer comes back as an event.
+  async remoteAsk(text, device) {
+    const id = crypto.randomUUID();
+    const go = (tries = 0) => {
+      if (this.runningTask) return this.enqueue(text, { remote: id });
+      if (['idle', 'done'].includes(this.state)) {
+        clearTimeout(this.doneTimer);
+        this.state = 'input';
+        this.handleText(text, { remote: id });
+        return;
+      }
+      if (tries < 40) setTimeout(() => go(tries + 1), 1500); // you are talking or typing on the Mac: wait for it
+      else this.onResult?.({ id, reply: 'Relay was busy with you for too long.', status: 'failed' });
+    };
+    go();
+    return id;
   }
 
   // ----- answer cards -----
@@ -1058,7 +1093,7 @@ class AskController {
 
     if (!opts.scheduled) this.unattended = false;
     if (!opts.drain) this.cardPanel?.hide(); // a new request takes the last card away
-    const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now() };
+    const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);
     if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
@@ -1375,6 +1410,8 @@ class AskController {
         this.push({ label: yes ? 'Working' : 'Skipping' });
         resolve(yes);
       };
+      this.confirmQuestion = q.question;
+      this.statusChanged();
       this.reveal({ question: q.question }, 'show');
       this.sound('Tink');
       // A scheduled request runs while nobody may be at the Mac: no answer in 90 seconds means no.
@@ -1389,6 +1426,7 @@ class AskController {
     if (used) this.lastTier = ['haiku', 'sonnet', 'opus'].find((t) => String(used.model).toLowerCase().includes(t)) || this.lastTier;
     const usageText = used ? usage.usageLine({ ...used, limit: this.freshRate() }) : '';
     this.lastUsage = used ? { id: entry.id, used } : null;
+    this.onResult?.({ id: entry.remote || null, reply, status: res.status });
     this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
     this.store.set('lastReply', reply);
     this.abort = null;
@@ -1414,7 +1452,7 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
-    if (this.store.get('settings.speakReplies') && res.status === 'done') this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
+    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
     clearTimeout(this.doneTimer);
     this.doneTimer = setTimeout(() => {
       if (this.state === 'done') this.close();
