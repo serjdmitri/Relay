@@ -1,10 +1,11 @@
 // What is true right now. The signed-in Claude path sends this with each request instead of putting it in the
 // system prompt, so the system prompt stays identical between requests (and a warm process can start early).
-function buildContext({ now = new Date(), frontmost, runningApps = [], mark = null } = {}) {
+function buildContext({ now = new Date(), frontmost, runningApps = [], mark = null, files = null } = {}) {
   const lines = [`Now: ${now.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`];
   if (frontmost) lines.push(`Frontmost app when the request started: ${frontmost}.`);
   if (runningApps.length) lines.push(`Running apps: ${runningApps.join(', ')}.`);
   if (mark) lines.push(`The user marked an area of their screen ${mark.ageSec} seconds ago (${Math.round(mark.w)}x${Math.round(mark.h)} points). Call see_marked_area to look at it. "This", "here" or "that" most likely mean it.`);
+  if (files && files.paths.length) lines.push(`The user dropped ${files.paths.length === 1 ? 'a file' : `${files.paths.length} files`} on Relay ${files.ageSec} seconds ago: ${files.paths.join(', ')}. "These", "this file" and "it" most likely mean them. Call read_file to look inside.`);
   return lines.join('\n');
 }
 
