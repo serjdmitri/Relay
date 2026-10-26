@@ -16,6 +16,7 @@ const DEFAULTS = {
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
     wake: { enabled: false, phrase: 'hey jarvis' }, // listen for a wake phrase while Relay is idle (on-device)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
+    models3d: true, // show a 3D model you can turn: a real one when there is one, else built from shapes
     cards: true, // answer cards with a picture, facts and links
     showUsage: true, // a small line under the answer: model, time, tokens (never spoken)
     memory: true, // remember facts you tell it, and use them in every request

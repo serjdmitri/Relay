@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.17.0
+
+- **3D models you can turn.** Ask "show me a 3D model of a skull", "what does the Eiffel Tower look like in 3D", or "show me the solar system in 3D", and a black glass viewer pops out on the right. Drag to turn it, scroll to zoom, double-click to reset, and it spins by itself until you touch it. Esc or × closes it.
+- **Real models first.** Relay looks on Wikimedia Commons for a real 3D model (free, with the maker and license shown under it) and downloads it itself: a skull, a heart, a brain, the Eiffel Tower, a chess knight and more turned up, usually in under a second. Coverage is patchy (mostly things made for 3D printing), so a search can also bring a loosely matching thing, and some models lie on their side: **Turn upright** cycles the up-direction.
+- **When there is no real model, Relay builds a simple one from shapes** (spheres, boxes, cylinders, cones, rings, with colors, glow, labels, spin and orbit), good for an atom, the solar system, a molecule or a simple object, and it says plainly that it is a stand-in.
+- Turn it off in General > 3D models. The viewer uses three.js (MIT), included in the app.
+
 ## 0.16.2
 
 - **"Hey Siri, Relay": talk to Relay from the iPhone without any secure address.** Safari hides its speech recognition on plain http, so hold to talk needs Tailscale. A Shortcut does not: say "Hey Siri, Relay" (or use the Action Button, Back Tap or a Home Screen icon), talk, and the answer is spoken back. Settings > Remote > Hey Siri, Relay makes a key and lists the six steps to build the Shortcut (Dictate Text, Get Contents of URL, Get Dictionary Value, Speak Text).

@@ -13,7 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -300,6 +300,20 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => memory.remove(i.match)
       }
     );
+  }
+
+  // A 3D model you can turn and zoom: a real one from Wikimedia Commons (an STL, when someone has made one), else built from shapes.
+  if (models) {
+    tools.push({
+      name: 'show_3d',
+      description: 'Show an interactive 3D model the user can drag to turn and scroll to zoom, for "show me a 3D model of…", "what does … look like in 3D", or a model that makes an idea clear (an atom, the solar system, a molecule). Give query (what to search for; Relay looks for a real model on Wikimedia Commons first). If the thing is simple enough, ALSO give parts so Relay can build it from shapes when no real model exists: sphere [r], box [w,h,d], cylinder [rTop,rBottom,h], cone [r,h], torus [R,tubeR], capsule [r,length], ring [inner,outer]; position [x,y,z], rotation degrees, color "#rrggbb", opacity, glow for light sources, label (a few words), spin [x,y,z] degrees per second, orbit {radius, speed (deg/s), tilt, center}. Keep to the point: up to 40 parts. After it, answer in one short sentence.',
+      input_schema: obj({
+        title: str('Name shown on the viewer'), query: str('What to search for, in plain words'), note: str('One short line under the title'),
+        parts: { type: 'array', description: 'Shapes to build it from if there is no real model', items: { type: 'object', properties: { shape: str('sphere|box|cylinder|cone|torus|capsule|ring'), size: { type: 'array', items: { type: 'number' } }, position: { type: 'array', items: { type: 'number' } }, rotation: { type: 'array', items: { type: 'number' } }, color: str('#rrggbb'), opacity: num('0.1 to 1'), glow: { type: 'boolean' }, label: str('Short label'), spin: { type: 'array', items: { type: 'number' } }, orbit: { type: 'object', properties: { radius: num('Distance'), speed: num('Degrees per second'), tilt: num('Degrees'), center: { type: 'array', items: { type: 'number' } } } } }, required: ['shape', 'size'] } }
+      }, ['title']),
+      describe: (i) => `Getting a 3D model of ${i.title}`,
+      run: async (i) => models.show(i)
+    });
   }
 
   // An answer card: a picture, the key facts and links, shown beside the answer (Relay finds the picture).
