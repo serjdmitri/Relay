@@ -22,6 +22,7 @@
     background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.75), rgba(255,255,255,0) 38%), linear-gradient(135deg, #6c63ff, #c13cf0 62%, #ff8a3d);
     box-shadow: 0 3px 10px rgba(108,99,255,.5), 0 0 0 1.5px rgba(255,255,255,.9); transition: background .3s; }
   .bars { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 1.5px; }
+  #buddy.speaking .orb { animation: speak .62s ease-in-out infinite; }
   .bars i { width: 2px; height: 5px; border-radius: 2px; background: #fff; animation: eq .8s ease-in-out infinite; }
   .bars i:nth-child(2) { animation-delay: .15s; } .bars i:nth-child(3) { animation-delay: .3s; }
   @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 10px; } }
@@ -58,6 +59,15 @@
   #card .step.done .n { background: #34c759; }
   #card .foot { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.12); font-size: 12px; color: #a9a5d6; }
 
+  /* the caption: what Relay hears, is doing, or answers, beside the pointer */
+  #cap { position: absolute; left: 0; top: 0; max-width: 360px; min-width: 120px; padding: 9px 14px 10px; border-radius: 14px; background: rgba(11, 17, 24, .94); color: #eef6fb; border: 1px solid rgba(76, 194, 255, .3);
+    box-shadow: 0 10px 28px rgba(0,0,0,.4); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; opacity: 0; transition: opacity .2s ease; will-change: transform; pointer-events: none; }
+  #cap.on { opacity: 1; }
+  #cap .st { font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: #4cc2ff; padding-bottom: 2px; }
+  #cap .tx { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+  #cap .tx.dim, #cap .sub { color: #8fa7b8; }
+  #cap .sub { font-size: 12.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #cap.bad .st { color: #ff9f0a; }
   /* ===== Jarvis look: one cyan accent. The buddy is a small ring with a cursor triangle; the pen traces what Relay draws. ===== */
   :root { --mk: #6c63ff; --cy: #4cc2ff; --cy2: #9fdcff; --ink: #06121b; }
   #reticle, #ring2, #ptr, #pen { display: none; }
@@ -76,8 +86,13 @@
   #reticle .ok { fill: none; stroke: var(--cy2); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
   @keyframes rot { to { transform: rotate(360deg); } }
   @keyframes breathe { 0%, 100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.14); opacity: 1; } }
-  #buddy.listening #reticle .c { animation: breathe .55s ease-in-out infinite; stroke-dasharray: none; }
-  #buddy.listening #reticle .core { animation: breathe .55s ease-in-out infinite; }
+  #buddy.listening #reticle .c { stroke-dasharray: none; transform: scale(calc(1 + var(--lvl, 0) * .5)); transition: transform .09s ease-out; }
+  #buddy.listening #reticle .core { transform: scale(calc(1 + var(--lvl, 0) * .9)); transition: transform .09s ease-out; }
+  #buddy.listening #reticle .b { transform: scale(calc(1 + var(--lvl, 0) * .18)); transition: transform .09s ease-out; }
+  #buddy.speaking #reticle .c { stroke-dasharray: none; animation: speak .62s ease-in-out infinite; }
+  #buddy.speaking #reticle .core { animation: speak .62s ease-in-out infinite reverse; }
+  #buddy.speaking #reticle .b { animation-duration: 3.5s; }
+  @keyframes speak { 0%, 100% { transform: scale(1); } 35% { transform: scale(1.28); } 70% { transform: scale(1.08); } }
   #buddy.idle { opacity: .85; }
   #buddy.idle #reticle g, #buddy.idle #reticle .core { animation-play-state: paused; }
   #buddy.idle .orb { opacity: .8; }
@@ -129,6 +144,7 @@
 <div id="buddy"><svg id="ptr" viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/></svg><svg id="reticle" viewBox="-50 -50 100 100" aria-hidden="true"><g class="a"><circle r="47"/></g><g class="b"><circle r="39"/></g><g class="t"><circle r="32"/></g><g class="c"><circle r="24"/></g><circle class="core" r="14"/><circle class="dot" r="3"/><path class="ok" d="M-9 1 l6.5 6.5 l12 -13"/></svg><div class="spin"></div><div class="orb"><div class="bars"><i></i><i></i><i></i></div></div>
   <svg class="chk" viewBox="0 0 30 30"><path d="M8.5 15.5l4.2 4.2 8.8-9.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="pen"><svg viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/></svg></div>
+<div id="cap"></div>
 <div id="card"></div>
 <script src="overlay.js"></script>
 </body>

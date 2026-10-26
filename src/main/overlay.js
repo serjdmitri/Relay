@@ -36,6 +36,8 @@ class Overlay {
     this.marking = null; // the window the user is drawing a mark on (the mark key is held)
     this.markPts = [];
     this.markPoll = null;
+    this.capActive = false; // the caption card (what Relay hears, is doing or says) is showing beside the pointer
+    this.capState = {};
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -70,7 +72,7 @@ class Overlay {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
-    e = { win, display, shapes: false, card: false, halo: false, buddy: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
+    e = { win, display, shapes: false, card: false, halo: false, buddy: false, cap: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
     // A page that has not finished loading would drop what we send it, so hold commands until it has.
     win.webContents.once('did-finish-load', () => {
       e.ready = true;
@@ -95,7 +97,7 @@ class Overlay {
       e.look = look;
       this.send(e, { type: 'look', look });
     }
-    const want = e.shapes || e.card || e.halo || e.buddy || e.markShow;
+    const want = e.shapes || e.card || e.halo || e.buddy || e.cap || e.markShow;
     if (want && !e.win.isVisible()) {
       if (e.win.getBounds().x !== e.display.bounds.x || e.win.getBounds().y !== e.display.bounds.y) e.win.setBounds(e.display.bounds);
       e.win.showInactive();
@@ -142,9 +144,11 @@ class Overlay {
     const want = this.isBuddy() ? state || (this.isAlways() ? 'idle' : null) : null;
     if (!want) {
       this.buddyState = null;
-      clearTimeout(this.followTimer);
-      this.followTimer = null;
-      this.lastCursor = null;
+      if (!this.capActive) {
+        clearTimeout(this.followTimer);
+        this.followTimer = null;
+        this.lastCursor = null;
+      }
       for (const e of this.wins.values()) {
         if (!e.buddy) continue;
         e.buddy = false;
@@ -170,7 +174,7 @@ class Overlay {
   tick() {
     const moved = this.follow();
     this.idleTicks = moved ? 0 : this.idleTicks + 1;
-    this.followTimer = this.buddyState ? setTimeout(() => this.tick(), this.idleTicks > 15 ? FOLLOW_IDLE_MS : FOLLOW_MS) : null;
+    this.followTimer = this.buddyState || this.capActive ? setTimeout(() => this.tick(), this.idleTicks > 15 ? FOLLOW_IDLE_MS : FOLLOW_MS) : null;
   }
 
   // Moves the buddy to the pointer. Returns whether the pointer had moved.
@@ -187,14 +191,61 @@ class Overlay {
         this.send(e, { type: 'buddy-away' });
         this.refresh(e);
       }
+      if (e.cap) {
+        e.cap = false;
+        this.send(e, { type: 'caption', hide: true });
+        this.refresh(e);
+      }
     }
-    if (!here.buddy) {
+    if (this.buddyState && !here.buddy) {
       here.buddy = true;
       this.send(here, { type: 'buddy-state', state: this.buddyState });
       this.refresh(here);
     }
+    if (this.capActive && !here.cap) {
+      here.cap = true;
+      this.send(here, { type: 'caption', state: this.capState });
+      this.refresh(here);
+    }
     this.send(here, { type: 'cursor', ...this.local(here, p) });
     return true;
+  }
+
+  // ----- the caption: what Relay hears, is doing, or answers, in a card beside the pointer (instead of the pill) -----
+  // msg uses the same fields as the pill ({ state, mode, partial, level, label, text, reply, status, ... }) or { hide: true }.
+  caption(msg) {
+    if (msg.hide) {
+      this.capActive = false;
+      this.capState = {};
+      for (const e of this.wins.values()) {
+        if (!e.cap) continue;
+        e.cap = false;
+        this.send(e, { type: 'caption', hide: true });
+        this.refresh(e);
+      }
+      if (!this.buddyState) { clearTimeout(this.followTimer); this.followTimer = null; this.lastCursor = null; }
+      return;
+    }
+    if (msg.state && msg.state !== this.capState.state || msg.reset) this.capState = { state: msg.state, mode: msg.mode };
+    Object.assign(this.capState, msg);
+    this.capActive = true;
+    this.idleTicks = 0;
+    if (!this.followTimer) this.followTimer = setTimeout(() => this.tick(), FOLLOW_MS);
+    const here = this.entry(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
+    if (!here.cap) {
+      here.cap = true;
+      this.refresh(here);
+    }
+    this.send(here, { type: 'caption', state: this.capState });
+    this.follow(true);
+  }
+
+  // Relay is speaking: the ring moves with its voice.
+  speaking(on) {
+    if (on) {
+      if (!this.isBuddy()) return;
+      this.buddy('speaking');
+    } else if (this.buddyState === 'speaking') this.buddy(null);
   }
 
   // The request is over: the buddy shows a check, then leaves. Drawings and guides stay.
@@ -360,6 +411,7 @@ class Overlay {
   hide() {
     this.markCancel();
     this.clear();
+    this.caption({ hide: true });
     this.buddy(null);
   }
 

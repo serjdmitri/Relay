@@ -79,7 +79,8 @@ class Speaker {
     this.token = 0; // bumped by stop() so a reply that is still being made is dropped
     this.abort = null;
     this.busy = false;
-    this.level = null; // set by the app: called with 0..1 while a voice is playing, for the ring
+    this.onState = null; // set by the app: called with true while a voice is speaking and false when it stops, for the ring
+    this.talking = false;
   }
 
   async voiceList() {
@@ -109,6 +110,7 @@ class Speaker {
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
+    this.setTalking(true);
     try {
       await this.speakWith(engine, tts, say, rate, token, this.abort.signal);
     } catch (e) {
@@ -117,7 +119,7 @@ class Speaker {
       if (this.onProblem) this.onProblem(e.message);
       await this.speakSystem(say, { voice, rate }); // never leave the user without an answer
     } finally {
-      if (token === this.token) this.busy = false;
+      if (token === this.token) { this.busy = false; if (!this.child) this.setTalking(false); }
     }
   }
 
@@ -188,10 +190,17 @@ class Speaker {
     const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
     const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
     this.child = child;
-    child.on('exit', () => { if (this.child === child) this.child = null; });
+    this.setTalking(true);
+    child.on('exit', () => { if (this.child === child) { this.child = null; this.setTalking(false); } });
     child.on('error', (e) => this.log.error?.('say:', e.message));
     child.stdin.on('error', () => {});
     child.stdin.end(say);
+  }
+
+  setTalking(on) {
+    if (this.talking === on) return;
+    this.talking = on;
+    if (this.onState) this.onState(on);
   }
 
   get speaking() {
@@ -201,6 +210,7 @@ class Speaker {
   stop() {
     this.token++;
     this.busy = false;
+    this.setTalking(false);
     try { this.abort && this.abort.abort(); } catch {}
     this.abort = null;
     if (!this.child) return;
