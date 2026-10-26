@@ -135,6 +135,9 @@ Drag files or a folder onto the menu bar icon (or anywhere on the Relay window) 
 ### Dictation learns your words
 After you dictate, Relay looks at the same text in the field a few seconds later. A word you fixed by hand, twice, becomes a word fix in Vocabulary. Only the changed words are kept, password fields are never read, and General > Learn my words from corrections turns it off.
 
+### Answer cards
+"Who is Gustave Eiffel?", "what does the Eiffel Tower look like?", "show me things to see in Boston": a black glass card with a picture, facts and links pops out on the right while Relay answers in one sentence. Pictures come from Wikipedia and Wikimedia Commons (photographer and license shown), downloaded by Relay itself. Esc or × closes it; General turns it off.
+
 ### Usage, speed and Try again
 Under each answer is a small dim line with the model, time, tokens, the cost at API prices and your Claude limit; it is never read aloud (General > Show usage turns it off). "Use the fast model", "use the smarter model", "use deep" and "use auto" change the speed, and so does Model Speed in the menu bar. "Try again" reruns the last request on the next model up.
 

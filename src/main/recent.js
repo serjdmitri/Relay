@@ -84,22 +84,25 @@ class RecentPanel {
     this.win.setAlwaysOnTop(true, 'screen-saver');
     this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.win.setIgnoreMouseEvents(true, { forward: true }); // clicks pass through the empty part; the page turns this off over the panel
+    this.ready = new Promise((resolve) => this.win.webContents.once('did-finish-load', resolve)); // a message sent before the page has loaded is lost
     this.win.loadFile(path.join(__dirname, '../renderer/recent.html'));
     this.win.on('closed', () => { this.win = null; this.rect = null; });
     return this.win;
   }
 
   // The window is a tall transparent strip centered on the left edge; rect is just the black panel inside it.
-  open(display) {
+  async open(display) {
     const win = this.ensure();
     clearTimeout(this.hideTimer);
+    const first = !this.rect;
+    if (first) { this.rect = { x: 0, y: 0, width: 0, height: 0 }; await this.ready; } // claim the open state at once so the poll does not open it twice
     const wa = display.workArea;
     const height = Math.max(300, Math.min(wa.height - 40, 760));
     this.strip = { x: wa.x, y: wa.y + Math.round((wa.height - height) / 2), width: WIDTH, height };
     this.panelH = this.panelH || 360;
-    if (!this.rect) {
+    if (first) {
       win.setBounds(this.strip);
-      win.webContents.send('recent:show');
+      win.webContents.send('recent:state', 'show');
       win.showInactive();
     }
     this.place();
@@ -122,7 +125,7 @@ class RecentPanel {
   close() {
     if (!this.rect || !this.win || this.win.isDestroyed()) { this.rect = null; return; }
     this.rect = null;
-    this.win.webContents.send('recent:hide');
+    this.win.webContents.send('recent:state', 'hide');
     this.win.setIgnoreMouseEvents(true, { forward: true });
     clearTimeout(this.hideTimer);
     this.hideTimer = setTimeout(() => { if (!this.rect && this.win && !this.win.isDestroyed()) this.win.hide(); }, 520);

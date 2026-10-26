@@ -14,6 +14,7 @@ const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
+const { CardPanel } = require('./cards/panel');
 const { NotionApi } = require('./connectors/notion');
 const { connectAccount: connectGoogle } = require('./connectors/google');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand } = require('./schedule');
@@ -26,7 +27,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent;
+let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -441,6 +442,10 @@ function registerIpc() {
     if (hit) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decryptKey(hit.refreshEnc))}`, { method: 'POST' }).catch(() => {}); // best effort: take Relay's access away at Google too
     broadcast();
   });
+  ipcMain.handle('card:close', () => cardPanel?.hide());
+  ipcMain.handle('card:open', (_e, url) => cardPanel?.open(url));
+  ipcMain.handle('card:size', (_e, h) => cardPanel?.setSize(h));
+  ipcMain.handle('card:hover', (_e, on) => cardPanel?.setHover(on));
   ipcMain.handle('memory:add', (_e, text) => {
     const r = ask.rememberFact(String(text || ''));
     broadcast();
@@ -552,6 +557,7 @@ app.whenReady().then(() => {
   overlay.watchDisplays();
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
   recent.start();
+  cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js') });
   overlay.applyMode(); // the always-on ring appears at launch
   speech = new Speech({ binPath: speechBinPath() });
   speech.on('preparing', (f) => {
@@ -582,6 +588,7 @@ app.whenReady().then(() => {
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
+  ask.cardPanel = cardPanel;
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
