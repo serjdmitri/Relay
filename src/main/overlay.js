@@ -12,7 +12,7 @@ const FOLLOW_IDLE_MS = 160; // and checks about 6 times a second once it has bee
 const HALO_MS = 2500;
 const MARKS_MS = 30000;
 const MARK_POLL_MS = 16; // how often the pointer is read while the mark key is held
-const MARK_FADE_MS = 900; // the window goes once the stroke has faded away behind the pointer
+const MARK_FADE_MS = 400; // the window goes once the stroke has faded away behind the pointer
 const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
