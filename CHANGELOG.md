@@ -6,6 +6,7 @@
 - **The pointer buddy is now just an arrow**, like HeyClicky's cursor: a small arrow that follows your pointer (a tiny green dot on it while "Hey Jarvis" is listening) and flies to what Relay points at. Put it away with General > Cursor buddy or the menu bar icon's "Show the cursor buddy". The name in the reactor's core can be changed in General.
 - **Move and resize windows.** "Snap this window to the left", "put Chrome on the right half", "move Spotify to the top right corner", "maximize this window", "center Notes", thirds ("right third"), and "other screen". Instant, no model; "undo that" puts the window back. The model can do it too (`arrange_window`). Tested on a real Finder window: placed within one point of the target.
 - Flatter Settings and website: no glows, gradient tiles or emoji icons.
+- Fix: asking by voice failed with "avfaudio error -10868" when AirPods (or another Bluetooth headset) were connected. If the built-in microphone cannot start next to the headset's speakers, Relay now uses the default microphone instead of failing.
 
 ## 0.6.0
 

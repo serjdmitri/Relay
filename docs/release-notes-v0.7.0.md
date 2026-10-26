@@ -5,6 +5,7 @@ A big Jarvis reactor for voice, a cursor buddy that is just an arrow, and window
 - **Cursor buddy is just an arrow** like HeyClicky's cursor. Put it away in General or from the menu bar icon.
 - **Move and resize windows by voice:** "snap this window to the left", "put Chrome on the right half", "top right corner", "maximize", "center", thirds, "other screen". Instant, and "undo that" puts the window back.
 - Flatter Settings and website: no glows, gradient tiles or emoji.
+- **Fix:** asking by voice failed with "avfaudio error -10868" when AirPods or another Bluetooth headset were connected. Relay now falls back to the default microphone instead of failing.
 
 ## Requirements
 **macOS 26 or later.** Apple Silicon (`arm64`) and Intel (`x64`) builds are attached below.
