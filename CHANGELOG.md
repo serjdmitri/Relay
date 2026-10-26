@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.1
+
+- **Hold to talk is tried on any browser that has speech recognition** (Safari does), instead of being switched off on plain Wi-Fi before it was tried. If the browser blocks the microphone on that address, the phone says so in words (use the Tailscale https link, or type) rather than doing nothing. A browser with no speech recognition at all is told to open Relay in Safari.
+
 ## 0.16.0
 
 - **Relay Remote: use Relay from your phone.** A new Settings > Remote page. Turn it on, press **Pair a phone**, scan the QR code (or open the address) in Safari, tap Pair, then Share > Add to Home Screen. The phone page shows your Jarvis reactor: type, or hold the reactor and talk, and your Mac does the work with Claude exactly as it does today. You see PROCESSING, the task bullets and background agents, and the answer comes back as text and speech from the phone (the usage line stays silent). No app, no App Store, no developer account, no reinstalling.

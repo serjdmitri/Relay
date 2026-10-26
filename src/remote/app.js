@@ -187,9 +187,12 @@
 
   // ---------- hold to talk ----------
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const canTalk = !!SR && window.isSecureContext;
+  // Try it whenever the browser has speech recognition (Safari does). Some browsers only allow the microphone on a secure address;
+  // if so, the error below says so instead of the button being switched off before it is tried.
+  const canTalk = !!SR;
   let rec = null;
   let heard = '';
+  let blocked = false;
   function startTalk() {
     if (!canTalk) { $('text').focus(); return; }
     unlockSpeech();
@@ -201,8 +204,10 @@
     rec.continuous = true;
     rec.onresult = (ev) => { heard = Array.from(ev.results).map((r) => r[0].transcript).join(' '); line(heard, true); level = 0.6; };
     rec.onaudiostart = () => { level = 0.4; };
-    rec.onerror = () => {};
-    rec.onend = () => { rec = null; setMode('idle'); level = 0; const t = heard.trim(); heard = ''; if (t) ask(t); else line('Did not catch that', true); };
+    rec.onerror = (ev) => {
+      if (['not-allowed', 'service-not-allowed'].includes(ev.error)) { blocked = true; line(window.isSecureContext ? 'Allow the microphone and Siri & Dictation for Safari, then try again.' : 'The microphone is blocked on this address. Use the Tailscale https link, or type.', true); }
+    };
+    rec.onend = () => { rec = null; setMode('idle'); level = 0; const t = heard.trim(); heard = ''; if (t) ask(t); else if (!blocked) line('Did not catch that', true); blocked = false; };
     setMode('listening');
     line('Listening…', true);
     try { rec.start(); } catch { setMode('idle'); }
@@ -219,8 +224,8 @@
   $('speak').onchange = () => { speakOn = $('speak').checked; localStorage.setItem('relay-remote-speak', speakOn ? '1' : '0'); if (!speakOn) speechSynthesis?.cancel?.(); };
   $('stop').onclick = () => { api('/api/stop', {}).catch(() => {}); waiting = null; setMode('idle'); line('Stopped', true); $('menu').hidden = true; };
   $('unpair').onclick = () => { if (confirm('Unpair this phone?')) unpair(); };
-  $('support').textContent = canTalk ? 'Hold the reactor to talk.' : (SR ? 'Hold to talk needs a secure connection (Tailscale). Until then, type, or use the keyboard microphone.' : 'This browser has no speech recognition. Type, or use the keyboard microphone.');
-  $('hint').textContent = canTalk ? 'Hold to talk' : 'Tap, then use the keyboard mic';
+  $('support').textContent = canTalk ? (window.isSecureContext ? 'Hold the reactor to talk.' : 'Hold the reactor to talk. If it says the microphone is blocked, this address is not secure enough: use the Tailscale https link, or type.') : 'This browser has no speech recognition. Open Relay in Safari to hold and talk, or type and use the keyboard microphone.';
+  $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap, then use the keyboard mic';
 
   // ---------- start ----------
   async function start() {
