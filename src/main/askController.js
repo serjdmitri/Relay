@@ -169,6 +169,7 @@ class AskController {
       skipTaskbar: true, alwaysOnTop: true, type: 'panel', fullscreenable: false, backgroundColor: '#00000000',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
     });
+    this.win.setHiddenInMissionControl?.(true);
     this.win.setAlwaysOnTop(true, 'screen-saver');
     this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     // Click-through, except over the pill itself (the page switches this on while the mouse is over it).
@@ -473,7 +474,9 @@ class AskController {
       if (!m) return;
       const shot = await this.captureRegion(m.display, markRegion(m.box, m.display.bounds));
       this.mark = { ts: Date.now(), box: m.box, ...shot };
-      this.notice('Marked. Now ask about it.', 'done');
+      // Only a word beside the cursor that follows you: the whole reactor is too much for this. Without that cursor, the old notice.
+      if (!this.overlay.buddyNote('Marked')) this.notice('Marked. Now ask about it.', 'done');
+      this.sound('Pop');
     } catch (e) {
       this.notice(e.message, 'failed');
     }

@@ -13,11 +13,15 @@
   #ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border-radius: 50%; border: 2.5px solid #8f86ff; box-shadow: 0 0 14px #6c63ff; animation: pulse 1.1s ease-out infinite; }
   #dot { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
   #lab { position: absolute; left: 24px; top: 14px; background: #1d1d22; color: #fff; font: 500 13px -apple-system, system-ui, sans-serif; padding: 5px 10px; border-radius: 10px; border: 1px solid #3a3a42; white-space: nowrap; display: none; }
+  .ripple { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #4cc2ff; background: rgba(76, 194, 255, .25); pointer-events: none; animation: rip .65s ease-out forwards; }
+  @keyframes rip { from { transform: scale(.4); opacity: 1; } to { transform: scale(3.4); opacity: 0; } }
   @keyframes pulse { 0% { transform: scale(.8); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 
   /* the buddy: follows the real pointer */
   #buddy { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; transition: opacity .25s; will-change: transform; }
   #buddy.on { opacity: 1; }
+  #note { position: absolute; left: 20px; top: 12px; padding: 4px 11px; border-radius: 11px; background: rgba(4, 14, 24, .88); border: 1px solid rgba(0, 212, 255, .55); color: #d8f8ff; font: 600 12px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: .02em; white-space: nowrap; opacity: 0; transform: translateX(-6px); transition: opacity .2s ease, transform .25s cubic-bezier(.3, 1.3, .5, 1); pointer-events: none; }
+  #note.on { opacity: 1; transform: none; }
   .orb { position: absolute; left: -10px; top: -10px; width: 20px; height: 20px; border-radius: 50%;
     background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.75), rgba(255,255,255,0) 38%), linear-gradient(135deg, #6c63ff, #c13cf0 62%, #ff8a3d);
     box-shadow: 0 3px 10px rgba(108,99,255,.5), 0 0 0 1.5px rgba(255,255,255,.9); transition: background .3s; }
@@ -186,7 +190,7 @@
 <svg id="markLayer" xmlns="http://www.w3.org/2000/svg"></svg>
 <div id="labels"></div>
 <div id="cur"><div id="halo"></div><div id="ring2"></div><div id="ring"></div><div id="dot"></div><div id="lab"></div></div>
-<div id="buddy"><svg id="ptr" viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/><circle class="armdot" cx="12.5" cy="12.5" r="2.2"/></svg><svg id="reticle" viewBox="-50 -50 100 100" aria-hidden="true"><g class="a"><circle r="47"/></g><g class="b"><circle r="39"/></g><g class="t"><circle r="32"/></g><g class="c"><circle r="24"/></g><circle class="core" r="14"/><circle class="dot" r="3"/><path class="ok" d="M-9 1 l6.5 6.5 l12 -13"/></svg><div class="spin"></div><div class="orb"><div class="bars"><i></i><i></i><i></i></div></div>
+<div id="buddy"><div id="note"></div><svg id="ptr" viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/><circle class="armdot" cx="12.5" cy="12.5" r="2.2"/></svg><svg id="reticle" viewBox="-50 -50 100 100" aria-hidden="true"><g class="a"><circle r="47"/></g><g class="b"><circle r="39"/></g><g class="t"><circle r="32"/></g><g class="c"><circle r="24"/></g><circle class="core" r="14"/><circle class="dot" r="3"/><path class="ok" d="M-9 1 l6.5 6.5 l12 -13"/></svg><div class="spin"></div><div class="orb"><div class="bars"><i></i><i></i><i></i></div></div>
   <svg class="chk" viewBox="0 0 30 30"><path d="M8.5 15.5l4.2 4.2 8.8-9.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="pen"><svg viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/></svg></div>
 <div id="hud" class="center"><div id="hudbg"></div><div id="hudR"><canvas id="hudc"></canvas></div><ul id="hudtasks"></ul><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><input id="hudin" type="text" placeholder="Type a request" autocomplete="off" spellcheck="false"><div id="hudbtns"><button id="hudno">Cancel</button><button id="hudyes" class="yes">Allow</button></div><div id="hudsub"></div></div></div>

@@ -445,6 +445,22 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       return parseFrame(out);
     },
     findText,
+    // The tabs of a browser, read from its tab strip with no extension: [{ title, active }].
+    async browserTabs(app = 'Firefox') {
+      if (!hasAx()) throw new Error('Reading tabs needs the accessibility helper.');
+      const out = String(await ax(['tabs', app, '2.5'])).trim();
+      return out ? out.split('\n').map((l) => ({ active: l.startsWith('1|'), title: l.slice(2) })) : [];
+    },
+    // Brings the tab whose title has all of these words to the front, by pressing it in the tab strip.
+    async switchBrowserTab(match, app = 'Firefox') {
+      const words = String(match || '').toLowerCase().split(/\s+/).filter(Boolean);
+      const tabs = await this.browserTabs(app);
+      const hit = tabs.find((t) => words.every((w) => t.title.toLowerCase().includes(w)));
+      if (!hit) throw new Error(`No tab matching "${match}". Open tabs: ${tabs.map((t) => t.title).slice(0, 15).join(' | ')}`);
+      const r = await ax(['press', app, hit.title, '2.5']);
+      if (!/pressed/.test(r)) throw new Error(`Could not switch to "${hit.title}".`);
+      return hit.title;
+    },
     // The text of the field being typed in, with the app it is in. null when there is none or it cannot be read.
     async focusedText() {
       if (!hasAx()) return null;

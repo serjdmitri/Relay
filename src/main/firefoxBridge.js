@@ -30,6 +30,7 @@ class FirefoxBridge extends EventEmitter {
         } catch {
           return;
         }
+        if (msg.event === 'hello') { this.extVersion = msg.version; this.emit('status', true); return; }
         const p = this.pending.get(msg.id);
         if (!p) return;
         this.pending.delete(msg.id);

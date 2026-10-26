@@ -20,7 +20,8 @@ test('every tool has a name, schema and runner; names are unique', () => {
 
 test('firefox tools only appear when the extension is connected; vision tools respect the flag', () => {
   const a = buildTools({ mac: fakeMac, getScale: () => 1, firefox: { isConnected: () => false } }).map((t) => t.name);
-  assert.ok(!a.some((n) => n.startsWith('firefox_')));
+  // Without the extension only the tab strip tools (read through accessibility) remain; page tools need the extension.
+  assert.deepEqual(a.filter((n) => n.startsWith('firefox_')).sort(), ['firefox_switch_tab', 'firefox_tabs']);
   const b = buildTools({ mac: fakeMac, getScale: () => 1, visionCapable: false }).map((t) => t.name);
   assert.ok(!b.includes('screenshot') && !b.includes('click'));
 });
@@ -165,4 +166,20 @@ test('the request context says when the user marked something', () => {
   assert.ok(!buildContext({}).includes('marked'));
   assert.match(buildSystemPrompt({ mark: { ageSec: 1, w: 5, h: 5 } }), /see_marked_area/);
   assert.match(buildSystemPrompt({}), /If the context says the user marked/, 'the standing rule is always there');
+});
+
+test('the Firefox tools pass their arguments to the extension, and closing several tabs asks first', async () => {
+  const calls = [];
+  const firefox = { isConnected: () => true, call: async (m, p) => { calls.push([m, p]); return { ok: true }; } };
+  const t = Object.fromEntries(buildTools({ mac: fakeMac, getScale: () => 1, firefox }).map((x) => [x.name, x]));
+  for (const n of ['firefox_tabs', 'firefox_switch_tab', 'firefox_open', 'firefox_read_page', 'firefox_click', 'firefox_type', 'firefox_press', 'firefox_scroll', 'firefox_navigate', 'firefox_close_tabs', 'firefox_screenshot']) assert.ok(t[n], n);
+  await t.firefox_click.run({ index: 3 });
+  await t.firefox_type.run({ index: 1, text: 'hi', submit: true });
+  await t.firefox_navigate.run({ action: 'back' });
+  await t.firefox_open.run({ url: 'github.com', background: true });
+  assert.deepEqual(calls.map((c) => c[0]), ['page.click', 'page.type', 'tabs.back', 'tabs.open']);
+  assert.equal(calls[3][1].background, true);
+  assert.equal(t.firefox_close_tabs.confirm({ id: 5 }), null); // one tab by id is quiet
+  assert.match(t.firefox_close_tabs.confirm({ match: 'amazon' }), /amazon/);
+  assert.match(t.firefox_close_tabs.confirm({ duplicates: true }), /duplicate/);
 });

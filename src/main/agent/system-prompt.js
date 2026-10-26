@@ -31,8 +31,8 @@ function buildSystemPrompt({ now = new Date(), mark = null, frontmost, runningAp
   else lines.push('Each request starts with a short context block (the time, the frontmost app, the running apps). Use it.');
   if (screen) lines.push(`Main display: ${screen.width}x${screen.height} points.`);
   lines.push(firefoxConnected
-    ? 'Firefox extension is connected: use the firefox_* tools for tabs and page content.'
-    : 'Firefox extension is not connected: use open_url, press_keys (cmd+l, cmd+t, cmd+w) and screenshots for Firefox.');
+    ? 'Firefox extension is connected: use the firefox_* tools for tabs and page content. For page work, firefox_read_page first (it numbers the buttons, links and fields), then firefox_click / firefox_type with those numbers, and read again after the page changes. Prefer firefox_switch_tab and firefox_open over key presses.'
+    : 'Firefox extension is not connected: firefox_tabs and firefox_switch_tab still work from the tab strip; for the rest use open_url, press_keys (cmd+l, cmd+t, cmd+w) and screenshots.');
   if (!visionCapable) lines.push('This model cannot see images; do not call screenshot.');
   if (vocabulary.length) lines.push(`Names and terms the user uses (fix transcription errors toward these): ${vocabulary.join(', ')}.`);
   if (routines.length) lines.push(`Saved routines (handled before you see the request): ${routines.map((r) => r.name).join(', ')}.`);

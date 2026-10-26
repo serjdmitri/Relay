@@ -3,6 +3,7 @@
 //   relay-ax find  <app> <name> [seconds]   prints "x|y|w|h|role" in global points, or "not found"
 //   relay-ax list  <app> [seconds]          prints "Role | name" lines
 //   relay-ax press <app> <name> [seconds]   presses the element: "pressed" | "not found" | "failed"
+//   relay-ax tabs  <app> [seconds]          prints one line per browser tab: "1|title" for the selected one, "0|title" for the rest
 //   relay-ax focused                        prints the front app's name, then the text of the focused text field (not a password field)
 //   relay-ax text  <png>                    prints every line of text in a picture
 //   relay-ax ocr   <png> <text> [accurate]  finds text in a picture: "nx|ny|nw|nh|text" (0..1, top-left origin) or "not found"
@@ -143,6 +144,24 @@ case "press":
     if let n = find(args[2], args[3], seconds: secs) {
         print(AXUIElementPerformAction(n.el, kAXPressAction as CFString) == .success ? "pressed" : "failed")
     } else { print("not found") }
+case "tabs":
+    // Browser tabs are radio buttons in the tab strip (Firefox and Safari expose them; Chromium browsers do too once asked).
+    let tsecs = args.count > 3 ? Double(args[3]) ?? 2.5 : 2.5
+    let tapp = openApp(args[2])
+    var tabLines: [String] = []
+    for attempt in 0..<2 {
+        walk(tapp, deadline: Date().addingTimeInterval(tsecs)) { n in
+            if n.role == "AXRadioButton", let f = n.frame, f.width > 20, let title = n.names.first {
+                let v = attr(n.el, kAXValueAttribute as String)
+                let on = (v as? NSNumber)?.intValue == 1
+                tabLines.append("\(on ? 1 : 0)|\(title)")
+            }
+            return false
+        }
+        if !tabLines.isEmpty || attempt == 1 { break }
+        Thread.sleep(forTimeInterval: 0.3)
+    }
+    print(tabLines.joined(separator: "\n"))
 case "focused":
     // For learning from corrections: the text in the field you are typing in. Password fields are never read.
     let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""

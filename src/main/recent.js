@@ -80,6 +80,7 @@ class RecentPanel {
       resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
       webPreferences: { preload: this.preload, contextIsolation: true }
     });
+    this.win.setHiddenInMissionControl?.(true);
     this.win.setAlwaysOnTop(true, 'screen-saver');
     this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.win.setIgnoreMouseEvents(true, { forward: true }); // clicks pass through the empty part; the page turns this off over the panel

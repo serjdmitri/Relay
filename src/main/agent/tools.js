@@ -193,7 +193,11 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       description: 'Click the UI element with this exact name in the front window of an app.',
       input_schema: obj({ app: str('App name'), name: str('Exact element name from ui_list') }, ['app', 'name']),
       describe: (i) => `Clicking ${i.name}`,
-      run: (i) => mac.uiClick(i.app, i.name)
+      run: async (i) => {
+        // Show the click first: fly to the element and ripple. If it cannot be located, just press it.
+        if (overlay?.click) { try { const f = await locate(i.app, i.name); await overlay.click(f.cx, f.cy); } catch {} }
+        return mac.uiClick(i.app, i.name);
+      }
     },
     {
       name: 'menu_click',
@@ -402,7 +406,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         describe: () => 'Clicking',
         run: async (i) => {
           const p = toPoints(i.x, i.y);
-          await overlay?.point(p.x, p.y);
+          await (overlay?.click ? overlay.click(p.x, p.y) : overlay?.point(p.x, p.y)); // the helper flies there and shows the click
           return mac.click(p.x, p.y, { double: i.double, right: i.right });
         }
       },
@@ -427,48 +431,102 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
 
   if (firefox?.isConnected()) {
     const ff = (method, params) => firefox.call(method, params);
+    const json = async (method, params) => JSON.stringify(await ff(method, params));
     tools.push(
-      { name: 'firefox_tabs', description: 'List open Firefox tabs with ids, titles and URLs.', input_schema: obj({}), run: async () => JSON.stringify(await ff('tabs.list', {})) },
+      { name: 'firefox_tabs', description: 'List every open Firefox tab (all windows) with id, title, URL, and whether it is the active tab, pinned or playing sound.', input_schema: obj({}), describe: () => 'Looking at your tabs', run: () => json('tabs.list', {}) },
       {
         name: 'firefox_switch_tab',
-        description: 'Switch to a Firefox tab by id, or by text in its title or URL.',
-        input_schema: obj({ id: num('Tab id'), match: str('Text in title or URL') }),
-        describe: () => 'Switching tab',
-        run: async (i) => JSON.stringify(await ff('tabs.activate', i))
+        description: 'Bring a Firefox tab to the front, by id or by words from its title or URL (all the words must match; the closest title wins).',
+        input_schema: obj({ id: num('Tab id'), match: str('Words from the title or URL') }),
+        describe: (i) => `Switching to ${i.match || 'a tab'}`,
+        run: (i) => json('tabs.activate', i)
       },
       {
         name: 'firefox_open',
-        description: 'Open a URL in Firefox, in a new tab by default.',
-        input_schema: obj({ url: str('Full URL'), new_tab: { type: 'boolean' } }, ['url']),
+        description: 'Open a URL in Firefox, in a new tab by default, and wait until it has loaded. A bare address like "github.com" gets https. Use background to open it without leaving the current tab.',
+        input_schema: obj({ url: str('URL or address'), new_tab: { type: 'boolean' }, background: { type: 'boolean', description: 'Open behind the current tab' } }, ['url']),
         describe: (i) => `Opening ${i.url}`,
-        run: async (i) => JSON.stringify(await ff('tabs.open', { url: i.url, newTab: i.new_tab !== false }))
+        run: (i) => json('tabs.open', { url: i.url, newTab: i.new_tab !== false, background: i.background === true })
       },
       {
         name: 'firefox_read_page',
-        description: 'Read the visible text of a Firefox tab (active tab if no id), plus its clickable links and form fields.',
+        description: 'Read a Firefox tab (the active one if no id): its title, URL, visible text, how far it is scrolled, and a numbered list of its buttons, links and fields. Use those numbers with firefox_click and firefox_type. Read again after the page changes: numbers are renewed on every read.',
         input_schema: obj({ id: num('Tab id') }),
         describe: () => 'Reading the page',
-        run: async (i) => JSON.stringify(await ff('page.read', i))
+        run: (i) => json('page.read', i)
       },
       {
         name: 'firefox_click',
-        description: 'Click an element in a Firefox tab by visible text or CSS selector.',
-        input_schema: obj({ text: str('Visible text'), selector: str('CSS selector'), id: num('Tab id') }),
-        describe: (i) => `Clicking ${i.text || i.selector}`,
-        run: async (i) => JSON.stringify(await ff('page.click', i))
+        description: 'Click something in a Firefox tab: by its number from firefox_read_page (best), or by visible text, or a CSS selector.',
+        input_schema: obj({ index: num('Number from firefox_read_page'), text: str('Visible text'), selector: str('CSS selector'), id: num('Tab id') }),
+        describe: (i) => `Clicking ${i.text || (i.index != null ? `item ${i.index}` : i.selector)}`,
+        run: (i) => json('page.click', i)
       },
       {
         name: 'firefox_type',
-        description: 'Type into a field in a Firefox tab (CSS selector), optionally pressing Enter.',
-        input_schema: obj({ selector: str('CSS selector'), text: str('Text'), submit: { type: 'boolean' }, id: num('Tab id') }, ['selector', 'text']),
+        description: 'Type into a field in a Firefox tab, by its number from firefox_read_page (best) or a CSS selector, optionally submitting the form (Enter).',
+        input_schema: obj({ index: num('Number from firefox_read_page'), selector: str('CSS selector'), text: str('Text'), submit: { type: 'boolean' }, id: num('Tab id') }, ['text']),
         describe: () => 'Typing',
-        run: async (i) => JSON.stringify(await ff('page.type', i))
+        run: (i) => json('page.type', i)
       },
       {
-        name: 'firefox_close_tab',
-        description: 'Close a Firefox tab by id.',
-        input_schema: obj({ id: num('Tab id') }, ['id']),
-        run: async (i) => JSON.stringify(await ff('tabs.close', i))
+        name: 'firefox_press',
+        description: 'Press a key (Enter, Escape, Tab, ArrowDown…) in the field that has focus on a Firefox page.',
+        input_schema: obj({ key: str('Key name'), id: num('Tab id') }, ['key']),
+        describe: (i) => `Pressing ${i.key}`,
+        run: (i) => json('page.press', i)
+      },
+      {
+        name: 'firefox_scroll',
+        description: 'Scroll a Firefox page: to "top" or "bottom", or by a screenful up or down. Returns the position.',
+        input_schema: obj({ to: str('"top" or "bottom"'), direction: str('"up" or "down" (a screenful)'), id: num('Tab id') }),
+        describe: () => 'Scrolling',
+        run: (i) => json('page.scroll', i)
+      },
+      {
+        name: 'firefox_navigate',
+        description: 'Reload a Firefox tab, or go back or forward in its history.',
+        input_schema: obj({ action: str('"reload", "back" or "forward"'), id: num('Tab id') }, ['action']),
+        describe: (i) => (i.action === 'reload' ? 'Reloading' : `Going ${i.action}`),
+        run: (i) => json(`tabs.${['back', 'forward'].includes(i.action) ? i.action : 'reload'}`, { id: i.id })
+      },
+      {
+        name: 'firefox_close_tabs',
+        description: 'Close Firefox tabs: one by id, or every tab whose title or URL has all of some words, or every duplicate of a page (the first of each is kept). Pinned tabs are never closed. At most 25 at once.',
+        input_schema: obj({ id: num('Tab id'), match: str('Words from title or URL'), duplicates: { type: 'boolean' } }),
+        confirm: (i) => (i.id != null ? null : i.duplicates ? 'Close the duplicate Firefox tabs?' : `Close the Firefox tabs matching "${i.match}"?`),
+        describe: () => 'Closing tabs',
+        run: (i) => json('tabs.close', i)
+      }
+    );
+    if (visionCapable) {
+      tools.push({
+        name: 'firefox_screenshot',
+        description: 'A picture of the visible part of a Firefox tab (the active one if no id; it is brought to the front first).',
+        input_schema: obj({ id: num('Tab id') }),
+        describe: () => 'Looking at the page',
+        run: async (i) => {
+          const r = await ff('page.screenshot', i);
+          return { image: { mediaType: r.mediaType, data: r.data }, text: 'The visible part of the Firefox tab.' };
+        }
+      });
+    }
+  } else if (mac.browserTabs) {
+    // No extension: the tab strip can still be read and pressed through accessibility.
+    tools.push(
+      {
+        name: 'firefox_tabs',
+        description: 'List the open tabs of the front Firefox window (titles only, read from the tab strip; the extension is not connected).',
+        input_schema: obj({}),
+        describe: () => 'Looking at your tabs',
+        run: async () => JSON.stringify(await mac.browserTabs('Firefox'))
+      },
+      {
+        name: 'firefox_switch_tab',
+        description: 'Bring a Firefox tab to the front by words from its title (the extension is not connected, so this presses the tab in the tab strip).',
+        input_schema: obj({ match: str('Words from the tab title') }, ['match']),
+        describe: (i) => `Switching to ${i.match}`,
+        run: async (i) => `Now on "${await mac.switchBrowserTab(i.match, 'Firefox')}".`
       }
     );
   }
