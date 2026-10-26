@@ -46,6 +46,43 @@ function setState(s) {
   if (!raf) raf = requestAnimationFrame(frame);
 }
 
+// Background agents, top right: what each one is on, how long, and how it ended.
+const agentsEl = $('agents');
+let agentList = [];
+let agentTimer = 0;
+const clock = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`; };
+function paintAgents() {
+  agentsEl.replaceChildren();
+  for (const a of agentList) {
+    const d = document.createElement('div');
+    d.className = `ag ${a.status}`;
+    const head = document.createElement('div');
+    head.className = 'agh';
+    const mark = document.createElement('span');
+    mark.className = 'agm';
+    mark.textContent = a.status === 'done' ? '\u2713' : a.status === 'running' ? '' : a.status === 'stopped' ? '\u25A0' : '!';
+    const task = document.createElement('span');
+    task.className = 'agt';
+    task.textContent = a.task;
+    const time = document.createElement('span');
+    time.className = 'agc';
+    time.textContent = clock((a.endedAt || Date.now()) - a.startedAt);
+    head.append(mark, task, time);
+    const line = document.createElement('div');
+    line.className = 'ags';
+    line.textContent = a.status === 'running' ? `${a.step}…` : a.result || (a.status === 'stopped' ? 'Stopped' : '');
+    d.append(head, line);
+    if (a.status === 'running') { const bar = document.createElement('div'); bar.className = 'agbar'; d.append(bar); }
+    agentsEl.append(d);
+  }
+}
+function renderAgents(list) {
+  agentList = list || [];
+  paintAgents();
+  clearInterval(agentTimer);
+  if (agentList.some((a) => a.status === 'running')) agentTimer = setInterval(paintAgents, 1000);
+}
+
 function point({ x, y, label }) {
   cur.style.transform = `translate(${x}px, ${y}px)`;
   cur.classList.add('on');
@@ -300,6 +337,9 @@ window.relay.onOverlay((m) => {
       break;
     case 'point':
       point(m);
+      break;
+    case 'agents':
+      renderAgents(m.list);
       break;
     case 'buddy-note':
       note.textContent = m.text;

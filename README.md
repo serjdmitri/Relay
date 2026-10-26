@@ -135,6 +135,9 @@ Drag files or a folder onto the menu bar icon (or anywhere on the Relay window) 
 ### Dictation learns your words
 After you dictate, Relay looks at the same text in the field a few seconds later. A word you fixed by hand, twice, becomes a word fix in Vocabulary. Only the changed words are kept, password fields are never read, and General > Learn my words from corrections turns it off.
 
+### Background agents
+"In the background, research the best noise cancelling headphones and save it in a note." "Start an agent to summarize my trip notes." Relay answers at once; the agent works by itself and its progress shows in the top right of the screen, then a short result. Up to three at once. "What are my agents doing?" lists them, "stop all agents" ends them. Agents can search the web, read pages and files you dropped, read and write Notes and Reminders and read the Calendar; they cannot see or control your screen or send or delete anything.
+
 ### Scheduled requests
 "Every weekday at 8, open my email." "Every Monday and Thursday at 9, play focus music." "Schedule open my email for tomorrow at 7am." Relay runs it by itself at that time (the Mac must be on and Relay open). "What's scheduled?", "cancel the email schedule" and Settings > Routines list, switch off and delete them. Anything that sends or deletes is declined unless you answer within 90 seconds; a run missed by more than 45 minutes is skipped with a notification.
 

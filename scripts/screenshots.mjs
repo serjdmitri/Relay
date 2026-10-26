@@ -119,6 +119,11 @@ await snap('hud-working', 1600);
 await send({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Made a note called groceries.', tasks: tasks.map((t) => ({ ...t, status: 'done' })), name: 'J.A.R.V.I.S' } });
 await snap('hud-done', 600);
 await send({ type: 'hud', hide: true });
+await send({ type: 'agents', list: [
+  { id: '1', task: 'Research the best noise cancelling headphones under $300 and save it in a note', status: 'running', step: 'Reading a review', steps: 4, startedAt: Date.now() - 74000, endedAt: null, result: '' },
+  { id: '2', task: 'Summarize my trip notes', status: 'done', step: 'Done', steps: 3, startedAt: Date.now() - 50000, endedAt: Date.now() - 12000, result: 'Wrote a one page summary into a note called Trip summary.' }] });
+await snap('agents', 600);
+await send({ type: 'agents', list: [] });
 await send({ type: 'hud', state: { state: 'input', mode: 'type', reset: true, name: 'J.A.R.V.I.S' } });
 await snap('hud-input', 1200);
 await send({ type: 'hud', state: { state: 'confirm', question: 'Send "running late" to +1 305 555 0100?', name: 'J.A.R.V.I.S' } });
