@@ -37,7 +37,7 @@
   let level = 0; // 0..1 microphone level
   let amp = 0; // smoothed
   let scale = 1;
-  let halo = 55;
+  let halo = 120;
   let tick = 0;
   let rings = [0, 120, 240];
   let scan = 0;
@@ -73,7 +73,7 @@
     // the reactor reacts to loudness: the mic while listening, a gentle made-up swell while it speaks
     const target = speaking ? 0.4 + 0.35 * Math.abs(Math.sin(tick * 0.11)) + 0.2 * Math.random() * Math.abs(Math.sin(tick * 0.31)) : level;
     amp += (target - amp) * 0.3;
-    const baseHalo = 55;
+    const baseHalo = 120; // brighter than the reference at rest, so it reads on a busy screen
     const tgtScale = 1 + amp * (speaking ? 0.13 : 0.06);
     const tgtHalo = baseHalo + amp * (speaking ? 95 : 75);
     scale += (tgtScale - scale) * (speaking ? 0.38 : 0.2);
