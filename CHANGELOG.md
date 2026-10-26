@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0
+
+- **Connectors.** A new Settings > Connectors page lets Relay work in your Notion, Gmail and Google Calendar, each connected by you and kept on this Mac (the secrets are encrypted).
+- **Notion:** paste an integration token and share pages with it in Notion. Then "search Notion for the trip plan", "read my packing page", "add this to my meeting notes", "make a new page under Projects". Relay only sees what you shared.
+- **Gmail and Google Calendar, several accounts:** sign in once per account with your own Google app (the page walks through making one), and Relay talks to Google directly. "Any unread email from Anna?", "read my last email from the bank", "what is on my Google calendar this week?", "add dentist Friday at 3", "draft an email to Sam saying I'll be late". Reading is free, drafts are saved in Gmail without sending, and sending an email always asks you first. With more than one account, reading looks in all of them and writing needs you to say which.
+- Background agents can use the read and write tools (Notion, Gmail reading and drafts, Calendar), but never send email.
+- I looked at using the claude.ai connectors you already have in Claude, but the Claude CLI only loads them together with all your own settings, plugins and hooks, which would slow every request, so Relay connects directly instead.
+
 ## 0.13.0
 
 - **Usage after every ask, never spoken.** A small dim line under the answer: the model, how long it took, tokens in and out, what it would cost at API prices (a Claude plan does not bill you per request), and how much of your Claude 5-hour limit is used. The cost arrives a moment after the answer and is added to the line. It is also kept under each request in History. Turn it off in General > Show usage after each ask. Other model services show the model, time and tokens they report.

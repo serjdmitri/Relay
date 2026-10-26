@@ -14,6 +14,8 @@ const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
+const { NotionApi } = require('./connectors/notion');
+const { connectAccount: connectGoogle } = require('./connectors/google');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand } = require('./schedule');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
@@ -85,6 +87,9 @@ function publicState() {
     hasTtsKeys[id] = !!decryptKey(d.settings.tts[id].keyEnc);
     delete d.settings.tts[id].keyEnc;
   }
+  const cn = d.settings.connectors || {};
+  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { clientId: cn.google?.clientId || '', hasSecret: !!decryptKey(cn.google?.clientSecretEnc), accounts: (cn.google?.accounts || []).map((a) => a.email) } };
+  delete d.settings.connectors;
   const hasKeys = {};
   for (const [id, s] of Object.entries(d.settings.model.presets)) {
     hasKeys[id] = !!decryptKey(s.keyEnc);
@@ -92,6 +97,7 @@ function publicState() {
   }
   return {
     ...d,
+    connectors,
     schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
     hasKeys,
@@ -395,6 +401,44 @@ function registerIpc() {
     store.data.vocabulary = [...set];
     store.save();
     schedulePrepareSpeech();
+    broadcast();
+  });
+  // Connectors: Notion token, and Google sign-in (the user's own OAuth app; several accounts).
+  ipcMain.handle('connectors:notion:set', async (_e, token) => {
+    const t = String(token || '').trim();
+    if (!t) return { ok: false, error: 'Paste the integration token first.' };
+    try {
+      const me = await new NotionApi({ token: t }).me();
+      store.set('settings.connectors.notion', { tokenEnc: encryptKey(t), name: me.name });
+      broadcast();
+      return { ok: true, name: me.name };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('connectors:notion:clear', () => { store.set('settings.connectors.notion', { tokenEnc: '', name: '' }); broadcast(); });
+  ipcMain.handle('connectors:google:client', (_e, clientId, secret) => {
+    store.set('settings.connectors.google.clientId', String(clientId || '').trim());
+    if (String(secret || '').trim()) store.set('settings.connectors.google.clientSecretEnc', encryptKey(String(secret).trim()));
+    broadcast();
+  });
+  ipcMain.handle('connectors:google:connect', async () => {
+    const g = store.get('settings.connectors.google');
+    const secret = decryptKey(g.clientSecretEnc);
+    if (!g.clientId || !secret) return { ok: false, error: 'Save the client ID and secret first.' };
+    try {
+      const r = await connectGoogle({ clientId: g.clientId, clientSecret: secret, openUrl: (u) => shell.openExternal(u) });
+      const rest = (store.get('settings.connectors.google.accounts') || []).filter((a) => a.email.toLowerCase() !== r.email.toLowerCase());
+      store.set('settings.connectors.google.accounts', [...rest, { email: r.email, refreshEnc: encryptKey(r.refreshToken) }]);
+      ask.googleApi = null;
+      broadcast();
+      return { ok: true, email: r.email };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('connectors:google:remove', async (_e, email) => {
+    const list = store.get('settings.connectors.google.accounts') || [];
+    const hit = list.find((a) => a.email === email);
+    store.set('settings.connectors.google.accounts', list.filter((a) => a.email !== email));
+    ask.googleApi = null;
+    if (hit) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decryptKey(hit.refreshEnc))}`, { method: 'POST' }).catch(() => {}); // best effort: take Relay's access away at Google too
     broadcast();
   });
   ipcMain.handle('memory:add', (_e, text) => {

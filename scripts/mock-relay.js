@@ -19,6 +19,7 @@
     },
     memories: [{ id: 'm1', text: 'my name is Sergey', ts: 1 }, { id: 'm2', text: 'I am vegetarian', ts: 2 }, { id: 'm3', text: 'my sister Anna lives in Boston', ts: 3 }],
     schedules: [{ id: 's1', text: 'open my email', when: 'Every weekday at 8:00 AM', enabled: true, next: Date.now() + 36e5 }, { id: 's2', text: 'read me my calendar', when: 'Every day at 7:30 AM', enabled: false }],
+    connectors: { notion: { connected: true, name: 'Sergey\'s workspace' }, google: { clientId: 'xxxx.apps.googleusercontent.com', hasSecret: true, accounts: ['sd2009main@gmail.com', 'sergey@school.edu'] } },
     history: [
       { id: '1', text: 'Remind me to call mom at 5pm', status: 'done', reply: 'Reminder set: call mom, today at 5:00 PM.', ts: now - 4 * min },
       { id: '2', text: 'What is on my calendar tomorrow?', status: 'done', reply: 'Tomorrow you have a design review at 10:00 and lunch with Sam at 12:30.', ts: now - 19 * min },
@@ -123,6 +124,7 @@
       interactive: async () => {}, hidden: async () => {},
       onState: (cb) => { window.__askState = cb; return () => {}; }
     },
+    setNotionToken: async () => ({ ok: true }), clearNotion: async () => {}, setGoogleClient: async () => {}, connectGoogle: async () => ({ ok: true, email: 'x' }), removeGoogle: async () => {},
     addSchedule: async (t) => ({ ok: true }),
     removeSchedule: async () => {},
     toggleSchedule: async () => {},

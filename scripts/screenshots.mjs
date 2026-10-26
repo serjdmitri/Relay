@@ -19,7 +19,7 @@ const main = await ctx.newPage();
 const errors = [];
 main.on('pageerror', (e) => errors.push('main: ' + e.message));
 main.on('console', (m) => m.type() === 'error' && errors.push('main console: ' + m.text()));
-for (const p of ['home', 'history', 'routines', 'vocab', 'memory', 'general', 'speech', 'shortcuts', 'permissions', 'account']) {
+for (const p of ['home', 'history', 'routines', 'vocab', 'memory', 'connectors', 'general', 'speech', 'shortcuts', 'permissions', 'account']) {
   await main.goto(url('index.html', `?page=${p}`));
   await main.waitForTimeout(150);
   await main.screenshot({ path: path.join(out, `main-${p}.png`) });
