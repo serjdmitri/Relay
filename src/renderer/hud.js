@@ -9,6 +9,7 @@
   const statusEl = document.getElementById('hudstatus');
   const lineEl = document.getElementById('hudline');
   const subEl = document.getElementById('hudsub');
+  const capEl = document.getElementById('hudcap');
   const inEl = document.getElementById('hudin');
   const btns = document.getElementById('hudbtns');
   const sendBtn = document.getElementById('hudyes');
@@ -50,6 +51,8 @@
   let cursorPos = null;
   let busySince = 0;
   let shownState = '';
+  let steps = []; // what it has done so far for this request, newest last
+  let request = '';
 
   const rad = (d) => (d * Math.PI) / 180;
 
@@ -235,6 +238,7 @@
     if (!msg || msg.hide) {
       on = false;
       hud.classList.remove('on');
+      capEl.classList.remove('on');
       busySince = 0;
       speaking = false;
       level = 0;
@@ -297,6 +301,23 @@
       return;
     }
     wave.style.display = s === 'listening' ? 'block' : 'none';
+    // Captions in the top right: the request, the steps as they happen, then the answer.
+    if (s === 'listening' || s === 'input') { steps = []; request = ''; }
+    if (s === 'working') {
+      if (msg.text) request = msg.text;
+      const step = (msg.label || '').trim();
+      if (step && step !== 'Thinking' && step !== 'Working' && steps[steps.length - 1] !== step) steps = [...steps, step].slice(-4);
+    }
+    capEl.replaceChildren();
+    if (s === 'working' || s === 'done') {
+      const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; capEl.append(d); };
+      if (request) add('req', `“${request.length > 90 ? request.slice(0, 90) + '…' : request}”`);
+      if (s === 'working') {
+        if (!steps.length) add('step now', `${(msg.label || 'Thinking').replace(/…$/, '')}…`);
+        steps.forEach((t, i) => add(`step${i === steps.length - 1 ? ' now' : ''}`, i === steps.length - 1 ? `${t}…` : t));
+      } else add('ans', msg.reply || '');
+      capEl.classList.add('on');
+    } else capEl.classList.remove('on');
     const typing = s === 'input';
     const asking = s === 'confirm';
     inEl.style.display = typing ? 'block' : 'none';

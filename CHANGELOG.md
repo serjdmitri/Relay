@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+- **Recent asks on the left edge.** Rest the pointer on the left edge of the screen and a glass list of what you asked lately slides out (real macOS blur, a soft highlight that follows the pointer, items that swell toward it). Click one to ask it again. Turn it off in General > Recent asks on the left edge, or from the menu bar icon.
+- **Circling leaves a comet, not a line.** While you hold the mark key, the stroke is bright where the pointer is and fades away behind it, so the screen stays clean but you still see what you are drawing.
+- **If it heard nothing, the reactor just fades away.** After you stop talking it stays in the middle while it checks what it got, and when there was nothing it disappears there instead of flying to the corner with "I didn't catch that". It only goes to the corner once there is a request to work on.
+- **The corner reactor glows like the big one.** Its glow used to shrink with it; now it is as bright as in the middle.
+- **Captions in the top right while it works.** Your request, the step it is on, and then the answer appear in the top right corner next to the reactor in the corner.
+
 ## 0.7.3
 
 - **The volume always comes back.** Relay lowers the volume to 30% while it listens (General > Lower the volume while I talk). It could be left low when listening ended in an unusual way, or when Relay quit mid-listen. Now the original volume is saved to disk before it is lowered, it is put back whenever listening stops by any route, again at launch and at quit if it was left low, and a volume you changed yourself in the meantime is left alone. The switch has a clearer name and description; off means your volume is never touched.

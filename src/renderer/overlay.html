@@ -66,10 +66,20 @@
   #hudR { position: absolute; left: 50%; top: calc(50% - 40px); width: 810px; height: 810px; margin: -405px 0 0 -405px; transform-origin: 50% 50%; transform: scale(var(--k));
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); will-change: transform; }
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)); }
+  /* the glow is part of the scaled picture, so at .27 it would shrink to a thread: widen it by the same factor to keep the same glow as the big one */
+  #hud.corner #hudc { filter: drop-shadow(0 0 17px rgba(0, 212, 255, .85)) drop-shadow(0 0 70px rgba(0, 160, 230, .55)) drop-shadow(0 6px 17px rgba(0, 12, 28, .8)); }
   /* a glow in the reactor's own cyan, and a soft dark shadow so it reads on a white window too */
   #hud.snap #hudR, #hud.snap #hudT { transition: none !important; }
   #hudc { width: 810px; height: 810px; display: block; filter: drop-shadow(0 0 5px rgba(0, 212, 255, .85)) drop-shadow(0 0 20px rgba(0, 160, 230, .55)) drop-shadow(0 2px 5px rgba(0, 12, 28, .8)); }
   #hudT { position: absolute; left: 50%; top: calc(50% - 40px + 270px * var(--k) + 22px); width: 640px; margin-left: -320px; text-align: center; transition: top .8s cubic-bezier(.22, .9, .3, 1), left .8s cubic-bezier(.22, .9, .3, 1), margin-left .8s cubic-bezier(.22, .9, .3, 1), width .8s ease; }
+  #hudcap { position: absolute; right: 40px; top: 74px; width: 460px; text-align: right; opacity: 0; transition: opacity .45s ease; pointer-events: none; text-shadow: 0 1px 3px rgba(0, 8, 20, .95), 0 0 10px rgba(0, 8, 20, .75), 0 0 22px rgba(0, 8, 20, .5); }
+  #hudcap.on { opacity: 1; }
+  #hud:not(.corner) #hudcap { opacity: 0; }
+  #hudcap .req { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #5ab8cc; margin-bottom: 8px; letter-spacing: .03em; }
+  #hudcap .step { font: 300 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; color: #8fd9ee; opacity: .6; }
+  #hudcap .step.now { color: #d8f8ff; opacity: 1; font-size: 18px; }
+  #hudcap .ans { font: 300 20px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; color: #e6fbff; }
+  #hud.corner #hudline, #hud.corner #hudsub { display: none; }
   #hud.corner #hudT { left: 196px; top: 72px; margin-left: 0; width: 460px; text-align: left; text-shadow: 0 1px 3px rgba(0, 8, 20, .95), 0 0 10px rgba(0, 8, 20, .75), 0 0 22px rgba(0, 8, 20, .5); }
   #hudstatus { font: 700 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; color: #00d4ff; }
   #hudwave { display: block; width: 288px; height: 30px; margin: 10px auto 12px; }
@@ -172,7 +182,7 @@
 <div id="buddy"><svg id="ptr" viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/><circle class="armdot" cx="12.5" cy="12.5" r="2.2"/></svg><svg id="reticle" viewBox="-50 -50 100 100" aria-hidden="true"><g class="a"><circle r="47"/></g><g class="b"><circle r="39"/></g><g class="t"><circle r="32"/></g><g class="c"><circle r="24"/></g><circle class="core" r="14"/><circle class="dot" r="3"/><path class="ok" d="M-9 1 l6.5 6.5 l12 -13"/></svg><div class="spin"></div><div class="orb"><div class="bars"><i></i><i></i><i></i></div></div>
   <svg class="chk" viewBox="0 0 30 30"><path d="M8.5 15.5l4.2 4.2 8.8-9.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="pen"><svg viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/></svg></div>
-<div id="hud" class="center"><div id="hudbg"></div><div id="hudR"><canvas id="hudc"></canvas></div><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><input id="hudin" type="text" placeholder="Type a request" autocomplete="off" spellcheck="false"><div id="hudbtns"><button id="hudno">Cancel</button><button id="hudyes" class="yes">Allow</button></div><div id="hudsub"></div></div></div>
+<div id="hud" class="center"><div id="hudbg"></div><div id="hudR"><canvas id="hudc"></canvas></div><div id="hudcap"></div><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><input id="hudin" type="text" placeholder="Type a request" autocomplete="off" spellcheck="false"><div id="hudbtns"><button id="hudno">Cancel</button><button id="hudyes" class="yes">Allow</button></div><div id="hudsub"></div></div></div>
 <div id="card"></div>
 <script src="hud.js"></script>
 <script src="overlay.js"></script>

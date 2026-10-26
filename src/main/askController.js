@@ -569,7 +569,7 @@ class AskController {
     }
     this.unduck();
     if (this.state !== 'finishing') return; // cancelled
-    if (!text) return this.notice("I didn't catch that.", 'failed');
+    if (!text) return this.close(); // heard nothing: the reactor just fades away where it is, it does not fly to the corner
     text = applyReplacements(text, this.store.get('replacements'));
     if (this.mode === 'dictate') return this.insertDictation(text);
     this.state = 'input';
