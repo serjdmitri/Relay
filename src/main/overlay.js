@@ -69,6 +69,7 @@ class Overlay {
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
     });
     win.setIgnoreMouseEvents(true);
+    win.setHiddenInMissionControl?.(true); // a transparent overlay is not a window to show in Mission Control
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
@@ -134,6 +135,23 @@ class Overlay {
       }, HALO_MS);
     }
     await new Promise((r) => setTimeout(r, 500)); // let the glide finish before a click lands
+    return true;
+  }
+
+  // A word next to the cursor that follows you ("Marked"), for things too small for the whole reactor. False when that cursor is off.
+  buddyNote(text, ms = 1700) {
+    if (!this.isEnabled() || !this.isBuddy()) return false;
+    this.follow(true);
+    for (const e of this.wins.values()) if (e.buddy) this.send(e, { type: 'buddy-note', text, ms });
+    return true;
+  }
+
+  // A visible click: the helper flies to the spot, a ring ripples out, then the caller clicks for real.
+  async click(x, y) {
+    if (!(await this.point(x, y))) return false;
+    const e = this.entry(displayAt(screen.getAllDisplays(), { x, y }));
+    this.send(e, { type: 'click', ...this.local(e, { x, y }) });
+    await new Promise((r) => setTimeout(r, 200));
     return true;
   }
 

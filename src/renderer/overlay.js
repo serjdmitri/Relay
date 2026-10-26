@@ -13,6 +13,8 @@ let flyTo = null; // { x, y, until }: the buddy is pointing at something
 let state = null;
 let jarvis = false;
 let raf = 0;
+const note = $('note');
+let noteTimer = 0;
 
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
@@ -299,6 +301,21 @@ window.relay.onOverlay((m) => {
     case 'point':
       point(m);
       break;
+    case 'buddy-note':
+      note.textContent = m.text;
+      note.classList.add('on');
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => note.classList.remove('on'), m.ms || 1700);
+      break;
+    case 'click': {
+      const r = document.createElement('div');
+      r.className = 'ripple';
+      r.style.left = `${m.x}px`;
+      r.style.top = `${m.y}px`;
+      document.body.append(r);
+      setTimeout(() => r.remove(), 800);
+      break;
+    }
     case 'halo-off':
       cur.classList.remove('on');
       break;

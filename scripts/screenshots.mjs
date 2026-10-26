@@ -130,6 +130,10 @@ const ring = Array.from({ length: 41 }, (_, i) => [610 + 150 * Math.cos((i / 40)
 for (const [x, y] of ring) { await send({ type: 'mark-point', x, y }); await ov.waitForTimeout(8); }
 await snap('mark', 100);
 await send({ type: 'mark-end', cancel: true });
+await send({ type: 'buddy-state', state: 'idle' });
+await send({ type: 'cursor', x: 700, y: 400 });
+await send({ type: 'buddy-note', text: 'Marked', ms: 5000 });
+await snap('marked-note', 500);
 await send({ type: 'mark-clear' });
 // the classic look, for comparison
 await ov.evaluate(() => { document.documentElement.style.background = 'linear-gradient(135deg,#1B1464,#6B2BD9 45%,#E0489B 80%,#FF9A4D)'; });

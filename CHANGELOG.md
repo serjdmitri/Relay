@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.1
+
+- **Marking just says "Marked" beside the cursor that follows you,** instead of bringing up the whole reactor. (With that cursor turned off it falls back to the old message.)
+- **The invisible overlay no longer shows up in Mission Control** as a window called Relay. (That window is what draws the cursor, the reactor and the left menu; it is transparent and click-through.)
+- **Clicks are visible.** When Relay clicks for you, the helper flies to the spot, a ring ripples out, and then it clicks.
+- **Firefox, much better.** The extension is now 0.2: numbered buttons, links and fields on every page read (so clicking and typing use a number instead of a guessed selector), scroll, press a key, reload, back and forward, screenshots of a tab, opening in the background and waiting until the page has loaded, switching tabs by words (the closest title wins), closing tabs by words or closing duplicates (asks first, never pinned tabs, at most 25). I tested it in a real, separate headless Firefox: open, read, click, type, submit a form, navigate, go back, scroll, background open, switch, screenshot and close all passed.
+- **Tabs work without the extension too:** Relay now reads the tab strip through accessibility, so "what tabs do I have" and "switch to the Gmail tab" work even when the extension is not loaded.
+- **Heads up:** Firefox forgets a temporarily loaded extension every time it restarts, which is why it was not connected. `scripts/sign-firefox.sh` signs it with Mozilla (free, unlisted) so it stays; it needs your own add-ons.mozilla.org API keys.
+
 ## 0.9.0
 
 - **The reactor stays in the middle while it works.** It no longer flies to the corner: Relay does the task in the background, shows the answer under the reactor, and the reactor goes away once the task is complete.
