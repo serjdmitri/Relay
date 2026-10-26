@@ -12,7 +12,7 @@ const path = require('path');
 const RELEASES = 'https://github.com/k2-fsa/sherpa-onnx/releases/download';
 const FILES = {
   tool: { url: `${RELEASES}/v2.0.0/sherpa-onnx-v2.0.0-osx-arm64-shared.tar.bz2`, sha256: 'ca352a87d313fb1cce311c7b5ddc2e48df3ff899fb2c43ce8076071f029d1d3f', approxMB: 20 },
-  voice: { url: `${RELEASES}/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2`, sha256: '', approxMB: 126 }
+  voice: { url: `${RELEASES}/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2`, sha256: '4c3052abaa60943a341f193888cf6abd68787dae6ab8ae5c925a706caa247e4e', approxMB: 126 }
 };
 
 // sherpa-onnx's speaker numbers for Kokoro v1.0 (from its model page).

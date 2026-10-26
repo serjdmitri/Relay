@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- **The Jarvis ring is the interface.** The ring now stays beside your pointer all the time (switch it off in the menu bar icon or in General). It moves with your voice while you talk, spins while it works, and pulses while Relay speaks. What Relay hears, is doing and answers appears in a small caption card beside the ring instead of in the pill. The pill still opens for typing a request (⌥T) and for Allow / Cancel questions, which need the keyboard or the mouse. General > Look > Classic brings the old pill back everywhere. The cursor arrow now sits outside the ring.
+- **"Hey Jarvis".** Turn on General > Listen for “Hey Jarvis” (or the menu bar icon's switch) and just say it. Relay listens on this Mac with the same on-device speech engine as dictation (nothing is recorded or sent), plays the chime, then listens for your request and ends it by itself when you stop talking. The phrase can be changed ("hey relay"). It is off until you switch it on, it pauses while Relay is busy or speaking, and the orange microphone dot is on while it listens.
+- **Remember a task by name.** Say "remember this as morning setup" after Relay does something. Next time you say "morning setup", Relay repeats the exact actions it took, with no model and no waiting. Anything that sends or deletes still asks first. If a saved action stops working, Relay does it from your words and drops the saved actions after two misses. "Forget morning setup" removes it.
+- **Better voices** (Speech > More natural voices): pick OpenAI or ElevenLabs voices with your own key (the provider bills you; Relay takes nothing), or an on-device voice (Kokoro, free, no key, Apple Silicon) downloaded on demand. Replies are spoken sentence by sentence so the voice starts quickly, and if an online voice fails Relay falls back to your Mac voice so you always get an answer. The on-device voice is new and has not yet been run end to end by the author; report anything odd.
+- Fix: the menu bar icon stopped changing while Relay listened or worked in 0.3.0 to 0.5.1.
+
 ## 0.5.1
 
 - **Mark the screen without clicking.** In 0.5.0 you had to hold the mark key and drag with the mouse, which does not work with Control held (macOS turns Control-click into a right click). Now you hold the key and just move the pointer round what you mean: a cyan trail follows it and fades, and when you let go Relay looks at what you circled. The mouse is never blocked, so nothing is clicked by accident. A pointer that only passes by (under about 28 points across) is ignored.

@@ -313,6 +313,12 @@ const PAGES = {
       toggleRow('Relay cursor', "Shows Relay's own pointer, drawings and step-by-step guides on your screen.", 'settings.cursor'),
       toggleRow('Buddy cursor', 'A small ring follows your pointer, shows when Relay is listening or working, and flies to what it points at.', 'settings.buddy'),
       toggleRow('Always show Jarvis', 'Off: the ring only appears while Relay listens or works.', 'settings.buddyAlways'),
+      toggleRow('Listen for “Hey Jarvis”', 'Relay listens on this Mac for your wake phrase, so you can start without a key. Nothing is recorded or sent anywhere; the words are read and thrown away. The orange microphone dot stays on while it listens, and it uses some battery.', 'settings.wake.enabled'),
+      (() => {
+        const row = h(`<div class="row"><div class="grow"><div class="t">Wake phrase</div><div class="d">Two or three clear words work best, like “hey jarvis” or “hey relay”.</div></div><input class="field" style="width:200px" value="${esc((S.settings.wake && S.settings.wake.phrase) || 'hey jarvis')}"></div>`);
+        $('input', row).onchange = (e) => { const v = e.target.value.trim().toLowerCase(); if (v) relay.set('settings.wake.phrase', v); };
+        return row;
+      })(),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')
     );

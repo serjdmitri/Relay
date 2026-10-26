@@ -199,6 +199,7 @@ class Overlay {
     }
     if (this.buddyState && !here.buddy) {
       here.buddy = true;
+      this.send(here, { type: 'armed', on: !!this.armed });
       this.send(here, { type: 'buddy-state', state: this.buddyState });
       this.refresh(here);
     }
@@ -238,6 +239,12 @@ class Overlay {
     }
     this.send(here, { type: 'caption', state: this.capState });
     this.follow(true);
+  }
+
+  // "Hey Jarvis" is listening: the ring shows a quiet sign of it.
+  setArmed(on) {
+    this.armed = !!on;
+    for (const e of this.wins.values()) this.send(e, { type: 'armed', on: !!on });
   }
 
   // Relay is speaking: the ring moves with its voice.

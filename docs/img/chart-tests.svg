@@ -1,18 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Bar chart: 170 unit tests by area">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Bar chart: 191 unit tests by area">
   <defs><linearGradient id="g0" x1="0" x2="1"><stop offset="0" stop-color="#6C63FF"/><stop offset="1" stop-color="#C13CF0"/></linearGradient><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#C13CF0"/><stop offset="1" stop-color="#FF8A3D"/></linearGradient><linearGradient id="g2" x1="0" x2="1"><stop offset="0" stop-color="#FF8A3D"/><stop offset="1" stop-color="#2FC4FF"/></linearGradient><linearGradient id="g3" x1="0" x2="1"><stop offset="0" stop-color="#2FC4FF"/><stop offset="1" stop-color="#4ADE80"/></linearGradient><linearGradient id="g4" x1="0" x2="1"><stop offset="0" stop-color="#4ADE80"/><stop offset="1" stop-color="#FFC94A"/></linearGradient><linearGradient id="g5" x1="0" x2="1"><stop offset="0" stop-color="#FFC94A"/><stop offset="1" stop-color="#6C63FF"/></linearGradient><linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient></defs>
   <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif">
     <rect width="600" height="340" rx="20" fill="url(#card)"/>
-    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">170 unit tests</text>
-    <text x="28" y="70" fill="#A9A5D6" font-size="13">by area · counted from test/*.test.js · v0.5.1</text>
+    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">191 unit tests</text>
+    <text x="28" y="70" fill="#A9A5D6" font-size="13">by area · counted from test/*.test.js · v0.6.0</text>
     <text x="28" y="121" fill="#D9D6F5" font-size="14">Claude and the agent loop</text>
     <rect x="242" y="104" width="302" height="24" rx="8" fill="url(#g0)"/>
     <text x="554" y="121" fill="#fff" font-size="14" font-weight="700">52</text>
-    <text x="28" y="159" fill="#D9D6F5" font-size="14">Instant commands and timers</text>
-    <rect x="242" y="142" width="197" height="24" rx="8" fill="url(#g1)"/>
-    <text x="449" y="159" fill="#fff" font-size="14" font-weight="700">34</text>
-    <text x="28" y="197" fill="#D9D6F5" font-size="14">Other</text>
-    <rect x="242" y="180" width="163" height="24" rx="8" fill="url(#g2)"/>
-    <text x="415" y="197" fill="#fff" font-size="14" font-weight="700">28</text>
+    <text x="28" y="159" fill="#D9D6F5" font-size="14">Other</text>
+    <rect x="242" y="142" width="279" height="24" rx="8" fill="url(#g1)"/>
+    <text x="531" y="159" fill="#fff" font-size="14" font-weight="700">48</text>
+    <text x="28" y="197" fill="#D9D6F5" font-size="14">Instant commands and timers</text>
+    <rect x="242" y="180" width="203" height="24" rx="8" fill="url(#g2)"/>
+    <text x="455" y="197" fill="#fff" font-size="14" font-weight="700">35</text>
     <text x="28" y="235" fill="#D9D6F5" font-size="14">Settings, shortcuts, Firefox</text>
     <rect x="242" y="218" width="122" height="24" rx="8" fill="url(#g3)"/>
     <text x="374" y="235" fill="#fff" font-size="14" font-weight="700">21</text>
