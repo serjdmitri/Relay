@@ -1,4 +1,4 @@
-const { BrowserWindow, screen } = require('electron');
+const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
 const { displayAt, normalizeStrokes, strokesBox, lastBurst } = require('./overlayGeometry');
 
@@ -206,6 +206,7 @@ class Overlay {
     if (msg.hide) {
       this.hudState = {};
       const e = this.hudEntry;
+      this.hudInteractive(false);
       this.hudEntry = null;
       if (e && !e.win.isDestroyed()) {
         this.send(e, { type: 'hud', hide: true });
@@ -223,6 +224,21 @@ class Overlay {
       this.refresh(this.hudEntry);
     }
     this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName() } });
+    this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
+  }
+
+  // Typing a request and Allow / Cancel need the keyboard and the mouse, so the window takes them only while those are shown.
+  hudInteractive(on) {
+    const e = this.hudEntry;
+    if (!e || e.win.isDestroyed() || !!e.interactive === on) return;
+    e.interactive = on;
+    e.win.setFocusable(on);
+    e.win.setIgnoreMouseEvents(!on);
+    if (on) {
+      app.focus({ steal: true });
+      e.win.focus();
+      setTimeout(() => this.send(e, { type: 'hud-focus' }), 60);
+    }
   }
 
   // "Hey Jarvis" is listening: the ring shows a quiet sign of it.

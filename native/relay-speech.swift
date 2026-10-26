@@ -129,7 +129,27 @@ func defaultInputName() -> String? {
 
 // MARK: - microphone capture
 
+// Delivers the samples of an AVCaptureSession as PCM buffers. Used to listen to one particular microphone (the built-in one)
+// while a Bluetooth headset is the default: AVAudioEngine ties input and output to one device and fails with -10868 there,
+// whereas a capture session takes the chosen microphone on its own and leaves the headset's speakers alone.
+final class CaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
+  var handler: ((AVAudioPCMBuffer) -> Void)?
+  func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    guard let fd = CMSampleBufferGetFormatDescription(sampleBuffer),
+      let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fd),
+      let format = AVAudioFormat(streamDescription: asbd) else { return }
+    let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(sampleBuffer))
+    guard frames > 0, let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
+    pcm.frameLength = frames
+    let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(sampleBuffer, at: 0, frameCount: Int32(frames), into: pcm.mutableAudioBufferList)
+    if status == noErr { handler?(pcm) }
+  }
+}
+
 final class Mic: @unchecked Sendable {
+  private var captureSession: AVCaptureSession?
+  private var captureDelegate: CaptureDelegate?
+  private let captureQueue = DispatchQueue(label: "relay.mic.capture")
   private var engine = AVAudioEngine()
   private var converter: AVAudioConverter?
   private var converterInput: AVAudioFormat?
@@ -155,7 +175,39 @@ final class Mic: @unchecked Sendable {
     AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &d, UInt32(MemoryLayout<AudioDeviceID>.size))
   }
 
+  private func startCapture(uid: String) throws {
+    guard let dev = AVCaptureDevice(uniqueID: uid) else { throw NSError(domain: "relay", code: 2, userInfo: [NSLocalizedDescriptionKey: "That microphone is not available."]) }
+    let session = AVCaptureSession()
+    let input = try AVCaptureDeviceInput(device: dev)
+    guard session.canAddInput(input) else { throw NSError(domain: "relay", code: 3, userInfo: [NSLocalizedDescriptionKey: "That microphone cannot be used."]) }
+    session.addInput(input)
+    let out = AVCaptureAudioDataOutput()
+    out.audioSettings = [AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: true]
+    let delegate = CaptureDelegate()
+    delegate.handler = { [weak self] buffer in self?.receive(buffer) }
+    out.setSampleBufferDelegate(delegate, queue: captureQueue)
+    guard session.canAddOutput(out) else { throw NSError(domain: "relay", code: 4, userInfo: [NSLocalizedDescriptionKey: "That microphone cannot be read."]) }
+    session.addOutput(out)
+    session.startRunning()
+    guard session.isRunning else { throw NSError(domain: "relay", code: 5, userInfo: [NSLocalizedDescriptionKey: "That microphone did not start."]) }
+    captureSession = session
+    captureDelegate = delegate
+    debug("capturing from \(dev.localizedName) with a capture session")
+  }
+
   func start() throws {
+    // Another microphone than the default (the built-in one while AirPods are the default): a capture session handles it.
+    if let device, device != defaultInputID(), let uid = stringProp(device, kAudioDevicePropertyDeviceUID) {
+      do {
+        try startCapture(uid: uid)
+        lock.lock(); running = true; lock.unlock()
+        return
+      } catch {
+        debug("capture session failed: \(error.localizedDescription)")
+        captureSession?.stopRunning()
+        captureSession = nil
+      }
+    }
     do {
       try startOnce()
     } catch {
@@ -253,6 +305,9 @@ final class Mic: @unchecked Sendable {
     lock.lock(); running = false; lock.unlock()
     if let observer { NotificationCenter.default.removeObserver(observer) }
     observer = nil
+    captureSession?.stopRunning()
+    captureSession = nil
+    captureDelegate = nil
     engine.inputNode.removeTap(onBus: 0)
     engine.stop()
   }

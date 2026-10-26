@@ -259,7 +259,7 @@ function clearAll() {
 
 // Where the reactor sits: the middle of the screen, or small in the top left corner while Relay works.
 function layoutHud() {
-  const k = Math.max(0.45, Math.min(1, (innerHeight - 230) / 540, innerWidth / 760));
+  const k = Math.max(0.45, Math.min(1, (innerHeight - 340) / 540, innerWidth / 760));
   const root = document.documentElement.style;
   root.setProperty('--k', String(k));
   const cornerK = 0.27;
@@ -307,6 +307,9 @@ window.relay.onOverlay((m) => {
     case 'hud':
       layoutHud();
       window.Hud.apply(m.hide ? { hide: true } : m.state);
+      break;
+    case 'hud-focus':
+      window.Hud.focusInput();
       break;
     case 'hud-speaking':
       window.Hud.setSpeaking(m.on);

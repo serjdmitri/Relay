@@ -9,6 +9,10 @@
   const statusEl = document.getElementById('hudstatus');
   const lineEl = document.getElementById('hudline');
   const subEl = document.getElementById('hudsub');
+  const inEl = document.getElementById('hudin');
+  const btns = document.getElementById('hudbtns');
+  const sendBtn = document.getElementById('hudyes');
+  const noBtn = document.getElementById('hudno');
   const ctx = canvas.getContext('2d');
   const wctx = wave.getContext('2d');
 
@@ -16,7 +20,7 @@
   const CANVAS = SIZE * 1.5;
   const PRI = '0,212,255';
   const ACC = '255,107,0';
-  const COLORS = { LISTENING: '#00ff88', PROCESSING: '#ffcc00', THINKING: '#ffcc00', SPEAKING: '#ff6b00', COMPLETE: '#00d4ff', ATTENTION: '#ff3355', DICTATING: '#00ff88' };
+  const COLORS = { 'TYPE A REQUEST': '#00d4ff', CONFIRM: '#ffcc00', LISTENING: '#00ff88', PROCESSING: '#ffcc00', THINKING: '#ffcc00', SPEAKING: '#ff6b00', COMPLETE: '#00d4ff', ATTENTION: '#ff3355', DICTATING: '#00ff88' };
 
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   canvas.width = CANVAS * dpr;
@@ -45,6 +49,7 @@
   let mode = 'center';
   let cursorPos = null;
   let busySince = 0;
+  let shownState = '';
 
   const rad = (d) => (d * Math.PI) / 180;
 
@@ -271,11 +276,33 @@
       line = msg.reply || '';
       setMode('corner');
       busySince = 0;
+    } else if (s === 'input') {
+      status = 'TYPE A REQUEST';
+      level = 0;
+      line = msg.notice || '';
+      lineClass = line ? 'warn' : '';
+      sub = 'Return to send · Esc to close';
+      setMode('center');
+      busySince = 0;
+    } else if (s === 'confirm') {
+      status = 'CONFIRM';
+      level = 0;
+      line = msg.question || '';
+      setMode('center');
+      busySince = 0;
     } else {
       on = false;
       hud.classList.remove('on');
       return;
     }
+    wave.style.display = s === 'listening' ? 'block' : 'none';
+    const typing = s === 'input';
+    const asking = s === 'confirm';
+    inEl.style.display = typing ? 'block' : 'none';
+    btns.style.display = asking ? 'flex' : 'none';
+    if (typing && (msg.reset || shownState !== 'input')) { inEl.value = ''; setTimeout(() => inEl.focus(), 90); }
+    if (typing && msg.requestSubmit) window.relay.ask.submit(inEl.value);
+    shownState = s;
     base = status;
     if (speaking) status = 'SPEAKING';
     if (!(busySince && status === 'PROCESSING')) statusEl.textContent = status;
@@ -302,5 +329,14 @@
     statusEl.style.color = COLORS[status] || '#00d4ff';
   }
 
-  window.Hud = { apply, setSpeaking, get on() { return on; } };
+  inEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); window.relay.ask.submit(inEl.value); }
+    else if (e.key === 'Escape') { e.preventDefault(); window.relay.ask.cancel(); }
+  });
+  sendBtn.addEventListener('click', () => window.relay.ask.confirm(true));
+  noBtn.addEventListener('click', () => window.relay.ask.confirm(false));
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && shownState === 'confirm') window.relay.ask.confirm(false); });
+  function focusInput() { if (shownState === 'input') inEl.focus(); }
+
+  window.Hud = { apply, focusInput, setSpeaking, get on() { return on; } };
 })();
