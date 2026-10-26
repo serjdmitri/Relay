@@ -98,7 +98,7 @@ class Overlay {
       e.look = look;
       this.send(e, { type: 'look', look });
     }
-    const want = e.shapes || e.card || e.halo || e.buddy || e.hud || e.markShow;
+    const want = e.shapes || e.card || e.halo || e.buddy || e.hud || e.markShow || e.agents;
     if (want && !e.win.isVisible()) {
       if (e.win.getBounds().x !== e.display.bounds.x || e.win.getBounds().y !== e.display.bounds.y) e.win.setBounds(e.display.bounds);
       e.win.showInactive();
@@ -136,6 +136,14 @@ class Overlay {
     }
     await new Promise((r) => setTimeout(r, 500)); // let the glide finish before a click lands
     return true;
+  }
+
+  // The background agents' progress, in the top right of the main display. An empty list takes it away.
+  agents(list) {
+    const e = this.entry(screen.getPrimaryDisplay());
+    e.agents = list.length > 0;
+    this.send(e, { type: 'agents', list });
+    this.refresh(e);
   }
 
   // A word next to the cursor that follows you ("Marked"), for things too small for the whole reactor. False when that cursor is off.

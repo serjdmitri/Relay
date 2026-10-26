@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0
+
+- **Background agents.** Say "in the background, research the best noise cancelling headphones and save it in a note", or "start an agent to summarize my trip notes". Relay answers at once and the agent works by itself while you keep going. Its progress is in the top right of the screen: what it is on now, how long it has been running, then a short result when it is done (the card goes after 15 seconds, a notification and a History entry stay). "What are my agents doing?" lists them; "stop all agents" or "stop the agent working on headphones" ends them; the menu bar icon has Stop Background Agents.
+- **Up to three at once, and they never fight you for the mouse.** An agent cannot see or control the screen and cannot send, delete or run commands. It can search the web, read pages and files you dropped, list folders, read and write Notes, add and read Reminders, and read the Calendar. Each runs in its own Claude process with its own tools (I tested two in parallel with the real Claude CLI: each used only its own tool).
+- The main model can also start one when you ask for a big job that needs no screen (it asks you first).
+- "Play jazz in the background" is not an agent: only "in the background, …" at the start, or "start an agent to …", is. Agents do not survive quitting Relay.
+
 ## 0.11.0
 
 - **Scheduled requests, by asking.** "Every weekday at 8, open my email." "Every Monday and Thursday at 9, play focus music." "Every morning, read me my calendar." "Schedule open my email for tomorrow at 7am." Relay saves it, runs it by itself at that time, and says what it scheduled. "What's scheduled?" lists them, "cancel the email schedule" removes one, "cancel all my schedules" asks first. The model can also schedule something from a looser sentence (it asks you to confirm).

@@ -13,7 +13,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -300,6 +300,18 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => memory.remove(i.match)
       }
     );
+  }
+
+  // Long jobs that do not need the screen can run in the background while the user carries on.
+  if (agents) {
+    tools.push({
+      name: 'start_background_agent',
+      description: 'Start a background agent for a long job that needs no screen: research, reading and summarizing, writing something into a Note. It works by itself (web, pages, Notes, Reminders, Calendar, dropped files; it cannot control the screen or send anything) and its progress shows in the top right. Use it when the user asks for a big job in the background, or it would take many steps. Write the job as complete instructions.',
+      input_schema: obj({ task: str('The whole job, in plain words, including where to keep the result (e.g. "in a Note called …")') }, ['task']),
+      confirm: (i) => `Start a background agent: ${String(i.task).slice(0, 120)}?`,
+      describe: () => 'Starting a background agent',
+      run: async (i) => agents.start(i.task)
+    });
   }
 
   // Requests that run later or on repeat, while the Mac is on and Relay is open. They run unattended, so what sends or deletes
