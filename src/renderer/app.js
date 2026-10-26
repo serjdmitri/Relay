@@ -20,12 +20,12 @@ function setCapturing(v) {
 const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 
 const NAV = [
-  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory']],
+  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors']],
   [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions']],
   [['account', 'Account']]
 ];
 const TITLES = Object.fromEntries(NAV.flat());
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -315,6 +315,57 @@ const PAGES = {
     const rc = h(`<div class="card">${rules.length ? rules.map((r) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="t">${esc(r.from)} <span style="color:var(--dim)">→</span> ${esc(r.to)}</div><button class="btn" data-del="${esc(r.id)}">Remove</button></div>`).join('') : '<div class="empty">None yet. Use Fix a Word… on a line in History › Dictation, or add one above.</div>'}</div>`);
     rc.onclick = (e) => e.target.dataset.del && relay.removeReplacement(e.target.dataset.del);
     c.append(rc);
+  },
+
+  connectors(c) {
+    const C = S.connectors || { notion: {}, google: { accounts: [] } };
+    c.append(h('<div class="lead">Let Relay read and write in the services you use. Each one is connected by you, on this Mac, and the secrets are kept encrypted here. Reading is free; sending an email always asks you first. Background agents can use them too.</div>'));
+
+    // Notion
+    c.append(h('<div class="section-title" style="margin-top:0">Notion</div>'));
+    const n = h('<div class="card" style="padding:14px"></div>');
+    if (C.notion.connected) {
+      n.append(h(`<div class="row" style="padding:0;min-height:36px"><div class="grow"><div class="t">Connected to ${esc(C.notion.name || 'Notion')}</div><div class="d">Relay can search, read, add to and create pages that you shared with it.</div></div><button class="btn" id="nout">Disconnect</button></div>`));
+      $('#nout', n).onclick = () => relay.clearNotion();
+    } else {
+      n.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">1. Open notion.so/profile/integrations and make a new internal integration (any name, e.g. Relay). 2. Copy its secret. 3. In Notion, open the pages you want Relay to see, choose ••• > Connections, and add the integration. 4. Paste the secret here.</div>'));
+      const row = h('<div class="field-row"><input class="field" id="ntok" type="password" placeholder="Integration secret"><button class="btn primary" id="nset" style="height:28px">Connect</button></div>');
+      const go = async () => {
+        const btn = $('#nset', row); btn.textContent = 'Checking…';
+        const r = await relay.setNotionToken($('#ntok', row).value);
+        btn.textContent = 'Connect';
+        if (!r.ok) alert(r.error);
+      };
+      $('#nset', row).onclick = go;
+      $('#ntok', row).onkeydown = (e) => e.key === 'Enter' && go();
+      n.append(row);
+    }
+    c.append(n);
+
+    // Google
+    c.append(h('<div class="section-title">Gmail and Google Calendar</div>'));
+    const g = h('<div class="card" style="padding:14px"></div>');
+    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay signs in to Google with your own app, so nothing goes through anyone else. One time: in console.cloud.google.com make a project, turn on the Gmail API and the Google Calendar API, set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
+    const cr = h(`<div class="field-row" style="margin-bottom:10px"><input class="field" id="gid" placeholder="Client ID" value="${esc(C.google.clientId || '')}"><input class="field" id="gsec" type="password" placeholder="${C.google.hasSecret ? 'Client secret saved (paste to replace)' : 'Client secret'}"><button class="btn" id="gsave" style="height:28px">Save</button></div>`);
+    $('#gsave', cr).onclick = () => relay.setGoogleClient($('#gid', cr).value, $('#gsec', cr).value).then(() => { $('#gsec', cr).value = ''; });
+    g.append(cr);
+    for (const email of C.google.accounts) {
+      const row = h(`<div class="row" style="padding:6px 0;min-height:36px"><div class="grow"><div class="t">${esc(email)}</div><div class="d">Gmail and Calendar connected</div></div><button class="btn" data-rm="${esc(email)}">Remove</button></div>`);
+      row.onclick = (e) => e.target.dataset.rm && confirm(`Remove ${email}?`) && relay.removeGoogle(email);
+      g.append(row);
+    }
+    const add = h(`<div style="margin-top:8px"><button class="btn primary" id="gconn" ${C.google.clientId && C.google.hasSecret ? '' : 'disabled'}>${C.google.accounts.length ? 'Connect another account' : 'Connect a Google account'}</button> <span class="note" id="gstat" style="margin-left:8px"></span></div>`);
+    $('#gconn', add).onclick = async () => {
+      $('#gstat', add).textContent = 'Waiting for Google in your browser…';
+      const r = await relay.connectGoogle();
+      $('#gstat', add).textContent = r.ok ? `Connected ${r.email}` : '';
+      if (!r.ok) alert(r.error);
+    };
+    g.append(add);
+    c.append(g);
+
+    c.append(h('<div class="section-title">Try saying</div>'));
+    c.append(h('<div class="card" style="padding:12px 14px"><div class="d" style="line-height:1.8">“Do I have any unread email from Anna?” · “Read me my last email from the bank” · “What is on my Google calendar this week?” · “Add dentist Friday at 3 to my calendar” · “Draft an email to Sam saying I will be late” · “Search Notion for the trip plan” · “In the background, summarize my Notion trip notes into a new page”.</div></div>'));
   },
 
   memory(c) {

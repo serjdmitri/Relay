@@ -18,6 +18,8 @@ const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
 const usage = require('./usage');
+const { NotionApi, notionTools } = require('./connectors/notion');
+const { GoogleApi, googleTools } = require('./connectors/google');
 const { corrections, noteCorrection } = require('./learn');
 const mem = require('./memory');
 const sched = require('./schedule');
@@ -463,7 +465,7 @@ class AskController {
   // ----- background agents -----
   // What a background agent may use: reading and writing, never the screen, and nothing that sends or deletes (so nothing needs asking).
   agentTools(vision) {
-    const ok = new Set(['web_search', 'fetch_page', 'notes_create', 'notes_list', 'notes_read', 'notes_append', 'reminders_add', 'reminders_list', 'calendar_events', 'list_folder', 'read_file']);
+    const ok = new Set(['notion_search', 'notion_read', 'notion_create', 'notion_append', 'gmail_search', 'gmail_read', 'gmail_draft', 'gcal_events', 'gcal_create', 'web_search', 'fetch_page', 'notes_create', 'notes_list', 'notes_read', 'notes_append', 'reminders_add', 'reminders_list', 'calendar_events', 'list_folder', 'read_file']);
     return this.makeTools(vision).filter((t) => ok.has(t.name) && !t.confirm);
   }
 
@@ -718,7 +720,29 @@ class AskController {
   }
 
   makeTools(vision = true) {
+    return [...this.baseTools(vision), ...this.connectorTools()];
+  }
+
+  baseTools(vision) {
     return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+  }
+
+  // Notion and Google tools exist only for what is connected in Settings > Connectors.
+  connectorTools() {
+    const c = this.store.get('settings.connectors') || {};
+    const tools = [];
+    const notion = decryptKey(c.notion?.tokenEnc);
+    if (notion) tools.push(...notionTools(new NotionApi({ token: notion })));
+    if (c.google?.clientId && (c.google.accounts || []).length) {
+      if (!this.googleApi) {
+        this.googleApi = new GoogleApi({
+          accounts: () => (this.store.get('settings.connectors.google.accounts') || []).map((a) => ({ email: a.email, refreshToken: decryptKey(a.refreshEnc) })).filter((a) => a.refreshToken),
+          client: () => ({ clientId: this.store.get('settings.connectors.google.clientId'), clientSecret: decryptKey(this.store.get('settings.connectors.google.clientSecretEnc')) })
+        });
+      }
+      tools.push(...googleTools(this.googleApi));
+    }
+    return tools;
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.

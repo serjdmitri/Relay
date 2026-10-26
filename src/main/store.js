@@ -33,6 +33,10 @@ const DEFAULTS = {
       openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
       elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
     },
+    connectors: { // Notion (a token you paste) and Google (your own OAuth app, several accounts): secrets are encrypted
+      notion: { tokenEnc: '', name: '' },
+      google: { clientId: '', clientSecretEnc: '', accounts: [] } // accounts: { email, refreshEnc }
+    },
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

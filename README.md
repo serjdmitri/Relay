@@ -138,6 +138,9 @@ After you dictate, Relay looks at the same text in the field a few seconds later
 ### Usage, speed and Try again
 Under each answer is a small dim line with the model, time, tokens, the cost at API prices and your Claude limit; it is never read aloud (General > Show usage turns it off). "Use the fast model", "use the smarter model", "use deep" and "use auto" change the speed, and so does Model Speed in the menu bar. "Try again" reruns the last request on the next model up.
 
+### Connectors
+Settings > Connectors: paste a Notion integration token, and sign in to Google (Gmail and Calendar) with your own Google app, as many accounts as you like. Then ask for your email, calendar and Notion pages by voice. Reading is free; drafts are saved without sending; sending an email always asks first. Secrets are encrypted on this Mac and Relay talks to Notion and Google directly.
+
 ### Background agents
 "In the background, research the best noise cancelling headphones and save it in a note." "Start an agent to summarize my trip notes." Relay answers at once; the agent works by itself and its progress shows in the top right of the screen, then a short result. Up to three at once. "What are my agents doing?" lists them, "stop all agents" ends them. Agents can search the web, read pages and files you dropped, read and write Notes and Reminders and read the Calendar; they cannot see or control your screen or send or delete anything.
 
