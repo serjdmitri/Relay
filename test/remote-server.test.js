@@ -73,3 +73,23 @@ test('events stream the current status and what is broadcast', async () => {
   await reader.cancel();
   s.stop();
 });
+
+test('an ask that waits answers in the same call, for an iPhone Shortcut', async () => {
+  const { s, base, post, pairing } = await make();
+  // a stand-in Mac that answers a moment after it is asked, using the id the server gave it
+  s.control.ask = async (t, d, id) => { setTimeout(() => s.broadcast({ type: 'result', id, reply: `Done: ${t}`, status: 'done' }), 50); return id; };
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'Siri Shortcut' })).json();
+  const r = await post('/api/ask', { text: 'open notes', wait: true }, token);
+  const j = await r.json();
+  assert.equal(j.reply, 'Done: open notes');
+  assert.equal(j.status, 'done');
+  // and a Mac that never answers gives a polite message instead of hanging forever
+  s.waitMs = 80;
+  s.control.ask = async (t, d, id) => id;
+  const slow = await (await post('/api/ask', { text: 'x', wait: true }, token)).json();
+  assert.equal(slow.status, 'working');
+  assert.match(slow.reply, /Still working/);
+  assert.equal(s.waiters.size, 0);
+  s.stop();
+});

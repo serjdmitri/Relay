@@ -38,7 +38,7 @@ class RemoteService {
     const host = s.lan === false ? '127.0.0.1' : '0.0.0.0';
     if (this.server && (!s.enabled || this.server.host !== host || this.server.port !== s.port)) { this.stop(); }
     if (!s.enabled || this.server) return;
-    const control = { ask: (t, d) => this.ask.remoteAsk(t, d), stop: () => this.ask.cancelAll(), snapshot: () => this.ask.remoteSnapshot(), recent: (n) => this.ask.remoteRecent(n) };
+    const control = { ask: (t, d, id) => this.ask.remoteAsk(t, d, id), stop: () => this.ask.cancelAll(), snapshot: () => this.ask.remoteSnapshot(), recent: (n) => this.ask.remoteRecent(n) };
     const server = new RemoteServer({ control, pairing: this.pairing, devices: this.devices, root: this.root, host, port: s.port });
     server.onPaired = () => this.broadcast();
     try {
@@ -73,6 +73,13 @@ class RemoteService {
     const urls = this.urls();
     const best = urls[0] || '';
     return { code, expiresInMs, urls, qr: best ? qrSvg(`${best}/?code=${code}`) : '' };
+  }
+
+  // A long-lived key for an iPhone Shortcut ("Hey Siri, Relay"), which cannot pair with a code. Shown once.
+  shortcutKey() {
+    const { token } = this.devices.add('Siri Shortcut');
+    const best = (this.urls().find((u) => u.startsWith('http://')) || this.urls()[0] || '');
+    return { token, url: `${best}/api/ask` };
   }
 
   async enableTailscale() {
