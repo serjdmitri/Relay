@@ -469,6 +469,30 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
         }
       }
     },
+    // Where an app's front window is: { x, y, w, h } in screen points.
+    async windowFrame(app) {
+      const out = await osa([
+        'tell application "System Events"', `tell process ${q(app)}`, 'if (count of windows) is 0 then return "none"', 'set p to position of window 1', 'set s to size of window 1',
+        'return ((item 1 of p) as text) & "|" & ((item 2 of p) as text) & "|" & ((item 1 of s) as text) & "|" & ((item 2 of s) as text)', 'end tell', 'end tell'
+      ]);
+      if (out === 'none') throw new Error(`${app} has no open window.`);
+      const f = parseFrame(out);
+      return { x: f.x, y: f.y, w: f.w, h: f.h };
+    },
+    // Moves and resizes an app's front window. Some apps keep a minimum size or nudge the window after a resize, so the
+    // result is read back and returned.
+    async setWindowFrame(app, r) {
+      const n = (v) => Math.round(v);
+      const out = await osa([
+        'tell application "System Events"', `tell process ${q(app)}`, 'if (count of windows) is 0 then return "none"',
+        `set position of window 1 to {${n(r.x)}, ${n(r.y)}}`, `set size of window 1 to {${n(r.w)}, ${n(r.h)}}`, `set position of window 1 to {${n(r.x)}, ${n(r.y)}}`,
+        'set p to position of window 1', 'set s to size of window 1',
+        'return ((item 1 of p) as text) & "|" & ((item 2 of p) as text) & "|" & ((item 1 of s) as text) & "|" & ((item 2 of s) as text)', 'end tell', 'end tell'
+      ]);
+      if (out === 'none') throw new Error(`${app} has no open window.`);
+      const f = parseFrame(out);
+      return { x: f.x, y: f.y, w: f.w, h: f.h };
+    },
     async menuClick(app, menuPath) {
       if (!Array.isArray(menuPath) || menuPath.length < 2) throw new Error('menu_path needs at least [menu, item].');
       const [top, ...rest] = menuPath;

@@ -6,7 +6,7 @@
 const REPLAYABLE = new Set([
   'open_app', 'focus_app', 'quit_app', 'open_url', 'open_path', 'reveal_path', 'trash_path',
   'notes_create', 'notes_append', 'reminders_add', 'calendar_create', 'messages_send',
-  'type_text', 'press_keys', 'ui_click', 'menu_click', 'clipboard_write',
+  'arrange_window', 'type_text', 'press_keys', 'ui_click', 'menu_click', 'clipboard_write',
   'set_volume', 'toggle_dark_mode', 'firefox_open', 'run_applescript', 'run_shell'
 ]);
 

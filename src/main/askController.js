@@ -212,10 +212,10 @@ class AskController {
 
   // Shows the pill. A pill that was hidden drops out of the notch; one already showing just updates.
   // mode: 'inactive' keeps focus in your app, 'show' brings the window forward, 'focus' also takes keyboard focus.
-  // Jarvis look: talking, working and answers show on the ring and its caption beside the pointer. The pill is kept for
+  // Jarvis look: talking, working and answers show on the reactor (big in the middle while it listens, small in the top left while it works). The pill is kept for
   // typing a request and for questions that need a button (Allow / Cancel), which need the keyboard or the mouse.
   passiveUI() {
-    return this.store.get('settings.look') !== 'classic' && this.store.get('settings.buddy') !== false && !!this.store.get('settings.cursor') &&
+    return this.store.get('settings.look') !== 'classic' &&
       this.state !== 'input' && this.state !== 'confirm' && this.mode !== 'type';
   }
 
@@ -227,7 +227,7 @@ class AskController {
   reveal(extra = {}, mode = 'inactive') {
     if (this.passiveUI() && !extra.question) {
       if (this.visible) this.hideSoft();
-      this.overlay.caption(this.captionState({ ...extra, ...(extra.show ? {} : {}) }));
+      this.overlay.hud(this.captionState(extra));
       return;
     }
     clearTimeout(this.hideTimer);
@@ -270,7 +270,7 @@ class AskController {
   push(extra = {}) {
     if (!extra.hide && this.passiveUI()) {
       if (this.visible) this.hideSoft();
-      this.overlay.caption(this.captionState(extra));
+      this.overlay.hud(this.captionState(extra));
       return;
     }
     if (!this.win || this.win.isDestroyed()) return;
@@ -425,7 +425,7 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -671,7 +671,7 @@ class AskController {
   close() {
     clearTimeout(this.doneTimer);
     this.state = 'idle';
-    this.overlay.caption({ hide: true });
+    this.overlay.hud({ hide: true });
     this.dropWarm();
     this.hideSoft();
   }
@@ -765,8 +765,14 @@ class AskController {
   }
 
   // Simple commands ("open Notes", "volume down") run at once, without asking the model.
+  // Every display and the part of it a window can use (below the menu bar, clear of the Dock).
+  displayAreas() {
+    return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
+  }
+
   quickContext() {
     return {
+      displays: () => this.displayAreas(),
       timers: this.timers,
       brightness: { get: () => this.speech.brightness(), set: (v) => this.speech.brightness(v) },
       prevApp: this.prevApp,

@@ -311,8 +311,12 @@ const PAGES = {
       look,
       toggleRow('Let Relay do things for you', 'Off: it only types what you say.', 'settings.actEnabled'),
       toggleRow('Relay cursor', "Shows Relay's own pointer, drawings and step-by-step guides on your screen.", 'settings.cursor'),
-      toggleRow('Buddy cursor', 'A small ring follows your pointer, shows when Relay is listening or working, and flies to what it points at.', 'settings.buddy'),
-      toggleRow('Always show Jarvis', 'Off: the ring only appears while Relay listens or works.', 'settings.buddyAlways'),
+      toggleRow('Cursor buddy', 'A small arrow follows your pointer, like a second cursor, and flies to what Relay points at. Off: it is put away.', 'settings.buddy'),
+      (() => {
+        const row = h(`<div class="row"><div class="grow"><div class="t">Name in the reactor</div><div class="d">Shown in the middle of the big reactor when you ask by voice.</div></div><input class="field" style="width:160px" value="${esc(S.settings.assistantName || 'J.A.R.V.I.S')}"></div>`);
+        $('input', row).onchange = (e) => relay.set('settings.assistantName', e.target.value.trim().slice(0, 14) || 'J.A.R.V.I.S');
+        return row;
+      })(),
       toggleRow('Listen for “Hey Jarvis”', 'Relay listens on this Mac for your wake phrase, so you can start without a key. Nothing is recorded or sent anywhere; the words are read and thrown away. The orange microphone dot stays on while it listens, and it uses some battery.', 'settings.wake.enabled'),
       (() => {
         const row = h(`<div class="row"><div class="grow"><div class="t">Wake phrase</div><div class="d">Two or three clear words work best, like “hey jarvis” or “hey relay”.</div></div><input class="field" style="width:200px" value="${esc((S.settings.wake && S.settings.wake.phrase) || 'hey jarvis')}"></div>`);

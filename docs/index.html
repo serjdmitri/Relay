@@ -17,7 +17,7 @@
     --bg: #0b1118; --bg2: #0f1822; --card: rgba(255,255,255,.06); --line: rgba(255,255,255,.14);
     --text: #eef6fb; --muted: #9db4c4;
     --indigo: #1c8fd6; --magenta: #2a9ee0; --orange: #4cc2ff; --cyan: #4cc2ff; --green: #4cc2ff; --yellow: #9fdcff;
-    --grad: linear-gradient(120deg, #1c8fd6, #2a9ee0 55%, #4cc2ff);
+    --grad: #4cc2ff;
     --radius: 20px;
   }
   * { box-sizing: border-box; }
@@ -26,8 +26,7 @@
   a { color: inherit; }
   img { max-width: 100%; height: auto; display: block; }
   .wrap { width: min(1120px, 100% - 40px); margin: 0 auto; }
-  .glow { position: absolute; inset: 0 0 auto 0; height: 880px; pointer-events: none; z-index: 0;
-    background: radial-gradient(600px 400px at 15% 10%, rgba(76,194,255,.30), transparent 70%), radial-gradient(700px 480px at 85% 0%, rgba(42,158,224,.40), transparent 70%), radial-gradient(600px 400px at 70% 55%, rgba(76,194,255,.22), transparent 70%); }
+  .glow { display: none; }
   header { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(11,17,24,.7); border-bottom: 1px solid var(--line); }
   nav { display: flex; align-items: center; gap: 22px; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; text-decoration: none; margin-right: auto; }
@@ -36,16 +35,16 @@
   nav a.l:hover { color: #fff; }
   .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: 999px; font-weight: 600; font-size: 16px; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
   .btn:hover { transform: translateY(-2px); }
-  .btn.primary { background: var(--grad); color: #fff; box-shadow: 0 10px 30px rgba(42,158,224,.4); }
+  .btn.primary { background: var(--cyan); color: #04121c; box-shadow: none; font-weight: 600; }
   .btn.ghost { background: rgba(255,255,255,.08); border-color: var(--line); color: #fff; }
   .btn.small { padding: 9px 16px; font-size: 14px; }
   .btn svg { width: 18px; height: 18px; fill: currentColor; }
   .hero { position: relative; z-index: 1; text-align: center; padding: 84px 0 40px; }
-  .hero .logo { width: 112px; height: 112px; margin: 0 auto 22px; filter: drop-shadow(0 16px 36px rgba(42,158,224,.55)); animation: float 6s ease-in-out infinite; }
+  .hero .logo { width: 112px; height: 112px; margin: 0 auto 22px;  }
   @keyframes float { 50% { transform: translateY(-8px); } }
   .eyebrow { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-size: 14px; margin-bottom: 20px; }
   h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.05; margin: 0 0 18px; letter-spacing: -.02em; }
-  .g { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .g { color: var(--cyan); }
   .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 30px; }
   .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .meta { margin-top: 18px; color: var(--muted); font-size: 14px; }
@@ -57,7 +56,7 @@
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
   .card h3 { margin: 14px 0 6px; font-size: 20px; }
   .card p { margin: 0; color: var(--muted); font-size: 16px; }
-  .ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; }
+  .ic { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,.06); color: var(--cyan); border: 1px solid var(--line); }
   .c1 { background: linear-gradient(135deg,#1c8fd6,#2a9ee0); } .c2 { background: linear-gradient(135deg,#2a9ee0,#4cc2ff); }
   .c3 { background: linear-gradient(135deg,#4cc2ff,#4cc2ff); } .c4 { background: linear-gradient(135deg,#4cc2ff,#9fdcff); }
   .c5 { background: linear-gradient(135deg,#4cc2ff,#4cc2ff); } .c6 { background: linear-gradient(135deg,#1c8fd6,#4cc2ff); }
@@ -128,15 +127,15 @@
     <h2>Everything you say, <span class="g">done</span></h2>
     <p class="sub">Hold a key, talk, let go. Relay figures out whether it is a quick command or something that needs a model, then does it.</p>
     <div class="grid">
-      <div class="card"><div class="ic c1">🎙️</div><h3>Ask with your voice</h3><p>Tap or hold <code>Right ⌥</code>, say what you want, and a pill drops out of the notch with a short result. Prefer typing? <code>⌥T</code>.</p></div>
-      <div class="card"><div class="ic c2">⌨️</div><h3>Dictate anywhere</h3><p>Hold <code>Right ⌘</code> and your words are typed where your cursor is. Spoken "new line", "scratch that", word fixes and per-app styles included.</p></div>
-      <div class="card"><div class="ic c4">⚡</div><h3>Instant commands</h3><p>Timers, music, volume, brightness, dark mode, notes, reminders, open apps and sites. About a third of a second, no model call, and "undo that" works.</p></div>
-      <div class="card"><div class="ic c3">🧰</div><h3>Acts in your apps</h3><p>Notes, Reminders, Calendar, Messages, Finder, the clipboard, screen and accessibility tree, plus an optional Firefox extension for tabs and pages.</p></div>
-      <div class="card"><div class="ic c1">👆</div><h3>Shows you, not just tells you</h3><p>Ask where something is and Relay points at it, circles it, or walks you through the steps on your own screen. Click the outlined spot, or say "next", to go on.</p></div>
-      <div class="card"><div class="ic c2">🛰️</div><h3>A ring that listens, and "Hey Jarvis"</h3><p>The ring follows your pointer, moves with your voice and answers in a small card beside it. Say your wake phrase to start, or hold a key and circle something on screen to ask about it. Name a task once and Relay repeats it with no model.</p></div>
-      <div class="card"><div class="ic c2">⭕</div><h3>Circle it, then ask</h3><p>Hold a key, move the pointer round anything on screen, let go and ask. Relay looks at exactly what you marked. A small ring with a cursor triangle follows your pointer and traces what it draws.</p></div>
-      <div class="card"><div class="ic c5">🛡️</div><h3>Asks before it acts</h3><p>Anything that sends a message, trashes a file, runs a shell command or looks destructive shows an Allow or Cancel card first.</p></div>
-      <div class="card"><div class="ic c6">🔒</div><h3>Private by design</h3><p>Speech is turned into words on your Mac by Apple's on-device recognition. Only the words go to the model, and only when you ask Relay to do something.</p></div>
+      <div class="card"><div class="ic c1"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21"/></svg></div><h3>Ask with your voice</h3><p>Tap or hold <code>Right ⌥</code>, say what you want, and a pill drops out of the notch with a short result. Prefer typing? <code>⌥T</code>.</p></div>
+      <div class="card"><div class="ic c2"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M8 14h8"/></svg></div><h3>Dictate anywhere</h3><p>Hold <code>Right ⌘</code> and your words are typed where your cursor is. Spoken "new line", "scratch that", word fixes and per-app styles included.</p></div>
+      <div class="card"><div class="ic c4"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg></div><h3>Instant commands</h3><p>Timers, music, volume, brightness, dark mode, notes, reminders, open apps and sites. About a third of a second, no model call, and "undo that" works.</p></div>
+      <div class="card"><div class="ic c3"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a2 2 0 012-2h2a2 2 0 012 2v2M3 13h18"/></svg></div><h3>Acts in your apps</h3><p>Notes, Reminders, Calendar, Messages, Finder, the clipboard, screen and accessibility tree, plus an optional Firefox extension for tabs and pages.</p></div>
+      <div class="card"><div class="ic c1"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 6-6 2-2 6z"/></svg></div><h3>Shows you, not just tells you</h3><p>Ask where something is and Relay points at it, circles it, or walks you through the steps on your own screen. Click the outlined spot, or say "next", to go on.</p></div>
+      <div class="card"><div class="ic c2"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div><h3>A reactor that listens, and "Hey Jarvis"</h3><p>A big Jarvis reactor opens in the middle of your screen and follows your voice, then shrinks to the corner while it works. Say your wake phrase to start, or hold a key and circle something on screen to ask about it. Name a task once and Relay repeats it with no model.</p></div>
+      <div class="card"><div class="ic c2"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="3 2.4"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg></div><h3>Circle it, then ask</h3><p>Hold a key, move the pointer round anything on screen, let go and ask. Relay looks at exactly what you marked. A small ring with a cursor triangle follows your pointer and traces what it draws.</p></div>
+      <div class="card"><div class="ic c5"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Asks before it acts</h3><p>Anything that sends a message, trashes a file, runs a shell command or looks destructive shows an Allow or Cancel card first.</p></div>
+      <div class="card"><div class="ic c6"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 018 0v2.5"/></svg></div><h3>Private by design</h3><p>Speech is turned into words on your Mac by Apple's on-device recognition. Only the words go to the model, and only when you ask Relay to do something.</p></div>
     </div>
   </section>
 
@@ -169,7 +168,7 @@
     <h2 id="nums">Built in the open</h2>
     <p class="sub">The numbers below are drawn from the repository itself.</p>
     <div class="charts">
-      <img src="img/chart-tests.svg" alt="Bar chart of 191 unit tests by area" width="600" height="340" loading="lazy">
+      <img src="img/chart-tests.svg" alt="Bar chart of 196 unit tests by area" width="600" height="340" loading="lazy">
       <img src="img/chart-code.svg" alt="Donut chart of lines of code by language" width="600" height="340" loading="lazy">
     </div>
   </section>

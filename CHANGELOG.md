@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- **A big Jarvis reactor in the middle of your screen.** When you ask by voice (Right ⌥, or "Hey Jarvis"), a large arc reactor appears in the middle of the screen, with no window behind it: spinning rings, scanners, tick marks and a core with the name in it. It swells and its bars follow your voice while you talk, shows your words under it, and when you stop it shrinks to the top left corner and keeps working there ("PROCESSING 3s") until the task is done. Then the answer appears beside it, and the reactor swells and throws off sparks while Relay speaks. It is drawn from the look of the reference J.A.R.V.I.S. HUD you attached. Typing a request (⌥T) and Allow / Cancel questions still use the pill, because they need the keyboard or the mouse; General > Look > Classic brings the pill back for everything.
+- **The pointer buddy is now just an arrow**, like HeyClicky's cursor: a small arrow that follows your pointer (a tiny green dot on it while "Hey Jarvis" is listening) and flies to what Relay points at. Put it away with General > Cursor buddy or the menu bar icon's "Show the cursor buddy". The name in the reactor's core can be changed in General.
+- **Move and resize windows.** "Snap this window to the left", "put Chrome on the right half", "move Spotify to the top right corner", "maximize this window", "center Notes", thirds ("right third"), and "other screen". Instant, no model; "undo that" puts the window back. The model can do it too (`arrange_window`). Tested on a real Finder window: placed within one point of the target.
+- Flatter Settings and website: no glows, gradient tiles or emoji icons.
+
 ## 0.6.0
 
 - **The Jarvis ring is the interface.** The ring now stays beside your pointer all the time (switch it off in the menu bar icon or in General). It moves with your voice while you talk, spins while it works, and pulses while Relay speaks. What Relay hears, is doing and answers appears in a small caption card beside the ring instead of in the pill. The pill still opens for typing a request (⌥T) and for Allow / Cancel questions, which need the keyboard or the mouse. General > Look > Classic brings the old pill back everywhere. The cursor arrow now sits outside the ring.

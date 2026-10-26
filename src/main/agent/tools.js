@@ -2,6 +2,7 @@ const { scriptNeedsConfirm } = require('./safety');
 const web = require('./web');
 const { toGlobal, normalizeShapes, guideSteps, KINDS } = require('../overlayGeometry');
 const { Guide } = require('../guide');
+const { layoutRect, pickArea, NAMES: WINDOW_NAMES } = require('../windows');
 
 const str = (description) => ({ type: 'string', description });
 const num = (description) => ({ type: 'number', description });
@@ -11,7 +12,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -146,6 +147,26 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       run: (i) => mac.messagesSend(i.to, i.text)
     },
 
+    {
+      name: 'arrange_window',
+      description: `Move and resize an app's front window: left, right, top or bottom half, a corner (top-left, top-right, bottom-left, bottom-right), a third (left-third, middle-third, right-third), center, or maximize to fill the screen. Omit app for the window the user is looking at. display: this (default, where the window is), other (the next screen) or main.`,
+      input_schema: obj({
+        app: str('App name; omit for the front window'),
+        position: { type: 'string', enum: Object.keys(WINDOW_NAMES) },
+        display: str('this, other or main')
+      }, ['position']),
+      describe: (i) => `Moving the window to ${WINDOW_NAMES[i.position] || i.position}`,
+      run: async (i) => {
+        const app = i.app || getFront();
+        if (!app) throw new Error('I could not tell which app to move. Name the app.');
+        const before = await mac.windowFrame(app);
+        const area = pickArea(getDisplays(), before, i.display || 'this');
+        const after = await mac.setWindowFrame(app, layoutRect(i.position, area));
+        const wanted = layoutRect(i.position, area);
+        const off = Math.abs(after.w - wanted.w) > 12 || Math.abs(after.h - wanted.h) > 12;
+        return `Moved ${app} to ${WINDOW_NAMES[i.position]}.${off ? ` It stopped at ${Math.round(after.w)} by ${Math.round(after.h)} because the app limits its size.` : ''}`;
+      }
+    },
     {
       name: 'type_text',
       description: 'Type text into whatever field currently has focus (pastes it).',

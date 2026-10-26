@@ -247,3 +247,31 @@ test('time, date and battery are answered locally', async () => {
   assert.equal((await runQuick({ type: 'info', what: 'battery' }, fakeMac())).reply, 'Battery is at 82%, on battery power, about 5 hours 12 minutes left.');
   assert.equal((await runQuick({ type: 'info', what: 'battery' }, fakeMac({ batteryStatus: async () => null }))).reply, 'This Mac has no battery.');
 });
+
+// ---- windows
+test('window commands become instant commands, with an app alias or the front window', () => {
+  const { parseQuick } = require('../src/main/quick');
+  assert.deepEqual(parseQuick('Snap this window to the left'), { type: 'window', position: 'left', app: null });
+  assert.deepEqual(parseQuick('put Chrome on the right half'), { type: 'window', position: 'right', app: 'Google Chrome' });
+  assert.deepEqual(parseQuick('move spotify to the top right corner'), { type: 'window', position: 'top-right', app: 'Spotify' });
+  assert.equal(parseQuick('maximize this window').position, 'maximize');
+  assert.equal(parseQuick('open notes').type, 'open-app', 'unrelated commands are unchanged');
+});
+
+test('running a window command moves the window, can be undone, and says when there is no window', async () => {
+  const { runQuick } = require('../src/main/quick');
+  const log = [];
+  const mac = {
+    windowFrame: async () => ({ x: 100, y: 120, w: 800, h: 600 }),
+    setWindowFrame: async (app, r) => { log.push([app, r]); return r; }
+  };
+  const ctx = { prevApp: 'Notes', displays: () => [{ bounds: { x: 0, y: 0, width: 1440, height: 900 }, workArea: { x: 0, y: 38, width: 1440, height: 800 } }] };
+  const r = await runQuick({ type: 'window', position: 'left', app: null }, mac, ctx);
+  assert.deepEqual(log[0], ['Notes', { x: 0, y: 38, w: 720, h: 800 }]);
+  assert.match(r.reply, /Moved Notes to the left half/);
+  assert.match(await r.undo(), /Put Notes back/);
+  assert.deepEqual(log[1], ['Notes', { x: 100, y: 120, w: 800, h: 600 }]);
+  assert.equal(await runQuick({ type: 'window', position: 'left', app: null }, mac, { displays: ctx.displays }), null, 'no app to move');
+  const none = await runQuick({ type: 'window', position: 'right', app: 'Preview' }, { windowFrame: async () => { throw new Error('Preview has no open window.'); } }, ctx);
+  assert.match(none.reply, /no open window/);
+});

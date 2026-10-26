@@ -1,4 +1,4 @@
-/* Window 820x620. Dark navy with one cyan accent. The page colour (--pc, --pc2, set from app.js) only tints the soft glows at the top and bottom and the selected sidebar item. */
+/* Window 820x620. Dark navy, flat surfaces, one cyan accent. No glows. */
 :root {
   --bg: #0d131a;
   --sidebar: #111a23;
@@ -27,7 +27,7 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; background: var(--bg); color: var(--text); font-size: var(--fs-body); -webkit-font-smoothing: antialiased; user-select: none; cursor: default; overflow: hidden; }
-body { background: radial-gradient(620px 170px at 50% -50px, color-mix(in srgb, var(--pc) 22%, transparent), transparent 75%), radial-gradient(620px 170px at 50% calc(100% + 50px), color-mix(in srgb, var(--pc2) 18%, transparent), transparent 75%), var(--bg); }
+body { background: var(--bg); }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: default; }
 input, textarea, select { font: inherit; color: inherit; user-select: text; }
 a, .link { color: var(--link); cursor: default; }
@@ -40,11 +40,11 @@ a, .link { color: var(--link); cursor: default; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav + .nav { margin-top: 18px; }
 .nav-item { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 8px; border-radius: 9px; font-size: var(--fs-nav); font-weight: 400; }
-.nav-item.active { background: color-mix(in srgb, var(--tc) 20%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tc) 42%, transparent), 0 0 18px color-mix(in srgb, var(--tc) 26%, transparent); font-weight: 600; }
+.nav-item.active { background: rgba(255, 255, 255, 0.09); font-weight: 600; }
 .nav-item:hover:not(.active) { background: rgba(255, 255, 255, 0.06); }
 .icon-box { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; flex: none; background: #25323f; --bc: #25323f; box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12); }
 .nav-item:not(.active) .icon-box svg { opacity: 0.7; }
-.nav-item.active .icon-box { background: linear-gradient(135deg, var(--tc), var(--tc2)); --bc: var(--tc); box-shadow: 0 0 12px color-mix(in srgb, var(--tc) 60%, transparent); }
+.nav-item.active .icon-box { background: var(--accent); --bc: var(--accent); box-shadow: none; }
 .icon-box svg { width: 16px; height: 16px; }
 .spacer { flex: 1; }
 .status-card { background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 12px 12px 12px; height: 66px; }
@@ -244,7 +244,7 @@ details.adv[open] summary::before { transform: rotate(90deg); }
 .kb { display: grid; gap: 5px; background: #262626; border: 1px solid #383838; padding: 10px; border-radius: 12px; }
 .kb .r { display: flex; gap: 5px; justify-content: center; }
 .kb .k { height: 28px; min-width: 28px; border-radius: 6px; background: #3a3a3a; color: #9a9a9a; font-size: 11.5px; display: grid; place-items: center; padding: 0 8px; }
-.kb .k.hot { background: var(--accent); color: #fff; box-shadow: 0 0 10px rgba(76, 194, 255, 0.55); }
+.kb .k.hot { background: var(--accent); color: #fff; box-shadow: none; }
 .suggest { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 16px; max-width: 520px; }
 .suggest span { background: #333; border-radius: 22px; padding: 10px 20px; font-size: 15px; }
 .steps { text-align: left; margin-top: 18px; font-size: var(--fs-row); line-height: 1.7; color: #cfcfcf; max-width: 460px; }
