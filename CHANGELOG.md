@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2
+
+- **The reply now sits beside the reactor** in the top left corner, under the status ("COMPLETE"), instead of on the right. The top right keeps your request and the steps while Relay works.
+- **Settings follow your Mac's light or dark appearance.** Every colour in the window is now a theme colour, with a clean light version, and the sidebar uses the native macOS sidebar material (the translucent blur you see in Finder and System Settings).
+- The Look description in General no longer talks about the old indigo orb.
+
 ## 0.8.1
 
 - **Circling now looks like Voice OS:** a smoke of soft blue puffs that follows the pointer, biggest at the pointer and thinning out behind it, instead of a drawn line. (No pen triangle either.)

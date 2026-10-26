@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification, nativeTheme } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -36,7 +36,7 @@ const DEFAULT_SHORTCUTS = { ask: { code: 'AltRight', mods: [] }, dictate: { code
 function windowOpts(w, h) {
   return {
     width: w, height: h, minWidth: w, minHeight: Math.min(h, 520), show: false,
-    titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: '#120f2b',
+    titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 }, backgroundColor: nativeTheme.shouldUseDarkColors ? '#0d131a' : '#f6f7f9',
     fullscreenable: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   };
@@ -44,7 +44,8 @@ function windowOpts(w, h) {
 
 function openMain(page) {
   if (!mainWin || mainWin.isDestroyed()) {
-    mainWin = new BrowserWindow(windowOpts(820, 620));
+    // vibrancy gives the sidebar the native macOS sidebar material, and follows the system's light or dark
+    mainWin = new BrowserWindow({ ...windowOpts(820, 620), vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' });
     mainWin.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { page: page || 'home' } });
     mainWin.once('ready-to-show', () => mainWin.show());
     mainWin.on('close', (e) => {
