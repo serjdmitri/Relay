@@ -312,7 +312,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         image_query: str('What to look up a picture for'),
         facts: { type: 'array', description: 'Up to 6 label/value pairs', items: obj({ label: str('Label'), value: str('Value') }, ['label', 'value']) },
         links: { type: 'array', description: 'Up to 4 https links', items: obj({ label: str('Button text'), url: str('https URL') }, ['url']) },
-        items: { type: 'array', description: 'For a list: up to 6 options', items: obj({ title: str('Name'), subtitle: str('Short detail'), note: str('One line, e.g. price or rating'), url: str('https URL'), image_query: str('What to look up a picture for, if it has a Wikipedia page') }, ['title']) }
+        items: { type: 'array', description: 'For a list: up to 6 options', items: obj({ title: str('Name'), subtitle: str('Short detail'), note: str('One line, e.g. price or rating'), url: str('https URL, only if you are certain it is real; otherwise leave it out and Relay links its Wikipedia page or a web search'), image_query: str('What to look up a picture for, if it has a Wikipedia page') }, ['title']) }
       }, ['title']),
       describe: (i) => `Showing ${i.title}`,
       run: async (i) => cards.show(i)

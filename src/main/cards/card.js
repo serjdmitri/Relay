@@ -4,6 +4,8 @@
 const { wikiLookup, commonsImage, imageData } = require('./lookup');
 
 const cut = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };
+// A web search for something, in the user's own browser (DuckDuckGo: no account, no tracking).
+const searchUrl = (q) => `https://duckduckgo.com/?q=${encodeURIComponent(String(q).slice(0, 150))}`;
 const safeUrl = (u) => { try { const x = new URL(String(u)); return /^https?:$/.test(x.protocol) ? x.href : ''; } catch { return ''; } };
 
 // What the page may show. kind: 'entity' (one thing, with a big picture) or 'list' (a few options, each with a small picture).
@@ -26,7 +28,9 @@ async function buildCard(raw, { fetchImpl = fetch } = {}) {
   if (card.kind === 'entity') {
     const wiki = await guard(wikiLookup(card.imageQuery, { fetchImpl }));
     if (wiki && !card.summary) card.summary = cut(wiki.summary, 420);
-    if (wiki && !card.links.length && wiki.url) card.links.push({ label: 'Wikipedia', url: wiki.url });
+    if (wiki?.url && !card.links.some((l) => /wikipedia\.org/.test(l.url))) card.links.unshift({ label: 'Wikipedia', url: wiki.url });
+    card.links = card.links.slice(0, 3);
+    card.links.push({ label: 'Search the web', url: searchUrl(card.title) }); // always something to follow up on
     let img = wiki?.image || null;
     if (!img) img = await guard(commonsImage(card.imageQuery, { fetchImpl }));
     if (img) { card.image = await guard(imageData(img.url, { fetchImpl })); card.credit = card.image ? img.credit : ''; }
@@ -35,9 +39,12 @@ async function buildCard(raw, { fetchImpl = fetch } = {}) {
       if (!it.imageQuery) return;
       const wiki = await guard(wikiLookup(it.imageQuery, { fetchImpl, width: 240 }));
       if (wiki?.image) it.image = await guard(imageData(wiki.image.url, { fetchImpl }));
+      // every result opens something: the link the model gave, else its Wikipedia page, else a web search for it
+      if (!it.url) it.url = wiki?.url || searchUrl(`${it.title} ${card.title}`);
     }));
+    for (const it of card.items) if (!it.url) it.url = searchUrl(`${it.title} ${card.title}`);
   }
   return card;
 }
 
-module.exports = { normalizeCard, buildCard, safeUrl, cut };
+module.exports = { normalizeCard, buildCard, safeUrl, searchUrl, cut };

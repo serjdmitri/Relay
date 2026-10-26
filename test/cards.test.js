@@ -50,7 +50,7 @@ test('an entity card gets its summary, a Wikipedia link and a picture; failures 
   const f = fakeFetch({ 'en.wikipedia.org': jsonRes(wikiPage), 'upload.wikimedia.org': imgRes() });
   const c = await buildCard({ title: 'Eiffel Tower', facts: [{ label: 'Height', value: '330 m' }] }, { fetchImpl: f });
   assert.match(c.summary, /lattice tower/);
-  assert.deepEqual(c.links, [{ label: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Eiffel_Tower' }]);
+  assert.deepEqual(c.links, [{ label: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/Eiffel_Tower' }, { label: 'Search the web', url: 'https://duckduckgo.com/?q=Eiffel%20Tower' }]);
   assert.match(c.image, /^data:image\/jpeg/);
   const none = await buildCard({ title: 'Eiffel Tower', summary: 'Mine.' }, { fetchImpl: async () => { throw new Error('offline'); } });
   assert.equal(none.image, null);
@@ -62,4 +62,14 @@ test('a list card looks up a small picture per item', async () => {
   const c = await buildCard({ title: 'Places', items: [{ title: 'Eiffel Tower' }, { title: 'Nothing' }] }, { fetchImpl: f });
   assert.equal(c.kind, 'list');
   assert.ok(c.items[0].image);
+});
+
+test('every result in a list opens something: its own link, else Wikipedia, else a web search', async () => {
+  const noWiki = fakeFetch({ 'en.wikipedia.org': jsonRes({ query: { pages: [] } }) });
+  const c = await buildCard({ title: 'Cafes in Boston', items: [{ title: 'Local Cafe', url: 'https://cafe.example/' }, { title: 'Other Cafe' }] }, { fetchImpl: noWiki });
+  assert.equal(c.items[0].url, 'https://cafe.example/');
+  assert.equal(c.items[1].url, 'https://duckduckgo.com/?q=Other%20Cafe%20Cafes%20in%20Boston');
+  const wiki = await buildCard({ title: 'Places', items: [{ title: 'Eiffel Tower' }] }, { fetchImpl: fakeFetch({ 'en.wikipedia.org': jsonRes(wikiPage), 'upload.wikimedia.org': imgRes() }) });
+  assert.equal(wiki.items[0].url, 'https://en.wikipedia.org/wiki/Eiffel_Tower');
+  assert.ok(c.items.every((i) => /^https:/.test(i.url)));
 });

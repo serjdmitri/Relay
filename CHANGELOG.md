@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1
+
+- **Every card result is clickable.** Each option in a list now has an arrow and opens something in your own browser: the link the model gave, else its Wikipedia page, else a web search for it (DuckDuckGo, no account). A single-thing card always has a "Search the web" button next to its Wikipedia link, so you can keep researching on your own. The model is told to leave out a link unless it is sure it is real.
+
 ## 0.15.0
 
 - **Answer cards with pictures.** Ask "who is Gustave Eiffel?", "what does the Eiffel Tower look like?", "tell me about Boston" or "show me things to see in Boston", and a black glass card pops out on the right with a picture, a short summary, key facts and link buttons, while Relay says one short sentence. For a list of options (hotels, places, products) the card shows each with a small picture, a line of detail and a link. Click a link to open it, the × or Esc to close it, or let it go by itself after 30 seconds (it stays while you hover). Turn it off in General > Answer cards with pictures.
