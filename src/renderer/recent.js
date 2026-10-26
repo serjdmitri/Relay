@@ -44,7 +44,7 @@ async function refresh() {
 
 relay.onRecent((m) => {
   if (m === 'show') { document.body.classList.remove('hide'); refresh().then(() => requestAnimationFrame(() => document.body.classList.add('show'))); }
-  else { document.body.classList.add('hide'); setTimeout(() => document.body.classList.remove('show'), 460); }
+  else { document.body.classList.add('hide'); setTimeout(() => document.body.classList.remove('show'), 300); }
 });
 relay.onStateChanged(() => refresh());
 glass.addEventListener('mouseenter', () => relay.recentHit?.(true));
