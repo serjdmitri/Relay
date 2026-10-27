@@ -322,8 +322,8 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
     if (models.save) {
       tools.push({
         name: 'save_3d',
-        description: 'Save the 3D hologram on screen as an STL file (the format for 3D printing, and for Fusion, Cura, PrusaSlicer, Bambu Studio and most CAD apps), in Downloads/Relay 3D. A designed model is saved in real millimetres; anything else is scaled to 100 mm across. Optionally open it in an app by name ("Cura", "PrusaSlicer", "Bambu Studio", "Fusion") so it is ready to print or edit. Use for "save this", "export it", "send it to my 3D printer", "open it in Fusion".',
-        input_schema: obj({ title: str('Which hologram, by its title (optional: the latest)'), open_with: str('An app to open the file in, e.g. "Bambu Studio" (optional)') }),
+        description: 'Save the 3D hologram on screen as a file in Downloads/Relay 3D: STL or 3MF (for 3D printing slicers), or STEP (for CAD apps like Fusion and FreeCAD; models up to about 20,000 triangles). The model stands on the bed, z up; a designed model keeps its real millimetres, anything else is scaled to 100 mm across. Optionally open it in an installed app by name ("Bambu Studio", "OrcaSlicer", "PrusaSlicer", "Cura", "Fusion", "FreeCAD"): the best format for that app is chosen. Use for "save this", "export it as STEP", "send it to my 3D printer", "open it in Fusion".',
+        input_schema: obj({ title: str('Which hologram, by its title (optional: the latest)'), format: str('stl | 3mf | step (optional)'), open_with: str('An app to open the file in, e.g. "Bambu Studio" (optional)') }),
         describe: () => 'Saving the model',
         run: async (i) => models.save(i)
       });

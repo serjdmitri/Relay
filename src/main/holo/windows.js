@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { sanitizeCad } = require('../models/cad');
 const { cleanFree } = require('./fit');
+const { installedApps, known } = require('./apps3d');
 const { uniquePath } = require('./logic');
 
 // A window with no frame, no shadow and no background (as big as the display it is placed on): only what the page draws is there. It never takes the keyboard.
@@ -34,7 +35,8 @@ const displayFor = (pt) => screen.getDisplayNearestPoint({ x: Math.round(pt.x), 
 
 function registerHoloIpc(mgr) {
   const of = (e) => mgr.forSender(e.sender.id);
-  ipcMain.handle('holo:hit', (e, on) => { const h = of(e); if (h && !h.win.isDestroyed()) h.win.setIgnoreMouseEvents(!on, { forward: true }); });
+  ipcMain.handle('holo:hit', (e, on) => { const h = of(e); if (!h || h.win.isDestroyed()) return; h.hit = !!on; if (!h.accepting) h.win.setIgnoreMouseEvents(!on, { forward: true }); });
+  ipcMain.handle('holo:files', (e, paths) => { const h = of(e); if (h && Array.isArray(paths)) return mgr.onFiles(h, paths.filter((p) => typeof p === 'string' && p).slice(0, 12)); });
   // Letting go always ends the drag, even when the hologram that started it is gone (a piece pulled out of the last one).
   ipcMain.handle('holo:drag', (e, phase) => { if (phase !== 'start') return mgr.stopDrag(); const h = of(e); if (h) mgr.startDrag(h); });
   ipcMain.handle('holo:sizes', (e, sizes) => { const h = of(e); if (h) mgr.setSizes(h.id, sizes); });
@@ -44,17 +46,24 @@ function registerHoloIpc(mgr) {
   ipcMain.handle('holo:ask', (e, d) => { const h = of(e); if (h && d) return mgr.onAsk(h, d); });
   ipcMain.handle('holo:cad', (e, d) => { const h = of(e); if (!h || !d) return false; try { return mgr.setCad(h, +d.item || 0, sanitizeCad(d.cad)); } catch { return false; } });
   // Saves a model as a file in Downloads/Relay 3D (never over a file that is there).
-  ipcMain.handle('holo:save', (e, d) => {
+  ipcMain.handle('holo:glb', (e, r) => { mgr.finishGlb(of(e), r); });
+  ipcMain.handle('holo:slicers', () => installedApps((p) => fs.existsSync(p), app.getPath('home')));
+  ipcMain.handle('holo:save', async (e, d) => {
     const res = (r) => { mgr.finishSave(of(e), r); return r; };
     try {
       if (!d || !(d.bytes instanceof Uint8Array || Buffer.isBuffer(d.bytes)) || d.bytes.length < 84 || d.bytes.length > 200 * 1024 * 1024) return res({ ok: false, error: 'Nothing to save.' });
-      const ext = d.ext === 'stl' ? 'stl' : 'stl';
+      const ext = ['stl', '3mf', 'step'].includes(d.ext) ? d.ext : 'stl';
       const dir = path.join(app.getPath('downloads'), 'Relay 3D');
       fs.mkdirSync(dir, { recursive: true });
       const file = uniquePath((p) => fs.existsSync(p), dir, d.name, ext);
       fs.writeFileSync(file, Buffer.from(d.bytes), { flag: 'wx' });
       shell.showItemInFolder(file);
-      return res({ ok: true, file, where: `Downloads/Relay 3D/${path.basename(file)}` });
+      let opened = false;
+      const target = known(d.openWith);
+      if (target && installedApps((p) => fs.existsSync(p), app.getPath('home')).some((a) => a.name === target.name)) {
+        opened = await new Promise((resolve) => require('child_process').execFile('/usr/bin/open', ['-a', target.name, file], (e) => resolve(!e)));
+      }
+      return res({ ok: true, file, where: `Downloads/Relay 3D/${path.basename(file)}`, opened });
     } catch (err) { return res({ ok: false, error: 'Could not save it.' }); }
   });
   ipcMain.handle('holo:place', (e, d) => { const h = of(e); if (!h || !d) return false; return mgr.setPlacement(h, +d.item || 0, cleanFree(d.free)); });

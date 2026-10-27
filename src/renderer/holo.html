@@ -11,17 +11,33 @@
   .glow { text-shadow: 0 0 6px rgba(0, 212, 255, .9), 0 0 16px rgba(0, 160, 230, .6); }
   /* the labels and controls travel with the model: the stage is a box around it, put in place by the page */
   #stage { position: absolute; width: 460px; pointer-events: none; }
-  #cap { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; transition: opacity .3s; }
+  /* everything below or beside the model, never over it. --mr is the model's radius in pixels (set by the page) */
+  #stage { --mr: 180px; }
+  #cap { position: absolute; left: 0; right: 0; top: calc(50% + var(--mr) + 2px); text-align: center; transition: opacity .3s; }
   #title { display: inline-block; padding: 2px 10px; font-size: 15px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; cursor: move; pointer-events: auto; }
-  #credit { margin-top: 3px; font-size: 10.5px; letter-spacing: .04em; opacity: .65; pointer-events: none; }
-  #ctl { position: absolute; left: 0; right: 0; bottom: 56px; display: flex; justify-content: center; gap: 4px; opacity: 0; transition: opacity .25s; }
-  body.near #ctl { opacity: 1; }
+  #credit { margin: 3px auto 0; max-width: 420px; font-size: 10.5px; letter-spacing: .04em; opacity: .65; pointer-events: none; }
+  #ctl { position: absolute; left: 0; right: 0; top: calc(50% + var(--mr) + 58px); display: flex; justify-content: center; align-items: center; gap: 6px; opacity: 0; transition: opacity .25s; }
+  body.near #ctl, body.menu-open #ctl { opacity: 1; }
+  #nav { display: flex; align-items: center; gap: 2px; }
+  #items { display: flex; gap: 4px; }
   .btn { min-width: 32px; height: 30px; padding: 0 9px; display: grid; place-items: center; font-size: 17px; cursor: pointer; border-radius: 999px; color: #8be9ff; text-shadow: 0 0 8px rgba(0, 212, 255, .95); pointer-events: auto; }
   .btn:hover { color: #fff; background: rgba(0, 212, 255, .18); box-shadow: 0 0 14px rgba(0, 212, 255, .45); }
   .btn.on { color: #fff; text-shadow: 0 0 10px #00d4ff, 0 0 22px #00d4ff; }
   .btn[hidden] { display: none; }
+  #more { display: none; letter-spacing: 2px; font-weight: 700; }
   #move { cursor: move; }
   #opt { font-size: 12px; letter-spacing: .08em; align-self: center; padding: 0 2px; min-width: 34px; text-align: center; }
+  /* style: menu (one ⋯ button that opens the list) */
+  body.ui-menu #more { display: grid; }
+  body.ui-menu #items { display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); flex-direction: column; gap: 2px; padding: 6px; border-radius: 16px; background: rgba(4, 16, 26, .82); box-shadow: 0 0 0 1px rgba(0, 212, 255, .25), 0 8px 30px rgba(0, 0, 0, .5); }
+  body.ui-menu.menu-open #items { display: flex; }
+  body.ui-menu #items .btn { justify-content: start; grid-template-columns: 26px auto; gap: 10px; border-radius: 10px; height: 32px; min-width: 150px; font-size: 16px; padding: 0 12px; text-shadow: none; }
+  body.ui-menu #items .btn::after { content: attr(data-name); font-size: 13px; letter-spacing: .04em; color: #d9f8ff; }
+  body.ui-menu #items .btn > * { display: none; }
+  /* style: side (a slim column beside the model) */
+  body.ui-side #ctl { top: 50%; left: calc(50% + var(--mr) + 16px); right: auto; transform: translateY(-50%); flex-direction: column; align-items: flex-start; gap: 4px; }
+  body.ui-side #items { flex-direction: column; gap: 0; }
+  body.ui-side .btn { min-width: 30px; height: 28px; font-size: 16px; }
   #merge { position: absolute; left: 0; right: 0; top: -4px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
   body.merging #merge { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
@@ -46,12 +62,20 @@
   .num:hover { background: rgba(0, 212, 255, .16); color: #fff; }
   .unit { opacity: .5; font-size: 11px; }
   /* hands in use: big, easy-to-hit controls, always shown */
-  body.hand #ctl { opacity: 1; gap: 12px; bottom: 44px; }
+  body.hand #ctl { opacity: 1; gap: 12px; top: calc(50% + var(--mr) + 70px); }
   body.hand .btn { min-width: 64px; height: 60px; font-size: 32px; padding: 0 14px; }
+  body.hand.ui-menu #items .btn { height: 64px; min-width: 260px; font-size: 30px; }
+  body.hand.ui-menu #items .btn::after { font-size: 22px; }
+  body.hand.ui-side #ctl { left: calc(50% + var(--mr) + 24px); }
   body.hand #opt { font-size: 18px; min-width: 56px; }
   body.hand #title { font-size: 20px; }
   body.hand .cadui { font-size: 17px; padding: 6px 12px; }
   body.hand #tip { font-size: 16px; padding: 6px 14px; }
+  #savemenu { position: fixed; display: none; flex-direction: column; gap: 1px; padding: 8px 6px; min-width: 240px; border-radius: 14px; background: rgba(4, 16, 26, .86); box-shadow: 0 0 0 1px rgba(0, 212, 255, .25), 0 8px 30px rgba(0, 0, 0, .5); color: #bff4ff; font-size: 14px; z-index: 5; }
+  #savemenu.open { display: flex; }
+  body.hand #savemenu .cadui { font-size: 22px; padding: 10px 14px; }
+  #dropring { position: absolute; left: 50%; top: 50%; width: calc(var(--mr) * 2); height: calc(var(--mr) * 2); transform: translate(-50%, -50%); border-radius: 50%; border: 2px dashed rgba(0, 212, 255, .8); box-shadow: 0 0 24px rgba(0, 212, 255, .45); opacity: 0; transition: opacity .15s; pointer-events: none; }
+  body.dropping #dropring { opacity: 1; animation: pulse 1s ease-in-out infinite; }
   #tip { position: absolute; left: 0; top: 0; padding: 4px 10px; border-radius: 999px; background: rgba(4, 18, 28, .78); font-size: 12px; letter-spacing: .04em; white-space: nowrap; opacity: 0; transition: opacity .12s; pointer-events: none; color: #d9f8ff; }
   #tip.show { opacity: 1; }
   #err { position: absolute; left: 0; right: 0; top: 46%; text-align: center; color: #ffcc66; }
@@ -64,18 +88,22 @@
   <div id="hint2" class="glow"></div>
   <div id="err" class="glow"></div>
   <div id="ctl" class="glow">
-    <div class="btn" id="move" data-tip="Move: drag this to put it anywhere">&#10021;</div>
-    <div class="btn" id="prev" hidden data-tip="Previous model">&#8249;</div><div id="opt" hidden></div><div class="btn" id="next" hidden data-tip="Next model">&#8250;</div>
-    <div class="btn" id="ask" data-tip="Ask about it (click a piece first to ask about just that piece)">?</div>
-    <div class="btn" id="edit" hidden data-tip="Edit the shapes: resize, move, add, remove, cut holes">&#9998;</div>
-    <div class="btn" id="explode" data-tip="Pull it apart into pieces (or double-click it)">&#10070;</div>
-    <div class="btn" id="reset" data-tip="Turn it back to the front">&#8982;</div>
-    <div class="btn" id="upright" hidden data-tip="Turn it upright">&#8635;</div>
-    <div class="btn" id="solid" data-tip="Switch between hologram and solid">&#9680;</div>
-    <div class="btn" id="save" data-tip="Save it as an STL file (for 3D printing, Fusion and other apps)">&#10515;</div>
-    <div class="btn" id="pin" data-tip="Keep it: stays when I say close, and after a restart">&#9906;</div>
-    <div class="btn" id="close" data-tip="Close just this one">&#10005;</div>
+    <div id="nav"><div class="btn" id="prev" hidden data-tip="Previous model">&#8249;</div><div id="opt" hidden></div><div class="btn" id="next" hidden data-tip="Next model">&#8250;</div></div>
+    <div class="btn" id="more" data-tip="Menu">&#8943;</div>
+    <div id="items">
+      <div class="btn" id="move" data-name="Move" data-tip="Move: drag this to put it anywhere">&#10021;</div>
+      <div class="btn" id="ask" data-name="Ask about it" data-tip="Ask about it (click a piece first to ask about just that piece)">?</div>
+      <div class="btn" id="edit" hidden data-name="Edit shapes" data-tip="Edit the shapes: resize, move, add, remove, cut holes">&#9998;</div>
+      <div class="btn" id="explode" data-name="Pull apart" data-tip="Pull it apart into pieces (or double-click it)">&#10070;</div>
+      <div class="btn" id="reset" data-name="Turn to front" data-tip="Turn it back to the front">&#8982;</div>
+      <div class="btn" id="upright" hidden data-name="Turn upright" data-tip="Turn it upright">&#8635;</div>
+      <div class="btn" id="solid" data-name="Solid or light" data-tip="Switch between hologram and solid">&#9680;</div>
+      <div class="btn" id="save" data-name="Save / send to printer" data-tip="Save it (STL, 3MF, STEP) or send it to a printer app">&#10515;</div>
+      <div class="btn" id="pin" data-name="Keep" data-tip="Keep it: stays when I say close, and after a restart">&#9906;</div>
+      <div class="btn" id="close" data-name="Close" data-tip="Close just this one">&#10005;</div>
+    </div>
   </div>
+  <div id="dropring"></div>
   <div id="cap" class="glow"><div id="title" data-tip="Drag the name to move it anywhere"></div><div id="credit"></div></div>
 </div>
 <div id="cad"><div id="cadL" class="cadcol"></div><div id="cadR" class="cadcol"></div></div>

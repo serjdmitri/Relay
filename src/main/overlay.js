@@ -420,6 +420,30 @@ class Overlay {
     return { display: e.display, box, strokes: 1 };
   }
 
+  // Drawing in the air with a hand: the same glowing trail as the mark key, but fed points by the hand (global screen points).
+  air(type, x, y) {
+    if (!this.isEnabled()) return false;
+    if (type === 'start') {
+      if (this.airEntry) return true;
+      const e = this.entry(screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }));
+      this.airEntry = e;
+      e.markShow = true;
+      clearTimeout(e.markTimer);
+      this.refresh(e);
+      this.send(e, { type: 'mark-start' });
+      this.air('point', x, y);
+    } else if (type === 'point' && this.airEntry) {
+      const o = this.origin(this.airEntry);
+      this.send(this.airEntry, { type: 'mark-point', x: x - o.x, y: y - o.y });
+    } else if (type === 'end' && this.airEntry) {
+      const e = this.airEntry;
+      this.airEntry = null;
+      this.send(e, { type: 'mark-end' });
+      e.markTimer = setTimeout(() => this.markFade(e), MARK_FADE_MS);
+    }
+    return true;
+  }
+
   markFade(e) {
     e.markShow = false;
     this.send(e, { type: 'mark-clear' });

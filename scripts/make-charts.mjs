@@ -1,4 +1,4 @@
-// Draws the two README charts from the repository itself: tests by area (counted from test/*.test.js)
+// Draws the two README charts from the repository itself: tests by area (counted from test/)
 // and lines of code by language. Run: node scripts/make-charts.mjs  (no dependencies)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +10,7 @@ fs.mkdirSync(out, { recursive: true });
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif";
-const COLORS = ['#6C63FF', '#C13CF0', '#FF8A3D', '#2FC4FF', '#4ADE80', '#FFC94A'];
+const COLORS = ['#1c8fd6', '#4cc2ff', '#9fdcff', '#2a6f9e', '#7ad4ff', '#0f4a75']; // the app's cyan family, nothing else
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 // ---- tests by area -------------------------------------------------------------------------------------------
@@ -21,13 +21,14 @@ const AREAS = {
   'Settings, shortcuts, Firefox': ['store', 'shortcuts', 'meta', 'bridge'],
   'Dictation and glass pill': ['speech', 'dictation', 'dictation-history', 'glass']
 };
+const testFile = (name) => ['.test.js', '.test.mjs'].map((e) => path.join(root, 'test', name + e)).find((f) => fs.existsSync(f));
 const count = (name) => {
-  const src = fs.readFileSync(path.join(root, 'test', `${name}.test.js`), 'utf8');
+  const src = fs.readFileSync(testFile(name), 'utf8');
   return (src.match(/^\s*(test|it)\(/gm) || []).length;
 };
 const known = new Set(Object.values(AREAS).flat());
-const unlisted = fs.readdirSync(path.join(root, 'test')).filter((f) => f.endsWith('.test.js') && !known.has(f.replace('.test.js', '')));
-if (unlisted.length) AREAS['Other'] = unlisted.map((f) => f.replace('.test.js', ''));
+const unlisted = fs.readdirSync(path.join(root, 'test')).filter((f) => /\.test\.m?js$/.test(f) && !known.has(f.replace(/\.test\.m?js$/, '')));
+if (unlisted.length) AREAS['Other'] = unlisted.map((f) => f.replace(/\.test\.m?js$/, ''));
 const tests = Object.entries(AREAS).map(([name, files]) => [name, files.reduce((n, f) => n + count(f), 0)]).sort((a, b) => b[1] - a[1]);
 const totalTests = tests.reduce((n, [, v]) => n + v, 0);
 
@@ -36,17 +37,17 @@ function testsChart() {
   const max = Math.max(...tests.map(([, v]) => v));
   const rows = tests.map(([name, v], i) => {
     const y = 104 + i * 38, w = Math.max(6, Math.round((v / max) * barMax));
-    return `<text x="${left}" y="${y + 17}" fill="#D9D6F5" font-size="14">${esc(name)}</text>
+    return `<text x="${left}" y="${y + 17}" fill="#eef6fb" font-size="14">${esc(name)}</text>
     <rect x="${barX}" y="${y}" width="${w}" height="24" rx="8" fill="url(#g${i})"/>
     <text x="${barX + w + 10}" y="${y + 17}" fill="#fff" font-size="14" font-weight="700">${v}</text>`;
   }).join('\n    ');
   const defs = tests.map((_, i) => `<linearGradient id="g${i}" x1="0" x2="1"><stop offset="0" stop-color="${COLORS[i % COLORS.length]}"/><stop offset="1" stop-color="${COLORS[(i + 1) % COLORS.length]}"/></linearGradient>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Bar chart: ${totalTests} unit tests by area">
-  <defs>${defs}<linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient></defs>
+  <defs>${defs}<linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1822"/><stop offset="1" stop-color="#0b1118"/></linearGradient></defs>
   <g font-family="${FONT}">
     <rect width="${W}" height="${H}" rx="20" fill="url(#card)"/>
     <text x="${left}" y="46" fill="#fff" font-size="22" font-weight="700">${totalTests} unit tests</text>
-    <text x="${left}" y="70" fill="#A9A5D6" font-size="13">by area · counted from test/*.test.js · v${esc(version)}</text>
+    <text x="${left}" y="70" fill="#9db4c4" font-size="13">by area · counted from test/ · v${esc(version)}</text>
     ${rows}
   </g>
 </svg>
@@ -87,18 +88,18 @@ function codeChart() {
   const legend = langs.map(([name, v], i) => {
     const y = 128 + i * 40;
     return `<rect x="340" y="${y}" width="14" height="14" rx="4" fill="${COLORS[i % COLORS.length]}"/>
-    <text x="364" y="${y + 12}" fill="#D9D6F5" font-size="15">${esc(name)}</text>
+    <text x="364" y="${y + 12}" fill="#eef6fb" font-size="15">${esc(name)}</text>
     <text x="572" y="${y + 12}" fill="#fff" font-size="15" font-weight="700" text-anchor="end">${v.toLocaleString('en-US')}</text>`;
   }).join('\n    ');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Donut chart: ${totalLines} lines of code by language">
-  <defs><linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient></defs>
+  <defs><linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1822"/><stop offset="1" stop-color="#0b1118"/></linearGradient></defs>
   <g font-family="${FONT}">
     <rect width="${W}" height="${H}" rx="20" fill="url(#card)"/>
     <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">${totalLines.toLocaleString('en-US')} lines of code</text>
-    <text x="28" y="70" fill="#A9A5D6" font-size="13">by language · ${testLines.toLocaleString('en-US')} of them are tests · v${esc(version)}</text>
+    <text x="28" y="70" fill="#9db4c4" font-size="13">by language · ${testLines.toLocaleString('en-US')} of them are tests · v${esc(version)}</text>
     ${arcs}
     <text x="${cx}" y="${cy + 6}" fill="#fff" font-size="22" font-weight="700" text-anchor="middle">${langs.length}</text>
-    <text x="${cx}" y="${cy + 26}" fill="#A9A5D6" font-size="12" text-anchor="middle">languages</text>
+    <text x="${cx}" y="${cy + 26}" fill="#9db4c4" font-size="12" text-anchor="middle">languages</text>
     ${legend}
   </g>
 </svg>

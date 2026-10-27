@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img" aria-label="How Relay works: your voice goes through on-device dictation to a router that either runs an instant command or asks your model; the model uses a local tool server, a confirmation gate guards risky actions, and the actions run on your Mac.">
   <defs>
-    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17143A"/><stop offset="1" stop-color="#241447"/></linearGradient>
-    <linearGradient id="a" x1="0" x2="1"><stop offset="0" stop-color="#6C63FF"/><stop offset="1" stop-color="#2a9ee0"/></linearGradient>
-    <linearGradient id="b" x1="0" x2="1"><stop offset="0" stop-color="#2a9ee0"/><stop offset="1" stop-color="#4cc2ff"/></linearGradient>
-    <linearGradient id="c" x1="0" x2="1"><stop offset="0" stop-color="#2FC4FF"/><stop offset="1" stop-color="#4cc2ff"/></linearGradient>
-    <linearGradient id="d" x1="0" x2="1"><stop offset="0" stop-color="#4cc2ff"/><stop offset="1" stop-color="#FFC94A"/></linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1822"/><stop offset="1" stop-color="#0b1118"/></linearGradient>
+    <linearGradient id="a" x1="0" x2="1"><stop offset="0" stop-color="#0f4a75"/><stop offset="1" stop-color="#1c8fd6"/></linearGradient>
+    <linearGradient id="b" x1="0" x2="1"><stop offset="0" stop-color="#1c8fd6"/><stop offset="1" stop-color="#2a9ee0"/></linearGradient>
+    <linearGradient id="c" x1="0" x2="1"><stop offset="0" stop-color="#2a9ee0"/><stop offset="1" stop-color="#4cc2ff"/></linearGradient>
+    <linearGradient id="d" x1="0" x2="1"><stop offset="0" stop-color="#4cc2ff"/><stop offset="1" stop-color="#9fdcff"/></linearGradient>
     <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#b3c8d6"/></marker>
   </defs>
   <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif">
@@ -52,10 +52,10 @@
     <rect x="884" y="64" width="276" height="404" rx="20" fill="#fff" fill-opacity="0.05" stroke="#fff" stroke-opacity="0.18"/>
     <text x="904" y="92" fill="#8fa7b8" font-size="13" font-weight="600" letter-spacing="1">YOUR MAC</text>
     <g font-size="14" fill="#fff">
-      <rect x="904" y="106" width="236" height="50" rx="12" fill="url(#a)"/><text x="920" y="127" font-weight="600">Notes · Reminders</text><text x="920" y="145" fill="#E7E4FF" font-size="12">Calendar · Messages</text>
-      <rect x="904" y="166" width="236" height="50" rx="12" fill="url(#b)"/><text x="920" y="187" font-weight="600">Finder and files</text><text x="920" y="205" fill="#FFEAD9" font-size="12">reveal, open, trash</text>
-      <rect x="904" y="226" width="236" height="50" rx="12" fill="url(#c)"/><text x="920" y="247" font-weight="600" fill="#05261A">Screen, clicks, typing</text><text x="920" y="265" fill="#0B3B2A" font-size="12">accessibility tree, screenshots</text>
-      <rect x="904" y="286" width="236" height="50" rx="12" fill="url(#d)"/><text x="920" y="307" font-weight="600" fill="#06202e">Firefox (optional)</text><text x="920" y="325" fill="#4A3000" font-size="12">tabs, pages, via local extension</text>
+      <rect x="904" y="106" width="236" height="50" rx="12" fill="url(#a)"/><text x="920" y="127" font-weight="600">Notes · Reminders</text><text x="920" y="145" fill="#dff3ff" font-size="12">Calendar · Messages</text>
+      <rect x="904" y="166" width="236" height="50" rx="12" fill="url(#b)"/><text x="920" y="187" font-weight="600">Finder and files</text><text x="920" y="205" fill="#dff3ff" font-size="12">reveal, open, trash</text>
+      <rect x="904" y="226" width="236" height="50" rx="12" fill="url(#c)"/><text x="920" y="247" font-weight="600" fill="#06202e">Screen, clicks, typing</text><text x="920" y="265" fill="#0b2b3f" font-size="12">accessibility tree, screenshots</text>
+      <rect x="904" y="286" width="236" height="50" rx="12" fill="url(#d)"/><text x="920" y="307" font-weight="600" fill="#06202e">Firefox (optional)</text><text x="920" y="325" fill="#0b2b3f" font-size="12">tabs, pages, via local extension</text>
       <rect x="904" y="346" width="236" height="50" rx="12" fill="#fff" fill-opacity="0.12" stroke="#fff" stroke-opacity="0.25"/><text x="920" y="367" font-weight="600">Apps, volume, dark mode</text><text x="920" y="385" fill="#c3d6e3" font-size="12">AppleScript, shell (asks first)</text>
     </g>
     <text x="1022" y="440" fill="#8fa7b8" font-size="12" text-anchor="middle">Everything runs on this Mac.</text>

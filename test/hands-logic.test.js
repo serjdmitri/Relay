@@ -165,3 +165,11 @@ test('a thumb up held keeps, a thumb down held closes, each once', () => {
   r.run(25, [r.hand({ gesture: 'Thumb_Down' })]);
   assert.equal(r.types().filter((t) => t === 'thumbdown').length, 1);
 });
+
+test('a pointing finger held a moment picks what it points at, once', () => {
+  const r = rig();
+  r.run(8, [r.hand({ gesture: 'Pointing_Up' })]);
+  assert.equal(r.types().filter((t) => t === 'point').length, 0, 'a flash is not enough');
+  r.run(20, [r.hand({ gesture: 'Pointing_Up' })]);
+  assert.equal(r.types().filter((t) => t === 'point').length, 1);
+});

@@ -9,7 +9,7 @@ import { GLTFExporter } from './vendor/three/GLTFExporter.js';
 import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
 import { CadView } from './holo-cad.js';
 import * as S from './holo-cad-spec.js';
-import { STLExporter } from './vendor/three/STLExporter.js';
+import { toStl, to3mf, toStep, zUp } from './holo-export.js';
 
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
@@ -28,12 +28,24 @@ const CYAN = new THREE.Color(0x00d4ff);
 const uniforms = { time: { value: 0 }, reveal: { value: -2 }, originY: { value: 0 } };
 let solid = false;
 let items = [];
+const touched = () => { lastTouch = performance.now(); };
+function applyUi(u) {
+  if (!u) return;
+  ui = { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.max(0, Number(u.spinDelay) || 0) };
+  for (const c of ['menu', 'side', 'bar']) document.body.classList.toggle(`ui-${c}`, ui.controls === c);
+  document.body.classList.remove('menu-open');
+}
 const anchor = new THREE.Group(); // sits at the hologram's spot on the screen
 scene.add(anchor);
 let holo = new THREE.Group(); // everything that turns (about its middle)
 anchor.add(holo);
 let userScale = 1;
 let kFit = 1;
+let modelR = 1.3; // the model's radius in units, once fitted
+let ui = { controls: 'menu', spin: true, spinDelay: 10 };
+let lastTouch = -1e9; // when it was last touched: it does not turn by itself for a while after
+let spinRate = 0;
+applyUi(ui);
 const orient = new THREE.Quaternion(); // how it is turned
 let reveal0 = 0;
 
@@ -179,6 +191,7 @@ async function rebuild() {
   const centre = box.getCenter(new THREE.Vector3());
   const radius = Math.max(size.length() / 2, 1e-6);
   kFit = Math.min(1.25, 1.3 / radius);
+  modelR = radius * kFit;
   const pivot = new THREE.Group();
   holo.position.copy(centre).multiplyScalar(-1);
   pivot.add(holo);
@@ -533,33 +546,78 @@ function editUp() {
   if (cadDrag || scrub) { cadDrag = null; scrub = null; hist.push(cadSpec); scheduleSave(); buildPanels(); }
 }
 
-// Saves the model as an STL: a designed one in its own millimetres, anything else scaled to 100 mm across.
-async function saveStl() {
-  try {
-    let root;
-    const cadItem = items.length === 1 && itemWraps[0]?.userData.cadView;
-    if (cadItem) {
-      const v = itemWraps[0].userData.cadView;
-      if (editing) leaveEdit();
-      root = new THREE.Group();
-      if (v.mesh) root.add(new THREE.Mesh(v.mesh.geometry, new THREE.MeshBasicMaterial()));
-    } else {
-      holo.updateWorldMatrix(true, true);
-      const inv = new THREE.Matrix4().copy(holo.matrixWorld).invert();
-      root = new THREE.Group();
-      holo.traverse((o) => { if (o.isMesh && o.geometry && o.visible && o.material && !o.userData.cad === false || (o.isMesh && o.geometry && o.visible)) { const m = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial()); m.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); root.add(m); } });
-      const box = new THREE.Box3().setFromObject(root);
-      const k = 100 / Math.max(...box.getSize(new THREE.Vector3()).toArray(), 1e-6);
-      root.scale.setScalar(k);
-    }
-    root.updateMatrixWorld(true);
-    const dv = new STLExporter().parse(root, { binary: true });
-    const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
-    const r = await relay.holoSave({ name: $('title').textContent || 'hologram', ext: 'stl', bytes });
-    $('err').textContent = r?.ok ? `Saved to ${r.where}` : (r?.error || 'Could not save it.');
-    setTimeout(() => { $('err').textContent = ''; }, 4000);
-  } catch { $('err').textContent = 'Could not save it.'; }
+// The whole model as a GLB for the phone (plain materials, textures kept for photo models). A designed model goes out in its own millimetres.
+async function exportWholeGlb() {
+  const root = new THREE.Group();
+  const cad = items.length === 1 && itemWraps[0]?.userData.cadView;
+  if (cad) { if (editing) leaveEdit(); if (cad.mesh) root.add(new THREE.Mesh(cad.mesh.geometry, exportMaterial(cad.mesh))); }
+  else {
+    holo.updateWorldMatrix(true, true);
+    const inv = new THREE.Matrix4().copy(holo.matrixWorld).invert();
+    holo.traverse((o) => {
+      if (!o.isMesh || !o.geometry || !o.visible || o.material?.visible === false) return;
+      const c = new THREE.Mesh(o.geometry, exportMaterial(Array.isArray(o.material) ? { ...o, material: o.material[0], userData: o.userData } : o));
+      new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld).decompose(c.position, c.quaternion, c.scale);
+      root.add(c);
+    });
+  }
+  if (!root.children.length) return null;
+  const bytes = await new Promise((resolve, reject) => new GLTFExporter().parse(root, resolve, reject, { binary: true }));
+  return { bytes: new Uint8Array(bytes), mm: !!cad };
 }
+
+// The model as plain triangles (9 numbers each): a designed one in its own millimetres, anything else as it is drawn.
+function collectTriangles() {
+  const out = [];
+  const take = (mesh, m) => {
+    const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+    const a = g.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < a.count; i++) { v.fromBufferAttribute(a, i); if (m) v.applyMatrix4(m); out.push(v.x, v.y, v.z); }
+  };
+  const cad = items.length === 1 && itemWraps[0]?.userData.cadView;
+  if (cad) { if (editing) leaveEdit(); if (cad.mesh) take(cad.mesh, null); return { tris: new Float32Array(out), mm: true }; }
+  holo.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(holo.matrixWorld).invert();
+  holo.traverse((o) => { if (o.isMesh && o.geometry && o.visible && o.material?.visible !== false) take(o, new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); });
+  return { tris: new Float32Array(out), mm: false };
+}
+
+// Saves the model as a file (stl, 3mf or step), standing on the bed, z up; a designed model keeps its real size, anything else is 100 mm across.
+// openWith: an app to open it in afterwards (a slicer or a CAD app).
+async function saveModel(format = 'stl', openWith = '') {
+  try {
+    const { tris, mm } = collectTriangles();
+    if (!tris.length) { $('err').textContent = 'There is nothing to save yet.'; return; }
+    const z = zUp(tris, { scaleTo: mm ? 0 : 100 });
+    const name = $('title').textContent || 'hologram';
+    const bytes = format === '3mf' ? to3mf(z, name) : format === 'step' ? toStep(z, name) : toStl(z, name);
+    const r = await relay.holoSave({ name, ext: format, bytes, openWith });
+    $('err').textContent = r?.ok ? `Saved to ${r.where}${r.opened ? ` and opened in ${openWith}` : ''}` : (r?.error || 'Could not save it.');
+  } catch (e) { $('err').textContent = /too detailed/.test(e.message) ? e.message : 'Could not save it.'; }
+  setTimeout(() => { $('err').textContent = ''; }, 5000);
+}
+
+// The save button: pick a file type, or send it to an app that is installed (a slicer to print it, Fusion to edit it).
+const saveMenu = document.createElement('div');
+saveMenu.id = 'savemenu';
+document.body.append(saveMenu);
+async function openSaveMenu() {
+  const apps = await relay.holoSlicers().catch(() => []);
+  const row = (label, act) => `<div class="cadui" data-act="${act}">${label}</div>`;
+  saveMenu.innerHTML = `<div class="cadh">Save as</div>${row('STL (3D printing)', 'fmt:stl')}${row('3MF (slicers, keeps millimetres)', 'fmt:3mf')}${row('STEP (CAD: Fusion, FreeCAD)', 'fmt:step')}` + (apps.length ? `<div class="cadh">Send to</div>${apps.map((a) => row(a.name, `app:${a.name}:${a.format}`)).join('')}` : '');
+  const r = $('save').getBoundingClientRect();
+  saveMenu.style.left = `${Math.max(8, Math.min(innerWidth - 260, r.left - 60))}px`;
+  saveMenu.style.top = `${Math.min(innerHeight - 220, r.bottom + 8)}px`;
+  saveMenu.classList.add('open');
+}
+saveMenu.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  saveMenu.classList.remove('open');
+  const [kind, a, b] = el.dataset.act.split(':');
+  if (kind === 'fmt') saveModel(a); else saveModel(b, a);
+});
 
 let extracting = false;
 // Takes a piece out of this hologram (it becomes its own, or joins the one it was let go over). The rest stays where it is, pulled apart.
@@ -609,7 +667,7 @@ function pick(e) {
   return null;
 }
 function setOver(on) { if (on !== over) { over = on; relay.holoHit(on); } }
-const nearStage = (e) => Math.abs(e.clientX - pos.x) < 260 && e.clientY > pos.y - 220 * userScale && e.clientY < pos.y + 170 * userScale + 120;
+const nearStage = (e) => { const r = Math.max(70, modelR * PPU * userScale + 8); return Math.abs(e.clientX - pos.x) < r + 120 && e.clientY > pos.y - r - 40 && e.clientY < pos.y + r + (document.body.classList.contains('hand') ? 240 : 170); };
 // What a control does, shown above it while the pointer is on it (the window never takes focus, so the browser's own tooltips never appear).
 const tip = $('tip');
 function showTip(e) {
@@ -635,6 +693,9 @@ addEventListener('mousemove', (e) => {
 });
 addEventListener('mouseleave', () => { tip.classList.remove('show'); if (!dragging) { document.body.classList.remove('near'); setHover(null); } });
 addEventListener('pointerdown', (e) => {
+  touched();
+  if (!e.target.closest('#ctl')) document.body.classList.remove('menu-open');
+  if (!e.target.closest('#savemenu, #save')) saveMenu.classList.remove('open');
   if (editDown(e)) return;
   const p = pick(e);
   if (p === 'move' || (p === 'model' && e.altKey)) { dragging = 'move'; relay.holoDrag('start'); }
@@ -708,9 +769,14 @@ addEventListener('pointercancel', endDrag);
 addEventListener('blur', endDrag);
 addEventListener('wheel', (e) => {
   e.preventDefault();
+  touched();
   if (e.shiftKey && selItem >= 0 && itemWraps[selItem]) { itemWraps[selItem].scale.multiplyScalar(Math.exp(-(e.deltaY || e.deltaX) * 0.002)); clearTimeout(placeTimer); const k = selItem; placeTimer = setTimeout(() => sendPlace(k), 300); return; } userScale = Math.min(3, Math.max(0.4, userScale * Math.exp(-e.deltaY * 0.0015))); applyScale(); relay.holoScale(userScale); }, { passive: false });
 addEventListener('dblclick', (e) => { if (editing) return; if (!pick(e) || pick(e) === 'ui' || pick(e) === 'move') return; toggleExplode(); });
 let spinPause = false;
+// Files dropped on the hologram (the window takes drags only while the mouse button is held over it).
+addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('dropping'); });
+addEventListener('dragleave', () => document.body.classList.remove('dropping'));
+addEventListener('drop', (e) => { e.preventDefault(); document.body.classList.remove('dropping'); touched(); if (e.dataTransfer?.files?.length) relay.holoDropFiles(e.dataTransfer.files); });
 let placeTimer = 0;
 let handScaleTimer = 0;
 
@@ -720,6 +786,7 @@ function applyScale() {
   const R = 150 * userScale + 40;
   const st = $('stage');
   st.style.left = `${pos.x - 230}px`; st.style.top = `${pos.y - R}px`; st.style.height = `${2 * R}px`;
+  st.style.setProperty('--mr', `${Math.max(70, modelR * PPU * userScale + 8)}px`);
   if (editing) layoutCad();
 }
 let anchorY = 0;
@@ -734,15 +801,19 @@ function setPos(x, y) {
 $('close').onclick = () => relay.holoClose();
 $('pin').onclick = () => { const on = !$('pin').classList.contains('on'); $('pin').classList.toggle('on', on); relay.holoPin(on); };
 $('solid').onclick = () => { solid = !solid; $('solid').classList.toggle('on', solid); rebuild().catch(() => {}); relay.holoSolid(solid); };
+$('more').onclick = () => document.body.classList.toggle('menu-open');
+$('items').addEventListener('click', () => document.body.classList.remove('menu-open'));
 $('explode').onclick = toggleExplode;
 $('edit').onclick = () => (editing ? leaveEdit() : enterEdit());
-$('save').onclick = saveStl;
+$('save').onclick = () => (saveMenu.classList.contains('open') ? saveMenu.classList.remove('open') : openSaveMenu());
 // Ask Relay about the whole model, or the piece that is picked out: it is sent a picture of the hologram with that piece lit.
-$('ask').onclick = () => {
+function askInfo() {
   const r = Math.min(Math.max(190 * userScale + 40, exploded ? zonePx + 60 : 0), Math.min(innerWidth, innerHeight) / 2);
   const x = Math.max(0, Math.round(pos.x - r)), y = Math.max(0, Math.round(pos.y - r));
-  relay.holoAsk({ region: { x, y, width: Math.round(Math.min(2 * r, innerWidth - x)), height: Math.round(Math.min(2 * r + 70, innerHeight - y)) }, part: selected ? selected.name : null, regions: hintText.includes('regions') });
-};
+  return { region: { x, y, width: Math.round(Math.min(2 * r, innerWidth - x)), height: Math.round(Math.min(2 * r + 70, innerHeight - y)) }, part: selected ? selected.name : null, regions: hintText.includes('regions') };
+}
+window.__holoAsk = askInfo; // main asks for this when your hand opens the mic over a hologram
+$('ask').onclick = () => relay.holoAsk(askInfo());
 $('reset').onclick = () => { orient.identity(); holo.quaternion.identity(); userScale = 1; applyScale(); relay.holoScale(1); };
 $('upright').onclick = () => { upright = (upright + 1) % 3; rebuild().catch(() => {}); };
 $('prev').onclick = () => relay.holoOption(-1);
@@ -756,7 +827,7 @@ function setOptions(o) {
 
 relay.onHolo((m, d) => {
   if (m === 'init' || m === 'items') {
-    if (m === 'init') { document.body.classList.toggle('hand', !!d.handMode); solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
+    if (m === 'init') { applyUi(d.ui); document.body.classList.toggle('hand', !!d.handMode); solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
     items = d.items;
     $('title').textContent = d.title || '';
     $('credit').textContent = items.map((i) => i.credit).filter(Boolean).join('  ·  ');
@@ -764,12 +835,14 @@ relay.onHolo((m, d) => {
     setOptions(d.options);
     rebuild().catch(() => { $('err').textContent = 'Could not draw that model.'; });
   } else if (m === 'merge-hint') { document.body.classList.toggle('merging', !!d); $('merge').textContent = d === 'fit' ? 'Fitting…' : 'Release to combine'; }
-  else if (m === 'pos') setPos(d.x, d.y);
+  else if (m === 'ui') applyUi(d);
+  else if (m === 'pos') { setPos(d.x, d.y); touched(); }
   else if (m === 'hand-mode') { document.body.classList.toggle('hand', !!d); applyScale(); }
-  else if (m === 'hand-explode') { if (!editing && !!d !== exploded) toggleExplode(); }
-  else if (m === 'hand-twist') { qDrag.setFromAxisAngle(axisZ, -d); holo.quaternion.premultiply(qDrag).normalize(); orient.copy(holo.quaternion); }
-  else if (m === 'save') saveStl();
-  else if (m === 'hand-scale') { userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
+  else if (m === 'hand-explode') { touched(); if (!editing && !!d !== exploded) toggleExplode(); }
+  else if (m === 'hand-twist') { touched(); qDrag.setFromAxisAngle(axisZ, -d); holo.quaternion.premultiply(qDrag).normalize(); orient.copy(holo.quaternion); }
+  else if (m === 'export-glb') exportWholeGlb().then((r) => relay.holoGlb(r)).catch(() => relay.holoGlb(null));
+  else if (m === 'save') saveModel(d?.format || 'stl', d?.openWith || '');
+  else if (m === 'hand-scale') { touched(); userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
   else if (m === 'error') $('err').textContent = d;
 });
@@ -794,7 +867,9 @@ function frame(now) {
   const span = 1.3 * kFit * userScale;
   uniforms.originY.value = anchor.position.y - span;
   uniforms.reveal.value = -0.2 + (1 - Math.pow(1 - t, 3)) * (2 * span + 0.6); // the build sweep, from the bottom up
-  if (!spinPause && !exploded && !carried && !editing) { qSpin.setFromAxisAngle(axisY, dt * 0.35); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
+  const spinning = ui.spin && !spinPause && !exploded && !carried && !editing && now - lastTouch > ui.spinDelay * 1000;
+  spinRate += ((spinning ? 0.35 : 0) - spinRate) * Math.min(1, dt * 2.2); // eases in and out instead of jerking
+  if (spinRate > 0.003) { qSpin.setFromAxisAngle(axisY, dt * spinRate); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
   anchor.position.y = anchorY + Math.sin(now / 900) * 0.03;
   if (parts.length) {
     const goal = exploded ? 1 : 0;
@@ -818,8 +893,9 @@ window.__holoTest = {
   state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length, pos: { ...pos }, zonePx, q: holo.quaternion.toArray() }),
   where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
   fps: () => fps,
+  save: (fmt) => saveModel(fmt),
   yaw: (deg) => { orient.setFromAxisAngle(axisY, (deg * Math.PI) / 180); holo.quaternion.copy(orient); return true; },
-  stlBytes: () => { const v = itemWraps[0]?.userData.cadView; if (!v?.mesh) return 0; const root = new THREE.Group(); root.add(new THREE.Mesh(v.mesh.geometry, new THREE.MeshBasicMaterial())); root.updateMatrixWorld(true); const dv = new STLExporter().parse(root, { binary: true }); return { bytes: dv.byteLength, tris: dv.getUint32(80, true) }; },
+  stlBytes: () => { const { tris } = collectTriangles(); return tris.length ? { bytes: toStl(zUp(tris), 'x').length, tris: tris.length / 9 } : 0; },
   mode: () => (exploded || editing ? 'parts' : items.length > 1 ? 'items' : 'whole'),
   itemAt: (i) => (itemWraps[i] ? toScreen(itemWraps[i].getWorldPosition(new THREE.Vector3())) : null),
   sel: () => selItem,

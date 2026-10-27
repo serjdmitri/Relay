@@ -23,6 +23,7 @@ const { findStls, downloadStl } = require('./models/lookup');
 const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
 const { CLOSE_HOLOS } = require('./holo/closeWords');
 const cadModel = require('./models/cad');
+const { known: known3d } = require('./holo/apps3d');
 const { photoToModel, byId: engineById } = require('./models/generators');
 const { rankPhotos, decodeWith } = require('./models/photoscore');
 const { fitPrompt, parsePlacement, heuristicPlacement } = require('./holo/fit');
@@ -483,6 +484,18 @@ class AskController {
     if (!this.onStatus) return;
     clearTimeout(this.statusTimer);
     this.statusTimer = setTimeout(() => this.onStatus?.(this.remoteSnapshot()), 120);
+  }
+
+  // The holograms on the Mac, for the phone page.
+  remoteHolos() {
+    return [...(this.holos?.holos.values() || [])].map((h) => ({ id: h.id, title: h.title, pinned: !!h.pinned, designed: h.items.some((i) => i.kind === 'cad') }));
+  }
+
+  async remoteHoloModel(id) {
+    const h = this.holos?.get(id);
+    if (!h) return null;
+    const r = await this.holos.requestGlb(h);
+    return r ? { ...r, title: h.title } : null;
   }
 
   remoteSnapshot() {
@@ -1666,21 +1679,18 @@ class AskController {
     } catch (e) { return `Could not change it: ${e.message}`; }
   }
 
-  // Saves a hologram as an STL in Downloads/Relay 3D, and opens it in an app (a slicer for 3D printing, Fusion...) when asked.
+  // Saves a hologram as a file in Downloads/Relay 3D (STL, 3MF or STEP), and opens it in an installed app when asked (a slicer, Fusion).
   async save3d(raw = {}) {
     const t = String(raw.title || '').toLowerCase().trim();
     const all = [...(this.holos?.holos.values() || [])];
     const h = (t && all.find((x) => x.title.toLowerCase().includes(t))) || all.at(-1);
     if (!h) return 'There is no hologram on screen to save.';
-    const r = await this.holos.requestSave(h);
+    const format = ['stl', '3mf', 'step'].includes(String(raw.format || '').toLowerCase()) ? String(raw.format).toLowerCase() : null;
+    const target = raw.open_with ? known3d(raw.open_with) : null;
+    if (raw.open_with && !target) return `"${raw.open_with}" is not an app Relay knows how to send a model to (Bambu Studio, OrcaSlicer, PrusaSlicer, Cura, Fusion, FreeCAD).`;
+    const r = await this.holos.requestSave(h, { format: format || target?.format || 'stl', openWith: target?.name || '' });
     if (!r.ok) return `Could not save it: ${r.error}`;
-    let opened = '';
-    const app = String(raw.open_with || '').trim();
-    if (app) {
-      if (!/^[\p{L}\p{N} .+_-]{1,60}$/u.test(app)) return `Saved as ${r.where}, but "${app}" is not an app name I can open it with.`;
-      opened = await new Promise((resolve) => require('child_process').execFile('/usr/bin/open', ['-a', app, r.file], (e) => resolve(e ? ` Could not open it in ${app} (is it installed?).` : ` Opened it in ${app}.`)));
-    }
-    return `Saved the model as an STL: ${r.where} (in your Downloads folder).${opened}`;
+    return `Saved the model: ${r.where} (in your Downloads folder).${r.opened ? ` Opened it in ${target.name}.` : target ? ` ${target.name} does not seem to be installed, so it was only saved.` : ''}`;
   }
 
   read3d(raw = {}) {
@@ -1689,25 +1699,61 @@ class AskController {
   }
 
   // Clicked "?" on a hologram: Relay is shown a picture of it (the picked piece lit) and asked what it is.
-  async askAboutHologram(h, { region, part, regions } = {}) {
-    if (!h || h.win.isDestroyed()) return;
+  // A picture of a hologram (the picked piece lit) kept as "the marked area", so "this" in the next request means it.
+  async captureHologram(h, { region, part, regions } = {}) {
+    if (!h || h.win.isDestroyed()) return false;
     const r = region || { x: 0, y: 0, width: 600, height: 600 };
     let img = await h.win.webContents.capturePage({ x: Math.round(r.x), y: Math.round(r.y), width: Math.max(50, Math.round(r.width)), height: Math.max(50, Math.round(r.height)) });
-    if (img.isEmpty()) return this.notice('Could not take a picture of the hologram.', 'failed');
+    if (img.isEmpty()) return false;
     if (img.getSize().width > 900) img = img.resize({ width: 900 });
     const size = img.getSize();
     this.mark = { ts: Date.now(), box: { x: 0, y: 0, w: size.width, h: size.height }, mediaType: 'image/jpeg', data: img.toJPEG(88).toString('base64'), width: size.width, height: size.height };
+    return true;
+  }
+
+  // Clicked "?" on a hologram: Relay is shown a picture of it (the picked piece lit) and asked what it is.
+  async askAboutHologram(h, { region, part, regions } = {}) {
+    if (!(await this.captureHologram(h, { region, part, regions }))) return this.notice('Could not take a picture of the hologram.', 'failed');
     const what = part ? `one piece of it, lit up in the picture${regions ? ' (the model is one solid piece that was cut into regions, so the piece has no real name: say what that part of the thing is, from where it sits)' : ''}` : 'the whole model';
     const text = `I am pointing at ${what} in the "${h.title}" hologram (the picture is my marked area). What is it, and what does it do? Answer in a few sentences.`;
     if (this.runningTask && this.state === 'working') return this.enqueue(text, { shown: part ? 'What is this piece?' : 'What is this?' });
     await this.handleText(text, { shown: part ? 'What is this piece?' : `What is this ${h.title}?` });
   }
 
-  // The hand-gesture "listen": the mic opens, and what is said is about the hologram the hand is on.
+  // Files dropped on a hologram: a 3D file (STL, GLB) joins it as another model; anything else (a document, a folder) is kept for the next request,
+  // which then knows it is about this hologram ("tidy this folder", "put this on the model's label").
+  async filesOnHologram(h, paths) {
+    const fs = require('fs');
+    const models = paths.filter((p) => /\.(stl|glb)$/i.test(p));
+    const others = paths.filter((p) => !models.includes(p));
+    let added = 0;
+    for (const p of models.slice(0, 3)) {
+      try {
+        if (fs.statSync(p).size > 60 * 1024 * 1024) continue;
+        const bytes = fs.readFileSync(p);
+        const title = path.basename(p).replace(/\.[^.]+$/, '').slice(0, 50);
+        const item = /\.stl$/i.test(p) ? { kind: 'stl', title, credit: 'Your file', bytes } : { kind: 'glb', title, credit: 'Your file', bytes };
+        if (await this.holos.add(h.id, item, '')) added++;
+      } catch { /* a file that cannot be read is skipped */ }
+    }
+    if (others.length) {
+      this.holoFocus = { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), piece: null, ts: Date.now() };
+      await this.attachFiles(others);
+    } else if (added) this.sound('Pop');
+    else this.notice('That file is not one Relay can add to a model (STL or GLB).', 'failed');
+    return { added, kept: others.length };
+  }
+
+  // The hand-gesture "listen": the mic opens, and what is said is about the hologram the hand is on (and the piece it pointed at, if one is lit).
   async listenFromHand(holoId) {
     if (!['idle', 'done'].includes(this.state)) return false;
     const h = (holoId && this.holos?.get(holoId)) || this.holos?.latest();
-    this.holoFocus = h ? { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), ts: Date.now() } : null;
+    let piece = null;
+    if (h) {
+      const info = await h.win.webContents.executeJavaScript('window.__holoAsk ? window.__holoAsk() : null').catch(() => null);
+      if (info?.part && (await this.captureHologram(h, info))) piece = info.part;
+    }
+    this.holoFocus = h ? { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), piece, ts: Date.now() } : null;
     await this.listen('ask', false, { auto: true });
     return true;
   }
@@ -1715,7 +1761,7 @@ class AskController {
   holoHint() {
     const f = this.holoFocus;
     if (!f || Date.now() - f.ts > 120000 || !this.holos?.get(f.id)) return null;
-    return { title: f.title, designed: f.designed };
+    return { title: f.title, designed: f.designed, piece: f.piece };
   }
 
   // A hologram was pinned, closed or added: once none is left unpinned, the reactor can go (the pinned ones stay).

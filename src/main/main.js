@@ -86,6 +86,7 @@ function openOnboarding() {
 
 function broadcast() {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send('state-changed');
+  holos?.refreshUi();
   rebuildTray();
 }
 
@@ -117,6 +118,7 @@ function publicState() {
     hasKeys,
     hasTtsKeys,
     hasHfToken,
+    handsInfo: { status: hands?.status || 'off', message: hands?.message || '' },
     voiceProblem,
     kokoro: kokoro.status(),
     presetInfo: PRESETS,
@@ -140,6 +142,22 @@ function extensionPath() {
   return app.isPackaged ? path.join(process.resourcesPath, 'firefox-extension') : path.join(__dirname, '../../extension/firefox');
 }
 
+// Hand control on or off (the menu bar item and Settings both use this). Turning it on asks macOS for the camera the first time.
+async function setHands(on) {
+  if (on) {
+    store.set('settings.hands.enabled', true);
+    const r = await hands.enable();
+    if (!r.ok) { store.set('settings.hands.enabled', false); ask.notice(r.error, 'failed'); }
+    else ask.notice('Hand control is on. Hold up an open hand: it moves a ring. Fist grabs, thumb and finger tap clicks, peace sign talks.', 'done');
+    broadcast();
+    return r;
+  }
+  store.set('settings.hands.enabled', false);
+  hands.disable();
+  broadcast();
+  return { ok: true };
+}
+
 function rebuildTray() {
   if (!tray) return;
   const askLabel = label(store.get('settings.shortcuts.ask'));
@@ -149,11 +167,7 @@ function rebuildTray() {
     { label: 'Type a Request…', click: () => ask.open() },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
     { label: holos?.holos.size ? `Clear ${holos.holos.size} Hologram${holos.holos.size === 1 ? '' : 's'}` : 'No Holograms', enabled: !!holos?.holos.size, click: () => holos.closeAll() },
-    { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: async (item) => {
-      if (item.checked) { store.set('settings.hands.enabled', true); const r = await hands.enable(); if (!r.ok) { store.set('settings.hands.enabled', false); ask.notice(r.error, 'failed'); } else ask.notice('Hand control is on: open hand moves, fist grabs, pinch clicks, peace sign talks.', 'done'); }
-      else { store.set('settings.hands.enabled', false); hands.disable(); }
-      rebuildTray();
-    } },
+    { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: (item) => setHands(item.checked) },
     { label: 'Stop Speaking', enabled: !!speaker?.speaking, click: () => ask.interruptSpeech() },
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
@@ -496,6 +510,7 @@ function registerIpc() {
   ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
+  ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
   ipcMain.handle('hands:status', (_e, st) => { hands?.setStatus(st); });
   ipcMain.handle('card:close', () => cardPanel?.hide());
@@ -616,7 +631,7 @@ app.whenReady().then(() => {
   cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js') });
   holos = new HoloManager({
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
-    cursor: () => hands?.virtualCursor() || holoWin.cursor(), area: holoWin.area, displayFor: holoWin.displayFor, download: (u) => downloadStl(u),
+    cursor: () => hands?.virtualCursor() || holoWin.cursor(), getUi: () => store.get('settings.holoUi'), area: holoWin.area, displayFor: holoWin.displayFor, download: (u) => downloadStl(u),
     generate: (c) => ask.generatePhotoModel(c), readFile: (f) => ask.modelCache?.readInside(f),
     fit: (base, item, hint) => ask.fitModels(base, item, hint), putFile: (b) => ask.modelCache?.put(ask.modelCache.key('part', b.length, b.slice(0, 64).toString('hex'), b.slice(-64).toString('hex')), b) || '',
     saved: () => store.get('holograms') || [], save: (l) => { store.data.holograms = l; store.save(); }
@@ -679,6 +694,7 @@ app.whenReady().then(() => {
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent('<body class="open" style="margin:0;background:transparent;overflow:hidden"><style>div{position:absolute;inset:10px;border-radius:50%;border:2px solid rgba(0,212,255,.9);box-shadow:0 0 14px rgba(0,212,255,.6);transition:all .12s}.held div{background:rgba(0,212,255,.35);inset:14px}.pinch div{inset:19px;background:rgba(0,212,255,.55)}.click div{inset:2px;opacity:.5}.mic div{inset:4px;box-shadow:0 0 26px rgba(0,212,255,.95)}</style><div></div></body>')}`);
       return { moveTo: (pt) => { if (!win.isDestroyed()) { if (!win.isVisible()) win.showInactive(); win.setPosition(Math.round(pt.x - 28), Math.round(pt.y - 28)); } }, hide: () => { if (!win.isDestroyed()) win.hide(); }, close: () => { if (!win.isDestroyed()) win.close(); }, setState: (c) => { if (!win.isDestroyed()) win.webContents.executeJavaScript(`document.body.className=${JSON.stringify(String(c).replace(/[^a-z]/g, ''))}`).catch(() => {}); } };
     },
+    air: (type, x, y) => overlay.air(type, x, y),
     onMic: (id) => ask.listenFromHand(id).catch(() => {}),
     notify: (m) => ask.notice(m, 'failed')
   });
@@ -686,6 +702,7 @@ app.whenReady().then(() => {
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
   holos.onChange = () => { rebuildTray(); ask.holosChanged(); };
   holos.onAsk = (h, d) => ask.askAboutHologram(h, d);
+  holos.onFiles = (h, paths) => ask.filesOnHologram(h, paths);
   ask.modelCache = new ModelCache(path.join(app.getPath('userData'), 'holo-cache'));
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });
@@ -719,6 +736,7 @@ app.whenReady().then(() => {
     });
   }
   hotkeys = new Hotkeys({ getShortcuts: () => store.get('settings.shortcuts'), onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
+  hotkeys.onMouse = (down) => holos?.mouseButton(down); // a file dragged onto a hologram is accepted while the button is held over it
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');
   const icon = nativeImage.createFromPath(iconPath);

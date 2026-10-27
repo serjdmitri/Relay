@@ -56,6 +56,13 @@ You will approve Microphone, Accessibility, Screen Recording and Input Monitorin
   <img src="docs/img/ui-more.png" alt="Relay window: Account with the model service picker, and Speech settings" width="900">
 </p>
 
+<p align="center">
+  <img src="docs/img/holo-menu.png" alt="A hologram with a small button that opens a menu" width="280">
+  <img src="docs/img/holo-side.png" alt="The same hologram with a slim column of buttons beside it" width="280">
+  <img src="docs/img/holo-bar.png" alt="The same hologram with a row of buttons under it" width="280"><br>
+  <img src="docs/img/holo-cad.png" alt="The hologram editor with shapes, holes and size fields" width="860">
+</p>
+
 These are the real interface pages rendered with sample data, so no personal information is shown. Regenerate them with `npm run shots && npm run readme-images`.
 
 ## How it works
@@ -143,6 +150,9 @@ For a specific real thing Relay researches what it looks like, then shows the be
 
 ### Design in 3D, hand control, and your files
 "Make a cube with a hole through it and a cone on top" builds a hologram from shapes; the pencil button edits it like Tinkercad, and the download button saves an STL for 3D printing or Fusion. Hand control (menu bar icon, uses the camera on this Mac only): open hand moves, fist grabs, pinch clicks, two pinches resize and roll, two fists pull a model apart, a swipe changes model, thumb up keeps and thumb down closes, a peace sign talks; the buttons grow while your hands are in use. Mac drive finds files with previews and tidies folders from a plan you approve; Relay never deletes (the most it does is move to the Trash, and it never empties it). Settings > Connectors can add all your Composio apps.
+
+### Hologram buttons, saving and your phone
+Settings > General > Holograms and hands: choose **Menu** (one small ⋯ button that opens the list), **Side** (a slim column) or **Bar** (a row under the name), and how long a hologram stays still after you touch it before it turns again. The download button saves **STL, 3MF or STEP** (millimetres, on the bed) or sends the file to a slicer or CAD app you have (Bambu Studio, OrcaSlicer, PrusaSlicer, Cura, Creality Print, Fusion, FreeCAD, Blender). In Relay Remote, the model icon on your phone lists your open holograms: turn one with a finger, pinch to zoom, save it. Drop a file on a hologram: an STL or GLB is added as a model, anything else goes with your next question. **Hand control:** turn it on from the menu bar icon (Hand control (camera)) or Settings, allow the camera, hold an open hand up. Point at a piece for a moment and hold the peace sign to ask about it; pinch and drag in empty space to draw a glowing line.
 
 ### Pull a hologram apart
 Double-click a hologram (or press the four-diamond button) and it comes apart. Drag any piece anywhere, drag one far out to make it its own hologram, or onto another hologram to combine them (Claude decides where it goes). Double-click a piece to close the rest back up without the piece you took. Holograms are drawn without any window or base, anywhere on the display; drag up, down or diagonally to turn one every way, and drag its name to move it. Assemblies split into their real bodies; a single solid model is cut into regions. See the changelog for limits.

@@ -6,6 +6,7 @@
 //   both hands pinching, moving apart or together               'scale' (resize); turning them like a wheel: 'twist' (roll)
 //   both hands in fists, pulled apart or pushed together         'pull' (take the model apart into pieces / put it back)
 //   a quick sideways swipe of the open hand                      'swipe' (the next or the previous model)
+//   a pointing finger held for a moment                          'point' (pick what it points at)
 //   a peace sign held for a moment                               'mic' (start listening)
 //   a thumb up held / a thumb down held                          'thumbup' (keep it) / 'thumbdown' (close it)
 // Positions come out as 0..1 across the screen: the picture is mirrored (your right is the screen's right) and only its middle part is
@@ -64,6 +65,7 @@ class HandPointer {
     this.hold('Victory', 'mic', h, t, dt, x, y);
     this.hold('Thumb_Up', 'thumbup', h, t, dt, x, y);
     this.hold('Thumb_Down', 'thumbdown', h, t, dt, x, y);
+    this.hold('Pointing_Up', 'point', h, t, dt, x, y);
 
     // ---- two hands: pinching resizes and turns, fists pull it apart ----
     const second = hands[1];
