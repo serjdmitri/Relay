@@ -115,6 +115,15 @@ export function placeItems(sizes, placements, gap = 0.12) {
   const box = { min: [-sizes[0].w / 2, -sizes[0].h / 2, -sizes[0].d / 2], max: [sizes[0].w / 2, sizes[0].h / 2, sizes[0].d / 2] };
   for (let i = 1; i < sizes.length; i++) {
     const p = placements[i] || { anchor: 'right', scale: 1, rotate: [0, 0, 0] };
+    if (p.free) { // put where the person dragged it: as it was left, in this same space
+      const f = p.free;
+      const sc = Math.min(6, Math.max(0.05, Number(f.scale) || 1));
+      const pos = f.position.map((x) => Number(x) || 0);
+      out.push({ position: pos, rotationDeg: (f.rotationDeg || [0, 0, 0]).map((x) => Number(x) || 0), scale: sc });
+      const half = [sizes[i].w, sizes[i].h, sizes[i].d].map((v) => (v * sc) / 2);
+      for (let k = 0; k < 3; k++) { box.min[k] = Math.min(box.min[k], pos[k] - half[k]); box.max[k] = Math.max(box.max[k], pos[k] + half[k]); }
+      continue;
+    }
     const s = Math.min(3, Math.max(0.15, Number(p.scale) || 1));
     const rot = (p.rotate || [0, 0, 0]).map((x) => Number(x) || 0);
     // a quarter turn about x or z swaps height with depth or width: use the turned size

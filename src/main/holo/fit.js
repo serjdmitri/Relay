@@ -39,4 +39,12 @@ function heuristicPlacement(base, item) {
   return { anchor: 'right', scale: round(Math.min(1.5, Math.max(0.5, 1 / ratio))), rotate: [0, 0, 0], note: 'beside it' };
 }
 
-module.exports = { fitPrompt, parsePlacement, heuristicPlacement, ANCHORS };
+// Where the person left a model they placed by hand: three numbers for the place, three for the turn, one for the size; or null.
+function cleanFree(f) {
+  const v3 = (a) => Array.isArray(a) && a.length >= 3 && a.slice(0, 3).every((x) => Number.isFinite(+x));
+  if (!f || !v3(f.position)) return null;
+  const lim = (x, m) => Math.max(-m, Math.min(m, +x));
+  return { position: f.position.slice(0, 3).map((x) => round(lim(x, 50))), rotationDeg: v3(f.rotationDeg) ? f.rotationDeg.slice(0, 3).map((x) => round(((+x % 360) + 360) % 360)) : [0, 0, 0], scale: round(Math.min(6, Math.max(0.05, +f.scale || 1))) };
+}
+
+module.exports = { fitPrompt, parsePlacement, heuristicPlacement, cleanFree, ANCHORS };

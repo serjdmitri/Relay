@@ -16,6 +16,9 @@ const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
 const { CardPanel } = require('./cards/panel');
 const { HoloManager } = require('./holo/manager');
+const { Drive } = require('./drive');
+const os = require('os');
+const { execFile } = require('child_process');
 const holoWin = require('./holo/windows');
 const { downloadStl } = require('./models/lookup');
 const { ModelCache } = require('./models/cache');
@@ -617,6 +620,16 @@ app.whenReady().then(() => {
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
   ask.holos = holos;
+  ask.drive = new Drive({
+    fs: require('fs'), home: os.homedir(), cards: cardPanel,
+    exec: (file, args) => new Promise((res) => execFile(file, args, { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => res(out || ''))),
+    thumb: async (p) => { try { const img = await nativeImage.createThumbnailFromPath(p, { width: 220, height: 220 }); return img.isEmpty() ? null : `data:image/jpeg;base64,${img.resize({ width: 160 }).toJPEG(72).toString('base64')}`; } catch { return null; } },
+    trashItem: (p) => shell.trashItem(p), reveal: (p) => shell.showItemInFolder(p), open: (p) => shell.openPath(p),
+    log: { read: () => store.get('driveLog') || [], write: (l) => { store.data.driveLog = l; store.save(); } }
+  });
+  cardPanel.onFile = (p) => ask.drive.openFile(p);
+  holos.onChange = () => { rebuildTray(); ask.holosChanged(); };
+  holos.onAsk = (h, d) => ask.askAboutHologram(h, d);
   ask.modelCache = new ModelCache(path.join(app.getPath('userData'), 'holo-cache'));
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });

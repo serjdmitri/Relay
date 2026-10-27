@@ -1,3 +1,4 @@
+const { shellBlocked, scriptBlocked, pathProblem } = require('../drive/guard');
 const { execFile } = require('child_process');
 const os = require('os');
 const path = require('path');
@@ -167,8 +168,10 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay, axBin =
 
     async trashPath(p) {
       const full = p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
+      const no = pathProblem(full, os.homedir());
+      if (no) throw new Error(`Not moved to the Trash. ${no}`);
       if (!fs.existsSync(full)) throw new Error(`Path does not exist: ${full}`);
-      await osa(`tell application "Finder" to delete POSIX file ${q(full)}`);
+      await osa(`tell application "Finder" to delete POSIX file ${q(full)}`); // Finder's delete is a move to the Trash
       return `Moved ${full} to the Trash.`;
     },
 
@@ -543,9 +546,13 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
     },
 
     async runShell(command) {
+      const no = shellBlocked(command);
+      if (no) throw new Error(no);
       return exec('/bin/zsh', ['-lc', command], { timeout: 60000 });
     },
     async runAppleScript(script, opts) {
+      const no = scriptBlocked(script);
+      if (no) throw new Error(no);
       return osa(script, opts);
     }
   };

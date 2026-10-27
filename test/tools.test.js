@@ -30,7 +30,12 @@ test('dangerous tools ask for confirmation, harmless ones do not', () => {
   const tools = Object.fromEntries(buildTools({ mac: fakeMac, getScale: () => 1 }).map((t) => [t.name, t]));
   assert.ok(tools.messages_send.confirm({ to: 'a', text: 'b' }));
   assert.ok(tools.run_shell.confirm({ command: 'ls' }));
-  assert.ok(tools.trash_path.confirm({ path: '/x' }));
+  assert.ok(tools.trash_path.confirm({ path: require('os').homedir() + '/Downloads/old.zip' }));
+  assert.equal(tools.trash_path.confirm({ path: '/x' }), null, 'outside the home folder: refused, not asked');
+  assert.match(tools.trash_path.run({ path: '/x' }), /Not moved to the Trash/);
+  assert.equal(tools.run_shell.confirm({ command: 'rm -rf ~/Downloads' }), null, 'a deleting command is refused, not offered');
+  assert.match(tools.run_shell.run({ command: 'rm -rf ~/Downloads' }), /never deletes/);
+  assert.match(tools.run_applescript.run({ script: 'tell application "Finder" to empty trash' }), /never deletes/);
   assert.equal(tools.run_applescript.confirm({ script: 'get name of notes' }), null);
   assert.ok(tools.run_applescript.confirm({ script: 'delete note 1' }));
   assert.equal(tools.open_app.confirm, undefined);

@@ -64,6 +64,7 @@ class CardPanel {
 
   arm() {
     clearTimeout(this.timer);
+    if (this.card?.hold) return; // a plan waiting for a yes stays until it is answered
     this.timer = setTimeout(() => this.hide(), SHOW_MS);
   }
 
@@ -76,6 +77,7 @@ class CardPanel {
   }
 
   open(url) {
+    if (typeof url === 'string' && url.startsWith('file:')) { this.onFile?.(url.slice(5)); return; } // a result of a file search: opened or shown in Finder
     const u = safeUrl(url);
     if (u) shell.openExternal(u);
   }
