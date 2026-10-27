@@ -48,18 +48,32 @@ function buildShortcut({ url, token, uuid = () => crypto.randomUUID().toUpperCas
   };
 }
 
+// A Shortcut with one step: open a web address (the Relay page, for the Action Button).
+function buildOpenShortcut({ url, uuid = () => crypto.randomUUID().toUpperCase() }) {
+  const u = uuid();
+  return {
+    WFWorkflowClientVersion: '2900', WFWorkflowMinimumClientVersion: 900, WFWorkflowMinimumClientVersionString: '900',
+    WFWorkflowIcon: { WFWorkflowIconStartColor: 431817727, WFWorkflowIconGlyphNumber: 59511 },
+    WFWorkflowImportQuestions: [], WFWorkflowInputContentItemClasses: [], WFWorkflowTypes: ['ActionExtension', 'Watch'],
+    WFWorkflowActions: [
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.url', WFWorkflowActionParameters: { UUID: u, WFURLActionURL: url } },
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.openurl', WFWorkflowActionParameters: { WFInput: { Value: { OutputName: 'URL', OutputUUID: u, Type: 'ActionOutput' }, WFSerializationType: 'WFTextTokenAttachment' } } }
+    ]
+  };
+}
+
 const run = (args) => new Promise((resolve) => execFile('/usr/bin/shortcuts', args, { timeout: 30000 }, (err, so, se) => resolve({ ok: !err, err: String(se || err?.message || '') })));
 
 // Writes the signed file to outPath. exec is injectable for tests.
-async function writeShortcutFile({ url, token, outPath, exec = run }) {
+async function writeShortcutFile({ url, token, outPath, exec = run, open = false }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-shortcut-'));
   const raw = path.join(dir, 'Relay.shortcut'); // the signer insists on the .shortcut name
   try {
-    fs.writeFileSync(raw, document(buildShortcut({ url, token })), { mode: 0o600 });
+    fs.writeFileSync(raw, document(open ? buildOpenShortcut({ url }) : buildShortcut({ url, token })), { mode: 0o600 });
     const r = await exec(['sign', '--mode', 'anyone', '--input', raw, '--output', outPath]);
     if (!r.ok) return { ok: false, error: `The Mac could not sign the Shortcut: ${r.err.slice(0, 200)}` };
     return { ok: true, path: outPath };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-module.exports = { buildShortcut, document, writeShortcutFile };
+module.exports = { buildShortcut, buildOpenShortcut, document, writeShortcutFile };
