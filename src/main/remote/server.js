@@ -110,7 +110,8 @@ class RemoteServer {
       const text = String(b?.text || '').trim().slice(0, 2000);
       if (!text) return this.json(res, 400, { error: 'Say or type something first.' });
       const id = crypto.randomUUID();
-      if (b?.wait !== true) return this.json(res, 200, { id: await this.control.ask(text, device, id) });
+      // wait can be true, or the text "true" / "1" (a Shortcut's JSON body has no easy way to write a real boolean)
+      if (!(b?.wait === true || /^(true|1|yes)$/i.test(String(b?.wait ?? '')))) return this.json(res, 200, { id: await this.control.ask(text, device, id) });
       // wait: hold the answer back until the request is done, so one call can carry a whole question and answer (iPhone Shortcuts).
       const answer = new Promise((resolve) => {
         const timer = setTimeout(() => { if (this.waiters.delete(id)) resolve({ id, status: 'working', reply: 'Still working on it. Ask again in a moment.' }); }, this.waitMs ?? 110000);

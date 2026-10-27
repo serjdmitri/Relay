@@ -57,6 +57,12 @@ const GRAD = Object.fromEntries(Object.entries(THEME).map(([id, [a, b]]) => [id,
 function h(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();
+  if (t.content.children.length > 1) { // several elements: kept together (the old code silently dropped all but the first: the pairing code, the Shortcut key and the secure address were never shown)
+    const w = document.createElement('div');
+    w.style.display = 'contents';
+    w.append(t.content);
+    return w;
+  }
   return t.content.firstElementChild;
 }
 

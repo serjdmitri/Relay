@@ -84,6 +84,8 @@ test('an ask that waits answers in the same call, for an iPhone Shortcut', async
   const j = await r.json();
   assert.equal(j.reply, 'Done: open notes');
   assert.equal(j.status, 'done');
+  // a Shortcut cannot easily write a real boolean: the text "true" waits too
+  assert.equal((await (await post('/api/ask', { text: 'open mail', wait: 'true' }, token)).json()).reply, 'Done: open mail');
   // and a Mac that never answers gives a polite message instead of hanging forever
   s.waitMs = 80;
   s.control.ask = async (t, d, id) => id;

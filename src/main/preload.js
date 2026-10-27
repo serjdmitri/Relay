@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('relay', {
   removePhone: (id) => invoke('remote:remove', id),
   remoteTailscale: (on) => invoke('remote:tailscale', on),
   remoteTailscaleCheck: () => invoke('remote:tailscale-check'),
+  shortcutFile: (d) => invoke('remote:shortcut-file', d),
   copyText: (t) => invoke('remote:copy', t),
   onHolo: (cb) => on('holo:state', (m, d) => cb(m, d)),
   holoHit: (on) => invoke('holo:hit', on),
