@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { Stickies } = require('./stickies');
@@ -562,6 +563,8 @@ function registerIpc() {
   });
   ipcMain.handle('remote:tailscale-check', async () => { await remote.refreshTailscale(); broadcast(); return { ok: true }; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
+  ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
+  ipcMain.handle('notify:test', () => ask.phone.test());
   ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); });
   ipcMain.handle('presence:status', (_e, st) => { presence?.setStatus(st); });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));

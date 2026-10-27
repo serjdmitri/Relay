@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('relay', {
   holoAnnotations: (list) => invoke('holo:annotations', list),
   holoAnnotate: (d) => invoke('holo:annotate', d),
   holoSlicers: () => invoke('holo:slicers'),
+  notifyTopic: () => invoke('notify:topic'),
+  notifyTest: () => invoke('notify:test'),
   presenceFrame: (f) => invoke('presence:frame', f),
   presenceStatus: (s) => invoke('presence:status', s),
   setHands: (on) => invoke('hands:set', on),

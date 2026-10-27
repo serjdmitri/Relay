@@ -157,6 +157,8 @@ function parseQuick(text, now = new Date()) {
   if (/^(?:next|skip|next song|next track|skip song|skip track|skip this song|skip this track|skip it|play the next song|play the next track|go to the next song|go to the next track)$/.test(n)) return { type: 'media', op: 'next' };
   if (/^(?:previous|previous song|previous track|last song|last track|play the previous song|play the previous track|play the last song|go back a song|go back a track|go back one song)$/.test(n)) return { type: 'media', op: 'previous' };
 
+  if (/^(?:whats|what is) playing(?: right now| now)?$|^what song is (?:this|playing)(?: right now)?$|^(?:whats|what is) this (?:song|track)$|^now playing$|^what am i listening to$|^what(?:s| is) the (?:song|track) (?:that is )?playing$/.test(n)) return { type: 'now-playing' };
+
   // ----- facts and small system things -----
   if (/^(?:whats|what is) the time(?: right now| now)?$|^what time is it(?: right now| now)?$|^tell me the time$|^the time$/.test(n)) return { type: 'info', what: 'time' };
   if (/^(?:whats|what is) (?:todays |the )?date(?: today)?$|^what day is it(?: today)?$|^(?:whats|what is) today$|^todays date$/.test(n)) return { type: 'info', what: 'date' };
@@ -353,6 +355,13 @@ async function runQuick(cmd, mac, ctx = {}) {
         reply = cmd.op === 'play' ? (track ? `Playing ${track}.` : 'Playing.') : track ? `${cmd.op === 'next' ? 'Skipped to' : 'Back to'} ${track}.` : cmd.op === 'next' ? 'Skipped.' : 'Went back.';
       }
       return { tool: 'media', input: { op: cmd.op, app: target.app }, reply, undo: async () => { await mac.mediaControl(target.app, flip[cmd.op]); return cmd.op === 'play' ? 'Paused.' : cmd.op === 'pause' ? 'Playing again.' : 'Went back.'; } };
+    }
+    case 'now-playing': {
+      const { states, playing } = await players(mac);
+      const target = playing || states.find((x) => x.state.includes('paused'));
+      if (!target) return { tool: 'media', input: { op: 'now-playing' }, reply: 'Nothing is playing.', readonly: true };
+      const track = await nowPlaying(mac, target.app);
+      return { tool: 'media', input: { op: 'now-playing', app: target.app }, reply: track ? `${playing ? 'Playing' : 'Paused on'} ${track} (${target.app}).` : `${target.app} is ${playing ? 'playing' : 'paused'}.`, readonly: true };
     }
     case 'timer': {
       if (!ctx.timers) return null;

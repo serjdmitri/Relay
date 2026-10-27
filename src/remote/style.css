@@ -67,3 +67,9 @@ header button { background: none; border: 0; color: var(--dim); font-size: 22px;
 #fields label { display: grid; gap: 2px; font-size: 11px; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
 #fields input { width: 100%; padding: 8px 6px; font-size: 16px; text-align: center; border-radius: 10px; }
 #fields input { background: rgba(0, 20, 36, .8); color: var(--ink); border: 1px solid rgba(0, 212, 255, .35); outline: 0; }
+
+/* quick actions: one tap, no model (the phrases are instant commands on the Mac) */
+#quick { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 2px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+#quick::-webkit-scrollbar { display: none; }
+#quick button { flex: 0 0 auto; height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(0, 212, 255, .4); background: rgba(0, 30, 50, .6); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; }
+#quick button:active { background: var(--acc); color: #00141c; }
