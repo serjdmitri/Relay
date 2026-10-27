@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.26.1
+
+- **Settings > Remote now notices Tailscale.** It only looked at Tailscale when Relay started, so installing or signing in to Tailscale afterwards still showed "Install Tailscale". It now looks again whenever the page is shown, and there is a **Check again** button.
+- Tested for real: with Tailscale installed after Relay started, the page now sees it; the secure link was made and `https://<this Mac>.ts.net` answered with the phone page (HTTP 200) from this Mac. Not tested: the phone itself, and hold-to-talk on it.
+
 ## 0.26.0
 
 - **Say "hands" and see what the camera sees.** "Hands" (or "show my hands", "open hand control") turns hand control on if it was off and opens the **hand view** in the top right of your screen: the camera picture like a mirror, the outline of each hand it finds, what each hand is doing (fist, open hand, pinch, peace sign, pointing, thumb up or down), how many hands it sees ("2 hands"), and a short flash of what Relay did with it (Grab, Click, Resize, Pull apart, Swipe…). "Hide hands" puts the view away and keeps control on; "stop hands" turns control off. The same switch is in Settings > General > Holograms and hands (Show hand view) and in the menu bar.

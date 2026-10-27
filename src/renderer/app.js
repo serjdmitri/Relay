@@ -383,9 +383,12 @@ const PAGES = {
 
     c.append(h('<div class="section-title">Away from home: Tailscale</div>'));
     const T = R.tailscale || {};
+    // Tailscale may have been installed or signed in after Relay started: look again when this page is shown (at most every 4 s).
+    if (Date.now() - (window.__tsCheck || 0) > 4000) { window.__tsCheck = Date.now(); relay.remoteTailscaleCheck?.(); }
+    const again = () => { const b = h('<button class="btn" style="margin-top:10px">Check again</button>'); b.onclick = async () => { b.textContent = 'Checking…'; await relay.remoteTailscaleCheck(); }; return b; };
     const ts = h('<div class="card" style="padding:14px"></div>');
-    if (!T.installed) ts.append(h('<div class="note" style="line-height:1.5">Tailscale is free. It joins your phone and Mac in a private, encrypted network, so Relay Remote works from anywhere, and it gives the phone the secure address its microphone needs for hold to talk. Install Tailscale on the Mac and on the phone (tailscale.com/download), sign in with the same account, then come back here.</div>'));
-    else if (!T.running) ts.append(h('<div class="note">Tailscale is installed but not connected. Open it and sign in, then come back here.</div>'));
+    if (!T.installed) ts.append(h('<div class="note" style="line-height:1.5">Tailscale is free. It joins your phone and Mac in a private, encrypted network, so Relay Remote works from anywhere, and it gives the phone the secure address its microphone needs for hold to talk. Install Tailscale on the Mac and on the phone (tailscale.com/download), sign in with the same account, then come back here.</div>'), again());
+    else if (!T.running) ts.append(h('<div class="note">Tailscale is installed but not connected. Open it and sign in, then come back here.</div>'), again());
     else if (T.serving) {
       ts.append(h(`<div class="t">Secure link on</div><div class="d" style="user-select:text;margin:4px 0 10px">${esc(T.https || '')}</div>`));
       const off = h('<button class="btn">Turn off</button>');
