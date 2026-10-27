@@ -9,6 +9,7 @@
       talking: 'tap-or-hold', playSounds: true, duckAudio: true, recent: true, memory: true, cards: true, models3d: true, models3dFromPhotos: true, showUsage: true, learnWords: true, actEnabled: true, cursor: true, speakReplies: false, dictation: true, saveDictation: true,
       glass: true, voice: 'auto', voiceRate: 'normal', openAtLogin: true, showInDock: false, look: 'jarvis', buddy: true, assistantName: 'J.A.R.V.I.S',
       wake: { enabled: false, phrase: 'hey jarvis' },
+      holoUi: { controls: 'menu', spin: true, spinDelay: 10 }, hands: { enabled: true }, hfTokenSet: true,
       tts: { engine: 'system', kokoro: { voice: 'af_heart' }, openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally.' }, elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2' } },
       shortcuts: { ask: { code: 'AltRight', mods: [] }, dictate: { code: 'MetaRight', mods: [] }, type: { code: 'KeyT', mods: ['Alt'] }, mark: { code: 'ControlLeft', mods: [] } },
       speech: { locale: 'en-US', input: 'auto' },
@@ -20,6 +21,7 @@
     memories: [{ id: 'm1', text: 'my name is Sergey', ts: 1 }, { id: 'm2', text: 'I am vegetarian', ts: 2 }, { id: 'm3', text: 'my sister Anna lives in Boston', ts: 3 }],
     schedules: [{ id: 's1', text: 'open my email', when: 'Every weekday at 8:00 AM', enabled: true, next: Date.now() + 36e5 }, { id: 's2', text: 'read me my calendar', when: 'Every day at 7:30 AM', enabled: false }],
     connectors: { notion: { connected: true, name: 'Sergey\'s workspace' }, google: { clientId: 'xxxx.apps.googleusercontent.com', hasSecret: true, accounts: ['sd2009main@gmail.com', 'sergey@school.edu'] } },
+    handsInfo: { status: 'running', message: '' },
     remote: { enabled: true, running: true, lan: true, port: 47900, error: '', urls: ['http://192.168.1.20:47900'], devices: [{ id: 'd1', name: "Sergey's iPhone", lastSeen: Date.now() - 3600e3 }], tailscale: { installed: false } },
     history: [
       { id: '1', text: 'Remind me to call mom at 5pm', status: 'done', reply: 'Reminder set: call mom, today at 5:00 PM.', ts: now - 4 * min },

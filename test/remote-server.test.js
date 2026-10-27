@@ -93,3 +93,35 @@ test('an ask that waits answers in the same call, for an iPhone Shortcut', async
   assert.equal(s.waiters.size, 0);
   s.stop();
 });
+
+test('the holograms on the Mac are listed and their models served, only to a paired phone; the viewer libraries are served by name only', async () => {
+  const { tinyGlb } = require('./helpers/glb');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-remote-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<title>Relay</title>');
+  let list = [];
+  const control = { ask: async () => 'r', stop() {}, snapshot: () => ({ state: 'idle', label: '', tasks: [], agents: [] }), recent: () => [], holos: () => [{ id: 'holo-1234-abcd', title: 'Skull', pinned: false, designed: false }], holoModel: async (id) => (id === 'holo-1234-abcd' ? { bytes: tinyGlb(), mm: true, title: 'Skull & bones' } : null) };
+  const pairing = new Pairing({ code: () => '424242' });
+  const devices = new Devices({ list: () => list, save: (l) => { list = l; } });
+  const s = new RemoteServer({ control, pairing, devices, root, vendor: path.join(__dirname, '../src/renderer/vendor/three'), host: '127.0.0.1', port: 0 });
+  await s.start();
+  const base = `http://127.0.0.1:${s.port}`;
+  try {
+    assert.equal((await fetch(`${base}/api/holos`)).status, 401);
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/model`)).status, 401);
+    pairing.start();
+    const { token } = await (await fetch(`${base}/api/pair`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-relay-remote': '1' }, body: JSON.stringify({ code: '424242', name: 'iPhone' }) })).json();
+    const auth = { authorization: `Bearer ${token}` };
+    assert.deepEqual((await (await fetch(`${base}/api/holos`, { headers: auth })).json()).holos.map((h) => h.title), ['Skull']);
+    const m = await fetch(`${base}/api/holos/holo-1234-abcd/model`, { headers: auth });
+    assert.equal(m.status, 200);
+    assert.equal(m.headers.get('content-type'), 'model/gltf-binary');
+    assert.equal(m.headers.get('x-relay-mm'), '1');
+    assert.equal(decodeURIComponent(m.headers.get('x-relay-title')), 'Skull & bones');
+    assert.equal(Buffer.from(await m.arrayBuffer()).slice(0, 4).toString(), 'glTF');
+    assert.equal((await fetch(`${base}/api/holos/holo-9999-gone/model`, { headers: auth })).status, 404);
+    assert.equal((await fetch(`${base}/api/holos/..%2F..%2Fetc/model`, { headers: auth })).status, 404, 'an id that is not an id');
+    assert.equal((await fetch(`${base}/vendor/three.module.min.js`)).status, 200);
+    assert.equal((await fetch(`${base}/vendor/STLLoader.js`)).status, 404, 'only the libraries the viewer uses');
+    assert.equal((await fetch(`${base}/vendor/../../main/store.js`)).status, 404);
+  } finally { s.stop(); }
+});

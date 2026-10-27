@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050d14">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+<title>Relay holograms</title>
+</head>
+<body class="holo-page">
+<main id="list" hidden>
+  <header><a class="back" href="/" aria-label="Back">&#8249;</a><span id="devtitle">Holograms</span></header>
+  <p id="empty" class="dim" hidden>No holograms on your Mac right now. Ask Relay for one (“show me a 3D model of a skull”), then come back.</p>
+  <ul id="tiles"></ul>
+</main>
+<main id="view" hidden>
+  <header><a class="back" href="/holo.html" aria-label="Back">&#8249;</a><span id="vtitle">Hologram</span></header>
+  <canvas id="gl"></canvas>
+  <div id="vhint" class="dim">Drag to turn · pinch to zoom</div>
+  <div id="vbar">
+    <button data-fmt="stl">STL</button>
+    <button data-fmt="3mf">3MF</button>
+    <button data-fmt="step">STEP</button>
+  </div>
+  <div id="vmsg" class="dim"></div>
+</main>
+<script type="module" src="/holo.js"></script>
+</body>
+</html>

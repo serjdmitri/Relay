@@ -124,3 +124,30 @@ test('while a hand is in view the controls are drawn bigger, and they go back a 
   hc.disable();
   assert.deepEqual(h.win.sent.filter((s) => s[1] === 'hand-mode').at(-1), ['holo:state', 'hand-mode', false]);
 });
+
+test('pointing clicks where the finger is (picking a piece), and the peace sign opens the mic', async () => {
+  const { h, ev, at, mics } = await rig();
+  await ev({ type: 'point', ...at(900, 550) });
+  assert.deepEqual(h.win.input.slice(-3).map((e) => e.type), ['mouseMove', 'mouseDown', 'mouseUp']);
+  await ev({ type: 'mic', ...at(900, 550) });
+  assert.deepEqual(mics, [h.id]);
+});
+
+test('a pinch held in empty space draws a line in the air; over a hologram it turns the model instead', async () => {
+  const calls = [];
+  const wins = [];
+  const holos = new HoloManager({ createWindow: () => { const w = fakeHolo(); wins.push(w); return w; }, cursor: () => ({ x: 0, y: 0 }), area: () => ({ x: 0, y: 0, width: 1800, height: 1100 }), download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
+  const h = holos.get(await holos.show({ title: 'A', items: [{ kind: 'shapes', title: 'A', parts: [] }], x: 400, y: 400 }));
+  const hc = new HandControl({ holos, display: () => ({ x: 0, y: 0, width: 1801, height: 1101 }), askAccess: async () => true, createCamera: async () => ({ close() {} }), createCursor: () => ({ moveTo() {}, setState() {}, hide() {}, close() {} }), air: (t, x, y) => calls.push([t, Math.round(x), Math.round(y)]) });
+  await hc.enable();
+  const at = (x, y) => ({ x: x / 1800, y: y / 1100 });
+  await hc.handle({ type: 'pinchdown', ...at(1400, 900) });
+  await hc.handle({ type: 'move', held: true, ...at(1450, 920) });
+  await hc.handle({ type: 'move', held: true, ...at(1500, 950) });
+  await hc.handle({ type: 'pinchup', ...at(1500, 950) });
+  assert.deepEqual(calls.map((c) => c[0]), ['start', 'point', 'point', 'end']);
+  assert.equal(h.win.input.length, 0, 'nothing was pressed on the hologram');
+  await hc.handle({ type: 'pinchdown', ...at(400, 400) });
+  assert.equal(h.win.input.at(-1).type, 'mouseDown', 'over the hologram it is a press');
+  assert.equal(calls.length, 4, 'and nothing more was drawn');
+});

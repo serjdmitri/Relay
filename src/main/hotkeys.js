@@ -42,7 +42,9 @@ class Hotkeys {
         const c = codes.get(e.keycode);
         if (c) this.matcher.handle('up', c);
       });
-      uIOhook.on('mouseup', () => {
+      uIOhook.on('mousedown', (e) => { if (e.button === 1) this.onMouse?.(true); });
+      uIOhook.on('mouseup', (e) => {
+        if (e.button === 1) this.onMouse?.(false);
         if (this.onClick) this.onClick();
       });
       uIOhook.start();

@@ -6,7 +6,7 @@ function buildContext({ now = new Date(), frontmost, runningApps = [], mark = nu
   if (runningApps.length) lines.push(`Running apps: ${runningApps.join(', ')}.`);
   if (mark) lines.push(`The user marked an area of their screen ${mark.ageSec} seconds ago (${Math.round(mark.w)}x${Math.round(mark.h)} points). Call see_marked_area to look at it. "This", "here" or "that" most likely mean it.`);
   if (memory) lines.push(memory);
-  if (holo) lines.push(`The user is pointing at the hologram "${holo.title}" with their hand${holo.designed ? ' (a model designed from shapes: call read_3d, then edit_3d to change it)' : ''}. "This", "it" and "the hologram" mean it.`);
+  if (holo) lines.push(`The user is pointing at the hologram "${holo.title}" with their hand${holo.piece ? `, at one piece of it that is lit up in the marked picture (call see_marked_area to look)` : ''}${holo.designed ? ' (a model designed from shapes: call read_3d, then edit_3d to change it)' : ''}. "This", "it" and "the hologram" mean it.`);
   if (files && files.paths.length) lines.push(`The user dropped ${files.paths.length === 1 ? 'a file' : `${files.paths.length} files`} on Relay ${files.ageSec} seconds ago: ${files.paths.join(', ')}. "These", "this file" and "it" most likely mean them. Call read_file to look inside.`);
   return lines.join('\n');
 }

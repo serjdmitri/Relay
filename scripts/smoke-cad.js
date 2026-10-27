@@ -11,6 +11,7 @@ const out = process.argv[2] || path.join(__dirname, '../shots');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 process.on('uncaughtException', (e) => console.log('UNCAUGHT', e.message));
 
+app.setPath('downloads', require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'relay-dl-'))); // saved files go to a temporary folder in this test
 app.whenReady().then(async () => {
   const preload = path.join(__dirname, '../src/main/preload.js');
   const mgr = new HoloManager({ createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload, width, height }), cursor: holoWin.cursor, area: holoWin.area, displayFor: holoWin.displayFor, download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
@@ -91,6 +92,12 @@ app.whenReady().then(async () => {
     result.afterVoice = { shapes: (await T('cad()')).spec.shapes.length, editing: (await T('cad()')).editing, hole: edited.shapes[1].size };
     await shot('cad-6-voice-edit.png');
     result.stl = await T('stlBytes()');
+    for (const fmt of ['stl', '3mf', 'step']) { await js(`window.__holoTest.save('${fmt}'); 0`); await wait(900); }
+    const dir = path.join(app.getPath('downloads'), 'Relay 3D');
+    result.saved = fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => [f, fs.statSync(path.join(dir, f)).size]) : [];
+    result.savedDir = dir;
+    const g = await mgr.requestGlb(mgr.get(id)); // what the phone gets
+    result.phoneGlb = g ? { head: g.bytes.slice(0, 4).toString(), kb: Math.round(g.bytes.length / 1024), mm: g.mm } : null;
     result.fps = await T('fps()');
   } catch (e) { result.error = e.stack; }
   console.log('RESULT', JSON.stringify(result));

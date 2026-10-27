@@ -527,6 +527,26 @@ const PAGES = {
     hfCard.append(hf);
     c.append(hfCard);
 
+    // Holograms: where the buttons go, slow turning; and Hand control (the camera), with how to use it.
+    title('Holograms and hands');
+    const hv = S.settings.holoUi || { controls: 'menu', spin: true, spinDelay: 10 };
+    const segRow = (label, desc, opts, current, onPick) => {
+      const row = h(`<div class="row talk" style="flex-wrap:wrap"><div class="grow"><div class="t">${label}</div>${desc ? `<div class="d">${desc}</div>` : ''}</div><div class="seg">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(current) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div></div>`);
+      row.onclick = (e) => e.target.dataset.v !== undefined && onPick(e.target.dataset.v);
+      return row;
+    };
+    const hcard = h('<div class="card flat"></div>');
+    hcard.append(segRow('Buttons on a hologram', 'Menu: one small ⋯ button that opens the list. Side: a slim column beside the model. Bar: a row under its name. All stay clear of the model.', [['menu', 'Menu'], ['side', 'Side'], ['bar', 'Bar']], hv.controls, (v) => relay.set('settings.holoUi.controls', v)));
+    hcard.append(toggleRow('Holograms slowly turn', 'A hologram turns by itself until you touch it.', 'settings.holoUi.spin'));
+    hcard.append(segRow('Leave it still after I touch it', 'How long before it starts turning again.', [[3, '3 s'], [10, '10 s'], [30, '30 s'], [120, '2 min']], hv.spinDelay, (v) => relay.set('settings.holoUi.spinDelay', Number(v))));
+    const hs = S.handsInfo || { status: 'off', message: '' };
+    const handsOn = !!S.settings.hands?.enabled;
+    const hrow = h(`<div class="row"><div class="grow"><div class="t">Hand control (camera)</div><div class="d">${hs.status === 'error' ? esc(hs.message || 'It could not start.') : handsOn ? (hs.status === 'running' ? 'On. Hold a hand up to the camera: you should see a small glowing ring follow it.' : 'Starting…') : 'Move holograms in the air. Turn it on, allow the camera when macOS asks (Relay only looks at where your hands are, on this Mac; no picture is kept or sent), then hold an open hand up to the camera.'}</div></div><div class="toggle ${handsOn && hs.status !== 'error' ? 'on' : ''}"></div></div>`);
+    hrow.onclick = async () => { const r = await relay.setHands(!(handsOn && hs.status !== 'error')); if (r && !r.ok) alert(r.error); };
+    hcard.append(hrow);
+    hcard.append(h('<div class="row" style="display:block"><div class="t">What your hands do</div><div class="d" style="line-height:1.8">Open hand: moves the ring.  Fist: grab a hologram or a piece and carry it; open the hand to let go.  Thumb and finger tapped together: click; held and moved: turn the model.  Two hands pinching: resize (turn them like a wheel to roll it).  Two fists pulled apart: take it apart; together: put it back.  Quick swipe: next or previous model.  Thumb up held: keep it; thumb down held: close it.  Peace sign held: talk to Relay about the hologram your hand is on.  Point at a piece for a moment: pick it.</div></div>'));
+    c.append(hcard);
+
     title('Ask Relay');
     const ask = h('<div class="card flat"></div>');
     const lookNow = S.settings.look === 'classic' ? 'classic' : 'jarvis';

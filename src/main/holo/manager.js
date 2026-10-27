@@ -13,10 +13,11 @@ const MAX_ITEMS = 4;
 class HoloManager {
   // createWindow(): a window-like object; cursor(): { x, y }; area(): the work area to place new ones in; download(url) -> Buffer;
   // saved(): the stored list; save(list): store it.
-  constructor({ createWindow, cursor, area, displayFor = null, download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
+  constructor({ createWindow, cursor, area, displayFor = null, getUi = () => ({ controls: 'menu', spin: true, spinDelay: 10 }), download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
     this.createWindow = createWindow;
     this.cursor = cursor;
     this.area = area;
+    this.getUi = getUi; // the look: where the controls are, and whether and when a hologram slowly turns
     this.displayFor = displayFor || (() => area()); // (point) -> the bounds of the display the point is on
     this.download = download;
     this.fit = fit; // (base, item, hint) -> how the item joins the base: { anchor, scale, rotate } or null
@@ -28,11 +29,14 @@ class HoloManager {
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
     this.holos = new Map();
+    this.buttonDown = false;
+    this.dragTimer = null;
     this.handMode = false; // hands are in use: the controls are drawn bigger
     this.byWindow = new Map(); // webContents id -> hologram id
     this.dragging = null;
     this.onChange = () => {};
-    this.onAsk = async () => {}; // (hologram, { region, part }): the user asks Relay about it
+    this.onAsk = async () => {};
+    this.onFiles = async () => {}; // (hologram, paths): files were dropped on it // (hologram, { region, part }): the user asks Relay about it
   }
 
   // The designed (editable) hologram: the one titled so, else the latest. { h, index } or null.
@@ -64,17 +68,74 @@ class HoloManager {
   }
 
   // Asks a hologram's page to save itself as an STL (the same as its save button); resolves with where it went.
-  requestSave(h) {
+  requestSave(h, opts = {}) {
     return new Promise((resolve) => {
       h.pendingSave = resolve;
-      h.win.webContents.send('holo:state', 'save');
+      h.win.webContents.send('holo:state', 'save', opts);
       const t = setTimeout(() => { if (h.pendingSave === resolve) { h.pendingSave = null; resolve({ ok: false, error: 'Saving took too long.' }); } }, 20000);
       t.unref?.();
     });
   }
 
+  // The model as a GLB (for the phone page): { bytes, mm } or null.
+  requestGlb(h) {
+    return new Promise((resolve) => {
+      h.pendingGlb = resolve;
+      h.win.webContents.send('holo:state', 'export-glb');
+      const t = setTimeout(() => { if (h.pendingGlb === resolve) { h.pendingGlb = null; resolve(null); } }, 20000);
+      t.unref?.();
+    });
+  }
+
+  finishGlb(h, r) {
+    if (h?.pendingGlb) { const f = h.pendingGlb; h.pendingGlb = null; f(r && r.bytes ? { bytes: Buffer.from(r.bytes), mm: !!r.mm } : null); }
+  }
+
   finishSave(h, result) {
     if (h?.pendingSave) { const r = h.pendingSave; h.pendingSave = null; r(result); }
+  }
+
+  ui() {
+    const u = this.getUi() || {};
+    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)) };
+  }
+
+  // Settings changed: every hologram takes the new look at once.
+  refreshUi() {
+    const j = JSON.stringify(this.ui());
+    if (j === this.lastUi) return;
+    this.lastUi = j;
+    for (const h of this.holos.values()) if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'ui', this.ui());
+  }
+
+  // ----- files dragged onto a hologram -----
+  // A window that lets clicks through is never offered a drag by macOS. So while the mouse button is held (a drag may be in progress) and the
+  // pointer is over a hologram, that hologram's window takes drags; when the button is let go it goes back to letting clicks through.
+  mouseButton(down) {
+    this.buttonDown = !!down;
+    if (down) {
+      if (!this.dragTimer) this.dragTimer = this.setTimer(() => this.watchDrag(), 70);
+      this.watchDrag();
+    } else {
+      if (this.dragTimer) { this.clearTimer(this.dragTimer); this.dragTimer = null; }
+      setTimeout(() => this.restoreDrop(), 250); // let a drop that is happening finish first
+    }
+  }
+
+  watchDrag() {
+    if (this.dragging) return; // the person is moving a hologram: not a file
+    const c = this.cursor();
+    const near = this.holoNear(c, 20);
+    for (const h of this.holos.values()) {
+      if (h.win.isDestroyed()) continue;
+      const accept = h === near;
+      if (accept !== !!h.accepting) { h.accepting = accept; h.win.setIgnoreMouseEvents(!accept && !h.hit, { forward: true }); }
+    }
+  }
+
+  restoreDrop() {
+    if (this.buttonDown) return;
+    for (const h of this.holos.values()) if (h.accepting && !h.win.isDestroyed()) { h.accepting = false; h.win.setIgnoreMouseEvents(!h.hit, { forward: true }); }
   }
 
   hasUnpinned() {
@@ -136,7 +197,7 @@ class HoloManager {
   }
 
   payload(h) {
-    return { id: h.id, title: h.title, items: h.items, options: h.options && h.options.list.length > 1 ? { index: h.options.index, count: h.options.list.length } : null, pinned: h.pinned, scale: h.scale, solid: h.solid, pos: this.local(h), handMode: this.handMode };
+    return { id: h.id, title: h.title, items: h.items, options: h.options && h.options.list.length > 1 ? { index: h.options.index, count: h.options.list.length } : null, pinned: h.pinned, scale: h.scale, solid: h.solid, pos: this.local(h), handMode: this.handMode, ui: this.ui() };
   }
 
   push(h, kind = 'items') {

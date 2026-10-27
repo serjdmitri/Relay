@@ -8,12 +8,14 @@ const path = require('path');
 const { isPrivateAddress } = require('./auth');
 
 const TYPES = { '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
-const PAGES = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
+const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
+const PAGES = { '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
   // control: { ask(text) -> id, stop(), snapshot(), recent(n) }; pairing: Pairing; devices: Devices; root: folder of the phone page.
-  constructor({ control, pairing, devices, root, host = '0.0.0.0', port = 47900 }) {
+  constructor({ control, pairing, devices, root, vendor = path.join(root, '../renderer/vendor/three'), host = '0.0.0.0', port = 47900 }) {
+    this.vendor = vendor; // where the viewer's libraries (three.js) are
     this.control = control;
     this.pairing = pairing;
     this.devices = devices;
@@ -79,6 +81,12 @@ class RemoteServer {
       res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
       return res.end(fs.readFileSync(file));
     }
+    if (req.method === 'GET' && VENDOR[p]) { // the 3D viewer's libraries (three.js), nothing else from that folder
+      const file = path.join(this.vendor, VENDOR[p]);
+      if (!fs.existsSync(file)) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'content-type': TYPES['.js'], 'cache-control': 'max-age=3600' });
+      return res.end(fs.readFileSync(file));
+    }
     if (!p.startsWith('/api/')) { res.writeHead(404); return res.end(); }
     // Pages on other sites cannot send this header without Relay's permission, so they cannot drive the API through a browser.
     if (req.method === 'POST' && req.headers['x-relay-remote'] !== '1') return this.json(res, 400, { error: 'Missing header.' });
@@ -110,6 +118,14 @@ class RemoteServer {
       });
       await this.control.ask(text, device, id);
       return this.json(res, 200, await answer);
+    }
+    if (p === '/api/holos' && req.method === 'GET') return this.json(res, 200, { holos: this.control.holos?.() || [] });
+    const hm = p.match(/^\/api\/holos\/([\w-]{8,64})\/model$/);
+    if (hm && req.method === 'GET') {
+      const r = await this.control.holoModel?.(hm[1]);
+      if (!r) return this.json(res, 404, { error: 'That hologram is gone.' });
+      res.writeHead(200, { 'content-type': 'model/gltf-binary', 'content-length': r.bytes.length, 'cache-control': 'no-store', 'x-relay-mm': r.mm ? '1' : '0', 'x-relay-title': encodeURIComponent(r.title || 'hologram') });
+      return res.end(r.bytes);
     }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {

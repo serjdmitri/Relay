@@ -38,7 +38,7 @@ class RemoteService {
     const host = s.lan === false ? '127.0.0.1' : '0.0.0.0';
     if (this.server && (!s.enabled || this.server.host !== host || this.server.port !== s.port)) { this.stop(); }
     if (!s.enabled || this.server) return;
-    const control = { ask: (t, d, id) => this.ask.remoteAsk(t, d, id), stop: () => this.ask.cancelAll(), snapshot: () => this.ask.remoteSnapshot(), recent: (n) => this.ask.remoteRecent(n) };
+    const control = { ask: (t, d, id) => this.ask.remoteAsk(t, d, id), stop: () => this.ask.cancelAll(), snapshot: () => this.ask.remoteSnapshot(), recent: (n) => this.ask.remoteRecent(n), holos: () => this.ask.remoteHolos(), holoModel: (id) => this.ask.remoteHoloModel(id) };
     const server = new RemoteServer({ control, pairing: this.pairing, devices: this.devices, root: this.root, host, port: s.port });
     server.onPaired = () => this.broadcast();
     try {

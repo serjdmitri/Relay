@@ -30,3 +30,20 @@ header button { background: none; border: 0; color: var(--dim); font-size: 22px;
 #menu { position: fixed; left: 14px; right: 14px; top: calc(env(safe-area-inset-top) + 48px); display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; background: #04121c; border: 1px solid rgba(0, 212, 255, .35); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); z-index: 5; }
 #menu button { padding: 12px; border-radius: 12px; border: 1px solid rgba(0, 212, 255, .35); background: none; color: var(--ink); font-size: 16px; }
 #menu #unpair { color: var(--warn); } #support { font-size: 12px; color: var(--dim); }
+/* the holograms page and its button on the home screen */
+.holo-page main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
+.holo-page header { display: flex; align-items: center; gap: 10px; padding: 12px 0; font-size: 20px; font-weight: 600; letter-spacing: .06em; }
+.holo-page .back { color: var(--acc); font-size: 34px; text-decoration: none; line-height: 1; padding: 0 8px 4px 0; }
+.dim { color: var(--dim); }
+#tiles { list-style: none; display: grid; gap: 12px; margin-top: 12px; }
+#tiles li { padding: 18px 16px; border-radius: 16px; background: var(--card); border: 1px solid rgba(0, 212, 255, .3); font-size: 18px; display: flex; justify-content: space-between; align-items: center; }
+#tiles li small { color: var(--dim); font-size: 13px; }
+#view { padding: env(safe-area-inset-top) 0 0; }
+#view header { padding-left: 20px; padding-right: 20px; }
+#gl { flex: 1; width: 100%; min-height: 0; touch-action: none; display: block; }
+#vhint { text-align: center; font-size: 13px; padding: 4px 0; }
+#vbar { display: flex; gap: 10px; padding: 10px 20px 4px; }
+#vbar button { flex: 1; padding: 14px 0; border-radius: 14px; border: 1px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .7); color: var(--ink); font-size: 17px; font-weight: 600; letter-spacing: .08em; }
+#vbar button:active { background: var(--acc); color: #00141c; }
+#vmsg { text-align: center; min-height: 1.4em; padding: 0 20px; font-size: 14px; }
+#holobtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-left: auto; margin-right: 6px; }

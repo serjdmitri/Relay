@@ -8,8 +8,9 @@ const { HandPointer } = require('./logic');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, now = Date.now }) {
-    Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, now });
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, now = Date.now }) {
+    Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, now });
+    this.drawing = false; // a pinch held in empty space draws a glowing line in the air
     this.enabled = false;
     this.status = 'off';
     this.message = '';
@@ -108,7 +109,7 @@ class HandControl {
 
   async handle(e) {
     if (!this.enabled) return;
-    if (e.type === 'lost') { this.release(); this.ring?.hide?.(); this.pos = null; return; }
+    if (e.type === 'lost') { if (this.drawing) { this.drawing = false; this.air('end', 0, 0); } this.release(); this.ring?.hide?.(); this.pos = null; return; }
     if (e.type === 'scale') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-scale', e.factor); return; }
     if (e.type === 'twist') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-twist', e.angle); return; }
     if (e.type === 'pull') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-explode', e.open); return; }
@@ -117,6 +118,7 @@ class HandControl {
     this.pos = pt;
     this.ring?.moveTo?.(pt);
     if (e.type === 'move') {
+      if (this.drawing) { this.air('point', pt.x, pt.y); return; }
       this.ringState(e.held ? 'held' : 'open');
       const h = this.target(pt);
       if (h) { const now = this.now(); if (now - this.lastMoveSent >= 16) { this.lastMoveSent = now; this.send(h, 'mouseMove', pt, this.captured ? { modifiers: ['leftButtonDown'] } : {}); } }
@@ -133,8 +135,8 @@ class HandControl {
       return;
     }
     if (e.type === 'release') { this.ringState('open'); this.release(); return; }
-    if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (h) { this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; }
-    if (e.type === 'pinchup') { this.ringState('open'); this.release(); return; }
+    if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (!h) { this.drawing = true; this.air('start', pt.x, pt.y); return; } if (h) { this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; }
+    if (e.type === 'pinchup') { this.ringState('open'); if (this.drawing) { this.drawing = false; this.air('end', pt.x, pt.y); return; } this.release(); return; }
     if (e.type === 'click') {
       this.ringState('click');
       setTimeout(() => this.ringState('open'), 220);
@@ -142,6 +144,7 @@ class HandControl {
       if (h) { this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); }
       return;
     }
+    if (e.type === 'point') { const h = this.holos.holoNear(pt, 330); if (h) { this.ringState('click'); setTimeout(() => this.ringState('open'), 300); this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); } return; }
     if (e.type === 'swipe') { const h = this.holos.holoNear(pt, 330); if (h) this.holos.step(h.id, e.dir === 'right' ? 1 : -1); return; }
     if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
     if (e.type === 'thumbdown') { const h = this.holos.holoNear(pt, 330); if (h) this.holos.close(h.id); return; }

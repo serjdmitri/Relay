@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.25.0
+
+- **Hologram buttons that stay out of the way.** Settings > General > Holograms and hands > Buttons on a hologram: **Menu** (one small ⋯ button that opens the list, the new default), **Side** (a slim column beside the model) or **Bar** (a row under its name). The controls now sit below or beside the model, never on top of it.
+- **A hologram waits after you touch it.** It still turns slowly by itself, but after you move or turn it, it stays still for 3 s, **10 s** (default), 30 s or 2 min and then eases back into turning. Both are settings (and the slow turn can be switched off).
+- **Hand control is easy to find and switch on.** The menu bar icon and Settings both have a Hand control (camera) switch, with its status and a list of what each gesture does.
+- **Point at a part and ask.** Hold your pointing finger on a piece for a moment to pick it; then hold the peace sign and talk: Relay is sent the picture with that piece lit, and your question, by voice.
+- **Draw in the air.** With hand control on, pinch and drag in empty space to leave a glowing line, the same trail as marking the screen.
+- **Save as STL, 3MF or STEP, or send it to your slicer.** The download button opens a small menu: the three formats (millimetres, standing on the bed; STEP is a real solid, read back by OpenCascade in my tests) and, for every app you have installed, Bambu Studio, OrcaSlicer, PrusaSlicer, Cura, Creality Print, Fusion, FreeCAD or Blender: "Send to". "Save it as a 3MF and open it in Orca" works by voice.
+- **Holograms on your phone.** Relay Remote has a model page: every hologram that is open, drawn on the phone, turned with a finger, zoomed with a pinch, saved as STL, 3MF or STEP (the share sheet, or a download).
+- **Drop a file on a hologram.** An STL or GLB is added as a model; any other file is handed to Relay with your next question about that hologram. (A hologram accepts drops while you drag a file over it.)
+- **The GitHub page** shows the new menus, the editor, hand control and the phone view, and every colour matches the app (the last purple and orange left in the diagrams and charts are gone).
+- Honest limits: tested with 406 unit tests, real Electron hologram windows (the three button styles, the spin delay measured, the save menu writing real STL/3MF/STEP files) and a real browser for the phone page against a stand-in Mac. **Not tested by me:** a live camera with a real hand (point, peace sign and air drawing are tested with scripted hand sequences), a real drag of a file from Finder onto a hologram, the phone page against a real Mac over the network, and how the air line looks in the real overlay.
+
 ## 0.24.0
 
 - **Bigger controls while your hands are in use.** When Hand control sees a hand, the buttons under every hologram, their labels and the editor's panels double in size (64 x 60 instead of 32 x 30) and stay visible; a couple of seconds after your hand leaves they shrink back.

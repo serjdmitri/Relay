@@ -11,7 +11,7 @@ process.on('uncaughtException', (e) => console.log('UNCAUGHT', e.message));
 app.whenReady().then(async () => {
   const preload = path.join(__dirname, '../src/main/preload.js');
   let hc = null;
-  const mgr = new HoloManager({ createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload, width, height }), cursor: () => hc?.virtualCursor() || holoWin.cursor(), area: holoWin.area, displayFor: holoWin.displayFor, download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
+  const mgr = new HoloManager({ createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload, width, height }), cursor: () => hc?.virtualCursor() || holoWin.cursor(), getUi: () => ({ controls: 'bar', spin: true, spinDelay: 10 }), area: holoWin.area, displayFor: holoWin.displayFor, download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
   holoWin.registerHoloIpc(mgr);
   hc = new HandControl({ holos: mgr, display: () => holoWin.area(), askAccess: async () => true, createCamera: async () => ({ close() {} }), createCursor: () => ({ moveTo() {}, setState() {}, hide() {}, close() {} }), onMic: () => {} });
   await hc.enable();

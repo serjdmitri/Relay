@@ -62,7 +62,7 @@
   .c5 { background: linear-gradient(135deg,#4cc2ff,#4cc2ff); } .c6 { background: linear-gradient(135deg,#1c8fd6,#4cc2ff); }
   .two { display: grid; gap: 22px; grid-template-columns: 1fr; }
   .frame { border-radius: 22px; overflow: hidden; box-shadow: 0 24px 60px rgba(4,12,20,.5), 0 0 0 1px var(--line); }
-  .diagram { background: #17143a; border-radius: 22px; padding: 8px; box-shadow: 0 0 0 1px var(--line); }
+  .diagram { background: #0f1822; border-radius: 22px; padding: 8px; box-shadow: 0 0 0 1px var(--line); }
   .model h3 { display: flex; align-items: center; gap: 10px; }
   .tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(76,194,255,.18); color: var(--green); letter-spacing: .02em; }
   .tag.warn { background: rgba(159,220,255,.18); color: var(--yellow); }
@@ -72,7 +72,7 @@
   .step b { display: block; margin-bottom: 4px; }
   .step span { color: var(--muted); font-size: 15px; }
   code { font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255,255,255,.1); padding: 2px 7px; border-radius: 7px; }
-  pre { margin: 18px 0 0; background: #07051a; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #cfe3f0; }
+  pre { margin: 18px 0 0; background: #070d14; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #cfe3f0; }
   .dl { text-align: center; margin-top: 30px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .charts { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
   details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 22px; margin-bottom: 12px; }
@@ -85,6 +85,24 @@
   .final h2 { margin-bottom: 10px; }
   footer { position: relative; z-index: 1; margin-top: 80px; padding: 34px 0 50px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; text-align: center; }
   footer a { color: #fff; }
+  .figs { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 30px; align-items: start; }
+  figure { margin: 0; }
+  figure .frame { background: #0b1118; }
+  figcaption { color: var(--muted); font-size: 15px; text-align: center; margin-top: 12px; }
+  figcaption b { color: var(--text); display: block; font-size: 16px; }
+  .split { display: grid; gap: 28px; grid-template-columns: 1fr; align-items: center; }
+  @media (min-width: 900px) { .split { grid-template-columns: 1.1fr 1fr; } .split.flip > :first-child { order: 2; } }
+  .split h3 { font-size: 26px; margin: 0 0 10px; letter-spacing: -.01em; }
+  .split p { color: var(--muted); margin: 0 0 12px; }
+  .list { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 9px; }
+  .list li { color: var(--muted); font-size: 16px; padding-left: 22px; position: relative; }
+  .list li::before { content: ""; position: absolute; left: 3px; top: .62em; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px rgba(76,194,255,.6); }
+  .list b { color: var(--text); font-weight: 600; }
+  .gest { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 26px; }
+  .gest div { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; font-size: 15px; color: var(--muted); }
+  .gest b { display: block; color: var(--cyan); font-size: 15px; margin-bottom: 3px; }
+  .phone { max-width: 300px; margin: 0 auto; border-radius: 34px; box-shadow: 0 24px 60px rgba(4,12,20,.55), 0 0 0 1px var(--line), 0 0 0 8px #0b1118, 0 0 0 9px var(--line); overflow: hidden; }
+  .note { color: var(--muted); font-size: 14px; text-align: center; max-width: 720px; margin: 22px auto 0; }
   @media (max-width: 720px) { nav a.l { display: none; } .hero { padding-top: 56px; } }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .hero .logo { animation: none; } .btn { transition: none; } }
   :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; border-radius: 8px; }
@@ -97,6 +115,8 @@
   <nav class="wrap" aria-label="Main">
     <a class="brand" href="#top"><img src="logo.svg" alt="" width="32" height="32">Relay</a>
     <a class="l" href="#features">Features</a>
+    <a class="l" href="#holograms">Holograms</a>
+    <a class="l" href="#hands">Hands</a>
     <a class="l" href="#how">How it works</a>
     <a class="l" href="#models">Models</a>
     <a class="l" href="#download">Download</a>
@@ -134,6 +154,12 @@
       <div class="card"><div class="ic c1"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 6-6 2-2 6z"/></svg></div><h3>Shows you, not just tells you</h3><p>Ask where something is and Relay points at it, circles it, or walks you through the steps on your own screen. Click the outlined spot, or say "next", to go on.</p></div>
       <div class="card"><div class="ic c2"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div><h3>A reactor that listens, and "Hey Jarvis"</h3><p>A big Jarvis reactor opens in the middle of your screen and follows your voice, then shrinks to the corner while it works. Say your wake phrase to start, or hold a key and circle something on screen to ask about it. Name a task once and Relay repeats it with no model.</p></div>
       <div class="card"><div class="ic c2"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="3 2.4"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg></div><h3>Circle it, then ask</h3><p>Hold a key, move the pointer round anything on screen, let go and ask. Relay looks at exactly what you marked. A small ring with a cursor triangle follows your pointer and traces what it draws.</p></div>
+      <div class="card"><div class="ic c3"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div><h3>Holograms you can hold</h3><p>Ask for a skull, an engine or a rocket and a glowing 3D model floats on your screen. Turn it, pull it apart, point at a piece and ask what it is.</p></div>
+      <div class="card"><div class="ic c4"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l4-1 11-11a2.1 2.1 0 00-3-3L5 16z"/><path d="M14 6l3 3"/></svg></div><h3>Design it by voice</h3><p>Say "make a box with a hole through it" and refine it with your hands or your voice. Export STL, 3MF or STEP and send it to your slicer.</p></div>
+      <div class="card"><div class="ic c6"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a1.5 1.5 0 013 0v5M12 9.5V4a1.5 1.5 0 013 0v6M15 10V7a1.5 1.5 0 013 0v8a6 6 0 01-6 6h-1a6 6 0 01-5-3l-2-3.5a1.5 1.5 0 012.3-1.8L9 15"/></svg></div><h3>Control it with your hands</h3><p>Use the camera to move, turn, resize and pull holograms apart in the air. Off until you switch it on; the video never leaves your Mac.</p></div>
+      <div class="card"><div class="ic c2"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></div><h3>On your phone too</h3><p>Open any hologram on your phone through Relay Remote, turn it with a finger, and save it as STL, 3MF or STEP.</p></div>
+      <div class="card"><div class="ic c1"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><h3>Finds and tidies your files</h3><p>Find a file with previews, or ask Relay to sort a messy folder. It shows where everything goes first, moves only when you confirm, and can undo. It never deletes.</p></div>
+      <div class="card"><div class="ic c5"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7V3M15 7V3M7 11h10M12 17v4"/><rect x="5" y="7" width="14" height="10" rx="3"/></svg></div><h3>Connects your other apps</h3><p>Paste one Composio or MCP address and Relay can read Gmail, Slack, GitHub and more. Reading runs; sending or changing asks first; deleting is refused.</p></div>
       <div class="card"><div class="ic c5"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Asks before it acts</h3><p>Anything that sends a message, trashes a file, runs a shell command or looks destructive shows an Allow or Cancel card first.</p></div>
       <div class="card"><div class="ic c6"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 018 0v2.5"/></svg></div><h3>Private by design</h3><p>Speech is turned into words on your Mac by Apple's on-device recognition. Only the words go to the model, and only when you ask Relay to do something.</p></div>
     </div>
@@ -145,6 +171,81 @@
     <div class="two">
       <div class="frame"><img src="img/ui-main.png" alt="Relay window: Home with shortcuts and stats, and History with a seven-day chart" width="1200" height="470" loading="lazy"></div>
       <div class="frame"><img src="img/ui-more.png" alt="Relay window: Account with the model service picker, and Speech settings" width="1200" height="470" loading="lazy"></div>
+    </div>
+  </section>
+
+
+  <section id="holograms" class="wrap">
+    <h2>Models you can <span class="g">hold</span></h2>
+    <p class="sub">Say "show me a human skull" or "make a model from this photo". The model floats on your screen with no window around it, and you choose how its buttons look.</p>
+    <div class="figs">
+      <figure><div class="frame"><img src="img/holo-menu.png" alt="A hologram of a human skull with a small button that opens a menu: Move, Ask about it, Pull apart, Turn to front" width="640" height="663" loading="lazy"></div><figcaption><b>Menu</b>One small button that opens the list. Nothing sits on the model.</figcaption></figure>
+      <figure><div class="frame"><img src="img/holo-side.png" alt="The same hologram with a slim column of icon buttons beside it" width="640" height="512" loading="lazy"></div><figcaption><b>Side</b>A slim column beside the model.</figcaption></figure>
+      <figure><div class="frame"><img src="img/holo-bar.png" alt="The same hologram with a row of icon buttons under its name" width="640" height="512" loading="lazy"></div><figcaption><b>Bar</b>A row under its name.</figcaption></figure>
+    </div>
+    <p class="note">Pick the style in Settings, General, Holograms and hands. A hologram turns slowly by itself; after you move it, it stays still for 3 seconds, 10 seconds, 30 seconds or 2 minutes (your choice) and then turns again.</p>
+
+    <div class="split" style="margin-top:70px">
+      <div class="frame"><img src="img/holo-parts.png" alt="A robot hologram pulled apart: one piece lit and lifted out, the rest on a glowing floor ring" width="640" height="751" loading="lazy"></div>
+      <div>
+        <h3>Pull it apart, ask about a piece</h3>
+        <p>Pull a model into its parts, pick one, take it out and put it back. Point at a piece and ask "what is this?" and Relay sees the piece you marked.</p>
+        <ul class="list">
+          <li><b>Combine.</b> Drag one hologram onto another to make something new, then place the pieces where you want them.</li>
+          <li><b>Photo to 3D.</b> Relay picks the best of your photos and builds a model. Add a free Hugging Face token in Settings to use the better TRELLIS.2 engine.</li>
+          <li><b>Drop a file.</b> Drag an STL or GLB onto a hologram to add it; drop any other file to hand it to Relay with your next question.</li>
+          <li><b>Draw in the air.</b> With hand control on, pinch and drag in empty space to leave a glowing line, handy for pointing things out.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="split flip" style="margin-top:70px">
+      <div>
+        <h3>Design by voice, edit with your hands</h3>
+        <p>Say what you want and Relay builds it from cubes, cylinders, spheres, cones, roofs, pyramids, rings and tubes. Holes cut like Tinkercad. Then open the editor to drag a shape, pull its squares to resize it, or type exact millimetres.</p>
+        <ul class="list">
+          <li><b>Save for printing.</b> STL, 3MF or STEP, scaled in millimetres and sitting on the bed.</li>
+          <li><b>Send to your slicer.</b> Relay lists the ones you have: Bambu Studio, OrcaSlicer, PrusaSlicer, Cura, Creality Print, plus Fusion, FreeCAD and Blender.</li>
+          <li><b>Undo and redo</b> every change, or say "make the hole bigger".</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="img/holo-cad.png" alt="The hologram editor: a cube with a cylinder-shaped hole and a cone on top, a list of shapes to add on the left, and size, position and turn fields on the right" width="1100" height="677" loading="lazy"></div>
+    </div>
+
+    <div class="split" style="margin-top:70px">
+      <div class="phone"><img src="img/phone-holo.png" alt="Relay Remote on a phone showing a 3D model with save buttons for STL, 3MF and STEP" width="390" height="844" loading="lazy"></div>
+      <div>
+        <h3>Take it with you</h3>
+        <p>Open Relay Remote on your phone and tap the model icon. Every hologram you have open is listed. Turn it with one finger, pinch to zoom, and save it as STL, 3MF or STEP straight to your phone. Remote stays private: pairing code, your own network, nothing in the cloud.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="hands" class="wrap">
+    <h2>Your hands are <span class="g">the mouse</span></h2>
+    <p class="sub">Switch on hand control and your camera follows your hand with a small glowing ring. The picture is read on your Mac and never saved or sent. Buttons grow bigger while a hand is in view.</p>
+    <div class="split">
+      <div class="frame"><img src="img/settings-holograms.png" alt="Relay Settings, Holograms and hands: button style, slow turning, leave-still delay, and the hand control switch with the list of gestures" width="1000" height="1097" loading="lazy"></div>
+      <div>
+        <h3>How to turn it on</h3>
+        <ul class="list">
+          <li>Click the Relay icon in the menu bar and choose <b>Hand control (camera)</b>. Or use Settings, General, Holograms and hands.</li>
+          <li>Allow the camera when macOS asks.</li>
+          <li>Hold an open hand up. A small ring should follow it.</li>
+        </ul>
+        <p style="margin-top:16px">It is off until you turn it on, and it is experimental: lighting and distance matter.</p>
+      </div>
+    </div>
+    <div class="gest">
+      <div><b>Open hand</b>Moves the ring.</div>
+      <div><b>Fist</b>Grab a hologram or a piece and carry it. Open to let go.</div>
+      <div><b>Pinch</b>Tap to click. Hold and move to turn the model.</div>
+      <div><b>Two hands pinching</b>Resize it. Turn them like a wheel to roll it.</div>
+      <div><b>Two fists apart</b>Pull it into parts. Bring them together to put it back.</div>
+      <div><b>Quick swipe</b>Next or previous model.</div>
+      <div><b>Thumb up or down, held</b>Keep it pinned, or close it.</div>
+      <div><b>Peace sign, held</b>Talk to Relay about what your hand is on.</div>
+      <div><b>Point, held</b>Pick the piece you are pointing at.</div>
     </div>
   </section>
 
@@ -168,7 +269,7 @@
     <h2 id="nums">Built in the open</h2>
     <p class="sub">The numbers below are drawn from the repository itself.</p>
     <div class="charts">
-      <img src="img/chart-tests.svg" alt="Bar chart of 196 unit tests by area" width="600" height="340" loading="lazy">
+      <img src="img/chart-tests.svg" alt="Bar chart of 406 unit tests by area" width="600" height="340" loading="lazy">
       <img src="img/chart-code.svg" alt="Donut chart of lines of code by language" width="600" height="340" loading="lazy">
     </div>
   </section>
