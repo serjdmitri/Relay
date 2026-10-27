@@ -45,16 +45,17 @@ function registerHoloIpc(mgr) {
   ipcMain.handle('holo:cad', (e, d) => { const h = of(e); if (!h || !d) return false; try { return mgr.setCad(h, +d.item || 0, sanitizeCad(d.cad)); } catch { return false; } });
   // Saves a model as a file in Downloads/Relay 3D (never over a file that is there).
   ipcMain.handle('holo:save', (e, d) => {
+    const res = (r) => { mgr.finishSave(of(e), r); return r; };
     try {
-      if (!d || !(d.bytes instanceof Uint8Array || Buffer.isBuffer(d.bytes)) || d.bytes.length < 84 || d.bytes.length > 200 * 1024 * 1024) return { ok: false, error: 'Nothing to save.' };
+      if (!d || !(d.bytes instanceof Uint8Array || Buffer.isBuffer(d.bytes)) || d.bytes.length < 84 || d.bytes.length > 200 * 1024 * 1024) return res({ ok: false, error: 'Nothing to save.' });
       const ext = d.ext === 'stl' ? 'stl' : 'stl';
       const dir = path.join(app.getPath('downloads'), 'Relay 3D');
       fs.mkdirSync(dir, { recursive: true });
       const file = uniquePath((p) => fs.existsSync(p), dir, d.name, ext);
       fs.writeFileSync(file, Buffer.from(d.bytes), { flag: 'wx' });
       shell.showItemInFolder(file);
-      return { ok: true, file, where: `Downloads/Relay 3D/${path.basename(file)}` };
-    } catch (err) { return { ok: false, error: 'Could not save it.' }; }
+      return res({ ok: true, file, where: `Downloads/Relay 3D/${path.basename(file)}` });
+    } catch (err) { return res({ ok: false, error: 'Could not save it.' }); }
   });
   ipcMain.handle('holo:place', (e, d) => { const h = of(e); if (!h || !d) return false; return mgr.setPlacement(h, +d.item || 0, cleanFree(d.free)); });
   ipcMain.handle('holo:scale', (e, v) => { const h = of(e); if (h && Number.isFinite(v)) mgr.setScale(h.id, v); });

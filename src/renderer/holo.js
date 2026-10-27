@@ -711,6 +711,7 @@ addEventListener('wheel', (e) => {
 addEventListener('dblclick', (e) => { if (editing) return; if (!pick(e) || pick(e) === 'ui' || pick(e) === 'move') return; toggleExplode(); });
 let spinPause = false;
 let placeTimer = 0;
+let handScaleTimer = 0;
 
 // The model's size, and the box that holds the name and the controls round it, follow the zoom.
 function applyScale() {
@@ -763,6 +764,8 @@ relay.onHolo((m, d) => {
     rebuild().catch(() => { $('err').textContent = 'Could not draw that model.'; });
   } else if (m === 'merge-hint') { document.body.classList.toggle('merging', !!d); $('merge').textContent = d === 'fit' ? 'Fitting…' : 'Release to combine'; }
   else if (m === 'pos') setPos(d.x, d.y);
+  else if (m === 'save') saveStl();
+  else if (m === 'hand-scale') { userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
   else if (m === 'error') $('err').textContent = d;
 });
@@ -811,6 +814,8 @@ window.__holoTest = {
   state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length, pos: { ...pos }, zonePx, q: holo.quaternion.toArray() }),
   where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
   fps: () => fps,
+  stlBytes: () => { const v = itemWraps[0]?.userData.cadView; if (!v?.mesh) return 0; const root = new THREE.Group(); root.add(new THREE.Mesh(v.mesh.geometry, new THREE.MeshBasicMaterial())); root.updateMatrixWorld(true); const dv = new STLExporter().parse(root, { binary: true }); return { bytes: dv.byteLength, tris: dv.getUint32(80, true) }; },
+  mode: () => (exploded || editing ? 'parts' : items.length > 1 ? 'items' : 'whole'),
   itemAt: (i) => (itemWraps[i] ? toScreen(itemWraps[i].getWorldPosition(new THREE.Vector3())) : null),
   sel: () => selItem,
   front: () => { orient.identity(); holo.quaternion.identity(); return true; },

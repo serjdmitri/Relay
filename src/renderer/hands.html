@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob: data:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'unsafe-inline'">
+<title>Hand control</title>
+</head>
+<body style="margin:0;background:#000">
+<!-- No picture is shown or kept: the camera feeds the hand finder (on this Mac) and only where your hands are is sent on. -->
+<video id="v" autoplay muted playsinline width="640" height="480" style="display:none"></video>
+<script type="module" src="hands.js"></script>
+</body>
+</html>

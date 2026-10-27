@@ -319,6 +319,15 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       describe: (i) => `Getting a 3D model of ${i.title}`,
       run: async (i) => models.show(i)
     });
+    if (models.save) {
+      tools.push({
+        name: 'save_3d',
+        description: 'Save the 3D hologram on screen as an STL file (the format for 3D printing, and for Fusion, Cura, PrusaSlicer, Bambu Studio and most CAD apps), in Downloads/Relay 3D. A designed model is saved in real millimetres; anything else is scaled to 100 mm across. Optionally open it in an app by name ("Cura", "PrusaSlicer", "Bambu Studio", "Fusion") so it is ready to print or edit. Use for "save this", "export it", "send it to my 3D printer", "open it in Fusion".',
+        input_schema: obj({ title: str('Which hologram, by its title (optional: the latest)'), open_with: str('An app to open the file in, e.g. "Bambu Studio" (optional)') }),
+        describe: () => 'Saving the model',
+        run: async (i) => models.save(i)
+      });
+    }
     if (models.design) {
       const shapeProps = {
         name: str('A short name you can refer to later ("Cube", "Hole", "Roof")'), type: str('box (cube/block/plate) | cylinder | sphere | cone | wedge (roof/ramp) | pyramid | torus (ring) | tube (hollow cylinder)'),

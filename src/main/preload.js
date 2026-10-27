@@ -76,6 +76,8 @@ contextBridge.exposeInMainWorld('relay', {
   holoAsk: (d) => invoke('holo:ask', d),
   holoCad: (d) => invoke('holo:cad', d),
   holoSave: (d) => invoke('holo:save', d),
+  handFrame: (f) => invoke('hands:frame', f),
+  handStatus: (s) => invoke('hands:status', s),
   holoPlace: (d) => invoke('holo:place', d),
   addSchedule: (text) => invoke('schedule:add', text),
   removeSchedule: (id) => invoke('schedule:remove', id),

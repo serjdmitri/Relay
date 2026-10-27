@@ -20,3 +20,15 @@ test('the manager says whether anything is up that is not pinned (so the reactor
   assert.equal(m.hasUnpinned(), false, 'pinned: the reactor can go, the hologram stays');
   assert.ok(changed >= 1, 'and the controller is told');
 });
+
+test('a save asked for by voice reaches the page and comes back with where the file went', async () => {
+  const sent = [];
+  const w = () => ({ webContents: { id: Math.random(), send: (...a) => sent.push(a) }, ready: Promise.resolve(), setBounds() {}, showInactive() {}, close() {}, isDestroyed: () => false });
+  const m = new HoloManager({ createWindow: w, cursor: () => ({ x: 0, y: 0 }), area: () => ({ x: 0, y: 0, width: 1000, height: 800 }), download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
+  const h = m.get(await m.show({ title: 'A', items: [{ kind: 'shapes', title: 'A', parts: [] }] }));
+  const p = m.requestSave(h);
+  assert.ok(sent.some((a) => a[0] === 'holo:state' && a[1] === 'save'), 'the page is told to save');
+  m.finishSave(h, { ok: true, where: 'Downloads/Relay 3D/A.stl' });
+  assert.deepEqual(await p, { ok: true, where: 'Downloads/Relay 3D/A.stl' });
+  m.finishSave(h, { ok: false }); // nothing waiting: ignored
+});
