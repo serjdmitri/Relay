@@ -600,6 +600,11 @@ const PAGES = {
         row.onclick = (e) => e.target.dataset.v && relay.set('settings.bargeIn.mode', e.target.dataset.v);
         return row;
       })(),
+      (() => {
+        const row = h(`<div class="row"><div class="grow"><div class="t">Focus mode closes these apps</div><div class="d">Say “focus mode for 25 minutes”: these apps are quit, a timer starts, and they reopen when it ends. For Do Not Disturb, make two Shortcuts named “Relay Focus On” and “Relay Focus Off” with the Set Focus action.</div></div><input class="field" style="width:230px" value="${esc(((S.settings.focus && S.settings.focus.apps) || []).join(', '))}"></div>`);
+        $('input', row).onchange = (e) => relay.set('settings.focus.apps', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
+        return row;
+      })(),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')

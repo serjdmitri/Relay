@@ -1,6 +1,7 @@
 const { app, BrowserWindow, screen, clipboard, desktopCapturer, safeStorage, systemPreferences, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 
 const { parseCommand } = require('./commands');
@@ -41,6 +42,10 @@ const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
 const { BargeIn } = require('./barge');
 const { shouldFollowUp } = require('./conversation');
+const { Layouts } = require('./layouts');
+const { FocusMode } = require('./focus');
+const ocrLib = require('./ocr');
+const { defaultExec } = require('./agent/mac');
 const { jobFor, profileFor } = require('./voiceProfile');
 const { Ducker } = require('./duck');
 const { markRegion } = require('./overlayGeometry');
@@ -1477,6 +1482,48 @@ class AskController {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
   }
 
+  layouts() {
+    return this._layouts || (this._layouts = new Layouts({ store: this.store, mac: this.mac, displays: () => this.displayAreas() }));
+  }
+
+  focusMode() {
+    return this.focus || (this.focus = new FocusMode({ store: this.store, mac: this.mac, timers: this.timers }));
+  }
+
+  // "Copy the text from my screen / last screenshot", "turn this table into a spreadsheet": read on this Mac (Apple Vision), put on the clipboard.
+  async readScreenText({ source, mode }) {
+    const fs = require('fs');
+    let file = null;
+    let temp = false;
+    if (source === 'screenshot') {
+      const where = String(await defaultExec('defaults', ['read', 'com.apple.screencapture', 'location']).catch(() => '') || '').trim().replace(/^~/, os.homedir());
+      file = ocrLib.latestScreenshot(fs, [where, path.join(os.homedir(), 'Desktop')].filter(Boolean));
+      if (!file) return 'I could not find a screenshot. They are normally on your Desktop.';
+    } else {
+      this.hideSoft?.();
+      await new Promise((r) => setTimeout(r, 250)); // the reactor must not be in the picture
+      file = await this.mac.screenToFile();
+      temp = true;
+    }
+    try {
+      const obs = await this.mac.ocrFile(file);
+      if (!obs.length) return 'I could not find any text there.';
+      if (mode === 'table') {
+        const t = ocrLib.toTable(obs);
+        if (t) { await this.mac.clipboardWrite(ocrLib.toTsv(t.rows)); return `Copied the table: ${t.rows.length} rows, ${t.columns} columns. Paste it into Numbers, Excel or Sheets.`; }
+        const text = ocrLib.plainText(obs);
+        await this.mac.clipboardWrite(text);
+        return 'I could not find a clear table, so I copied the text as it reads instead.';
+      }
+      const text = ocrLib.plainText(obs);
+      await this.mac.clipboardWrite(text);
+      const words = text.split(/\s+/).filter(Boolean).length;
+      return `Copied the text (${words} ${words === 1 ? 'word' : 'words'}) to your clipboard.`;
+    } finally {
+      if (temp) try { fs.rmSync(file, { force: true }); } catch { /* it is a temporary file */ }
+    }
+  }
+
   quickContext() {
     return {
       displays: () => this.displayAreas(),
@@ -1484,6 +1531,9 @@ class AskController {
       brightness: { get: () => this.speech.brightness(), set: (v) => this.speech.brightness(v) },
       prevApp: this.prevApp,
       runningApps: this.lastApps,
+      layouts: this.layouts(),
+      focus: this.focusMode(),
+      ocr: (cmd) => this.readScreenText(cmd),
       downloads: this.drive ? {
         plan: async () => { const r = await this.drive.proposeDownloads({ nightly: false }); return r.moves ? `Here is where ${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads would go. Say “apply the plan” to do it, or “skip the plan”.` : 'Nothing in Downloads needs tidying right now.'; },
         apply: () => this.drive.applyDownloads(),
