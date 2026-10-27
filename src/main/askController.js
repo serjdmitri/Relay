@@ -28,6 +28,7 @@ const { fitPrompt, parsePlacement, heuristicPlacement } = require('./holo/fit');
 const { normalizeParts } = require('./models/shapes');
 const { NotionApi, notionTools } = require('./connectors/notion');
 const { GoogleApi, googleTools } = require('./connectors/google');
+const { McpRemote, mcpTools } = require('./connectors/mcp');
 const { corrections, noteCorrection } = require('./learn');
 const mem = require('./memory');
 const sched = require('./schedule');
@@ -882,6 +883,16 @@ class AskController {
     const tools = [];
     const notion = decryptKey(c.notion?.tokenEnc);
     if (notion) tools.push(...notionTools(new NotionApi({ token: notion })));
+    const appKey = decryptKey(c.apps?.keyEnc);
+    if (c.apps?.url && appKey) {
+      try {
+        if (!this.appsClient || this.appsClientFor !== `${c.apps.url}|${c.apps.headerName}|${c.apps.keyEnc}`) {
+          this.appsClient = new McpRemote({ url: c.apps.url, headers: { [c.apps.headerName || 'x-api-key']: c.apps.headerName?.toLowerCase() === 'authorization' && !/^bearer /i.test(appKey) ? `Bearer ${appKey}` : appKey } });
+          this.appsClientFor = `${c.apps.url}|${c.apps.headerName}|${c.apps.keyEnc}`;
+        }
+        tools.push(...mcpTools(this.appsClient, { label: 'your apps' }));
+      } catch { /* a bad address is shown in Settings; nothing is added */ }
+    }
     if (c.google?.clientId && (c.google.accounts || []).length) {
       if (!this.googleApi) {
         this.googleApi = new GoogleApi({

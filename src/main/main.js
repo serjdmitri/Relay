@@ -24,6 +24,7 @@ const { downloadStl } = require('./models/lookup');
 const { ModelCache } = require('./models/cache');
 const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
+const { McpRemote } = require('./connectors/mcp');
 const { connectAccount: connectGoogle } = require('./connectors/google');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand } = require('./schedule');
 const perms = require('./permissions');
@@ -97,7 +98,7 @@ function publicState() {
     delete d.settings.tts[id].keyEnc;
   }
   const cn = d.settings.connectors || {};
-  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { clientId: cn.google?.clientId || '', hasSecret: !!decryptKey(cn.google?.clientSecretEnc), accounts: (cn.google?.accounts || []).map((a) => a.email) } };
+  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { clientId: cn.google?.clientId || '', hasSecret: !!decryptKey(cn.google?.clientSecretEnc), accounts: (cn.google?.accounts || []).map((a) => a.email) }, apps: { connected: !!(cn.apps?.url && decryptKey(cn.apps?.keyEnc)), url: cn.apps?.url ? (() => { try { return new URL(cn.apps.url).host; } catch { return ''; } })() : '', count: cn.apps?.count || 0, headerName: cn.apps?.headerName || 'x-api-key' } };
   delete d.settings.connectors;
   const hasKeys = {};
   for (const [id, s] of Object.entries(d.settings.model.presets)) {
@@ -427,6 +428,20 @@ function registerIpc() {
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('connectors:notion:clear', () => { store.set('settings.connectors.notion', { tokenEnc: '', name: '' }); broadcast(); });
+  // Your other apps: a Composio (or other MCP server) address and key. It is tried before it is kept.
+  ipcMain.handle('connectors:apps:set', async (_e, url, key, headerName) => {
+    const u = String(url || '').trim(), k = String(key || '').trim(), hn = String(headerName || 'x-api-key').trim() || 'x-api-key';
+    if (!u || !k) return { ok: false, error: 'Paste the server address and the key.' };
+    try {
+      const value = hn.toLowerCase() === 'authorization' && !/^bearer /i.test(k) ? `Bearer ${k}` : k;
+      const tools = await new McpRemote({ url: u, headers: { [hn]: value } }).listTools();
+      store.set('settings.connectors.apps', { url: u, headerName: hn, keyEnc: encryptKey(k), count: tools.length });
+      ask.appsClient = null;
+      broadcast();
+      return { ok: true, count: tools.length };
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
   ipcMain.handle('connectors:google:client', (_e, clientId, secret) => {
     store.set('settings.connectors.google.clientId', String(clientId || '').trim());
     if (String(secret || '').trim()) store.set('settings.connectors.google.clientSecretEnc', encryptKey(String(secret).trim()));
