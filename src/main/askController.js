@@ -51,6 +51,7 @@ const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
 const { parseExplainCommand, explainPrompt } = require('./explain');
 const phish = require('./phish');
 const workshop = require('./workshop');
+const { parseMeetingCommand, MeetingRecorder, meetingPrompt } = require('./meeting');
 const { parseBriefingCommand, buildBriefing, fetchWeather, parseMacEvents, parseMacDue, mergeEvents } = require('./briefing');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
@@ -188,13 +189,15 @@ class AskController {
     this.wake = new WakeWord({
       speech,
       getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [] }),
-      canListen: () => !this.suspended && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
+      canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
       onArmed: (on) => this.overlay.setArmed(on),
       onWake: () => this.wakeTriggered(),
       log: console
     });
+    // Meeting notes: listens in short stretches until you say "Jarvis, end the meeting"; then the model writes the Note and the reminders.
+    this.meeting = new MeetingRecorder({ speech, getDevice: () => this.store.get('settings.speech.input') || 'auto', onStop: (r) => this.meetingEnded(r), log: console });
     this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
@@ -1167,7 +1170,7 @@ class AskController {
     clearTimeout(this.followTimer);
     this.followTimer = setTimeout(() => {
       const cfg = this.store.get('settings.followUp') || {};
-      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz ? 0 : this.followChain });
+      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz ? 0 : this.followChain });
       if (!ok) return;
       this.followFor = null;
       this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
@@ -1220,6 +1223,7 @@ class AskController {
   }
 
   async listen(mode, held, opts = {}) {
+    if (this.meeting?.active) return this.notice('Meeting notes are using the microphone. Say “Jarvis, end the meeting”, or use the menu bar, first.', 'failed');
     this.wake?.disarm(); // the microphone is needed for this
     this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null, noSpeechMs: opts.noSpeechMs || 7000 } : null;
     this.followChain = opts.followUp ? (this.followChain || 0) + 1 : 0;
@@ -1498,6 +1502,10 @@ class AskController {
         if (!opts.shown && !opts.scheduled) {
           const sc = parseStudyCommand(effective);
           if (sc) return this.studyStart(sc, effective, entry);
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const mc = parseMeetingCommand(effective);
+          if (mc) return this.meetingCommand(mc, entry);
         }
         if (!opts.shown && !opts.scheduled) {
           const wc = workshop.parseWorkshopCommand(effective);
@@ -1818,6 +1826,46 @@ class AskController {
     if (n < 0) return { status: 'failed', reply: `I could not reach the breach database. Offline, it looks ${st.label} (${st.length} characters).${cleared}`, actions: 0 };
     if (n > 0) return { status: 'done', reply: `That password has appeared ${n.toLocaleString('en-US')} ${n === 1 ? 'time' : 'times'} in known data breaches. Do not use it anywhere, and change it where you do.${cleared}`, actions: 0 };
     return { status: 'done', reply: `That password is not in any known breach. It looks ${st.label}${st.label === 'weak' || st.label === 'fair' ? ': make it longer, with unrelated words' : ''}. That does not mean it is safe if you reuse it on several sites.${cleared}`, actions: 0 };
+  }
+
+  // ---- meeting notes ----
+  async startMeeting() {
+    if (this.meeting.active) return { status: 'done', reply: 'Meeting notes are already on.', actions: 0 };
+    if (!(await this.micAllowed())) return { status: 'failed', reply: 'Microphone access is off. Turn it on in Permissions first.', actions: 0 };
+    this.wake?.disarm(); this.barge?.disarm(); this.speaker?.stop();
+    try { await this.meeting.start(); } catch (e) { return { status: 'failed', reply: `I could not start listening: ${e.message}`, actions: 0 }; }
+    this.overlay.setArmed(true);
+    this.onChange();
+    return { status: 'done', reply: 'Taking meeting notes. I listen through the microphone on this Mac and keep no audio, but tell the others in the room. I hear you and the room, not the other side of a call on headphones. Say “Jarvis, end the meeting” when you are done.', actions: 1 };
+  }
+
+  // From the voice command or the menu: ends it and has the model write it up (a Note, and reminders for your action items).
+  async stopMeeting(entry = null) {
+    const r = await this.meeting.end('asked');
+    return this.writeUpMeeting(r, entry);
+  }
+
+  // It ended by itself: you said "Jarvis, end the meeting", or too many errors, or the time limit.
+  meetingEnded(r) { this.writeUpMeeting(r, null).then((res) => { if (res) this.notice(res.reply, res.status === 'failed' ? 'failed' : 'done'); }).catch(() => {}); }
+
+  async writeUpMeeting(r, entry) {
+    this.overlay.setArmed(false);
+    this.onChange();
+    this.wakeSoon();
+    if (!r) return { status: 'failed', reply: 'Meeting notes were not on.', actions: 0 };
+    if (r.words < 25) return { status: 'failed', reply: `Not enough was said to make notes (${r.words} words).`, actions: 0 };
+    const prompt = meetingPrompt({ text: r.text, seconds: r.seconds });
+    if (entry) await this.runRequest(prompt, entry); // it finishes the request itself
+    else await this.handleText(prompt, { shown: 'Writing up your meeting' });
+    return null; // null: the write-up was handed to the model; anything else is a plain result to show
+  }
+
+  async meetingCommand(cmd, entry) {
+    if (cmd.type === 'meeting-start') return this.finish(entry, await this.startMeeting());
+    if (cmd.type === 'meeting-status') return this.finish(entry, { status: 'done', reply: this.meeting.active ? `Taking meeting notes: ${Math.max(1, Math.round(this.meeting.seconds / 60))} minutes, ${this.meeting.words} words so far.` : 'Meeting notes are not on.', actions: 0 });
+    if (!this.meeting.active) return this.finish(entry, { status: 'failed', reply: 'Meeting notes were not on.', actions: 0 });
+    const out = await this.stopMeeting(entry);
+    return out ? this.finish(entry, out) : undefined;
   }
 
   // ---- workshop mode ----

@@ -211,6 +211,7 @@ function rebuildTray() {
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
+    { label: 'Take Meeting Notes', type: 'checkbox', checked: !!ask.meeting?.active, click: (item) => { (item.checked ? ask.startMeeting().then((r) => ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done')) : ask.stopMeeting().then((r) => r && ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done'))).finally(() => rebuildTray()); } },
     { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
     { label: 'Recent asks on the left edge', type: 'checkbox', checked: store.get('settings.recent') !== false, click: (item) => { store.set('settings.recent', item.checked); broadcast(); rebuildTray(); } },
     ...(store.get('settings.model.provider') === 'claude' ? [{ label: 'Model Speed', submenu: [['auto', 'Auto'], ['haiku', 'Fast (Haiku)'], ['sonnet', 'Smart (Sonnet)'], ['opus', 'Deep (Opus)']].map(([v, l]) => ({ label: l, type: 'radio', checked: store.get('settings.model.claudeModel') === v, click: () => { store.set('settings.model.claudeModel', v); broadcast(); } })) }] : []),
