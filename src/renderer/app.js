@@ -613,6 +613,14 @@ const PAGES = {
         $('input', row).onchange = (e) => relay.set('settings.focus.apps', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
         return row;
       })(),
+      toggleRow('Pause music when I leave the desk', 'Uses the camera, all the time while on (the green light stays on): it only counts faces once a second, on this Mac. Nothing is recognised, saved or sent. When nobody has been there for a minute it pauses the music, and plays it again when you are back.', 'settings.presence.enabled'),
+      toggleRow('Lock my Mac when I leave too', 'Also locks the screen when you have been away.', 'settings.presence.lock'),
+      (() => {
+        const cur = (S.settings.presence && S.settings.presence.awayAfter) || 60;
+        const row = h(`<div class="row"><div class="grow"><div class="t">Count me as away after</div><div class="d">How long with no face in front of the camera. Short enough to notice you left, long enough not to fire when you look away.</div></div><div class="seg sm">${[[30, '30 s'], [60, '1 min'], [180, '3 min'], [600, '10 min']].map(([v, l]) => `<button data-v="${v}" class="${cur === v ? 'on' : ''}" style="width:64px">${l}</button>`).join('')}</div></div>`);
+        row.onclick = (e) => e.target.dataset.v && relay.set('settings.presence.awayAfter', Number(e.target.dataset.v));
+        return row;
+      })(),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')

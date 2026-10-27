@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob: data:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'unsafe-inline'">
+<title>Presence</title>
+</head>
+<body>
+<!-- Counts the faces in front of the camera, once a second, on this Mac. The picture is never drawn, saved or sent; only the number leaves this page. -->
+<video id="v" autoplay muted playsinline width="320" height="240" style="display:none"></video>
+<script type="module" src="presence.js"></script>
+</body>
+</html>

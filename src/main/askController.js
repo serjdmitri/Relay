@@ -1521,6 +1521,24 @@ class AskController {
     }
   }
 
+  // You left the desk (the camera has seen no face for a while): pause what is playing, and lock the screen if that is asked for.
+  async presenceAway() {
+    const cfg = this.store.get('settings.presence') || {};
+    this.pausedByPresence = false;
+    if (cfg.pause !== false) {
+      const r = await this.quick('pause').catch(() => null);
+      if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
+    }
+    if (cfg.lock) await this.mac.lockScreen().catch(() => {});
+  }
+
+  // You are back: start what it paused (not what you paused yourself).
+  async presenceBack() {
+    const cfg = this.store.get('settings.presence') || {};
+    if (this.pausedByPresence && cfg.resume !== false) await this.quick('play').catch(() => {});
+    this.pausedByPresence = false;
+  }
+
   // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).
   async holoRealSize(mm) {
     const h = this.holos.latest();
