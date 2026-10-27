@@ -1,4 +1,5 @@
 const { scriptNeedsConfirm } = require('./safety');
+const { shellBlocked, scriptBlocked, pathProblem } = require('../drive/guard');
 const web = require('./web');
 const { toGlobal, normalizeShapes, guideSteps, KINDS } = require('../overlayGeometry');
 const { Guide } = require('../guide');
@@ -13,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -74,10 +75,10 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
     },
     {
       name: 'trash_path',
-      description: 'Move a file or folder to the Trash.',
+      description: 'Move ONE file or folder to the Trash (it can be put back). Relay never deletes anything and never empties the Trash. Only when the user asked to get rid of that item; to tidy many files use drive_propose instead.',
       input_schema: obj({ path: str('Absolute path or starting with ~') }, ['path']),
-      confirm: (i) => `Move ${i.path} to the Trash?`,
-      run: (i) => mac.trashPath(i.path)
+      confirm: (i) => (pathProblem(i.path, require('os').homedir()) ? null : `Move ${i.path} to the Trash? (You can put it back.)`),
+      run: (i) => { const no = pathProblem(i.path, require('os').homedir()); return no ? `Not moved to the Trash. ${no}` : mac.trashPath(i.path); }
     },
 
     {
@@ -266,19 +267,19 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
 
     {
       name: 'run_applescript',
-      description: 'Run raw AppleScript for anything the other tools do not cover. Returns its output.',
+      description: 'Run raw AppleScript for anything the other tools do not cover. Returns its output. It can never empty the Trash or delete files.',
       input_schema: obj({ script: str('AppleScript source') }, ['script']),
-      confirm: (i) => (scriptNeedsConfirm(i.script) ? `Run this AppleScript?\n${i.script.slice(0, 300)}` : null),
+      confirm: (i) => (scriptBlocked(i.script) ? null : scriptNeedsConfirm(i.script) ? `Run this AppleScript?\n${i.script.slice(0, 300)}` : null),
       describe: () => 'Running a script',
-      run: (i, ctx) => mac.runAppleScript(i.script, ctx)
+      run: (i, ctx) => scriptBlocked(i.script) || mac.runAppleScript(i.script, ctx)
     },
     {
       name: 'run_shell',
-      description: 'Run a zsh command. Always asks the user first. Prefer other tools when they exist.',
+      description: 'Run a zsh command. Always asks the user first. Prefer other tools when they exist. Commands that delete or destroy anything (rm, find -delete, git clean...) are refused outright: Relay never deletes.',
       input_schema: obj({ command: str('Shell command') }, ['command']),
-      confirm: (i) => `Run this command?\n${i.command.slice(0, 300)}`,
+      confirm: (i) => (shellBlocked(i.command) ? null : `Run this command?\n${i.command.slice(0, 300)}`),
       describe: () => 'Running a command',
-      run: (i) => mac.runShell(i.command)
+      run: (i) => shellBlocked(i.command) || mac.runShell(i.command)
     }
   ];
 
@@ -318,6 +319,87 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       describe: (i) => `Getting a 3D model of ${i.title}`,
       run: async (i) => models.show(i)
     });
+    if (models.design) {
+      const shapeProps = {
+        name: str('A short name you can refer to later ("Cube", "Hole", "Roof")'), type: str('box (cube/block/plate) | cylinder | sphere | cone | wedge (roof/ramp) | pyramid | torus (ring) | tube (hollow cylinder)'),
+        size: { type: 'array', description: 'Width, height and depth in millimetres, e.g. [40, 40, 40]. A number alone makes it the same all round. A cylinder or sphere: [diameter, height, diameter].', items: { type: 'number' } },
+        diameter: { type: 'number', description: 'For a round shape or a hole: how wide' },
+        position: { type: 'array', description: 'Where the MIDDLE of the shape is: [x, y, z] in mm, y is up. Leave it out for the first shape (it stands on the floor). Prefer on/through below.', items: { type: 'number' } },
+        rotation: { type: 'array', description: 'Degrees about x, y, z', items: { type: 'number' } },
+        hole: { type: 'boolean', description: 'true: this shape is cut OUT of the solid shapes (a hole, a slot, a dent)' },
+        color: str('A colour name or #hex (optional)'),
+        on: { type: 'object', description: 'Put it ON another shape, touching it: { of: "<name>", side: "top|bottom|left|right|front|back", offset: [a, b] (optional, slide it) }', properties: { of: str('Name of the other shape'), side: str('top|bottom|left|right|front|back'), offset: { type: 'array', items: { type: 'number' } } } },
+        through: { type: 'object', description: 'For a hole: make it go right THROUGH another shape (opens on both sides): { of: "<name>", axis: "x|y|z" (default y, top to bottom), offset: [a, b] (optional) }', properties: { of: str('Name of the other shape'), axis: str('x|y|z'), offset: { type: 'array', items: { type: 'number' } } } }
+      };
+      tools.push({
+        name: 'design_3d',
+        description: 'DESIGN a new 3D model from simple shapes, like Tinkercad, as a hologram the user can then edit themselves (resize, move, add, remove, make holes) and save as an STL. Use it when the user asks you to MAKE something ("make a cube with a hole going through it and add a cone on top", "design a phone stand", "a keychain with a round hole", "a simple house"), not when they want to SEE a real thing (that is show_3d). Give the shapes in order; later ones can use on/through to sit on or cut through earlier ones by name, so you do not have to work out positions. Solid shapes are added together, holes are subtracted. Dimensions are in millimetres (a cube of 40 is a 4 cm cube). Keep it simple and exact: the user will edit it.',
+        input_schema: obj({ title: str('Name shown under the hologram'), shapes: { type: 'array', description: 'The shapes, in order', items: { type: 'object', properties: shapeProps } }, keep: { type: 'boolean', description: 'true to pin it' } }, ['title', 'shapes']),
+        describe: (i) => `Designing ${i.title}`,
+        run: async (i) => models.design(i)
+      });
+      tools.push({
+        name: 'edit_3d',
+        description: 'CHANGE the designed 3D model already on screen (made with design_3d, or edited by the user by hand): make a hole bigger, move or resize a shape, add or remove one, turn a shape into a hole. Refer to shapes by the names read_3d or design_3d gave. If the user may have changed it by hand since, call read_3d first.',
+        input_schema: obj({ changes: { type: 'array', description: 'In order. Each: { op: "set", name, size|diameter|radius|width|height|depth (new size), scale (a number or [x,y,z] to multiply the size), position, move: [dx, dy, dz], rotation, hole (true/false), color } | { op: "add", ...a shape as in design_3d, with on/through } | { op: "remove", name } | { op: "clear" }', items: { type: 'object' } }, title: str('Which hologram, by its title (optional: the latest designed one)') }, ['changes']),
+        describe: () => 'Changing the model',
+        run: async (i) => models.edit(i)
+      });
+      tools.push({
+        name: 'read_3d',
+        description: 'Read the shapes of the designed 3D model on screen, with their names, sizes and places, as the user has it now (they may have edited it by hand). Use it before edit_3d when you are not sure.',
+        input_schema: obj({ title: str('Which hologram, by its title (optional)') }),
+        describe: () => 'Looking at the model',
+        run: async (i) => models.read(i)
+      });
+    }
+  }
+
+  // Mac drive: find files with previews, and tidy folders by a plan the user has seen. Nothing is ever deleted or overwritten.
+  if (drive) {
+    tools.push(
+      {
+        name: 'drive_find',
+        description: 'Find files on the Mac by name or content (Spotlight), inside the home folder. Shows the best matches on screen as a card with PREVIEW pictures; the user can click one to open it or show it in Finder. Use for "find my …", "where is the … file", "show me my photos of …".',
+        input_schema: obj({ query: str('Words from the name or the content'), folder: str('Only look in this folder (optional), e.g. ~/Documents'), kind: str('image | video | audio | pdf | document | spreadsheet | slides | archive | code | folder (optional)') }, ['query']),
+        describe: (i) => `Looking for ${i.query}`,
+        run: (i) => drive.find(i)
+      },
+      {
+        name: 'drive_scan',
+        description: 'List what is inside a folder (a few levels down) with each file kind, size and date, so you can plan how to tidy it. Read-only. Folders marked as projects are not to be taken apart.',
+        input_schema: obj({ folder: str('e.g. ~/Downloads'), depth: { type: 'number', description: 'How many levels down, 1 to 5 (default 3)' } }, ['folder']),
+        describe: (i) => `Looking inside ${i.folder}`,
+        run: (i) => drive.scan(i)
+      },
+      {
+        name: 'drive_propose',
+        description: 'Propose how to tidy files: a list of moves, shown to the user on screen as "where I will put everything". NOTHING MOVES YET. Check the plan with drive_scan first, group sensibly (by kind, by project or by year), keep names as they are, and prefer moving files into folders (new folders are made for you) over anything else. Only put something in the Trash (trash list) if the user asked you to get rid of it; otherwise use a folder such as ~/Documents/To review. After it returns, tell the user plainly where things will go, ask them to confirm, and only then call drive_apply.',
+        input_schema: obj({
+          moves: { type: 'array', description: 'Each file or folder and where it goes', items: { type: 'object', properties: { from: str('Absolute path or ~/…'), to_folder: str('The folder to move it into (created if missing)') } } },
+          trash: { type: 'array', description: 'Only things the user asked to get rid of: they go to the Trash (recoverable), never deleted', items: { type: 'string' } },
+          note: str('One line: the idea of the plan')
+        }, ['moves']),
+        describe: () => 'Planning where things go',
+        run: (i) => drive.propose(i)
+      },
+      {
+        name: 'drive_apply',
+        description: 'Carry out a plan made with drive_propose, after the user has been told where everything goes. The user is asked to confirm. Moves only; never deletes or overwrites. Needs the plan_id that drive_propose returned.',
+        input_schema: obj({ plan_id: str('The id from drive_propose') }, ['plan_id']),
+        confirm: (i) => drive.confirmText(i.plan_id),
+        describe: () => 'Moving the files',
+        run: (i) => drive.apply(i)
+      },
+      {
+        name: 'drive_undo',
+        description: 'Put the last tidy-up back where it was (files that went to the Trash are put back by the user from the Trash).',
+        input_schema: obj({}),
+        confirm: () => 'Put the last tidy-up back where it was?',
+        describe: () => 'Putting the files back',
+        run: () => drive.undo()
+      }
+    );
   }
 
   // An answer card: a picture, the key facts and links, shown beside the answer (Relay finds the picture).

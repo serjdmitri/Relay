@@ -31,6 +31,39 @@ class HoloManager {
     this.byWindow = new Map(); // webContents id -> hologram id
     this.dragging = null;
     this.onChange = () => {};
+    this.onAsk = async () => {}; // (hologram, { region, part }): the user asks Relay about it
+  }
+
+  // The designed (editable) hologram: the one titled so, else the latest. { h, index } or null.
+  cadTarget(title = '') {
+    const t = String(title || '').toLowerCase().trim();
+    const all = [...this.holos.values()].filter((h) => h.items.some((i) => i.kind === 'cad'));
+    const h = (t && all.find((x) => x.title.toLowerCase().includes(t))) || all.at(-1);
+    return h ? { h, index: h.items.findIndex((i) => i.kind === 'cad') } : null;
+  }
+
+  // The shapes of a designed model changed (by hand in the hologram, or by voice).
+  setCad(h, index, cad, { push = false } = {}) {
+    const it = h.items[index];
+    if (!it || it.kind !== 'cad') return false;
+    h.items[index] = { ...it, cad };
+    h.options = null;
+    if (push) this.push(h);
+    this.persist();
+    return true;
+  }
+
+  // A model of a combined hologram was put where the person wants it (dragged onto a surface): kept, and saved with a pinned one.
+  setPlacement(h, index, free) {
+    const it = h.items[index];
+    if (!it || !free) return false;
+    h.items[index] = { ...it, placement: { free } };
+    this.persist();
+    return true;
+  }
+
+  hasUnpinned() {
+    return [...this.holos.values()].some((h) => !h.pinned);
   }
 
   latest() {

@@ -1,0 +1,106 @@
+// Mac drive: find files (with pictures of them), and tidy folders by a plan the person has seen and said yes to. Nothing is ever deleted
+// or overwritten; the most Relay does is move files (and, only if asked, put some in the Trash). See guard.js and plan.js for the rules.
+
+const path = require('path');
+const { buildPlan, applyPlan, undoMoves } = require('./plan');
+const { pathProblem } = require('./guard');
+const { scanFolder, describeScan, findFiles, kindOf, size, day, tilde, OPEN_SAFE } = require('./files');
+
+const PLAN_TTL = 30 * 60 * 1000;
+
+class Drive {
+  // fs, exec(file, args) -> stdout, cards: { show(card), hide() }, thumb(path) -> data URL | null, trashItem(path), reveal(path), open(path), log: { read(), write(list) }
+  constructor({ fs, home, exec, cards, thumb = async () => null, trashItem, reveal = () => {}, open = () => {}, log = { read: () => [], write: () => {} } }) {
+    Object.assign(this, { fs, home, exec, cards, thumb, trashItem, reveal, open, log });
+    this.plans = new Map();
+  }
+
+  resolve(p) {
+    const t = String(p || '');
+    return path.resolve(t.startsWith('~') ? path.join(this.home, t.slice(1)) : t || this.home);
+  }
+
+  // Files by name or content, with pictures on a card. Returns what to tell the model.
+  async find({ query, folder, kind, limit } = {}) {
+    const where = folder ? this.resolve(folder) : this.home;
+    if (where !== this.home && !where.startsWith(this.home + path.sep)) return 'Relay only looks inside your home folder.';
+    const found = await findFiles(query, { exec: this.exec, fs: this.fs, home: this.home, folder: where, kind, limit: Math.min(24, Math.max(1, +limit || 10)) });
+    if (!found.length) return `Nothing found for "${query}"${folder ? ` in ${tilde(where, this.home)}` : ''}. Try fewer or different words, or look in a folder with drive_scan.`;
+    const items = await Promise.all(found.slice(0, 10).map(async (f) => ({
+      title: f.name, subtitle: tilde(path.dirname(f.path), this.home), note: `${f.kind}${f.size ? ` · ${size(f.size)}` : ''} · ${day(f.mtime)}`, image: await this.thumb(f.path).catch(() => null), url: `file:${f.path}`
+    })));
+    await this.cards?.show({ kind: 'list', title: `Found ${found.length} for “${String(query).slice(0, 40)}”`, subtitle: 'Click one to show it in Finder', summary: '', facts: [], links: [], items, image: null, credit: '' });
+    return `Showing ${Math.min(10, found.length)} of ${found.length} on screen with previews (click one to show it in Finder). Results:\n${found.map((f) => `${f.path} | ${f.kind} | ${size(f.size)} | ${day(f.mtime)}`).join('\n')}`;
+  }
+
+  scan({ folder, depth } = {}) {
+    const root = this.resolve(folder);
+    const bad = root === this.home ? '' : pathProblem(path.join(root, 'x'), this.home);
+    if (root !== this.home && !root.startsWith(this.home + path.sep)) return 'Relay only looks inside your home folder.';
+    if (bad && !/main folders|itself/.test(bad)) return bad;
+    try { if (!this.fs.statSync(root).isDirectory()) return 'That is not a folder.'; } catch { return 'That folder is not there.'; }
+    return describeScan(scanFolder(root, { fs: this.fs, home: this.home, depth: Math.min(5, Math.max(1, +depth || 3)) }), this.home);
+  }
+
+  // Checks a plan and shows it: where everything goes. Nothing moves yet.
+  async propose(raw) {
+    const plan = buildPlan(raw, { fs: this.fs, home: this.home });
+    if (!plan.moves.length && !plan.trash.length) {
+      return `Nothing can be done with that plan.${plan.skipped.length ? ` Skipped: ${plan.skipped.slice(0, 8).map((s) => `${s.path} (${s.reason})`).join('; ')}` : ''}`;
+    }
+    this.plans.set(plan.id, plan);
+    for (const [id, p] of this.plans) if (Date.now() - p.createdAt > PLAN_TTL || this.plans.size > 5) this.plans.delete(id);
+    const items = await Promise.all(plan.groups.slice(0, 12).map(async (g) => {
+      const names = g.moves.map((m) => path.basename(m.from));
+      return { title: `→ ${tilde(g.folder, this.home)}`, subtitle: `${g.moves.length} ${g.moves.length === 1 ? 'item' : 'items'}`, note: `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''}`, image: await this.thumb(g.moves[0].from).catch(() => null), url: `file:${g.moves[0].from}` };
+    }));
+    if (plan.trash.length) items.push({ title: '→ the Trash (you can put them back)', subtitle: `${plan.trash.length} ${plan.trash.length === 1 ? 'item' : 'items'}`, note: plan.trash.slice(0, 3).map((t) => path.basename(t)).join(', '), image: null, url: '' });
+    await this.cards?.show({
+      kind: 'list', hold: true, title: 'Where I will put everything', subtitle: `${plan.moves.length} ${plan.moves.length === 1 ? 'item' : 'items'} to move${plan.trash.length ? `, ${plan.trash.length} to the Trash` : ''}`,
+      summary: `Nothing is deleted or overwritten, and I can undo all of it.${plan.skipped.length ? ` ${plan.skipped.length} left alone.` : ''}`, facts: [], links: [], items, image: null, credit: ''
+    });
+    const lines = plan.groups.map((g) => `${tilde(g.folder, this.home)}: ${g.moves.length} (${g.moves.slice(0, 4).map((m) => path.basename(m.from)).join(', ')}${g.moves.length > 4 ? ', …' : ''})`);
+    if (plan.trash.length) lines.push(`Trash: ${plan.trash.length} (${plan.trash.slice(0, 4).map((t) => path.basename(t)).join(', ')})`);
+    return `Plan ${plan.id} is on screen. Where everything goes:\n${lines.join('\n')}${plan.skipped.length ? `\nLeft alone: ${plan.skipped.slice(0, 8).map((s) => `${path.basename(String(s.path))} (${s.reason})`).join('; ')}` : ''}\nNow tell the user in a few plain sentences where things will go, and ask them to confirm. Only then call drive_apply with plan_id "${plan.id}". Nothing has been moved yet.`;
+  }
+
+  confirmText(planId) {
+    const p = this.plans.get(planId);
+    if (!p) return null;
+    return `Move ${p.moves.length} ${p.moves.length === 1 ? 'item' : 'items'} as shown${p.trash.length ? ` and put ${p.trash.length} in the Trash` : ''}? Nothing is deleted, and it can be undone.`;
+  }
+
+  async apply({ plan_id } = {}) {
+    const plan = this.plans.get(plan_id);
+    if (!plan) return 'There is no such plan (it may be old). Use drive_propose again.';
+    if (Date.now() - plan.createdAt > PLAN_TTL) { this.plans.delete(plan_id); return 'That plan is too old. Use drive_propose again so the user sees it fresh.'; }
+    this.plans.delete(plan_id);
+    const res = await applyPlan(plan, { fs: this.fs, trashItem: this.trashItem });
+    this.cards?.hide?.();
+    const list = [...(this.log.read() || []), { id: res.id, ts: res.ts, done: res.done, trashed: res.trashed }].slice(-30);
+    this.log.write(list);
+    const bits = [`Moved ${res.done.length}`];
+    if (res.trashed.length) bits.push(`put ${res.trashed.length} in the Trash`);
+    return `${bits.join(' and ')}.${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 5).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''} It can be undone with drive_undo.`;
+  }
+
+  // Puts the last tidy-up back (files that went to the Trash are put back by the user, from the Trash).
+  undo() {
+    const list = this.log.read() || [];
+    const last = list.at(-1);
+    if (!last || !last.done?.length) return 'There is nothing to undo.';
+    const { back, left } = undoMoves(last, { fs: this.fs });
+    this.log.write(list.slice(0, -1));
+    return `Put ${back.length} back where they were.${left.length ? ` ${left.length} could not be put back: ${left.slice(0, 4).map((l) => `${path.basename(l.path)} (${l.reason})`).join('; ')}.` : ''}${last.trashed?.length ? ` ${last.trashed.length} went to the Trash: open the Trash and choose Put Back.` : ''}`;
+  }
+
+  // A click on a result: a file of a safe kind opens, anything else is shown in Finder.
+  openFile(p) {
+    const full = this.resolve(p);
+    if (!full.startsWith(this.home + path.sep)) return;
+    let st; try { st = this.fs.statSync(full); } catch { return; }
+    if (st.isFile() && OPEN_SAFE.has(kindOf(full))) this.open(full); else this.reveal(full);
+  }
+}
+
+module.exports = { Drive };

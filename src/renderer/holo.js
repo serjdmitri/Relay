@@ -7,6 +7,9 @@ import { STLLoader } from './vendor/three/STLLoader.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 import { GLTFExporter } from './vendor/three/GLTFExporter.js';
 import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
+import { CadView } from './holo-cad.js';
+import * as S from './holo-cad-spec.js';
+import { STLExporter } from './vendor/three/STLExporter.js';
 
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
@@ -87,6 +90,14 @@ async function buildItem(it) {
     g.add(gltf.scene);
     ud.meshes = [];
     gltf.scene.traverse((o) => { if (o.isMesh) ud.meshes.push(o); });
+  } else if (it.kind === 'cad') {
+    // A designed model: shapes added together, holes cut out (see holo-cad.js). Its shapes can be edited here.
+    const view = new CadView({ makeMat });
+    view.update(it.cad, { editing: false, edges: !solid });
+    g.add(view.group);
+    ud.cadView = view;
+    ud.meshes = view.mesh ? [view.mesh] : [];
+    ud.edges = view.edgeLines || null;
   } else if (it.kind === 'stl') {
     const geo = new STLLoader().parse(it.bytes.buffer.slice(it.bytes.byteOffset, it.bytes.byteOffset + it.bytes.byteLength));
     if (!geo.attributes.normal) geo.computeVertexNormals();
@@ -123,11 +134,13 @@ async function buildItem(it) {
   wrap.add(g);
   wrap.scale.setScalar(s);
   for (const l of labels) if (l.group === g) { l.sprite.scale.set(0.8 / s, 0.2 / s, 1); l.sprite.position.y = l.radius + 0.2 / s; }
-  Object.assign(wrap.userData, ud, { size: { w: size.x * s, h: size.y * s, d: size.z * s }, width: Math.max(size.x, size.z) * s, height: size.y * s });
+  Object.assign(wrap.userData, ud, { s, size: { w: size.x * s, h: size.y * s, d: size.z * s }, width: Math.max(size.x, size.z) * s, height: size.y * s });
   return wrap;
 }
 
 let building = 0;
+let innerGroup = null; // the models of a combined hologram, in the space where they are placed
+let selItem = -1; // the model of a combined hologram that is picked (it can be dragged onto a surface of another)
 let itemWraps = [];
 const intros = []; // models flying in to join
 async function rebuild() {
@@ -139,6 +152,8 @@ async function rebuild() {
   holo.traverse((o) => { o.geometry?.dispose?.(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.map?.dispose?.() || m?.dispose?.()); });
   const inner = new THREE.Group(); // the models, put side by side; centred and turned in the pivot made below
   holo = inner;
+  innerGroup = inner;
+  selItem = -1;
   const sizes = wraps.map((w) => w.userData.size);
   const placed = placeItems(sizes, items.map((it) => it.placement || null));
   const now = performance.now();
@@ -174,6 +189,8 @@ async function rebuild() {
   applyScale();
   reveal0 = performance.now();
   $('upright').hidden = !items.some((i) => i.kind === 'stl');
+  $('edit').hidden = !items.some((i) => i.kind === 'cad');
+  if (editing) leaveEdit(false);
 }
 
 // ---------- pulling it apart ----------
@@ -203,7 +220,7 @@ function splitMesh(mesh) {
     g2.setAttribute('position', new THREE.BufferAttribute(P, 3));
     if (N) g2.setAttribute('normal', new THREE.BufferAttribute(N, 3)); else g2.computeVertexNormals();
     if (U) g2.setAttribute('uv', new THREE.BufferAttribute(U, 2));
-    const m2 = new THREE.Mesh(g2, mesh.material.clone());
+    const m2 = new THREE.Mesh(g2, (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material).clone());
     m2.position.copy(mesh.position); m2.rotation.copy(mesh.rotation); m2.scale.copy(mesh.scale);
     m2.userData = { ...mesh.userData, orig: mesh.userData.orig };
     return m2;
@@ -295,6 +312,255 @@ function exportGlb(list, g) {
   return new Promise((resolve, reject) => new GLTFExporter().parse(root, resolve, reject, { binary: true }));
 }
 
+
+// ---------- editing a designed model: add, remove, resize, move, cut holes ----------
+let editing = false;
+let editWrap = null;
+let editIdx = -1;
+let cadSpec = null;
+let cadSel = null;
+let hist = null;
+let saveTimer = 0;
+let asHole = false;
+const view = () => editWrap?.userData.cadView;
+const FIELD = { 'size.0': 'W', 'size.1': 'H', 'size.2': 'D', 'pos.0': 'X', 'pos.1': 'Y', 'pos.2': 'Z', 'rot.0': 'X', 'rot.1': 'Y', 'rot.2': 'Z' };
+
+function redrawCad() {
+  const v = view();
+  if (!v) return;
+  v.update(cadSpec, { editing: true, selected: cadSel, edges: !solid });
+  editWrap.userData.meshes = v.mesh ? [v.mesh] : [];
+  editWrap.userData.edges = v.edgeLines || null;
+}
+function scheduleSave() {
+  items[editIdx].cad = cadSpec;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => relay.holoCad({ item: editIdx, cad: cadSpec }), 350);
+}
+// One edit made: drawn, remembered for undo, saved.
+function commitCad(next, remember = true) {
+  cadSpec = next;
+  redrawCad();
+  if (remember) hist.push(cadSpec);
+  scheduleSave();
+  buildPanels();
+}
+function enterEdit() {
+  const i = itemWraps.findIndex((w) => w.userData.cadView);
+  if (i < 0) return;
+  if (exploded) toggleExplode();
+  editing = true; editIdx = i; editWrap = itemWraps[i];
+  cadSpec = S.clone(items[i].cad); cadSel = null; hist = new S.History(cadSpec);
+  document.body.classList.add('editing');
+  $('edit').classList.add('on');
+  $('explode').hidden = true;
+  $('hint2').textContent = 'Drag a shape to move it · drag its squares to resize · Shift-drag turns the view';
+  redrawCad();
+  buildPanels();
+}
+function leaveEdit(redraw = true) {
+  if (!editing) return;
+  clearTimeout(saveTimer);
+  relay.holoCad({ item: editIdx, cad: cadSpec });
+  items[editIdx].cad = cadSpec;
+  const v = view();
+  editing = false;
+  document.body.classList.remove('editing');
+  $('edit').classList.remove('on');
+  $('explode').hidden = false;
+  $('hint2').textContent = '';
+  if (redraw && v) { v.update(cadSpec, { editing: false, edges: !solid }); editWrap.userData.meshes = v.mesh ? [v.mesh] : []; editWrap.userData.edges = v.edgeLines || null; parts = []; }
+  editWrap = null; cadSel = null;
+}
+
+const num = (v) => (Math.round(v * 100) / 100).toString();
+function buildPanels() {
+  if (!editing) return;
+  const sel = cadSpec.shapes.find((x) => x.id === cadSel);
+  const add = Object.entries(S.TYPES).map(([t, d]) => `<div class="cadui" data-add="${t}">${asHole ? 'Hole: ' : '+ '}${d.label}</div>`).join('');
+  $('cadL').innerHTML = `<div class="cadh">Add a shape</div>${add}<div class="cadui ${asHole ? 'on' : ''}" id="asHole">${asHole ? 'Adding holes' : 'Add as holes'}</div>
+    <div class="cadh">Edit</div><div class="cadui ${hist.canUndo ? '' : 'off'}" id="undo">Undo</div><div class="cadui ${hist.canRedo ? '' : 'off'}" id="redo">Redo</div><div class="cadui" id="done">Done</div>`;
+  const list = cadSpec.shapes.map((x) => `<div class="cadui shp ${x.hole ? 'hole' : ''} ${x.id === cadSel ? 'sel' : ''}" data-sel="${x.id}"><i></i>${x.name.replace(/</g, '&lt;')}</div>`).join('');
+  const rows = (kind, vals, unit) => vals.map((v, i) => `<div class="row"><b>${FIELD[`${kind}.${i}`]}</b><span class="num cadui" data-f="${kind}.${i}">${num(v)}</span><span class="unit">${unit}</span></div>`).join('');
+  $('cadR').innerHTML = `<div class="cadh">Shapes (click one)</div>${list}` + (sel ? `
+    <div class="cadh">Size</div>${rows('size', sel.size, 'mm')}
+    <div class="cadh">Place</div>${rows('pos', sel.pos, 'mm')}
+    <div class="cadh">Turn</div>${rows('rot', sel.rot, '°')}
+    <div class="cadui" id="holeT">${sel.hole ? 'Make it solid' : 'Make it a hole'}</div><div class="cadui" id="floor">Put it on the floor</div><div class="cadui" id="dup">Copy</div><div class="cadui" id="del">Delete</div>` : '<div class="unit" style="padding:6px 8px">Pick a shape to change its size,<br>place, turn, or to cut a hole.</div>');
+  layoutCad();
+}
+function layoutCad() {
+  const R = 150 * userScale + 40;
+  const c = $('cad');
+  c.style.left = `${pos.x}px`; c.style.top = `${pos.y}px`;
+  $('cadL').style.left = 'auto'; $('cadL').style.right = `${R + 70}px`;
+  $('cadR').style.left = `${R + 70}px`;
+}
+const sel1 = () => cadSpec.shapes.find((x) => x.id === cadSel);
+$('cad').addEventListener('click', (e) => {
+  const el = e.target.closest('.cadui');
+  if (!el || !editing) return;
+  if (el.dataset.add) { const r = S.addShape(cadSpec, el.dataset.add, asHole); if (r.id) { cadSel = r.id; commitCad(r.spec); } else $('err').textContent = 'That is as many shapes as it can hold.'; return; }
+  if (el.dataset.sel) { cadSel = el.dataset.sel; redrawCad(); buildPanels(); return; }
+  if (el.id === 'asHole') { asHole = !asHole; buildPanels(); }
+  else if (el.id === 'undo' && hist.canUndo) { cadSpec = hist.undo(); if (!sel1()) cadSel = null; redrawCad(); scheduleSave(); buildPanels(); }
+  else if (el.id === 'redo' && hist.canRedo) { cadSpec = hist.redo(); if (!sel1()) cadSel = null; redrawCad(); scheduleSave(); buildPanels(); }
+  else if (el.id === 'done') leaveEdit();
+  else if (el.id === 'holeT' && sel1()) commitCad(S.toggleHole(cadSpec, cadSel));
+  else if (el.id === 'floor' && sel1()) { const s = sel1(); const h = S.axisAligned(s.rot) ? S.bounds({ shapes: [{ ...s, pos: [0, 0, 0] }] }) : null; if (h) commitCad(S.replaceShape(cadSpec, { ...s, pos: [s.pos[0], Math.round(-h.min[1] * 100) / 100, s.pos[2]] })); }
+  else if (el.id === 'dup' && sel1()) { const r = S.duplicateShape(cadSpec, cadSel); if (r.id) { cadSel = r.id; commitCad(r.spec); } }
+  else if (el.id === 'del' && sel1()) { const next = S.removeShape(cadSpec, cadSel); if (next === cadSpec) $('err').textContent = 'A model needs at least one solid shape.'; else { cadSel = null; commitCad(next); } }
+});
+// A number is changed by dragging it sideways (or with the wheel): there is no keyboard in a hologram.
+let scrub = null;
+$('cadR').addEventListener('pointerdown', (e) => {
+  const n = e.target.closest('.num');
+  if (!n || !sel1()) return;
+  const [kind, i] = n.dataset.f.split('.');
+  scrub = { f: n.dataset.f, el: n, x0: e.clientX, start: JSON.parse(JSON.stringify(sel1())), v0: sel1()[kind][+i], kind };
+  dragging = 'num'; spinPause = true;
+  e.preventDefault(); document.body.setPointerCapture?.(e.pointerId);
+});
+function scrubMove(e) {
+  const fine = e.altKey ? 0.1 : 1;
+  const per = scrub.kind === 'rot' ? 0.5 : 0.25; // value per pixel
+  const stepSize = e.shiftKey ? (scrub.kind === 'rot' ? 15 : 5) : fine;
+  const v = scrub.v0 + (e.clientX - scrub.x0) * per * (e.shiftKey ? 5 : 1);
+  const next = S.setField(scrub.start, scrub.f, v, stepSize);
+  cadSpec = S.replaceShape(cadSpec, next);
+  const [kind, i] = scrub.f.split('.');
+  scrub.el.textContent = num(next[kind][+i]);
+  redrawCad();
+}
+$('cadR').addEventListener('wheel', (e) => {
+  const n = e.target.closest('.num');
+  if (!n || !sel1()) return;
+  e.preventDefault();
+  const [kind, i] = n.dataset.f.split('.');
+  const step = (e.shiftKey ? 5 : 1) * (kind === 'rot' ? 5 : 1) * (e.deltaY < 0 ? 1 : -1);
+  commitCad(S.replaceShape(cadSpec, S.setField(sel1(), n.dataset.f, sel1()[kind][+i] + step, 1)));
+}, { passive: false });
+
+
+// ---------- placing one model of a combined hologram by hand: it sticks to the surface of another where you drop it ----------
+const itemOf = (obj) => { for (let o = obj; o; o = o.parent) { const i = itemWraps.indexOf(o); if (i >= 0) return i; } return -1; };
+function glowItem(i, v) { if (i >= 0 && itemWraps[i]) { const meshes = []; itemWraps[i].traverse((o) => { if (o.isMesh) meshes.push(o); }); setBoost({ meshes }, v); } }
+function pickItem(e) {
+  setRay(e);
+  const meshes = [];
+  holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const hit = ray.intersectObjects(meshes, false)[0];
+  return hit ? itemOf(hit.object) : -1;
+}
+const _box = new THREE.Box3();
+let itemDrag = null;
+function itemStart(e, i) {
+  const w = itemWraps[i];
+  w.updateWorldMatrix(true, false);
+  const c0 = w.getWorldPosition(new THREE.Vector3());
+  camera.matrixWorld.extractBasis(_r, _u, _z);
+  const pp = toScreen(c0.clone().add(_r)).x - toScreen(c0).x || 1;
+  itemDrag = { i, c0, r: _r.clone(), u: _u.clone(), pp, x0: e.clientX, y0: e.clientY };
+}
+function itemMove(e) {
+  const d = itemDrag, w = itemWraps[d.i];
+  let target = null;
+  if (!e.altKey) { // over another model: the dragged one rests against that surface
+    setRay(e);
+    const others = [];
+    itemWraps.forEach((x, k) => { if (k !== d.i) x.traverse((o) => { if (o.isMesh) others.push(o); }); });
+    const hit = ray.intersectObjects(others, false)[0];
+    if (hit && hit.face) {
+      const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+      _box.setFromObject(w);
+      const half = _box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+      target = hit.point.clone().addScaledVector(n, Math.abs(n.x) * half.x + Math.abs(n.y) * half.y + Math.abs(n.z) * half.z + 0.01);
+    }
+  }
+  if (!target) target = d.c0.clone().addScaledVector(d.r, (e.clientX - d.x0) / d.pp).addScaledVector(d.u, -(e.clientY - d.y0) / d.pp);
+  w.position.copy(innerGroup.worldToLocal(target));
+}
+function sendPlace(i) {
+  const w = itemWraps[i];
+  relay.holoPlace({ item: i, free: { position: w.position.toArray(), rotationDeg: [w.rotation.x, w.rotation.y, w.rotation.z].map((r) => (r * 180) / Math.PI), scale: w.scale.x / (w.userData.s || 1) } });
+}
+// The pointer on the model while editing: a handle resizes, a shape is picked and moved. (Shift-drag turns the view as usual.)
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _r = new THREE.Vector3(), _u = new THREE.Vector3(), _z = new THREE.Vector3();
+const toScreen = (w) => { const p = w.clone().project(camera); return { x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight }; };
+let cadDrag = null;
+function editDown(e) {
+  if (!editing || e.shiftKey) return false;
+  setRay(e);
+  const hit = view()?.pick(ray);
+  if (!hit) { if (cadSel) { cadSel = null; redrawCad(); buildPanels(); } return false; }
+  const g = view().group;
+  g.updateWorldMatrix(true, false);
+  if (hit.type === 'handle') {
+    const s = JSON.parse(JSON.stringify(sel1()));
+    const axisLocal = [0, 0, 0]; axisLocal[hit.axis] = 1;
+    const d = S.rotateVec(axisLocal, s.rot); // the face's direction, in the model's own space
+    const c = new THREE.Vector3(...s.pos);
+    const sa = toScreen(g.localToWorld(c.clone())), sb = toScreen(g.localToWorld(c.clone().add(new THREE.Vector3(...d).multiplyScalar(10))));
+    const len = Math.hypot(sb.x - sa.x, sb.y - sa.y) || 1e-6;
+    cadDrag = { kind: 'resize', s, axis: hit.axis, sign: hit.sign, x0: e.clientX, y0: e.clientY, dx: (sb.x - sa.x) / len, dy: (sb.y - sa.y) / len, ppm: len / 10 };
+  } else {
+    if (cadSel !== hit.id) { cadSel = hit.id; redrawCad(); buildPanels(); }
+    const s = JSON.parse(JSON.stringify(sel1()));
+    camera.matrixWorld.extractBasis(_r, _u, _z);
+    const c0 = g.localToWorld(new THREE.Vector3(...s.pos));
+    const pp = toScreen(c0.clone().add(_r)).x - toScreen(c0).x || 1; // pixels in a world unit
+    cadDrag = { kind: 'move', s, x0: e.clientX, y0: e.clientY, c0, r: _r.clone(), u: _u.clone(), pp, start: g.worldToLocal(c0.clone()) };
+  }
+  dragging = 'cad'; spinPause = true;
+  e.preventDefault(); document.body.setPointerCapture?.(e.pointerId);
+  return true;
+}
+function cadMove(e) {
+  const d = cadDrag;
+  const step = e.shiftKey ? 5 : 1;
+  if (d.kind === 'resize') {
+    const along = ((e.clientX - d.x0) * d.dx + (e.clientY - d.y0) * d.dy) / d.ppm;
+    cadSpec = S.replaceShape(cadSpec, S.resizeFace(d.s, d.axis, d.sign, along, step));
+  } else {
+    const dx = (e.clientX - d.x0) / d.pp, dy = -(e.clientY - d.y0) / d.pp;
+    const target = view().group.worldToLocal(d.c0.clone().addScaledVector(d.r, dx).addScaledVector(d.u, dy));
+    const dl = target.sub(d.start);
+    cadSpec = S.replaceShape(cadSpec, S.moveBy(d.s, [dl.x, dl.y, dl.z], step));
+  }
+  redrawCad();
+}
+function editUp() {
+  if (cadDrag || scrub) { cadDrag = null; scrub = null; hist.push(cadSpec); scheduleSave(); buildPanels(); }
+}
+
+// Saves the model as an STL: a designed one in its own millimetres, anything else scaled to 100 mm across.
+async function saveStl() {
+  try {
+    let root;
+    const cadItem = items.length === 1 && itemWraps[0]?.userData.cadView;
+    if (cadItem) {
+      const v = itemWraps[0].userData.cadView;
+      if (editing) leaveEdit();
+      root = new THREE.Group();
+      if (v.mesh) root.add(new THREE.Mesh(v.mesh.geometry, new THREE.MeshBasicMaterial()));
+    } else {
+      holo.updateWorldMatrix(true, true);
+      const inv = new THREE.Matrix4().copy(holo.matrixWorld).invert();
+      root = new THREE.Group();
+      holo.traverse((o) => { if (o.isMesh && o.geometry && o.visible && o.material && !o.userData.cad === false || (o.isMesh && o.geometry && o.visible)) { const m = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial()); m.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); root.add(m); } });
+      const box = new THREE.Box3().setFromObject(root);
+      const k = 100 / Math.max(...box.getSize(new THREE.Vector3()).toArray(), 1e-6);
+      root.scale.setScalar(k);
+    }
+    root.updateMatrixWorld(true);
+    const dv = new STLExporter().parse(root, { binary: true });
+    const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    const r = await relay.holoSave({ name: $('title').textContent || 'hologram', ext: 'stl', bytes });
+    $('err').textContent = r?.ok ? `Saved to ${r.where}` : (r?.error || 'Could not save it.');
+    setTimeout(() => { $('err').textContent = ''; }, 4000);
+  } catch { $('err').textContent = 'Could not save it.'; }
+}
+
 let extracting = false;
 // Takes a piece out of this hologram (it becomes its own, or joins the one it was let go over). The rest stays where it is, pulled apart.
 async function takeOut(part, at) {
@@ -335,7 +601,7 @@ function pickPart(e) {
 function pick(e) {
   const ui = document.elementFromPoint(e.clientX, e.clientY);
   if (ui && ui.closest('#move, #title')) return 'move';
-  if (ui && ui.closest('.btn')) return 'ui';
+  if (ui && ui.closest('.btn, .cadui, .num')) return 'ui';
   setRay(e);
   const meshes = [];
   holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
@@ -349,7 +615,7 @@ const tip = $('tip');
 function showTip(e) {
   const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-tip]');
   if (!el || dragging) { tip.classList.remove('show'); return; }
-  const dyn = el.id === 'explode' && exploded ? 'Put it back together (or double-click)' : el.id === 'pin' && el.classList.contains('on') ? 'Let it go when I ask something else' : el.id === 'solid' && el.classList.contains('on') ? 'Back to hologram' : '';
+  const dyn = el.id === 'explode' && exploded ? 'Put it back together (or double-click)' : el.id === 'pin' && el.classList.contains('on') ? 'Kept: click to let it go when I say close' : el.id === 'solid' && el.classList.contains('on') ? 'Back to hologram' : '';
   tip.textContent = dyn || el.dataset.tip;
   const r = el.getBoundingClientRect();
   tip.classList.add('show');
@@ -369,11 +635,16 @@ addEventListener('mousemove', (e) => {
 });
 addEventListener('mouseleave', () => { tip.classList.remove('show'); if (!dragging) { document.body.classList.remove('near'); setHover(null); } });
 addEventListener('pointerdown', (e) => {
+  if (editDown(e)) return;
   const p = pick(e);
   if (p === 'move' || (p === 'model' && e.altKey)) { dragging = 'move'; relay.holoDrag('start'); }
   else if (p === 'model') {
     const part = pickPart(e);
-    if (part && !e.shiftKey && explodeT > 0.9) { select(part); dragging = 'piece'; carried = { part, outside: false, sent: 0 }; last = { x: e.clientX, y: e.clientY }; cv.style.cursor = 'grabbing'; }
+    const multi = !exploded && !editing && items.length > 1 && !e.altKey;
+    const pi = multi ? pickItem(e) : -1;
+    if (multi && pi >= 0 && pi === selItem && !e.shiftKey) { itemStart(e, pi); dragging = 'item'; $('hint2').textContent = ''; }
+    else if (multi && pi >= 0 && pi !== selItem) { glowItem(selItem, 0); selItem = pi; glowItem(pi, 0.8); $('hint2').textContent = 'Drag the lit model onto another to place it there · Shift+scroll resizes it'; document.body.classList.add('hinting'); dragging = 'rotate'; last = { x: e.clientX, y: e.clientY }; cv.style.cursor = 'grabbing'; }
+    else if (part && !e.shiftKey && explodeT > 0.9) { select(part); dragging = 'piece'; carried = { part, outside: false, sent: 0 }; last = { x: e.clientX, y: e.clientY }; cv.style.cursor = 'grabbing'; }
     else { if (selected) select(null); dragging = 'rotate'; last = { x: e.clientX, y: e.clientY }; cv.style.cursor = 'grabbing'; }
   }
   if (dragging) { e.preventDefault(); document.body.setPointerCapture?.(e.pointerId); spinPause = true; }
@@ -384,6 +655,9 @@ const axisY = new THREE.Vector3(0, 1, 0);
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 addEventListener('pointermove', (e) => {
+  if (dragging === 'cad' && cadDrag) return cadMove(e);
+  if (dragging === 'item' && itemDrag) return itemMove(e);
+  if (dragging === 'num' && scrub) return scrubMove(e);
   if (dragging === 'rotate') {
     // up, down, sideways and diagonal alike: the model turns the way the pointer pushes it, about the screen's own axes
     const dx = e.clientX - last.x, dy = e.clientY - last.y;
@@ -413,6 +687,8 @@ addEventListener('pointermove', (e) => {
 async function endDrag() {
   if (!dragging) return;
   const d = dragging;
+  if (d === 'cad' || d === 'num') { editUp(); dragging = null; spinPause = false; return; }
+  if (d === 'item') { if (itemDrag) sendPlace(itemDrag.i); itemDrag = null; dragging = null; spinPause = false; return; }
   dragging = null;
   spinPause = false;
   if (d === 'move') { relay.holoDrag('end'); return; }
@@ -429,9 +705,12 @@ async function endDrag() {
 addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
 addEventListener('blur', endDrag);
-addEventListener('wheel', (e) => { e.preventDefault(); userScale = Math.min(3, Math.max(0.4, userScale * Math.exp(-e.deltaY * 0.0015))); applyScale(); relay.holoScale(userScale); }, { passive: false });
-addEventListener('dblclick', (e) => { if (!pick(e) || pick(e) === 'ui' || pick(e) === 'move') return; toggleExplode(); });
+addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (e.shiftKey && selItem >= 0 && itemWraps[selItem]) { itemWraps[selItem].scale.multiplyScalar(Math.exp(-(e.deltaY || e.deltaX) * 0.002)); clearTimeout(placeTimer); const k = selItem; placeTimer = setTimeout(() => sendPlace(k), 300); return; } userScale = Math.min(3, Math.max(0.4, userScale * Math.exp(-e.deltaY * 0.0015))); applyScale(); relay.holoScale(userScale); }, { passive: false });
+addEventListener('dblclick', (e) => { if (editing) return; if (!pick(e) || pick(e) === 'ui' || pick(e) === 'move') return; toggleExplode(); });
 let spinPause = false;
+let placeTimer = 0;
 
 // The model's size, and the box that holds the name and the controls round it, follow the zoom.
 function applyScale() {
@@ -439,6 +718,7 @@ function applyScale() {
   const R = 150 * userScale + 40;
   const st = $('stage');
   st.style.left = `${pos.x - 230}px`; st.style.top = `${pos.y - R}px`; st.style.height = `${2 * R}px`;
+  if (editing) layoutCad();
 }
 let anchorY = 0;
 function setPos(x, y) {
@@ -453,6 +733,14 @@ $('close').onclick = () => relay.holoClose();
 $('pin').onclick = () => { const on = !$('pin').classList.contains('on'); $('pin').classList.toggle('on', on); relay.holoPin(on); };
 $('solid').onclick = () => { solid = !solid; $('solid').classList.toggle('on', solid); rebuild().catch(() => {}); relay.holoSolid(solid); };
 $('explode').onclick = toggleExplode;
+$('edit').onclick = () => (editing ? leaveEdit() : enterEdit());
+$('save').onclick = saveStl;
+// Ask Relay about the whole model, or the piece that is picked out: it is sent a picture of the hologram with that piece lit.
+$('ask').onclick = () => {
+  const r = Math.min(Math.max(190 * userScale + 40, exploded ? zonePx + 60 : 0), Math.min(innerWidth, innerHeight) / 2);
+  const x = Math.max(0, Math.round(pos.x - r)), y = Math.max(0, Math.round(pos.y - r));
+  relay.holoAsk({ region: { x, y, width: Math.round(Math.min(2 * r, innerWidth - x)), height: Math.round(Math.min(2 * r + 70, innerHeight - y)) }, part: selected ? selected.name : null, regions: hintText.includes('regions') });
+};
 $('reset').onclick = () => { orient.identity(); holo.quaternion.identity(); userScale = 1; applyScale(); relay.holoScale(1); };
 $('upright').onclick = () => { upright = (upright + 1) % 3; rebuild().catch(() => {}); };
 $('prev').onclick = () => relay.holoOption(-1);
@@ -499,7 +787,7 @@ function frame(now) {
   const span = 1.3 * kFit * userScale;
   uniforms.originY.value = anchor.position.y - span;
   uniforms.reveal.value = -0.2 + (1 - Math.pow(1 - t, 3)) * (2 * span + 0.6); // the build sweep, from the bottom up
-  if (!spinPause && !exploded && !carried) { qSpin.setFromAxisAngle(axisY, dt * 0.35); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
+  if (!spinPause && !exploded && !carried && !editing) { qSpin.setFromAxisAngle(axisY, dt * 0.35); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
   anchor.position.y = anchorY + Math.sin(now / 900) * 0.03;
   if (parts.length) {
     const goal = exploded ? 1 : 0;
@@ -523,6 +811,12 @@ window.__holoTest = {
   state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length, pos: { ...pos }, zonePx, q: holo.quaternion.toArray() }),
   where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
   fps: () => fps,
+  itemAt: (i) => (itemWraps[i] ? toScreen(itemWraps[i].getWorldPosition(new THREE.Vector3())) : null),
+  sel: () => selItem,
+  front: () => { orient.identity(); holo.quaternion.identity(); return true; },
+  cad: () => ({ editing, sel: cadSel, spec: editing ? cadSpec : (items.find((i) => i.kind === 'cad')?.cad || null), canUndo: hist?.canUndo }),
+  shapeAt: (id) => { const sh = cadSpec?.shapes.find((x) => x.id === id); if (!sh) return null; const p = toScreen(view().group.localToWorld(new THREE.Vector3(...sh.pos))); return p; },
+  handleAt: (axis, sign) => { const h = view()?.handles.find((x) => x.userData.handle.axis === axis && x.userData.handle.sign === sign); if (!h) return null; return toScreen(h.getWorldPosition(new THREE.Vector3())); },
   carried: () => (carried ? { at: carried.at, outside: carried.outside, over: carried.over, part: parts.indexOf(carried.part) } : null)
 };
 let fps = 0; let fpsN = 0; let fpsT = performance.now();

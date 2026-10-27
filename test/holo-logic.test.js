@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { overlapRatio, mergeTarget, layoutX, cycle, toSaved, cleanSaved } = require('../src/main/holo/logic');
+const { safeName, uniquePath, overlapRatio, mergeTarget, layoutX, cycle, toSaved, cleanSaved } = require('../src/main/holo/logic');
 
 const rect = (x, y, w = 400, h = 500) => ({ x, y, width: w, height: h });
 
@@ -39,4 +39,13 @@ test('a pinned hologram is saved as links, and the saved list is cleaned', () =>
   const list = [saved, { ...saved, id: 'bad', items: [{ kind: 'stl', title: 'x', url: 'https://evil.example/a.stl' }] }, { ...saved, id: 'unpinned', pinned: false }, null, { pinned: true, items: [] }];
   assert.deepEqual(cleanSaved(list).map((h) => h.id), ['h1']);
   assert.deepEqual(cleanSaved('nonsense'), []);
+});
+
+test('a saved file is named from the title and never replaces one that is there', () => {
+  const { safeName, uniquePath } = require('../src/main/holo/logic');
+  assert.equal(safeName('Cube / with a hole: v2?'), 'Cube with a hole v2');
+  assert.equal(safeName('///'), 'hologram');
+  const taken = new Set(['/d/Cube.stl', '/d/Cube (2).stl']);
+  assert.equal(uniquePath((p) => taken.has(p), '/d', 'Cube', 'stl'), '/d/Cube (3).stl');
+  assert.equal(uniquePath(() => false, '/d', 'Skull', 'stl'), '/d/Skull.stl');
 });

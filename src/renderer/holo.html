@@ -25,7 +25,26 @@
   #merge { position: absolute; left: 0; right: 0; top: -4px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
   body.merging #merge { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
-  #hint2 { position: absolute; left: -60px; right: -60px; top: -26px; text-align: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: 0; transition: opacity .25s; pointer-events: none; } body.exploded #hint2 { opacity: .85; } body.merging #hint2 { opacity: 0; }
+  #hint2 { position: absolute; left: -60px; right: -60px; top: -26px; text-align: center; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; opacity: 0; transition: opacity .25s; pointer-events: none; } body.exploded #hint2, body.editing #hint2, body.hinting #hint2 { opacity: .85; } body.merging #hint2 { opacity: 0; }
+  #cad { position: absolute; left: 0; top: 0; width: 0; height: 0; display: none; }
+  body.editing #cad { display: block; }
+  .cadcol { position: absolute; top: 0; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px; font-size: 13px; letter-spacing: .04em; color: #bff4ff; text-shadow: 0 0 6px rgba(0, 212, 255, .8), 0 1px 3px rgba(0, 8, 20, .9); }
+  #cadL { width: 130px; right: 0; align-items: flex-end; text-align: right; }
+  #cadR { width: 210px; left: 0; }
+  .cadui { pointer-events: auto; cursor: pointer; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .cadui:hover { background: rgba(0, 212, 255, .16); color: #fff; }
+  .cadui.off { opacity: .35; pointer-events: none; }
+  .cadui.on { color: #fff; text-shadow: 0 0 10px #00d4ff; }
+  .cadh { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; padding: 6px 8px 0; }
+  .shp { display: flex; align-items: center; gap: 6px; }
+  .shp i { width: 7px; height: 7px; border-radius: 50%; background: #00d4ff; display: inline-block; }
+  .shp.hole i { background: #ff9f43; }
+  .shp.sel { color: #fff; text-shadow: 0 0 10px #00d4ff; }
+  .row { display: flex; gap: 8px; align-items: center; padding: 1px 8px; }
+  .row b { width: 14px; font-weight: 400; opacity: .6; }
+  .num { pointer-events: auto; cursor: ew-resize; min-width: 52px; text-align: right; padding: 1px 6px; border-radius: 6px; }
+  .num:hover { background: rgba(0, 212, 255, .16); color: #fff; }
+  .unit { opacity: .5; font-size: 11px; }
   #tip { position: absolute; left: 0; top: 0; padding: 4px 10px; border-radius: 999px; background: rgba(4, 18, 28, .78); font-size: 12px; letter-spacing: .04em; white-space: nowrap; opacity: 0; transition: opacity .12s; pointer-events: none; color: #d9f8ff; }
   #tip.show { opacity: 1; }
   #err { position: absolute; left: 0; right: 0; top: 46%; text-align: center; color: #ffcc66; }
@@ -40,15 +59,19 @@
   <div id="ctl" class="glow">
     <div class="btn" id="move" data-tip="Move: drag this to put it anywhere">&#10021;</div>
     <div class="btn" id="prev" hidden data-tip="Previous model">&#8249;</div><div id="opt" hidden></div><div class="btn" id="next" hidden data-tip="Next model">&#8250;</div>
+    <div class="btn" id="ask" data-tip="Ask about it (click a piece first to ask about just that piece)">?</div>
+    <div class="btn" id="edit" hidden data-tip="Edit the shapes: resize, move, add, remove, cut holes">&#9998;</div>
     <div class="btn" id="explode" data-tip="Pull it apart into pieces (or double-click it)">&#10070;</div>
     <div class="btn" id="reset" data-tip="Turn it back to the front">&#8982;</div>
     <div class="btn" id="upright" hidden data-tip="Turn it upright">&#8635;</div>
     <div class="btn" id="solid" data-tip="Switch between hologram and solid">&#9680;</div>
-    <div class="btn" id="pin" data-tip="Keep it on my screen">&#9906;</div>
-    <div class="btn" id="close" data-tip="Close it">&#10005;</div>
+    <div class="btn" id="save" data-tip="Save it as an STL file (for 3D printing, Fusion and other apps)">&#10515;</div>
+    <div class="btn" id="pin" data-tip="Keep it: stays when I say close, and after a restart">&#9906;</div>
+    <div class="btn" id="close" data-tip="Close just this one">&#10005;</div>
   </div>
   <div id="cap" class="glow"><div id="title" data-tip="Drag the name to move it anywhere"></div><div id="credit"></div></div>
 </div>
+<div id="cad"><div id="cadL" class="cadcol"></div><div id="cadR" class="cadcol"></div></div>
 <div id="tip"></div>
 <script type="module" src="holo.js"></script>
 </body>

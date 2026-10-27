@@ -225,14 +225,21 @@
     raf = requestAnimationFrame(frame);
   }
 
+  // Kept by id and only changed where it differs: a list rebuilt on every update (the level and the words arrive many times a second) made
+  // every finished task pop in again each time, which looked like flickering.
   function renderTasks(tasks) {
-    tasksEl.replaceChildren();
-    for (const t of tasks) {
-      const li = document.createElement('li');
-      li.className = t.status;
-      li.textContent = t.text;
-      tasksEl.append(li);
-    }
+    const have = new Map([...tasksEl.children].map((li) => [li.dataset.id, li]));
+    const keep = new Set();
+    tasks.forEach((t, i) => {
+      const key = String(t.id ?? `${i}:${t.text}`);
+      keep.add(key);
+      let li = have.get(key);
+      if (!li) { li = document.createElement('li'); li.dataset.id = key; }
+      if (li.className !== t.status) li.className = t.status;
+      if (li.textContent !== t.text) li.textContent = t.text;
+      if (tasksEl.children[i] !== li) tasksEl.insertBefore(li, tasksEl.children[i] || null);
+    });
+    for (const [key, li] of have) if (!keep.has(key)) li.remove();
   }
 
   function setMode(m) {

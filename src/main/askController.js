@@ -21,6 +21,8 @@ const usage = require('./usage');
 const { buildCard } = require('./cards/card');
 const { findStls, downloadStl } = require('./models/lookup');
 const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
+const { CLOSE_HOLOS } = require('./holo/closeWords');
+const cadModel = require('./models/cad');
 const { photoToGlb } = require('./models/sf3d');
 const { fitPrompt, parsePlacement, heuristicPlacement } = require('./holo/fit');
 const { normalizeParts } = require('./models/shapes');
@@ -103,6 +105,7 @@ class AskController {
     this.lastOk = null;
     this.scale = 1;
     this.doneTimer = null;
+    this.holdForHolos = false; // the reactor stays while holograms are up that you have not pinned or closed
     this.heldStart = false; // the current listening session was started by holding the key
     this.ducker = new Ducker({
       osa: (script) => this.mac.osa(script),
@@ -399,8 +402,7 @@ class AskController {
     // Any of these cuts a spoken reply off mid-sentence, whatever else it then does (see interruptSpeech).
     if (name === 'cancel' || (name === 'type' && kind === 'press')) this.interruptSpeech();
     if (name === 'cancel') {
-      this.cardPanel?.hide();
-      this.holos?.hideUnpinned();
+      this.cardPanel?.hide(); // Esc closes the reactor; the holograms stay (close them one by one, say "close", or pin the ones to keep through that)
       this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
       else if (this.overlay.hasMarks()) this.overlay.clear(); // Esc closes drawings and guides
@@ -871,7 +873,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1142,6 +1144,7 @@ class AskController {
 
   close() {
     clearTimeout(this.doneTimer);
+    this.holdForHolos = false;
     this.state = 'idle';
     if (!this.runningTask) { this.tasks = []; this.queue = []; this.pendingFinish = null; }
     this.overlay.hud({ hide: true });
@@ -1198,7 +1201,11 @@ class AskController {
     this.push({ label: 'Thinking', text: opts.shown || text });
 
     if (!opts.scheduled) this.unattended = false;
-    if (!opts.drain) { this.cardPanel?.hide(); this.holos?.hideUnpinned(); } // a new request takes the last card and the holograms you did not pin away
+    if (!opts.drain) this.cardPanel?.hide(); // a new request takes the last card away; holograms you have not pinned stay until you close them or pin them
+    if (!opts.shown && this.holos?.holos.size && CLOSE_HOLOS.test(String(text).trim())) {
+      this.closeHolograms();
+      return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: 'Closed.', actions: 0 });
+    }
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     const gc = this.guide.command(text);
@@ -1560,10 +1567,68 @@ class AskController {
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
     clearTimeout(this.doneTimer);
+    this.holdForHolos = !!this.holos?.hasUnpinned();
+    if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
     this.doneTimer = setTimeout(() => {
       if (this.state === 'done') this.close();
     }, Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes
     return res;
+  }
+
+  // A model designed from simple shapes (the user edits it in the hologram, or by voice).
+  async design3d(raw = {}) {
+    let cad;
+    try { cad = cadModel.normalizeCad({ shapes: raw.shapes }); } catch (e) { return `Could not make that design: ${e.message}`; }
+    const title = String(raw.title || 'Design').slice(0, 60);
+    const id = await this.holos.show({ title, items: [{ kind: 'cad', title, credit: 'Designed with Relay · edit it right in the hologram', cad }] });
+    if (raw.keep) this.holos.pin(id, true);
+    return `The design is on screen as a hologram. Shapes now:\n${cadModel.describeCad(cad)}\nTell the user briefly what you made. They can double-click it, press the pencil button to resize, move, add and remove shapes and cut holes themselves, and the download button saves an STL for 3D printing.`;
+  }
+
+  async edit3d(raw = {}) {
+    const t = this.holos?.cadTarget(raw.title);
+    if (!t) return 'There is no designed model on screen to change. Use design_3d to make one.';
+    try {
+      const cad = cadModel.applyEdits(t.h.items[t.index].cad, raw.changes);
+      this.holos.setCad(t.h, t.index, cad, { push: true });
+      return `Changed. The shapes now:\n${cadModel.describeCad(cad)}`;
+    } catch (e) { return `Could not change it: ${e.message}`; }
+  }
+
+  read3d(raw = {}) {
+    const t = this.holos?.cadTarget(raw.title);
+    return t ? `The designed model "${t.h.title}" now has:\n${cadModel.describeCad(t.h.items[t.index].cad)}` : 'There is no designed model on screen.';
+  }
+
+  // Clicked "?" on a hologram: Relay is shown a picture of it (the picked piece lit) and asked what it is.
+  async askAboutHologram(h, { region, part, regions } = {}) {
+    if (!h || h.win.isDestroyed()) return;
+    const r = region || { x: 0, y: 0, width: 600, height: 600 };
+    let img = await h.win.webContents.capturePage({ x: Math.round(r.x), y: Math.round(r.y), width: Math.max(50, Math.round(r.width)), height: Math.max(50, Math.round(r.height)) });
+    if (img.isEmpty()) return this.notice('Could not take a picture of the hologram.', 'failed');
+    if (img.getSize().width > 900) img = img.resize({ width: 900 });
+    const size = img.getSize();
+    this.mark = { ts: Date.now(), box: { x: 0, y: 0, w: size.width, h: size.height }, mediaType: 'image/jpeg', data: img.toJPEG(88).toString('base64'), width: size.width, height: size.height };
+    const what = part ? `one piece of it, lit up in the picture${regions ? ' (the model is one solid piece that was cut into regions, so the piece has no real name: say what that part of the thing is, from where it sits)' : ''}` : 'the whole model';
+    const text = `I am pointing at ${what} in the "${h.title}" hologram (the picture is my marked area). What is it, and what does it do? Answer in a few sentences.`;
+    if (this.runningTask && this.state === 'working') return this.enqueue(text, { shown: part ? 'What is this piece?' : 'What is this?' });
+    await this.handleText(text, { shown: part ? 'What is this piece?' : `What is this ${h.title}?` });
+  }
+
+  // A hologram was pinned, closed or added: once none is left unpinned, the reactor can go (the pinned ones stay).
+  holosChanged() {
+    if (this.holdForHolos && !this.holos?.hasUnpinned()) {
+      this.holdForHolos = false;
+      if (this.state === 'done') this.close();
+    }
+  }
+
+  // "Close", "that's all", "clear them": the holograms you did not pin go, and so does the reactor.
+  closeHolograms() {
+    this.holos?.hideUnpinned();
+    this.cardPanel?.hide();
+    this.holdForHolos = false;
+    this.close();
   }
 
   // Developer aid: RELAY_DEMO=listening|working|confirm|done|input shows the pill in that state.
