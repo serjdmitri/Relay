@@ -61,6 +61,132 @@ export function splitTriangles(positions, { regions = 5 } = {}) {
   return { kind: 'regions', groups: kmeans(positions, n, Math.max(2, Math.min(regions, 8))) };
 }
 
+// ---- a model that is one solid skin (made from a photo), cut along its own creases and colours ----
+// Where two neighbouring triangles meet at a sharp fold (a wheel arch, the edge of a roof, a window frame), or where the colour changes (tyre against
+// paint), the skin is cut; what stays joined is a piece. Small pieces are then merged into the neighbour they share the longest border with, until
+// a handful of sensible pieces is left. geo: { positions: Float32Array (x, y, z per vertex), index: Uint32Array | null (3 per triangle), colors:
+// Float32Array | null (r, g, b per triangle) }. Returns { kind: 'surface', groups } (groups of triangle numbers) or null when no useful cut was found.
+const MAX_SURFACE_TRIS = 900000;
+export function splitSurface(geo, { maxParts = 10, minShare = 0.025, convexDeg = 62, concaveDeg = 30, colorStep = 0.32 } = {}) {
+  const pos = geo.positions;
+  const nv = Math.floor(pos.length / 3);
+  const index = geo.index || null;
+  const nt = index ? Math.floor(index.length / 3) : Math.floor(nv / 3);
+  if (nt < 20 || nt > MAX_SURFACE_TRIS) return null;
+  const corner = (t, k) => (index ? index[t * 3 + k] : t * 3 + k);
+  let minx = Infinity, miny = Infinity, minz = Infinity, maxx = -Infinity, maxy = -Infinity, maxz = -Infinity;
+  for (let i = 0; i < nv; i++) {
+    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+    if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; if (z < minz) minz = z; if (z > maxz) maxz = z;
+  }
+  const diag = Math.hypot(maxx - minx, maxy - miny, maxz - minz) || 1;
+  const q = diag * 2e-4; // corners closer than this are the same point (a texture seam is not a cut)
+  const keyOf = new Map();
+  const weld = new Int32Array(nv);
+  let nw = 0;
+  for (let i = 0; i < nv; i++) {
+    const k = ((Math.round((pos[i * 3] - minx) / q) * 8192 + Math.round((pos[i * 3 + 1] - miny) / q)) * 8192) + Math.round((pos[i * 3 + 2] - minz) / q);
+    let id = keyOf.get(k);
+    if (id === undefined) { id = nw++; keyOf.set(k, id); }
+    weld[i] = id;
+  }
+  // per triangle: normal, area and middle
+  const nx = new Float32Array(nt), ny = new Float32Array(nt), nz = new Float32Array(nt), area = new Float32Array(nt);
+  const cx = new Float32Array(nt), cy = new Float32Array(nt), cz = new Float32Array(nt);
+  let total = 0;
+  for (let t = 0; t < nt; t++) {
+    const a = corner(t, 0) * 3, b = corner(t, 1) * 3, c = corner(t, 2) * 3;
+    const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+    let x = uy * vz - uz * vy, y = uz * vx - ux * vz, z = ux * vy - uy * vx;
+    const l = Math.hypot(x, y, z);
+    area[t] = l / 2; total += l / 2;
+    if (l > 0) { x /= l; y /= l; z /= l; }
+    nx[t] = x; ny[t] = y; nz[t] = z;
+    cx[t] = (pos[a] + pos[b] + pos[c]) / 3; cy[t] = (pos[a + 1] + pos[b + 1] + pos[c + 1]) / 3; cz[t] = (pos[a + 2] + pos[b + 2] + pos[c + 2]) / 3;
+  }
+  // neighbours: triangles sharing an edge
+  const first = new Map();
+  const A = [], B = [], L = [];
+  for (let t = 0; t < nt; t++) {
+    for (let k = 0; k < 3; k++) {
+      const i = corner(t, k), j = corner(t, (k + 1) % 3);
+      const wi = weld[i], wj = weld[j];
+      if (wi === wj) continue;
+      const key = wi < wj ? wi * nw + wj : wj * nw + wi;
+      const o = first.get(key);
+      if (o === undefined) first.set(key, t);
+      else if (o >= 0) {
+        A.push(o); B.push(t);
+        L.push(Math.hypot(pos[i * 3] - pos[j * 3], pos[i * 3 + 1] - pos[j * 3 + 1], pos[i * 3 + 2] - pos[j * 3 + 2]));
+        first.set(key, -1); // an edge with more than two triangles is not followed again
+      }
+    }
+  }
+  const col = geo.colors || null;
+  const cosConvex = Math.cos((convexDeg * Math.PI) / 180), cosConcave = Math.cos((concaveDeg * Math.PI) / 180);
+  const parent = new Int32Array(nt);
+  for (let t = 0; t < nt; t++) parent[t] = t;
+  const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  const cuts = []; // the neighbours that were cut apart, to find which pieces touch
+  for (let e = 0; e < A.length; e++) {
+    const a = A[e], b = B[e];
+    const dot = nx[a] * nx[b] + ny[a] * ny[b] + nz[a] * nz[b];
+    const concave = (cx[b] - cx[a]) * nx[a] + (cy[b] - cy[a]) * ny[a] + (cz[b] - cz[a]) * nz[a] > 1e-7 * diag;
+    let cut = concave ? dot < cosConcave : dot < cosConvex;
+    if (!cut && col) { const d = Math.hypot(col[a * 3] - col[b * 3], col[a * 3 + 1] - col[b * 3 + 1], col[a * 3 + 2] - col[b * 3 + 2]); cut = d > colorStep; }
+    if (cut) cuts.push(e);
+    else { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; }
+  }
+  // the pieces so far, with their area, and how long a border each pair shares
+  const id = new Map();
+  const seg = new Int32Array(nt);
+  const areaOf = [];
+  for (let t = 0; t < nt; t++) { const r = find(t); let s = id.get(r); if (s === undefined) { s = areaOf.length; id.set(r, s); areaOf.push(0); } seg[t] = s; areaOf[s] += area[t]; }
+  const nbr = areaOf.map(() => new Map());
+  for (const e of cuts) {
+    const sa = seg[A[e]], sb = seg[B[e]];
+    if (sa === sb) continue;
+    nbr[sa].set(sb, (nbr[sa].get(sb) || 0) + L[e]);
+    nbr[sb].set(sa, (nbr[sb].get(sa) || 0) + L[e]);
+  }
+  // merge: the smallest piece joins the neighbour it shares the longest border with, until no piece is too small and there are not too many
+  const alive = new Set(areaOf.keys());
+  const minArea = total * minShare;
+  const redirect = new Int32Array(areaOf.length).map((_, i) => i); // a merged piece points at the one it joined
+  const root = (x) => { while (redirect[x] !== x) { redirect[x] = redirect[redirect[x]]; x = redirect[x]; } return x; };
+  const mergeInto = (small) => {
+    let best = -1, bl = -1;
+    for (const [o, len] of nbr[small]) if (len > bl) { bl = len; best = o; }
+    if (best < 0) return false;
+    areaOf[best] += areaOf[small];
+    for (const [o, len] of nbr[small]) {
+      if (o === best) continue;
+      nbr[o].delete(small);
+      nbr[best].set(o, (nbr[best].get(o) || 0) + len);
+      nbr[o].set(best, (nbr[o].get(best) || 0) + len);
+    }
+    nbr[best].delete(small);
+    nbr[small] = new Map();
+    redirect[small] = best;
+    alive.delete(small);
+    return true;
+  };
+  // a rough skin has thousands of specks: the tiny ones go first in one pass
+  for (const sp of [...alive].sort((a, b) => areaOf[a] - areaOf[b])) { if (areaOf[sp] >= minArea * 0.2) break; if (alive.has(sp)) mergeInto(sp); }
+  const loose = new Set(); // pieces with no neighbour (separate shells) stay as they are
+  for (;;) {
+    let small = -1, sa = Infinity;
+    for (const sp of alive) if (!loose.has(sp) && areaOf[sp] < sa) { sa = areaOf[sp]; small = sp; }
+    if (small < 0 || (sa >= minArea && alive.size <= maxParts)) break;
+    if (!mergeInto(small)) loose.add(small);
+  }
+  const groups = new Map();
+  for (let t = 0; t < nt; t++) { const r = root(seg[t]); (groups.get(r) || groups.set(r, []).get(r)).push(t); }
+  const out = [...groups.values()].sort((a, b) => b.length - a.length);
+  return out.length >= 2 ? { kind: 'surface', groups: out } : null;
+}
+
 // Triangles grouped by where they are: k seeds spread as far apart as possible, then each triangle joins the nearest seed (a few rounds).
 function kmeans(positions, n, k) {
   const cx = new Float32Array(n), cy = new Float32Array(n), cz = new Float32Array(n);
