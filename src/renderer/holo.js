@@ -14,6 +14,7 @@ import { toStl, to3mf, toStep, zUp } from './holo-export.js';
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
 const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, premultipliedAlpha: true });
+renderer.localClippingEnabled = true; // the cut bar also cuts the solid look and the outlines
 renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1)); // the window is the whole display, so the pixel count is kept in check
 renderer.setClearColor(0x000000, 0);
 const scene = new THREE.Scene();
@@ -25,7 +26,11 @@ scene.add(new THREE.HemisphereLight(0xcfe9ff, 0x101820, 1.0));
 const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3, 5, 4); scene.add(key);
 
 const CYAN = new THREE.Color(0x00d4ff);
-const uniforms = { time: { value: 0 }, reveal: { value: -2 }, originY: { value: 0 } };
+// The cut bar: a plane through the model (everything on its positive side is cut away). clipN and clipD are in world units; the shader and three's own clipping both use them.
+const clip = { on: false, axis: 1, t: 1, flip: false, box: null };
+const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e6); // three keeps the side with distance >= 0, so this is the plane turned round
+const clipPlanes = [clipPlane];
+const uniforms = { time: { value: 0 }, reveal: { value: -2 }, originY: { value: 0 }, clipOn: { value: 0 }, clipN: { value: new THREE.Vector3(0, 1, 0) }, clipD: { value: 0 } };
 let solid = false;
 let items = [];
 const touched = () => { lastTouch = performance.now(); };
@@ -56,11 +61,11 @@ function holoMaterial(tint, map, body = 0) {
     uniforms: { ...uniforms, tint: { value: new THREE.Color(tint || 0x00d4ff).lerp(CYAN, map ? 0.15 : 0.55) }, map: { value: map || null }, hasMap: { value: map ? 1 : 0 }, mapSrgb: { value: map && map.colorSpace === THREE.SRGBColorSpace ? 1 : 0 }, body: { value: body }, boost: { value: 0 } },
     // a real-looking model (body 1) is drawn solid with the hologram effects over it; the light-only kind is see-through and additive
     transparent: body < 1, depthWrite: body >= 1, blending: body >= 1 ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; vN = normalize(normalMatrix * normal); vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform float time; uniform float reveal; uniform float originY; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float mapSrgb; uniform float body; uniform float boost; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; void main() { float ry = vY - originY; if (ry > reveal) discard; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, ry); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb; if (mapSrgb > 0.5) base = pow(base, vec3(0.4545)); base *= 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge) + vec3(0.0, 0.35, 0.5) * boost; gl_FragColor = vec4(lit * flick1, 1.0); return; }  float a = (0.10 + body + f * 0.9) * scan + edge * 0.9 + boost * 0.5; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge) + vec3(0.0, 0.4, 0.6) * boost, a * flick); }'
+    vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; varying vec3 vW; void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; vW = wp.xyz; vN = normalize(normalMatrix * normal); vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform float time; uniform float reveal; uniform float originY; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float mapSrgb; uniform float body; uniform float boost; uniform float clipOn; uniform vec3 clipN; uniform float clipD; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; varying vec3 vW; void main() { float ry = vY - originY; if (ry > reveal) discard; float cd = dot(clipN, vW) + clipD; if (clipOn > 0.5 && cd > 0.0) discard; float cutGlow = clipOn > 0.5 ? 1.0 - smoothstep(0.0, 0.05, abs(cd)) : 0.0; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, ry); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb; if (mapSrgb > 0.5) base = pow(base, vec3(0.4545)); base *= 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge) + vec3(0.0, 0.35, 0.5) * boost + vec3(0.3, 0.9, 1.0) * cutGlow; gl_FragColor = vec4(lit * flick1, 1.0); return; }  float a = (0.10 + body + f * 0.9) * scan + edge * 0.9 + boost * 0.5 + cutGlow * 0.8; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge) + vec3(0.0, 0.4, 0.6) * boost + vec3(0.3, 0.9, 1.0) * cutGlow, a * flick); }'
   });
 }
-function solidMaterial(color) { return new THREE.MeshStandardMaterial({ color: color || 0xd7e3ea, roughness: 0.5, metalness: 0.15 }); }
+function solidMaterial(color) { return new THREE.MeshStandardMaterial({ color: color || 0xd7e3ea, roughness: 0.5, metalness: 0.15, side: THREE.DoubleSide, clippingPlanes: clipPlanes }); }
 
 // ---------- building the models ----------
 const GEOM = {
@@ -667,7 +672,7 @@ function pick(e) {
   return null;
 }
 function setOver(on) { if (on !== over) { over = on; relay.holoHit(on); } }
-const nearStage = (e) => { const r = Math.max(70, modelR * PPU * userScale + 8); return Math.abs(e.clientX - pos.x) < r + 120 && e.clientY > pos.y - r - 40 && e.clientY < pos.y + r + (document.body.classList.contains('hand') ? 240 : 170); };
+const nearStage = (e) => { const r = Math.max(70, modelR * PPU * userScale + 8); return Math.abs(e.clientX - pos.x) < r + 120 && e.clientY > pos.y - r - (clip.on ? 110 : 40) && e.clientY < pos.y + r + (document.body.classList.contains('hand') ? 240 : 170); };
 // What a control does, shown above it while the pointer is on it (the window never takes focus, so the browser's own tooltips never appear).
 const tip = $('tip');
 function showTip(e) {
@@ -770,7 +775,7 @@ addEventListener('blur', endDrag);
 addEventListener('wheel', (e) => {
   e.preventDefault();
   touched();
-  if (e.shiftKey && selItem >= 0 && itemWraps[selItem]) { itemWraps[selItem].scale.multiplyScalar(Math.exp(-(e.deltaY || e.deltaX) * 0.002)); clearTimeout(placeTimer); const k = selItem; placeTimer = setTimeout(() => sendPlace(k), 300); return; } userScale = Math.min(3, Math.max(0.4, userScale * Math.exp(-e.deltaY * 0.0015))); applyScale(); relay.holoScale(userScale); }, { passive: false });
+  if (e.shiftKey && selItem >= 0 && itemWraps[selItem]) { itemWraps[selItem].scale.multiplyScalar(Math.exp(-(e.deltaY || e.deltaX) * 0.002)); clearTimeout(placeTimer); const k = selItem; placeTimer = setTimeout(() => sendPlace(k), 300); return; } userScale = Math.min(4, Math.max(0.3, userScale * Math.exp(-e.deltaY * (e.ctrlKey ? 0.011 : 0.0015)))); applyScale(); relay.holoScale(userScale); }, { passive: false }); // a pinch on the trackpad arrives as a wheel with ctrl held: smaller steps, so it is stronger
 addEventListener('dblclick', (e) => { if (editing) return; if (!pick(e) || pick(e) === 'ui' || pick(e) === 'move') return; toggleExplode(); });
 let spinPause = false;
 // Files dropped on the hologram (the window takes drags only while the mouse button is held over it).
@@ -858,6 +863,73 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+// ---------- the cut bar: slide a plane through the model to see inside it ----------
+const cutVis = new THREE.Group(); // a faint sheet that shows where the cut is (in the anchor, so it is never part of the model or of a saved file)
+{
+  const sq = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x25c8ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const ln = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)), new THREE.LineBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.9, depthTest: false }));
+  sq.raycast = () => {}; ln.raycast = () => {};
+  cutVis.add(sq, ln);
+  cutVis.visible = false;
+  anchor.add(cutVis);
+}
+const tmpN = new THREE.Vector3();
+const tmpP = new THREE.Vector3();
+const tmpQ = new THREE.Quaternion();
+const AXIS_V = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+// The model's box in its own frame (what turns), measured when the bar is opened.
+function measureClip() {
+  holo.updateMatrixWorld(true);
+  const inv = holo.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  holo.traverse((o) => { if (o.isMesh && o.geometry) { o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld)); box.union(b); } });
+  clip.box = box.isEmpty() ? new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1)) : box;
+}
+function updateClip() {
+  if (!clip.on) { uniforms.clipOn.value = 0; clipPlane.set(tmpN.set(0, -1, 0), 1e6); cutVis.visible = false; return; }
+  if (!clip.box) measureClip();
+  holo.updateMatrixWorld(true);
+  const n = AXIS_V[clip.axis];
+  const c = clip.box.getCenter(new THREE.Vector3());
+  const half = (clip.box.max.getComponent(clip.axis) - clip.box.min.getComponent(clip.axis)) / 2;
+  const sign = clip.flip ? -1 : 1;
+  tmpP.copy(c).addScaledVector(n, sign * clip.t * half); // the plane's point, in the model's frame
+  const pw = holo.localToWorld(tmpP.clone());
+  tmpN.copy(n).multiplyScalar(sign).transformDirection(holo.matrixWorld); // its normal, in the world
+  uniforms.clipN.value.copy(tmpN);
+  uniforms.clipD.value = -tmpN.dot(pw);
+  uniforms.clipOn.value = 1;
+  clipPlane.set(tmpN.clone().negate(), tmpN.dot(pw));
+  const sz = clip.box.getSize(new THREE.Vector3()).length() * holo.scale.x * 0.62;
+  cutVis.visible = true;
+  cutVis.position.copy(anchor.worldToLocal(pw));
+  cutVis.quaternion.copy(tmpQ.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tmpN));
+  cutVis.scale.set(sz, sz, 1);
+  // the solid look, outlines and anything else that is not the hologram shader is cut by three's own planes
+  holo.traverse((o) => {
+    if (!(o.isMesh || o.isLineSegments) || !o.material) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (m.isShaderMaterial || m.clippingPlanes === clipPlanes) continue;
+      m.clippingPlanes = clipPlanes;
+      if (o.isMesh) m.side = THREE.DoubleSide;
+      m.needsUpdate = true;
+    }
+  });
+}
+function setCut(on) {
+  clip.on = !!on;
+  if (clip.on) { clip.box = null; clip.t = Number($('cutr').value) / 100; }
+  document.body.classList.toggle('cutting', clip.on);
+  $('cut').classList.toggle('on', clip.on);
+  touched();
+  updateClip();
+}
+$('cut').onclick = () => { setCut(!clip.on); document.body.classList.remove('menu-open'); };
+$('cutx').onclick = () => setCut(false);
+$('cutflip').onclick = () => { clip.flip = !clip.flip; $('cutflip').classList.toggle('on', clip.flip); touched(); };
+$('cutr').addEventListener('input', () => { clip.t = Number($('cutr').value) / 100; touched(); });
+for (const b of document.querySelectorAll('#cutax b')) b.onclick = () => { clip.axis = Number(b.dataset.ax); for (const x of document.querySelectorAll('#cutax b')) x.classList.toggle('on', x === b); clip.box = null; touched(); };
+
 let prev = performance.now();
 const qSpin = new THREE.Quaternion();
 function frame(now) {
@@ -884,6 +956,7 @@ function frame(now) {
     it.w.scale.setScalar(it.s1 * (0.55 + 0.45 * e));
     if (t >= 1) intros.splice(i, 1);
   }
+  if (clip.on) updateClip();
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -893,6 +966,8 @@ window.__holoTest = {
   state: () => ({ exploded, explodeT, parts: parts.length, selected: selected ? parts.indexOf(selected) : -1, items: items.length, pos: { ...pos }, zonePx, q: holo.quaternion.toArray() }),
   where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
   fps: () => fps,
+  scale: () => userScale,
+  cut: (on, axis = 1, t = 0, flip = false) => { clip.axis = axis; clip.flip = flip; $('cutr').value = String(Math.round(t * 100)); setCut(on); clip.t = t; updateClip(); return { on: clip.on, d: uniforms.clipD.value, n: uniforms.clipN.value.toArray() }; },
   save: (fmt) => saveModel(fmt),
   yaw: (deg) => { orient.setFromAxisAngle(axisY, (deg * Math.PI) / 180); holo.quaternion.copy(orient); return true; },
   stlBytes: () => { const { tris } = collectTriangles(); return tris.length ? { bytes: toStl(zUp(tris), 'x').length, tris: tris.length / 9 } : 0; },

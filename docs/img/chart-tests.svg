@@ -1,15 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Bar chart: 410 unit tests by area">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-label="Bar chart: 411 unit tests by area">
   <defs><linearGradient id="g0" x1="0" x2="1"><stop offset="0" stop-color="#1c8fd6"/><stop offset="1" stop-color="#4cc2ff"/></linearGradient><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#4cc2ff"/><stop offset="1" stop-color="#9fdcff"/></linearGradient><linearGradient id="g2" x1="0" x2="1"><stop offset="0" stop-color="#9fdcff"/><stop offset="1" stop-color="#2a6f9e"/></linearGradient><linearGradient id="g3" x1="0" x2="1"><stop offset="0" stop-color="#2a6f9e"/><stop offset="1" stop-color="#7ad4ff"/></linearGradient><linearGradient id="g4" x1="0" x2="1"><stop offset="0" stop-color="#7ad4ff"/><stop offset="1" stop-color="#0f4a75"/></linearGradient><linearGradient id="g5" x1="0" x2="1"><stop offset="0" stop-color="#0f4a75"/><stop offset="1" stop-color="#1c8fd6"/></linearGradient><linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1822"/><stop offset="1" stop-color="#0b1118"/></linearGradient></defs>
   <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif">
     <rect width="600" height="340" rx="20" fill="url(#card)"/>
-    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">410 unit tests</text>
-    <text x="28" y="70" fill="#9db4c4" font-size="13">by area · counted from test/ · v0.26.0</text>
+    <text x="28" y="46" fill="#fff" font-size="22" font-weight="700">411 unit tests</text>
+    <text x="28" y="70" fill="#9db4c4" font-size="13">by area · counted from test/ · v0.27.0</text>
     <text x="28" y="121" fill="#eef6fb" font-size="14">Other</text>
     <rect x="242" y="104" width="302" height="24" rx="8" fill="url(#g0)"/>
-    <text x="554" y="121" fill="#fff" font-size="14" font-weight="700">264</text>
+    <text x="554" y="121" fill="#fff" font-size="14" font-weight="700">265</text>
     <text x="28" y="159" fill="#eef6fb" font-size="14">Claude and the agent loop</text>
-    <rect x="242" y="142" width="61" height="24" rx="8" fill="url(#g1)"/>
-    <text x="313" y="159" fill="#fff" font-size="14" font-weight="700">53</text>
+    <rect x="242" y="142" width="60" height="24" rx="8" fill="url(#g1)"/>
+    <text x="312" y="159" fill="#fff" font-size="14" font-weight="700">53</text>
     <text x="28" y="197" fill="#eef6fb" font-size="14">Instant commands and timers</text>
     <rect x="242" y="180" width="42" height="24" rx="8" fill="url(#g2)"/>
     <text x="294" y="197" fill="#fff" font-size="14" font-weight="700">37</text>

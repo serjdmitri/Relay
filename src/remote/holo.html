@@ -19,6 +19,20 @@
   <header><a class="back" href="/holo.html" aria-label="Back">&#8249;</a><span id="vtitle">Hologram</span></header>
   <canvas id="gl"></canvas>
   <div id="vhint" class="dim">Drag to turn · pinch to zoom</div>
+  <div id="vtools"><button id="tcut" type="button">Cut</button><button id="tedit" type="button">Edit</button></div>
+  <section id="pcut" class="panel" hidden>
+    <div class="prow"><span class="plbl">Cut through it</span><span id="cutax"><button type="button" data-ax="0">X</button><button type="button" data-ax="1" class="on">Y</button><button type="button" data-ax="2">Z</button></span><button id="cutflip" type="button" aria-label="Cut away the other side">&#8644;</button></div>
+    <input id="cutr" type="range" min="-100" max="100" value="100" aria-label="Where to cut">
+  </section>
+  <section id="pedit" class="panel" hidden>
+    <form id="tell"><input id="tellin" type="text" placeholder="Tell Relay what to change…" enterkeyhint="send" autocomplete="off"><button type="submit">Send</button></form>
+    <div id="cadbox" hidden>
+      <div id="chips"></div>
+      <div id="fields"></div>
+      <div id="cadact"><button type="button" id="cHole">Make hole</button><button type="button" id="cCopy">Copy</button><button type="button" id="cDel">Delete</button><button type="button" id="cUndo">Undo</button></div>
+      <div id="addrow"></div>
+    </div>
+  </section>
   <div id="vbar">
     <button data-fmt="stl">STL</button>
     <button data-fmt="3mf">3MF</button>

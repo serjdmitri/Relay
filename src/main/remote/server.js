@@ -9,7 +9,7 @@ const { isPrivateAddress } = require('./auth');
 
 const TYPES = { '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
-const PAGES = { '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
+const PAGES = { '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
@@ -126,6 +126,23 @@ class RemoteServer {
       if (!r) return this.json(res, 404, { error: 'That hologram is gone.' });
       res.writeHead(200, { 'content-type': 'model/gltf-binary', 'content-length': r.bytes.length, 'cache-control': 'no-store', 'x-relay-mm': r.mm ? '1' : '0', 'x-relay-title': encodeURIComponent(r.title || 'hologram') });
       return res.end(r.bytes);
+    }
+    // Editing a hologram from the phone: its shapes (designed models), and "tell Relay what to change" about it.
+    const hc = p.match(/^\/api\/holos\/([\w-]{8,64})\/(cad|ask)$/);
+    if (hc && req.method === 'GET' && hc[2] === 'cad') {
+      const cad = await this.control.holoCad?.(hc[1]);
+      return cad ? this.json(res, 200, { cad }) : this.json(res, 404, { error: 'That hologram has no shapes to edit.' });
+    }
+    if (hc && req.method === 'POST') {
+      const b = await this.body(req).catch(() => null);
+      if (hc[2] === 'cad') {
+        const ok = b?.cad && (await this.control.setHoloCad?.(hc[1], b.cad));
+        return ok ? this.json(res, 200, { ok: true }) : this.json(res, 400, { error: 'Could not change that.' });
+      }
+      const text = String(b?.text || '').trim().slice(0, 1000);
+      if (!text) return this.json(res, 400, { error: 'Say or type what to change first.' });
+      const id = await this.control.holoAsk?.(hc[1], text, device);
+      return id ? this.json(res, 200, { id }) : this.json(res, 404, { error: 'That hologram is gone.' });
     }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {

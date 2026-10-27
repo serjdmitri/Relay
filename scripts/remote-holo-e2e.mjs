@@ -17,7 +17,9 @@ const out = path.join(root, 'shots');
 fs.mkdirSync(out, { recursive: true });
 
 let list = [];
-const control = { ask: async () => 'r1', stop() {}, snapshot: () => ({ state: 'idle', label: '', tasks: [], agents: [] }), recent: () => [], holos: () => [{ id: 'holo-aaaa-1111', title: 'Test octahedron', pinned: false, designed: true }], holoModel: async () => ({ bytes: tinyGlb(), mm: true, title: 'Test octahedron' }) };
+const control = { ask: async () => 'r1', stop() {}, snapshot: () => ({ state: 'idle', label: '', tasks: [], agents: [] }), recent: () => [], holos: () => [{ id: 'holo-aaaa-1111', title: 'Test octahedron', pinned: false, designed: true }], holoModel: async () => { calls.model++; return { bytes: tinyGlb(), mm: true, title: 'Test octahedron' }; }, holoCad: async () => spec0, setHoloCad: async (id, cad) => { calls.cad = cad; return true; }, holoAsk: async (id, text) => { calls.ask = text; return 'r2'; } };
+const calls = { model: 0, cad: null, ask: null };
+const spec0 = { shapes: [{ id: 's1', name: 'Cube', type: 'box', size: [20, 20, 20], pos: [0, 10, 0], rot: [0, 0, 0], hole: false, color: '#8ec7e6' }, { id: 's2', name: 'Hole', type: 'cylinder', size: [8, 30, 8], pos: [0, 10, 0], rot: [0, 0, 0], hole: true, color: '#ff9f43' }] };
 const pairing = new Pairing({ code: () => '123456' });
 const devices = new Devices({ list: () => list, save: (l) => { list = l; } });
 const server = new RemoteServer({ control, pairing, devices, root: path.join(root, 'src/remote'), host: '127.0.0.1', port: 0 });
@@ -69,6 +71,39 @@ try {
     if (fmt === '3mf') ok('the 3MF is a valid zip', /No errors detected/.test(execFileSync('unzip', ['-t', f]).toString()));
     if (fmt === 'stl') ok('the STL holds the 8 triangles of the model, 20 mm across', fs.readFileSync(f).readUInt32LE(80) === 8);
   }
+  // cut: the bar opens, sliding it takes material away (the picture changes), and it goes away again
+  const lit2 = async () => { const shot2 = await page.screenshot({ clip: await page.locator('#gl').boundingBox() }); return page.evaluate(async (b64) => { const img = new Image(); img.src = `data:image/png;base64,${b64}`; await img.decode(); const t = document.createElement('canvas'); t.width = img.width; t.height = img.height; const g = t.getContext('2d'); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, t.width, t.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 45 && d[i + 2] > 60) n++; return n; }, shot2.toString('base64')); };
+  await page.click('#tcut');
+  ok('the cut bar opens', await page.isVisible('#pcut'));
+  await page.evaluate(() => { window.__phoneHolo.pivot.quaternion.identity(); const r = document.getElementById('cutr'); r.value = '100'; r.dispatchEvent(new Event('input')); });
+  await page.waitForTimeout(500);
+  const full = await lit2();
+  await page.evaluate(() => { const r = document.getElementById('cutr'); r.value = '0'; r.dispatchEvent(new Event('input')); });
+  await page.waitForTimeout(500);
+  const half = await lit2();
+  await page.screenshot({ path: path.join(out, 'remote-holo-cut.png') });
+  ok('sliding the cut takes material away', half < full * 0.8, `${full} -> ${half} model-coloured pixels`);
+  await page.click('#tcut');
+  ok('closing the bar puts it back', !(await page.isVisible('#pcut')));
+  // edit: the shapes of a designed model, changed from the phone
+  await page.click('#tedit');
+  await page.waitForSelector('#fields input');
+  ok('the shapes of a designed model are listed with their sizes', (await page.locator('#chips button').count()) === 2 && (await page.locator('#fields input').count()) === 6);
+  await page.screenshot({ path: path.join(out, 'remote-holo-edit.png') });
+  const models0 = calls.model;
+  await page.fill('#fields input >> nth=0', '30');
+  await page.dispatchEvent('#fields input >> nth=0', 'change');
+  await page.waitForFunction(() => true);
+  await page.waitForTimeout(1200);
+  ok('changing a size is sent to the Mac as the new shapes', calls.cad && calls.cad.shapes[0].size[0] === 30 && calls.cad.shapes.length === 2, JSON.stringify(calls.cad && calls.cad.shapes[0].size));
+  ok('and the model on the phone is fetched again', calls.model > models0);
+  await page.click('#addrow button >> nth=2');
+  await page.waitForTimeout(1200);
+  ok('adding a shape sends it too', calls.cad.shapes.length === 3);
+  await page.fill('#tellin', 'make the hole bigger');
+  await page.click('#tell button');
+  await page.waitForTimeout(2500);
+  ok('"tell Relay" sends the words about this hologram', calls.ask === 'make the hole bigger', calls.ask);
   ok('no page errors', errors.length === 0, errors.join(' | '));
 } catch (e) {
   ok('run', false, e.message + ' | ' + errors.join(' | ') + ' | msg: ' + (await page.textContent('#vmsg').catch(() => '')));

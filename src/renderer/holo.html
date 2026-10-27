@@ -38,6 +38,20 @@
   body.ui-side #ctl { top: 50%; left: calc(50% + var(--mr) + 16px); right: auto; transform: translateY(-50%); flex-direction: column; align-items: flex-start; gap: 4px; }
   body.ui-side #items { flex-direction: column; gap: 0; }
   body.ui-side .btn { min-width: 30px; height: 28px; font-size: 16px; }
+  /* the cut bar: sits above the model */
+  #cutbar { position: absolute; left: 50%; top: calc(50% - var(--mr) - 74px); transform: translateX(-50%); width: 270px; padding: 8px 12px 10px; border-radius: 16px; background: rgba(4, 16, 26, .82); box-shadow: 0 0 0 1px rgba(0, 212, 255, .3), 0 8px 30px rgba(0, 0, 0, .5); display: none; pointer-events: auto; }
+  body.cutting #cutbar { display: block; }
+  .cutrow { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .cutlbl { flex: 1; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #8be9ff; }
+  #cutax { display: flex; gap: 2px; }
+  #cutbar b { min-width: 26px; height: 24px; padding: 0 6px; display: grid; place-items: center; font-size: 13px; font-weight: 600; border-radius: 999px; cursor: pointer; color: #8be9ff; }
+  #cutbar b:hover { color: #fff; background: rgba(0, 212, 255, .18); }
+  #cutbar b.on { color: #04121c; background: #4cc2ff; }
+  #cutr { width: 100%; height: 22px; margin: 0; accent-color: #4cc2ff; cursor: pointer; }
+  body.hand #cutbar { width: 460px; padding: 14px 18px 16px; top: calc(50% - var(--mr) - 120px); }
+  body.hand #cutbar b { min-width: 46px; height: 44px; font-size: 20px; }
+  body.hand .cutlbl { font-size: 18px; }
+  body.hand #cutr { height: 44px; }
   #merge { position: absolute; left: 0; right: 0; top: -4px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
   body.merging #merge { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
@@ -98,11 +112,13 @@
       <div class="btn" id="reset" data-name="Turn to front" data-tip="Turn it back to the front">&#8982;</div>
       <div class="btn" id="upright" hidden data-name="Turn upright" data-tip="Turn it upright">&#8635;</div>
       <div class="btn" id="solid" data-name="Solid or light" data-tip="Switch between hologram and solid">&#9680;</div>
+      <div class="btn" id="cut" data-name="Cut through it" data-tip="Slide a cutting plane through it to look inside">&#9704;</div>
       <div class="btn" id="save" data-name="Save / send to printer" data-tip="Save it (STL, 3MF, STEP) or send it to a printer app">&#10515;</div>
       <div class="btn" id="pin" data-name="Keep" data-tip="Keep it: stays when I say close, and after a restart">&#9906;</div>
       <div class="btn" id="close" data-name="Close" data-tip="Close just this one">&#10005;</div>
     </div>
   </div>
+  <div id="cutbar" class="cadui glow"><div class="cutrow"><span class="cutlbl">Cut</span><span id="cutax"><b data-ax="0">X</b><b data-ax="1" class="on">Y</b><b data-ax="2">Z</b></span><b id="cutflip" class="cutb" title="Cut away the other side">&#8644;</b><b id="cutx" class="cutb" title="Close the cut">&#10005;</b></div><input id="cutr" type="range" min="-100" max="100" value="100"></div>
   <div id="dropring"></div>
   <div id="cap" class="glow"><div id="title" data-tip="Drag the name to move it anywhere"></div><div id="credit"></div></div>
 </div>

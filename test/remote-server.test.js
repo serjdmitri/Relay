@@ -125,3 +125,35 @@ test('the holograms on the Mac are listed and their models served, only to a pai
     assert.equal((await fetch(`${base}/vendor/../../main/store.js`)).status, 404);
   } finally { s.stop(); }
 });
+
+test('a paired phone can read and change the shapes of a designed hologram and tell Relay what to change; nobody else, and nothing off the list', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-remote-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<title>Relay</title>');
+  let list = [];
+  const got = { cad: null, ask: null };
+  const spec = { shapes: [{ id: 's1', name: 'Cube', type: 'box', size: [20, 20, 20], pos: [0, 10, 0], rot: [0, 0, 0], hole: false, color: '#8ec7e6' }] };
+  const control = { ask: async () => 'r', stop() {}, snapshot: () => ({ state: 'idle', label: '', tasks: [], agents: [] }), recent: () => [],
+    holoCad: async (id) => (id === 'holo-1234-abcd' ? spec : null), setHoloCad: async (id, cad) => { if (id !== 'holo-1234-abcd') return false; got.cad = cad; return true; }, holoAsk: async (id, text) => { if (id !== 'holo-1234-abcd') return null; got.ask = text; return 'req-1'; } };
+  const pairing = new Pairing({ code: () => '424242' });
+  const devices = new Devices({ list: () => list, save: (l) => { list = l; } });
+  const s = new RemoteServer({ control, pairing, devices, root, host: '127.0.0.1', port: 0 });
+  await s.start();
+  const base = `http://127.0.0.1:${s.port}`;
+  try {
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/cad`)).status, 401);
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/ask`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-relay-remote': '1' }, body: '{}' })).status, 401);
+    pairing.start();
+    const { token } = await (await fetch(`${base}/api/pair`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-relay-remote': '1' }, body: JSON.stringify({ code: '424242', name: 'iPhone' }) })).json();
+    const h = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-relay-remote': '1' };
+    assert.deepEqual((await (await fetch(`${base}/api/holos/holo-1234-abcd/cad`, { headers: h })).json()).cad, spec);
+    assert.equal((await fetch(`${base}/api/holos/holo-9999-gone/cad`, { headers: h })).status, 404);
+    const changed = { shapes: [{ ...spec.shapes[0], size: [30, 20, 20] }] };
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/cad`, { method: 'POST', headers: h, body: JSON.stringify({ cad: changed }) })).status, 200);
+    assert.deepEqual(got.cad, changed);
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/cad`, { method: 'POST', headers: h, body: JSON.stringify({}) })).status, 400);
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/ask`, { method: 'POST', headers: h, body: JSON.stringify({ text: ' make the hole bigger ' }) })).status, 200);
+    assert.equal(got.ask, 'make the hole bigger');
+    assert.equal((await fetch(`${base}/api/holos/holo-1234-abcd/ask`, { method: 'POST', headers: h, body: JSON.stringify({ text: '  ' }) })).status, 400);
+    assert.equal((await fetch(`${base}/api/holos/holo-9999-gone/ask`, { method: 'POST', headers: h, body: JSON.stringify({ text: 'hi' }) })).status, 404);
+  } finally { s.stop(); }
+});

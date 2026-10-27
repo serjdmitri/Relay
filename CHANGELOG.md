@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.27.0
+
+- **Pinch the trackpad to zoom a hologram.** Pinch in and out with two fingers over a hologram (a trackpad pinch arrives as a wheel with Ctrl held; it used to be far too weak to notice). Plain scrolling still zooms gently, and you can zoom out to 0.3x or in to 4x.
+- **The cut bar.** A new "Cut through it" button in the hologram menu opens a small bar above the model: pick X, Y or Z, slide, and a plane moves across the model removing material so you can see inside it or look at half of it; a button flips which side is removed. The cut is a faint sheet with a glowing edge, it works in the hologram look and the solid look (and on designed models and their outlines), and it follows the model when you turn it. Saved files stay whole. The bar grows for hand control.
+- **Edit holograms from your phone.** The phone's model page has Cut (the same slider, drawn on the phone) and Edit. For a model you designed, Edit lists its shapes: change width, height, depth and position, turn a shape into a hole or back, copy, delete, add any shape and undo; each change updates the hologram on your Mac and the picture on the phone. For any hologram, "Tell Relay what to change…" sends your words to Relay about that hologram ("make the hole bigger"), and the phone picture refreshes when it is done.
+- Tested for real: pinch (as the browser sees it: negative delta zooms in) and cut in a real hologram window with real skull data (both looks; X, Y, flip; picture checked), and the phone page in a phone-sized browser against the real server (cut changes the picture, shape edits reach the stand-in Mac, "tell Relay" arrives). Not tested: a real trackpad (pinch events were sent as the same wheel events), the phone against a real Mac, and "tell Relay" with the real model answering.
+
 ## 0.26.1
 
 - **Settings > Remote now notices Tailscale.** It only looked at Tailscale when Relay started, so installing or signing in to Tailscale afterwards still showed "Install Tailscale". It now looks again whenever the page is shown, and there is a **Check again** button.
