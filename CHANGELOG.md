@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Zip and convert, with undo.** New `drive_make`: zip files or folders into one archive, or convert pictures to PNG, JPEG, TIFF, HEIC, GIF or BMP. Originals are untouched, a new file never replaces one that is there (it gets a free name), and you are asked first. `drive_undo` now also covers these: the new file goes to the Trash (never deleted). Renames already worked through `drive_propose`; the tool now says so.
+- **Photo-made models pull apart along their own creases and colours** (including TRELLIS.2 models over 250,000 triangles). Not yet tuned on real car models.
+
 ## 0.28.0
 
 - **Cut works on every hologram.** The cut bar used the model's own axes, which are arbitrary: a horse's "X" is its width, so cutting it looked like nothing from the side. It now cuts along the screen's directions (left to right, up and down, front to back) and shows the section whatever way the model is turned; turn the model and the section changes. The faint cut sheet was also never drawn (a rebuild cleared it); it is now. The model holds still while the bar is open. Same on the phone.

@@ -385,7 +385,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         name: 'drive_propose',
         description: 'Propose how to tidy files: a list of moves, shown to the user on screen as "where I will put everything". NOTHING MOVES YET. Check the plan with drive_scan first, group sensibly (by kind, by project or by year), keep names as they are, and prefer moving files into folders (new folders are made for you) over anything else. Only put something in the Trash (trash list) if the user asked you to get rid of it; otherwise use a folder such as ~/Documents/To review. After it returns, tell the user plainly where things will go, ask them to confirm, and only then call drive_apply.',
         input_schema: obj({
-          moves: { type: 'array', description: 'Each file or folder and where it goes', items: { type: 'object', properties: { from: str('Absolute path or ~/…'), to_folder: str('The folder to move it into (created if missing)') } } },
+          moves: { type: 'array', description: 'Each file or folder and where it goes', items: { type: 'object', properties: { from: str('Absolute path or ~/…'), to_folder: str('The folder to move it into (created if missing)'), to: str('Instead of to_folder: the full new path, to rename it') } } },
           trash: { type: 'array', description: 'Only things the user asked to get rid of: they go to the Trash (recoverable), never deleted', items: { type: 'string' } },
           note: str('One line: the idea of the plan')
         }, ['moves']),
@@ -401,8 +401,16 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => drive.apply(i)
       },
       {
+        name: 'drive_make',
+        description: 'Make a new file from existing ones: ZIP files or folders into one archive, or CONVERT pictures to png, jpg, tiff, heic, gif or bmp. The originals stay as they are and nothing is replaced (the new file gets a free name next to the first item). The user is asked to confirm. drive_undo puts the new file in the Trash. To rename or move files use drive_propose (a move with "to" set to the new full path).',
+        input_schema: obj({ action: str('zip | convert'), paths: { type: 'array', description: 'Absolute paths or ~/… (convert: up to 40 pictures)', items: { type: 'string' } }, format: str('For convert: png | jpg | tiff | heic | gif | bmp'), name: str('For zip: the archive name without .zip (optional)') }, ['action', 'paths']),
+        confirm: (i) => drive.makeConfirmText(i),
+        describe: (i) => (i.action === 'convert' ? 'Converting the pictures' : 'Zipping the files'),
+        run: (i) => drive.make(i)
+      },
+      {
         name: 'drive_undo',
-        description: 'Put the last tidy-up back where it was (files that went to the Trash are put back by the user from the Trash).',
+        description: 'Put the last tidy-up back where it was, or put a file made with drive_make in the Trash (files that went to the Trash are put back by the user from the Trash).',
         input_schema: obj({}),
         confirm: () => 'Put the last tidy-up back where it was?',
         describe: () => 'Putting the files back',
