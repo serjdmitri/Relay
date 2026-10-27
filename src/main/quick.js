@@ -8,6 +8,7 @@ const { normalize } = require('./commands');
 const { parseDuration, parseWhen, splitReminder, localIso } = require('./when');
 const { humanDuration } = require('./timers');
 const { parseWindowCommand, layoutRect, pickArea, NAMES: WINDOW_NAMES } = require('./windows');
+const { calc } = require('./calc');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -96,6 +97,10 @@ function parseQuick(text, now = new Date()) {
     const when = parseWhen(/^wake me(?: up)? in /i.test(L) ? 'in ' + m[1] : m[1], now);
     if (when) return { type: 'alarm', when };
   }
+
+  // ----- maths and unit conversions: answered here, no model -----
+  const sum = calc(text);
+  if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
 
   // ----- the web -----
   let engine = null;
@@ -378,6 +383,8 @@ async function runQuick(cmd, mac, ctx = {}) {
       if (!b) return { tool: 'battery', input: {}, reply: 'This Mac has no battery.', readonly: true };
       return { tool: 'battery', input: {}, reply: `Battery is at ${b.percent}%${b.state ? ', ' + b.state : ''}${b.remaining ? ', about ' + b.remaining + ' left' : ''}.`, readonly: true };
     }
+    case 'calc':
+      return { tool: 'calc', input: { kind: cmd.kind }, reply: cmd.reply, readonly: true };
     case 'lock':
       await mac.lockScreen();
       return { tool: 'lock_screen', input: {}, reply: 'Locked.' };
