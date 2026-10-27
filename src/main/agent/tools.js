@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, stickies = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -417,6 +417,17 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: () => drive.undo()
       }
     );
+  }
+
+  // Sticky notes on the screen, like the Stickies app.
+  if (stickies) {
+    tools.push({
+      name: 'sticky_note',
+      description: 'Put a sticky note on the user\'s screen with this text (it stays until they remove it, like the Stickies app). Use for "make a sticky saying …", "put the wifi password on a sticky", or when the user wants something kept in sight. Keep the text short; up to a few lines.',
+      input_schema: obj({ text: str('What the sticky says') }, ['text']),
+      describe: () => 'Making a sticky',
+      run: (i) => stickies.add(i.text)
+    });
   }
 
   // An answer card: a picture, the key facts and links, shown beside the answer (Relay finds the picture).

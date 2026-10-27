@@ -1014,7 +1014,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1483,6 +1483,44 @@ class AskController {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
   }
 
+  // Sticky notes, by voice. Returns { reply, undo? } or null to leave it to the model.
+  async stickyCommand(cmd) {
+    const st = this.stickies;
+    const short = (t, n = 60) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t).replace(/\s+/g, ' ');
+    switch (cmd.type) {
+      case 'sticky-add': {
+        const s = st.add(cmd.text);
+        if (!s) return null;
+        return { reply: `Made a sticky: “${short(cmd.text)}”. It is at the top right; drag it where you like.`, undo: async () => { st.remove(s.id); return 'Removed that sticky.'; } };
+      }
+      case 'sticky-show': st.setHidden(false); return { reply: st.items.length ? `Here ${st.items.length === 1 ? 'is your sticky' : `are your ${st.items.length} stickies`}.` : 'You have no stickies yet. Say “make a sticky saying …”.' };
+      case 'sticky-hide': st.setHidden(true); return { reply: 'Put your stickies away. Say “show my stickies” to bring them back.' };
+      case 'sticky-list': {
+        const L = st.items;
+        if (!L.length) return { reply: 'You have no stickies.' };
+        return { reply: `You have ${L.length} ${L.length === 1 ? 'sticky' : 'stickies'}: ${L.slice(-5).reverse().map((s) => `“${short(s.text, 80)}”`).join('; ')}${L.length > 5 ? `, and ${L.length - 5} more` : ''}.` };
+      }
+      case 'sticky-remove': {
+        const found = st.find(cmd.query);
+        if (!found.length) return { reply: `I do not see a sticky about “${cmd.query}”.` };
+        const gone = st.remove(found[0].id);
+        return { reply: `Removed the sticky “${short(gone.text)}”.${found.length > 1 ? ` ${found.length - 1} more match${found.length === 2 ? 'es' : ''}; say it again to remove the next.` : ''}`, undo: async () => { st.restore([gone]); return 'Put that sticky back.'; } };
+      }
+      case 'sticky-clear': {
+        const was = st.clear();
+        return was.length ? { reply: `Cleared ${was.length} ${was.length === 1 ? 'sticky' : 'stickies'}.`, undo: async () => { st.restore(was); return `Put ${was.length} ${was.length === 1 ? 'sticky' : 'stickies'} back.`; } } : { reply: 'You have no stickies.' };
+      }
+      case 'sticky-append': {
+        const found = st.find(cmd.query);
+        if (!found.length) return { reply: `I do not see a sticky about “${cmd.query}”.` };
+        const before = found[0].text;
+        st.append(found[0].id, cmd.text);
+        return { reply: `Added “${short(cmd.text)}” to that sticky.`, undo: async () => { st.setText(found[0].id, before); return 'Took that off the sticky.'; } };
+      }
+      default: return null;
+    }
+  }
+
   // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).
   async holoRealSize(mm) {
     const h = this.holos.latest();
@@ -1589,6 +1627,7 @@ class AskController {
       prevApp: this.prevApp,
       runningApps: this.lastApps,
       layouts: this.layouts(),
+      stickies: this.stickies ? (cmd) => this.stickyCommand(cmd) : null,
       holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
       holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),
