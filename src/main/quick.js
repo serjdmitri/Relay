@@ -13,6 +13,7 @@ const { parseLayoutCommand } = require('./layouts');
 const { parseFocusCommand } = require('./focus');
 const { parseOcrCommand } = require('./ocr');
 const { parseHoloCommand } = require('./holo/commands');
+const { parseStickyCommand } = require('./stickies');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -112,7 +113,7 @@ function parseQuick(text, now = new Date()) {
   if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
 
   // ----- window layouts, focus mode, text from the screen -----
-  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text);
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text);
   if (lay) return lay;
 
   // ----- the web -----
@@ -438,6 +439,11 @@ async function runQuick(cmd, mac, ctx = {}) {
     case 'ocr': {
       if (!ctx.ocr) return null;
       return { tool: 'ocr', input: { source: cmd.source, mode: cmd.mode }, reply: await ctx.ocr(cmd), readonly: true };
+    }
+    case 'sticky-add': case 'sticky-show': case 'sticky-hide': case 'sticky-remove': case 'sticky-clear': case 'sticky-append': case 'sticky-list': {
+      if (!ctx.stickies) return null;
+      const r = await ctx.stickies(cmd);
+      return r ? { tool: cmd.type.replace('-', '_'), input: { text: cmd.text, query: cmd.query }, reply: r.reply, ...(r.undo ? { undo: r.undo } : { readonly: true }) } : null;
     }
     case 'holo-realsize': {
       if (!ctx.holoReal) return null;

@@ -10,6 +10,8 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { Stickies } = require('./stickies');
+const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
 const { nightlyDue, dayKey } = require('./drive/nightly');
 const { profileFor } = require('./voiceProfile');
@@ -40,7 +42,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
+let stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -710,6 +712,9 @@ app.whenReady().then(() => {
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
   ask.holos = holos;
+  ask.stickies = new Stickies({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } });
+  stickyPanel = new StickyPanel({ stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });
+  stickyPanel.sync(); // the stickies you left are still there
   ask.drive = new Drive({
     fs: require('fs'), home: os.homedir(), cards: cardPanel,
     exec: (file, args) => new Promise((res) => execFile(file, args, { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => res(out || ''))),
