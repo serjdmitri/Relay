@@ -36,7 +36,7 @@ let items = [];
 const touched = () => { lastTouch = performance.now(); };
 function applyUi(u) {
   if (!u) return;
-  ui = { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.max(0, Number(u.spinDelay) || 0) };
+  ui = { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.max(0, Number(u.spinDelay) || 0), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
   for (const c of ['menu', 'side', 'bar']) document.body.classList.toggle(`ui-${c}`, ui.controls === c);
   document.body.classList.remove('menu-open');
 }
@@ -47,7 +47,7 @@ anchor.add(holo);
 let userScale = 1;
 let kFit = 1;
 let modelR = 1.3; // the model's radius in units, once fitted
-let ui = { controls: 'menu', spin: true, spinDelay: 10 };
+let ui = { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl' };
 let lastTouch = -1e9; // when it was last touched: it does not turn by itself for a while after
 let spinRate = 0;
 applyUi(ui);
@@ -209,6 +209,7 @@ async function rebuild() {
   $('upright').hidden = !items.some((i) => i.kind === 'stl');
   $('edit').hidden = !items.some((i) => i.kind === 'cad');
   if (editing) leaveEdit(false);
+  bumpModel();
 }
 
 // ---------- pulling it apart ----------
@@ -357,6 +358,7 @@ function scheduleSave() {
 }
 // One edit made: drawn, remembered for undo, saved.
 function commitCad(next, remember = true) {
+  bumpModel();
   cadSpec = next;
   redrawCad();
   if (remember) hist.push(cadSpec);
@@ -603,6 +605,38 @@ async function saveModel(format = 'stl', openWith = '') {
   setTimeout(() => { $('err').textContent = ''; }, 5000);
 }
 
+// The hologram as a file, ready to be dragged into an app (Fusion, a slicer, a folder, a message): it is written to a folder of Relay's as soon as the
+// model is drawn or changed, and the drag-to-an-app button hands that file to the system's drag. The file type is a setting.
+let modelVer = 0;
+let staged = { ver: -1, path: '' };
+let staging = null;
+let stageTimer = 0;
+function bumpModel() { modelVer++; clearTimeout(stageTimer); stageTimer = setTimeout(() => stageFile().catch(() => {}), 1200); }
+function stageFile() {
+  if (staged.ver === modelVer && staged.path) return Promise.resolve(staged.path);
+  if (staging) return staging;
+  const ver = modelVer;
+  staging = (async () => {
+    const { tris, mm } = collectTriangles();
+    if (!tris.length) return '';
+    const z = zUp(tris, { scaleTo: mm ? 0 : 100 });
+    const name = $('title').textContent || 'hologram';
+    const make = (fmt) => (fmt === '3mf' ? to3mf(z, name) : fmt === 'step' ? toStep(z, name) : toStl(z, name));
+    let fmt = ui.dragFormat || 'stl', bytes;
+    try { bytes = make(fmt); } catch { fmt = 'stl'; bytes = make('stl'); } // a model too detailed for STEP goes out as an STL
+    const r = await relay.holoStage({ name, ext: fmt, bytes });
+    staged = { ver, path: r?.ok ? r.path : '' };
+    return staged.path;
+  })().catch(() => '').finally(() => { staging = null; });
+  return staging;
+}
+$('dragout').addEventListener('mouseenter', () => stageFile());
+$('dragout').addEventListener('dragstart', (e) => {
+  e.preventDefault(); // the system's own drag takes over (main starts it with the file)
+  if (staged.path) relay.holoStartDrag();
+  else { $('err').textContent = 'Getting the file ready: try again in a moment.'; stageFile(); setTimeout(() => { $('err').textContent = ''; }, 3000); }
+});
+
 // The save button: pick a file type, or send it to an app that is installed (a slicer to print it, Fusion to edit it).
 const saveMenu = document.createElement('div');
 saveMenu.id = 'savemenu';
@@ -694,13 +728,14 @@ addEventListener('mousemove', (e) => {
   setOver(!!p);
   const part = p === 'model' ? pickPart(e) : null;
   setHover(part);
-  cv.style.cursor = p === 'move' ? 'move' : part ? 'pointer' : p === 'model' ? 'grab' : 'default';
+  cv.style.cursor = p === 'move' ? 'move' : part ? 'pointer' : p === 'model' ? (measuring ? 'crosshair' : 'grab') : 'default';
 });
 addEventListener('mouseleave', () => { tip.classList.remove('show'); if (!dragging) { document.body.classList.remove('near'); setHover(null); } });
 addEventListener('pointerdown', (e) => {
   touched();
   if (!e.target.closest('#ctl')) document.body.classList.remove('menu-open');
   if (!e.target.closest('#savemenu, #save')) saveMenu.classList.remove('open');
+  if (measuring && pick(e) === 'model') { measureClick(e); e.preventDefault(); return; }
   if (editDown(e)) return;
   const p = pick(e);
   if (p === 'move' || (p === 'model' && e.altKey)) { dragging = 'move'; relay.holoDrag('start'); }
@@ -863,6 +898,68 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+// ---------- measuring: click two points on the model, see the distance in millimetres ----------
+// A designed model is in real millimetres. Anything else has no known size: like the files it is saved as, its biggest side is taken as 100 mm.
+let measuring = false;
+const mpts = []; // the points, in the model's own frame (so they turn with it)
+const mkG = new THREE.Group(); // dots and the line: never part of the model, a pick or a saved file
+mkG.visible = false;
+scene.add(mkG); // in the scene itself: a rebuild clears everything in the anchor
+const mDot = () => new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+const mDots = [mDot(), mDot()];
+mDots.forEach((d) => { d.renderOrder = 20; d.frustumCulled = false; d.raycast = () => {}; d.visible = false; mkG.add(d); });
+const mLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0x9fe8ff, depthTest: false }));
+mLine.renderOrder = 19; mLine.frustumCulled = false; mLine.raycast = () => {}; mLine.visible = false; mkG.add(mLine);
+let mmNote = false;
+function mmBetween(a, b) {
+  // millimetres between two points of the model's frame
+  const cad = items.length === 1 && itemWraps[0]?.userData.cadView?.mesh;
+  const local = a.distanceTo(b);
+  if (cad) { cad.updateWorldMatrix(true, false); const s = new THREE.Vector3().setFromMatrixScale(cad.matrixWorld).x || 1; return { mm: (local * holo.scale.x) / s, exact: true }; }
+  measureClip();
+  const big = Math.max(...clip.box.getSize(new THREE.Vector3()).toArray()) || 1;
+  return { mm: (local / big) * 100, exact: false };
+}
+function measureClick(e) {
+  setRay(e);
+  const meshes = [];
+  holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const hit = ray.intersectObjects(meshes, false)[0];
+  if (!hit) return null;
+  if (mpts.length >= 2) mpts.length = 0; // a third click starts again
+  mpts.push(holo.worldToLocal(hit.point.clone()));
+  touched();
+  if (!mmNote) { mmNote = true; if (!(items.length === 1 && itemWraps[0]?.userData.cadView)) { $('err').textContent = 'Sizes take its biggest side as 100 mm (the same as the files it saves as).'; setTimeout(() => { $('err').textContent = ''; }, 5000); } }
+  return measureState();
+}
+function measureState() { return mpts.length === 2 ? { n: 2, ...mmBetween(mpts[0], mpts[1]), world: +(mpts[0].distanceTo(mpts[1]) * holo.scale.x).toFixed(4) } : { n: mpts.length }; }
+function setMeasure(on) {
+  measuring = !!on;
+  $('measure').classList.toggle('on', measuring);
+  if (!measuring) { mpts.length = 0; }
+  mkG.visible = measuring;
+  if (!measuring) $('mlabel').style.display = 'none';
+  document.body.classList.remove('menu-open');
+}
+$('measure').onclick = () => setMeasure(!measuring);
+const mw = new THREE.Vector3();
+function updateMeasure() {
+  if (!measuring) return;
+  holo.updateMatrixWorld(true);
+  const ws = mpts.map((p) => holo.localToWorld(p.clone()));
+  mDots.forEach((d, i) => { d.visible = !!ws[i]; if (ws[i]) d.position.copy(ws[i]); });
+  mLine.visible = ws.length === 2;
+  const lab = $('mlabel');
+  if (ws.length === 2) {
+    mLine.geometry.setFromPoints(ws);
+    const r = mmBetween(mpts[0], mpts[1]);
+    const mid = ws[0].clone().add(ws[1]).multiplyScalar(0.5);
+    mid.project(camera);
+    lab.textContent = `${r.exact ? '' : '≈ '}${r.mm < 10 ? r.mm.toFixed(2) : r.mm < 100 ? r.mm.toFixed(1) : Math.round(r.mm)} mm`;
+    lab.style.left = `${(mid.x + 1) / 2 * innerWidth}px`; lab.style.top = `${(1 - mid.y) / 2 * innerHeight}px`; lab.style.display = 'block';
+  } else lab.style.display = 'none';
+}
+
 // ---------- the cut bar: slide a plane through the model to see inside it ----------
 const cutVis = new THREE.Group(); // a faint sheet that shows where the cut is (in the anchor, so it is never part of the model or of a saved file)
 {
@@ -871,7 +968,7 @@ const cutVis = new THREE.Group(); // a faint sheet that shows where the cut is (
   sq.raycast = () => {}; ln.raycast = () => {};
   cutVis.add(sq, ln);
   cutVis.visible = false;
-  anchor.add(cutVis);
+  scene.add(cutVis); // in the scene itself: a rebuild clears everything in the anchor
 }
 const tmpN = new THREE.Vector3();
 const tmpP = new THREE.Vector3();
@@ -887,22 +984,25 @@ function measureClip() {
 }
 function updateClip() {
   if (!clip.on) { uniforms.clipOn.value = 0; clipPlane.set(tmpN.set(0, -1, 0), 1e6); cutVis.visible = false; return; }
-  if (!clip.box) measureClip();
+  // The planes are the SCREEN's: X slides left to right, Y up and down, Z front to back, whatever way the model is turned (a model's own axes are
+  // arbitrary: a horse's "X" is its width, and cutting that looks like nothing from the side). Turn the model and the section changes.
   holo.updateMatrixWorld(true);
+  const wb = new THREE.Box3().setFromObject(holo);
+  if (wb.isEmpty()) return;
   const n = AXIS_V[clip.axis];
-  const c = clip.box.getCenter(new THREE.Vector3());
-  const half = (clip.box.max.getComponent(clip.axis) - clip.box.min.getComponent(clip.axis)) / 2;
+  const c = wb.getCenter(new THREE.Vector3());
+  const half = (wb.max.getComponent(clip.axis) - wb.min.getComponent(clip.axis)) / 2;
   const sign = clip.flip ? -1 : 1;
-  tmpP.copy(c).addScaledVector(n, sign * clip.t * half); // the plane's point, in the model's frame
-  const pw = holo.localToWorld(tmpP.clone());
-  tmpN.copy(n).multiplyScalar(sign).transformDirection(holo.matrixWorld); // its normal, in the world
+  tmpP.copy(c).addScaledVector(n, sign * clip.t * half * 1.02);
+  const pw = tmpP.clone();
+  tmpN.copy(n).multiplyScalar(sign);
   uniforms.clipN.value.copy(tmpN);
   uniforms.clipD.value = -tmpN.dot(pw);
   uniforms.clipOn.value = 1;
   clipPlane.set(tmpN.clone().negate(), tmpN.dot(pw));
-  const sz = clip.box.getSize(new THREE.Vector3()).length() * holo.scale.x * 0.62;
+  const sz = wb.getSize(new THREE.Vector3()).length() * 0.62;
   cutVis.visible = true;
-  cutVis.position.copy(anchor.worldToLocal(pw));
+  cutVis.position.copy(pw);
   cutVis.quaternion.copy(tmpQ.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tmpN));
   cutVis.scale.set(sz, sz, 1);
   // the solid look, outlines and anything else that is not the hologram shader is cut by three's own planes
@@ -939,7 +1039,7 @@ function frame(now) {
   const span = 1.3 * kFit * userScale;
   uniforms.originY.value = anchor.position.y - span;
   uniforms.reveal.value = -0.2 + (1 - Math.pow(1 - t, 3)) * (2 * span + 0.6); // the build sweep, from the bottom up
-  const spinning = ui.spin && !spinPause && !exploded && !carried && !editing && now - lastTouch > ui.spinDelay * 1000;
+  const spinning = ui.spin && !spinPause && !exploded && !carried && !editing && !clip.on && now - lastTouch > ui.spinDelay * 1000;
   spinRate += ((spinning ? 0.35 : 0) - spinRate) * Math.min(1, dt * 2.2); // eases in and out instead of jerking
   if (spinRate > 0.003) { qSpin.setFromAxisAngle(axisY, dt * spinRate); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
   anchor.position.y = anchorY + Math.sin(now / 900) * 0.03;
@@ -957,6 +1057,7 @@ function frame(now) {
     if (t >= 1) intros.splice(i, 1);
   }
   if (clip.on) updateClip();
+  updateMeasure();
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -967,6 +1068,12 @@ window.__holoTest = {
   where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
   fps: () => fps,
   scale: () => userScale,
+  measureAt: (x, y) => { if (!measuring) setMeasure(true); return measureClick({ clientX: x, clientY: y }); },
+  measureOff: () => setMeasure(false),
+  measureState: () => measureState(),
+  bounds: () => { const b = new THREE.Box3().setFromObject(holo); const p = (v) => { const w = v.clone().project(camera); return { x: (w.x + 1) / 2 * innerWidth, y: (1 - w.y) / 2 * innerHeight }; }; const c = b.getCenter(new THREE.Vector3()); return { l: p(new THREE.Vector3(b.min.x, c.y, c.z)), r: p(new THREE.Vector3(b.max.x, c.y, c.z)), c: p(c), size: b.getSize(new THREE.Vector3()).toArray() }; },
+  stage: async () => { staged = { ver: -1, path: '' }; return stageFile(); },
+  info: () => { const kinds = {}; let meshes = 0; holo.traverse((o) => { if (o.isMesh) { meshes++; for (const m of [].concat(o.material)) { const k = m.isShaderMaterial ? (m.uniforms.clipOn ? 'shader+clip' : 'shader') : m.type; kinds[k] = (kinds[k] || 0) + 1; } } }); return { meshes, kinds, box: clip.box && [clip.box.min.toArray(), clip.box.max.toArray()], items: items.map((i) => i.kind) }; },
   cut: (on, axis = 1, t = 0, flip = false) => { clip.axis = axis; clip.flip = flip; $('cutr').value = String(Math.round(t * 100)); setCut(on); clip.t = t; updateClip(); return { on: clip.on, d: uniforms.clipD.value, n: uniforms.clipN.value.toArray() }; },
   save: (fmt) => saveModel(fmt),
   yaw: (deg) => { orient.setFromAxisAngle(axisY, (deg * Math.PI) / 180); holo.quaternion.copy(orient); return true; },

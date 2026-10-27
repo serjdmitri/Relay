@@ -159,3 +159,20 @@ test('a paired phone can read and change the shapes of a designed hologram and t
     assert.equal((await fetch(`${base}/api/holos/holo-9999-gone/ask`, { method: 'POST', headers: h, body: JSON.stringify({ text: 'hi' }) })).status, 404);
   } finally { s.stop(); }
 });
+
+test('/api/send takes a photo or text from the share sheet (base64), only from a paired phone, and answers once Relay has', async () => {
+  const { s, post, pairing } = await make();
+  const got = [];
+  s.control.send = async (what, d, id) => { got.push(what); if (!what.data) return { ok: false, error: 'Nothing was sent.' }; setTimeout(() => s.broadcast({ type: 'result', id, reply: 'It is a note.', status: 'done' }), 30); return { ok: true, id }; };
+  assert.equal((await post('/api/send', { data: 'aGk=' })).status, 401);
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'Share' })).json();
+  const r = await post('/api/send', { data: Buffer.from('a note').toString('base64'), text: 'what is this?', wait: 'true' }, token);
+  assert.equal((await r.json()).reply, 'It is a note.');
+  assert.equal(got[0].text, 'what is this?');
+  assert.equal((await post('/api/send', {}, token)).status, 400);
+  const quick = await post('/api/send', { data: 'aGk=' }, token);
+  assert.equal(quick.status, 200);
+  assert.ok((await quick.json()).id);
+  s.stop();
+});

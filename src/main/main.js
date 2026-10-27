@@ -534,8 +534,9 @@ function registerIpc() {
     const token = String(d?.token || '');
     const url = String(d?.url || '');
     if (!/^[\w-]{16,128}$/.test(token) || !/^https?:\/\//.test(url) || !remote.devices.find(token)) return { ok: false, error: 'Make a new Shortcut key first.' };
-    const out = path.join(app.getPath('downloads'), 'Relay.shortcut');
-    const r = await writeShortcutFile({ url, token, outPath: out });
+    const share = d?.kind === 'share';
+    const out = path.join(app.getPath('downloads'), share ? 'Send to Relay.shortcut' : 'Relay.shortcut');
+    const r = await writeShortcutFile({ url, token, outPath: out, share });
     if (r.ok) shell.showItemInFolder(out);
     return r;
   });
@@ -696,6 +697,7 @@ app.whenReady().then(() => {
   });
   glass = new Glass({ binPath: glassBinPath() });
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
+  ask.inboxDir = path.join(app.getPath('userData'), 'inbox'); // photos and PDFs shared from the phone wait here
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
@@ -790,7 +792,7 @@ app.whenReady().then(() => {
     });
   }
   hotkeys = new Hotkeys({ getShortcuts: () => store.get('settings.shortcuts'), onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
-  hotkeys.onMouse = (down) => holos?.mouseButton(down); // a file dragged onto a hologram is accepted while the button is held over it
+  hotkeys.onMouse = (down) => { holos?.mouseButton(down); overlay?.dropWatch(down); }; // a file dragged onto a hologram is accepted while the button is held over it
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');
   const icon = nativeImage.createFromPath(iconPath);

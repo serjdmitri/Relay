@@ -48,6 +48,32 @@ function buildShortcut({ url, token, uuid = () => crypto.randomUUID().toUpperCas
   };
 }
 
+// "Send to Relay" in the iPhone share sheet: for a photo, PDF, web page or text, asks what to do with it, sends it (base64) with the answer, speaks the reply.
+function buildShareShortcut({ url, token, uuid = () => crypto.randomUUID().toUpperCase() }) {
+  const ask = uuid(), enc = uuid(), fetchId = uuid(), valueId = uuid();
+  return {
+    WFWorkflowClientVersion: '2900', WFWorkflowMinimumClientVersion: 900, WFWorkflowMinimumClientVersionString: '900',
+    WFWorkflowIcon: { WFWorkflowIconStartColor: 431817727, WFWorkflowIconGlyphNumber: 59511 },
+    WFWorkflowImportQuestions: [],
+    WFWorkflowInputContentItemClasses: ['WFImageContentItem', 'WFPDFContentItem', 'WFURLContentItem', 'WFSafariWebPageContentItem', 'WFStringContentItem', 'WFGenericFileContentItem'],
+    WFWorkflowTypes: ['ActionExtension'],
+    WFWorkflowActions: [
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.ask', WFWorkflowActionParameters: { UUID: ask, WFAskActionPrompt: 'What should Relay do with this? (empty: tell me what it is)', WFInputType: 'Text' } },
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.base64encode', WFWorkflowActionParameters: { UUID: enc, WFInput: { Value: { Type: 'ExtensionInput' }, WFSerializationType: 'WFTextTokenAttachment' }, WFEncodeMode: 'Encode' } },
+      {
+        WFWorkflowActionIdentifier: 'is.workflow.actions.downloadurl',
+        WFWorkflowActionParameters: {
+          UUID: fetchId, WFURL: url, WFHTTPMethod: 'POST', WFHTTPBodyType: 'JSON', ShowHeaders: true,
+          WFHTTPHeaders: dict([item('Authorization', text(`Bearer ${token}`)), item('X-Relay-Remote', text('1'))]),
+          WFJSONValues: dict([item('data', fromAction(enc, 'Base64 Encoded')), item('text', fromAction(ask, 'Provided Input')), item('wait', text('true'))])
+        }
+      },
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.getvalueforkey', WFWorkflowActionParameters: { UUID: valueId, WFDictionaryKey: 'reply' } },
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.speaktext', WFWorkflowActionParameters: { WFText: fromAction(valueId, 'Dictionary Value') } }
+    ]
+  };
+}
+
 // A Shortcut with one step: open a web address (the Relay page, for the Action Button).
 function buildOpenShortcut({ url, uuid = () => crypto.randomUUID().toUpperCase() }) {
   const u = uuid();
@@ -65,15 +91,15 @@ function buildOpenShortcut({ url, uuid = () => crypto.randomUUID().toUpperCase()
 const run = (args) => new Promise((resolve) => execFile('/usr/bin/shortcuts', args, { timeout: 30000 }, (err, so, se) => resolve({ ok: !err, err: String(se || err?.message || '') })));
 
 // Writes the signed file to outPath. exec is injectable for tests.
-async function writeShortcutFile({ url, token, outPath, exec = run, open = false }) {
+async function writeShortcutFile({ url, token, outPath, exec = run, open = false, share = false }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-shortcut-'));
   const raw = path.join(dir, 'Relay.shortcut'); // the signer insists on the .shortcut name
   try {
-    fs.writeFileSync(raw, document(open ? buildOpenShortcut({ url }) : buildShortcut({ url, token })), { mode: 0o600 });
+    fs.writeFileSync(raw, document(open ? buildOpenShortcut({ url }) : share ? buildShareShortcut({ url: url.replace(/\/api\/ask$/, '/api/send'), token }) : buildShortcut({ url, token })), { mode: 0o600 });
     const r = await exec(['sign', '--mode', 'anyone', '--input', raw, '--output', outPath]);
     if (!r.ok) return { ok: false, error: `The Mac could not sign the Shortcut: ${r.err.slice(0, 200)}` };
     return { ok: true, path: outPath };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-module.exports = { buildShortcut, buildOpenShortcut, document, writeShortcutFile };
+module.exports = { buildShortcut, buildShareShortcut, buildOpenShortcut, document, writeShortcutFile };

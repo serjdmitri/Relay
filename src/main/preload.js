@@ -80,6 +80,8 @@ contextBridge.exposeInMainWorld('relay', {
   holoAsk: (d) => invoke('holo:ask', d),
   holoCad: (d) => invoke('holo:cad', d),
   holoSave: (d) => invoke('holo:save', d),
+  holoStage: (d) => invoke('holo:stage', d),
+  holoStartDrag: () => ipcRenderer.send('holo:dragstart'),
   holoDropFiles: (files) => invoke('holo:files', Array.from(files || []).map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
   holoGlb: (r) => invoke('holo:glb', r),
   holoSlicers: () => invoke('holo:slicers'),

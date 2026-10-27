@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.28.0
+
+- **Cut works on every hologram.** The cut bar used the model's own axes, which are arbitrary: a horse's "X" is its width, so cutting it looked like nothing from the side. It now cuts along the screen's directions (left to right, up and down, front to back) and shows the section whatever way the model is turned; turn the model and the section changes. The faint cut sheet was also never drawn (a rebuild cleared it); it is now. The model holds still while the bar is open. Same on the phone.
+- **A hologram is a file, and you can drag it out.** Every hologram is written as a file shortly after it is drawn or changed (a Relay folder, not your files). The new **Drag to an app** button in the hologram menu hands that file to the system drag: drop it in Fusion, FreeCAD, a slicer, a folder or a message. The type is a setting (Settings > General > Holograms and hands > File when I drag a hologram into an app: STL, 3MF or STEP; a model too detailed for STEP goes out as STL).
+- **Measure.** A new Measure button: click two points on a hologram and a line and a label show the distance in millimetres (real millimetres for a designed model; anything else takes its biggest side as 100 mm, shown with a "≈", the same as its saved files). A third click starts again.
+- **Drop files on the reactor.** Drag a file over the reactor while it is on screen and drop it: it is handed to Relay like a file dropped on the menu bar icon (the reactor lights up while a file is over it).
+- **Send to Relay (iPhone share sheet).** Settings > Remote > after Make a Shortcut key: **Save “Send to Relay”**. AirDrop it to your iPhone; then share a photo, a PDF, a web page or some text and say what to do with it ("what is this?", "add this to my notes"); Relay answers out loud. Photos and PDFs wait in an inbox folder for the request; shared text is marked as content, not as instructions.
+- Tested for real: cut on a horse and a skull (screen axes, both looks, sheet drawn); the staged file in STL and 3MF from a real hologram (STEP falls back for the detailed skull); measure on a 40 mm designed cube (the label agrees with an independent conversion; dots and line drawn); the reactor's hit area in a real overlay window. Not tested: the real OS drag of the file into Fusion or a slicer, a real file dragged onto the reactor, a real trackpad pinch, and importing the share-sheet Shortcut on an iPhone.
+
 ## 0.27.1
 
 - **Fixed: "Make a Shortcut key" showed nothing.** Two faults: the page redrew itself when the new paired phone appeared and wiped the key, and, worse, the code that builds those little blocks of the page kept only the first element of each, so the address and the key were never drawn at all (the same fault hid the pairing code number and the secure address under "Secure link on"). Both are fixed; the key stays on screen until you leave the page.

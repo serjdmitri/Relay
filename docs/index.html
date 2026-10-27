@@ -193,7 +193,7 @@
         <ul class="list">
           <li><b>Combine.</b> Drag one hologram onto another to make something new, then place the pieces where you want them.</li>
           <li><b>Photo to 3D.</b> Relay picks the best of your photos and builds a model. Add a free Hugging Face token in Settings to use the better TRELLIS.2 engine.</li>
-          <li><b>Drop a file.</b> Drag an STL or GLB onto a hologram to add it; drop any other file to hand it to Relay with your next question.</li>
+          <li><b>Drop a file.</b> Drag an STL or GLB onto a hologram to add it; drop any other file onto a hologram, or onto the reactor, to hand it to Relay with your next question.</li>
           <li><b>Draw in the air.</b> With hand control on, pinch and drag in empty space to leave a glowing line, handy for pointing things out.</li>
         </ul>
       </div>
@@ -205,6 +205,7 @@
         <p>Say what you want and Relay builds it from cubes, cylinders, spheres, cones, roofs, pyramids, rings and tubes. Holes cut like Tinkercad. Then open the editor to drag a shape, pull its squares to resize it, or type exact millimetres.</p>
         <ul class="list">
           <li><b>Save for printing.</b> STL, 3MF or STEP, scaled in millimetres and sitting on the bed.</li>
+          <li><b>The hologram is a file.</b> Every hologram is written out as a file (STL, 3MF or STEP, your choice in Settings). Drag the <b>Drag to an app</b> button into Fusion, FreeCAD, a slicer, a folder or a message.</li>
           <li><b>Send to your slicer.</b> Relay lists the ones you have: Bambu Studio, OrcaSlicer, PrusaSlicer, Cura, Creality Print, plus Fusion, FreeCAD and Blender.</li>
           <li><b>Undo and redo</b> every change, or say "make the hole bigger".</li>
         </ul>
@@ -216,7 +217,8 @@
       <div class="frame"><img src="img/holo-cut.png" alt="A skull hologram cut through the middle with the cut bar above it: X, Y and Z buttons, a flip button and a slider" width="560" height="677" loading="lazy"></div>
       <div>
         <h3>Cut it open, zoom with a pinch</h3>
-        <p>Press <b>Cut through it</b> and a bar appears above the model. Slide it and a plane moves across the model, taking material away so you can see inside it or look at half of it. Pick the direction (X, Y or Z) and flip which side goes.</p>
+        <p>Press <b>Cut through it</b> and a bar appears above the model. Slide it and a plane moves across the model, taking material away so you can see inside it or look at half of it. Pick the direction (left to right, up and down, or front to back) and flip which side goes. The bar works on the screen's directions, so it always shows something, whatever way the model is turned.</p>
+        <p><b>Measure</b> two points on a hologram and see the distance in millimetres: real millimetres for a model you designed, and for anything else its biggest side is taken as 100 mm (the same as the files it saves as).</p>
         <p>On a laptop trackpad, pinch in and out over a hologram to zoom it. The cut bar and its buttons grow when hand control sees your hands.</p>
       </div>
     </div>
@@ -283,7 +285,7 @@
     <h2 id="nums">Built in the open</h2>
     <p class="sub">The numbers below are drawn from the repository itself.</p>
     <div class="charts">
-      <img src="img/chart-tests.svg" alt="Bar chart of 411 unit tests by area" width="600" height="340" loading="lazy">
+      <img src="img/chart-tests.svg" alt="Bar chart of 420 unit tests by area" width="600" height="340" loading="lazy">
       <img src="img/chart-code.svg" alt="Donut chart of lines of code by language" width="600" height="340" loading="lazy">
     </div>
   </section>

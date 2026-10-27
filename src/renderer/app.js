@@ -362,10 +362,12 @@ const PAGES = {
         so.append(h(`<div><div class="d" style="margin:10px 0 4px">Key (shown once)</div><div style="user-select:text;font:12px ui-monospace,Menlo,monospace;word-break:break-all">Bearer ${esc(r.token)}</div></div>`));
         const file = h('<button class="btn primary" style="margin:10px 8px 10px 0">Save the Shortcut file</button>');
         file.onclick = async () => { file.textContent = 'Making it…'; const f = await relay.shortcutFile({ url: r.url, token: r.token }); file.textContent = f.ok ? 'Saved: AirDrop it to your iPhone' : 'Save the Shortcut file'; if (!f.ok) alert(f.error); };
+        const share = h('<button class="btn primary" style="margin:10px 8px 10px 0">Save “Send to Relay” (share sheet)</button>');
+        share.onclick = async () => { share.textContent = 'Making it…'; const f = await relay.shortcutFile({ url: r.url, token: r.token, kind: 'share' }); share.textContent = f.ok ? 'Saved: AirDrop it to your iPhone' : 'Save “Send to Relay” (share sheet)'; if (!f.ok) alert(f.error); };
         const copy = h('<button class="btn" style="margin:10px 8px 10px 0">Copy the key</button>');
         copy.onclick = () => relay.copyText(`Bearer ${r.token}`);
-        so.append(file, copy);
-        so.append(h('<div class="d" style="line-height:1.6">The file is the finished Shortcut. It is saved in your Downloads folder and shown in Finder: AirDrop it to your iPhone, tap it, and tap <b>Add Shortcut</b>. Then say “Hey Siri, Relay”, or put it on the Action Button (Settings, Action Button, Shortcut, Relay). Or build it by hand:</div>'));
+        so.append(file, share, copy);
+        so.append(h('<div class="d" style="line-height:1.6">The file is the finished Shortcut. It is saved in your Downloads folder and shown in Finder: AirDrop it to your iPhone, tap it, and tap <b>Add Shortcut</b>. <b>Send to Relay</b> adds Relay to the iPhone share sheet: share a photo, a PDF, a web page or some text, say what to do with it (“what is this?”, “add this to my notes”), and Relay answers out loud. Then say “Hey Siri, Relay”, or put it on the Action Button (Settings, Action Button, Shortcut, Relay). Or build it by hand:</div>'));
         so.append(h(`<ol class="d" style="line-height:1.7;margin-left:18px"><li>Open <b>Shortcuts</b> on the iPhone, tap +, and name it <b>Relay</b>.</li><li>Add <b>Dictate Text</b>.</li><li>Add <b>Get Contents of URL</b>. URL: the address above. Show More: Method <b>POST</b>; Headers: <code>Authorization</code> = the key you copied, <code>X-Relay-Remote</code> = <code>1</code>; Request Body <b>JSON</b> with <code>text</code> (Text) = the <b>Dictated Text</b> variable and <code>wait</code> (Text) = <code>true</code>.</li><li>Add <b>Get Dictionary Value</b> for the key <code>reply</code> from the Contents of URL.</li><li>Add <b>Speak Text</b> with that value.</li></ol>`));
         so.append(h('<div class="note" style="margin-top:6px">The key is saved as a paired phone named Siri Shortcut: unpair it below to cancel it. Tailscale must be on on the phone when you are away from home.</div>'));
       };
@@ -549,6 +551,7 @@ const PAGES = {
     };
     const hcard = h('<div class="card flat"></div>');
     hcard.append(segRow('Buttons on a hologram', 'Menu: one small ⋯ button that opens the list. Side: a slim column beside the model. Bar: a row under its name. All stay clear of the model.', [['menu', 'Menu'], ['side', 'Side'], ['bar', 'Bar']], hv.controls, (v) => relay.set('settings.holoUi.controls', v)));
+    hcard.append(segRow('File when I drag a hologram into an app', 'The hologram button "Drag to an app" hands over the model as a file you can drop into Fusion, FreeCAD, a slicer, a folder or a message. STL for printing, 3MF for slicers (keeps millimetres), STEP for CAD.', [['stl', 'STL'], ['3mf', '3MF'], ['step', 'STEP']], hv.dragFormat || 'stl', (v) => relay.set('settings.holoUi.dragFormat', v)));
     hcard.append(toggleRow('Holograms slowly turn', 'A hologram turns by itself until you touch it.', 'settings.holoUi.spin'));
     hcard.append(segRow('Leave it still after I touch it', 'How long before it starts turning again.', [[3, '3 s'], [10, '10 s'], [30, '30 s'], [120, '2 min']], hv.spinDelay, (v) => relay.set('settings.holoUi.spinDelay', Number(v))));
     const hs = S.handsInfo || { status: 'off', message: '' };

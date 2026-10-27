@@ -492,6 +492,26 @@ class AskController {
     return [...(this.holos?.holos.values() || [])].map((h) => ({ id: h.id, title: h.title, pinned: !!h.pinned, designed: h.items.some((i) => i.kind === 'cad') }));
   }
 
+  // Something shared from the phone ("Send to Relay" in the share sheet): a photo or PDF is kept in an inbox folder (and counts as a dropped file for this
+  // request); a web address or text goes in the request, marked as content. Then it is asked like any other request from the phone.
+  async remoteSend(what, device, id) {
+    const inbox = require('./remote/inbox');
+    const d = inbox.decode(what.data);
+    if (!d.ok) return d;
+    const info = inbox.detect(d.bytes);
+    if (!info) return { ok: false, error: 'Relay cannot read that kind of file from the phone yet (photos, PDFs, web addresses and text work).' };
+    let file = '';
+    if (info.kind !== 'text') {
+      const dir = path.join(this.inboxDir || path.join(require('os').tmpdir(), 'relay-inbox'));
+      const convert = (a, b) => new Promise((resolve) => execFile('/usr/bin/sips', ['-s', 'format', 'jpeg', a, '--out', b], { timeout: 20000 }, (err) => resolve(!err)));
+      file = await inbox.keep(dir, d.bytes, info, { convert });
+      this.files = { ts: Date.now(), paths: [file] };
+    }
+    const text = inbox.requestText({ info, instruction: what.text, text: info.kind === 'text' ? d.bytes.toString('utf8') : '', file });
+    await this.remoteAsk(text, device, id);
+    return { ok: true, id };
+  }
+
   // The shapes of a designed hologram, for editing on the phone.
   remoteHoloCad(id) {
     const h = this.holos?.get(id);

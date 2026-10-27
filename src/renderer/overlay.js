@@ -400,3 +400,11 @@ window.relay.onOverlay((m) => {
       break;
   }
 });
+
+// Files dragged onto the reactor: handed to Relay like files dropped on the menu bar icon (it asks what to do with them).
+(() => {
+  const hudEl = document.getElementById('hud');
+  addEventListener('dragover', (e) => { e.preventDefault(); hudEl && hudEl.classList.add('dropping'); });
+  addEventListener('dragleave', () => hudEl && hudEl.classList.remove('dropping'));
+  addEventListener('drop', (e) => { e.preventDefault(); hudEl && hudEl.classList.remove('dropping'); if (e.dataTransfer?.files?.length) window.relay.dropFiles(e.dataTransfer.files); });
+})();

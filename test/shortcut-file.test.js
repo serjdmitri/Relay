@@ -43,3 +43,18 @@ test('the open-the-page Shortcut is one URL step then Open URLs on that URL', ()
   assert.equal(s.WFWorkflowActions[0].WFWorkflowActionParameters.WFURLActionURL, 'https://mac.ts.net/');
   assert.equal(s.WFWorkflowActions[1].WFWorkflowActionParameters.WFInput.Value.OutputUUID, 'U1');
 });
+
+test('the share-sheet Shortcut asks what to do, base64-encodes the shared thing, sends both to /api/send and speaks the reply', () => {
+  const { buildShareShortcut } = require('../src/main/remote/shortcutFile');
+  const ids = ['A', 'E', 'F', 'V'];
+  const s = buildShareShortcut({ url: 'https://mac.ts.net/api/send', token: 'tok', uuid: () => ids.shift() });
+  assert.ok(s.WFWorkflowInputContentItemClasses.includes('WFImageContentItem') && s.WFWorkflowInputContentItemClasses.includes('WFURLContentItem'));
+  assert.deepEqual(s.WFWorkflowTypes, ['ActionExtension']);
+  const [ask, enc, post, val, say] = s.WFWorkflowActions;
+  assert.equal(ask.WFWorkflowActionIdentifier, 'is.workflow.actions.ask');
+  assert.equal(enc.WFWorkflowActionParameters.WFInput.Value.Type, 'ExtensionInput');
+  const body = post.WFWorkflowActionParameters.WFJSONValues.Value.WFDictionaryFieldValueItems.map((i) => [i.WFKey.Value.string, i.WFValue.Value.attachmentsByRange?.['{0, 1}']?.OutputUUID || i.WFValue.Value.string]);
+  assert.deepEqual(body, [['data', 'E'], ['text', 'A'], ['wait', 'true']]);
+  assert.equal(val.WFWorkflowActionParameters.WFDictionaryKey, 'reply');
+  assert.equal(say.WFWorkflowActionIdentifier, 'is.workflow.actions.speaktext');
+});
