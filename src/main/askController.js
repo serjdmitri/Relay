@@ -48,6 +48,8 @@ const { UndoRegistry } = require('./activity');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
+const { parseExplainCommand, explainPrompt } = require('./explain');
+const phish = require('./phish');
 const { parseBriefingCommand, buildBriefing, fetchWeather, parseMacEvents, parseMacDue, mergeEvents } = require('./briefing');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
@@ -1496,6 +1498,12 @@ class AskController {
           const sc = parseStudyCommand(effective);
           if (sc) return this.studyStart(sc, effective, entry);
         }
+        if (!opts.shown && !opts.scheduled) {
+          const ec = parseExplainCommand(effective);
+          if (ec) return this.explainError(ec, entry);
+          const pc = phish.parsePhishCommand(effective);
+          if (pc) return this.finish(entry, await this.securityCheck(pc));
+        }
         if (!opts.shown) {
           const lc = parseLanguageCommand(effective);
           if (lc) return this.finish(entry, await this.runLanguage(lc));
@@ -1757,6 +1765,54 @@ class AskController {
     if (['idle', 'done'].includes(this.state)) this.notice(text, 'done');
     this.sound('Glass');
     setTimeout(() => this.sound('Glass'), 900);
+  }
+
+  // The text the person means: what is selected, else what they copied a moment ago, else what is on the screen (read on this Mac), else the clipboard.
+  // order can say otherwise. Returns { text, from } (text '' when nothing could be read).
+  async gatherText(order = ['selection', 'recent-clipboard', 'screen', 'clipboard'], min = 8) {
+    for (const src of order) {
+      try {
+        let t = '';
+        if (src === 'selection') t = await this.mac.selectedText();
+        else if (src === 'recent-clipboard') { const last = this.clipHistory?.list(1)[0]; t = last && this.clipHistory.now() - last.t < 120000 ? last.text : ''; }
+        else if (src === 'clipboard') t = await this.mac.clipboardRead();
+        else if (src === 'screen') t = await this.screenTextOnly();
+        t = String(t || '').trim();
+        if (t.length >= min) return { text: t, from: src === 'recent-clipboard' ? 'clipboard' : src };
+      } catch { /* that source is not available: try the next */ }
+    }
+    return { text: '', from: '' };
+  }
+
+  // "Explain this error": the model gets the error text (or is told to look at the screen) and says what it means and how to fix it.
+  async explainError(cmd, entry) {
+    const { text, from } = await this.gatherText(['selection', 'screen', 'clipboard']);
+    return this.runRequest(explainPrompt({ material: text, from, fix: cmd.fix }), entry);
+  }
+
+  // "Is this phishing?" and "has my password been breached?": checked here, on this Mac. Nothing about the email is sent anywhere; for the password only
+  // the first 5 characters of its hash are (see phish.js). The password is never spoken, logged or kept.
+  async securityCheck(cmd) {
+    if (cmd.type === 'phish') {
+      const { text, from } = await this.gatherText(['selection', 'recent-clipboard', 'screen', 'clipboard'], 6);
+      if (!text) return { status: 'failed', reply: 'I have nothing to check. Select the email or link first (or copy it), then ask again.', actions: 0 };
+      const r = phish.analyze(text);
+      const where = from === 'selection' ? 'the text you selected' : from === 'screen' ? 'what is on your screen' : 'what you copied';
+      if (r.flags.length) await this.cardPanel?.show({ kind: 'list', title: r.verdict === 'likely phishing' ? 'Looks like phishing' : r.verdict === 'suspicious' ? 'Suspicious' : 'Worth a careful look', subtitle: `Checked ${where}. Red flags, strongest first`, summary: '', facts: [], links: [], image: null, credit: '', items: r.flags.slice(0, 6).map((f) => ({ title: f[0].toUpperCase() + f.slice(1), subtitle: '', note: '', image: null, url: '' })) });
+      return { status: 'done', reply: `Checked ${where}. ${phish.adviceText(r)}`, actions: 0 };
+    }
+    const got = await this.gatherText(['selection', 'clipboard'], 1);
+    const pw = got.text.trim();
+    if (!pw || /\n/.test(pw) || pw.length > 128) return { status: 'failed', reply: 'Copy just the password (one line), then say “check my password”. Do not say it out loud.', actions: 0 };
+    let n;
+    try { n = await phish.pwnedCount(pw, { signal: AbortSignal.timeout(8000) }); } catch { n = -1; }
+    const st = phish.strength(pw);
+    this.clipHistory?.forget(pw);
+    let cleared = '';
+    try { if ((await this.mac.clipboardRead()).trim() === pw) { this.clipHistory?.ignore(''); await this.mac.clipboardWrite(' '); cleared = ' I cleared it from your clipboard.'; } } catch { /* the clipboard stays as it was */ }
+    if (n < 0) return { status: 'failed', reply: `I could not reach the breach database. Offline, it looks ${st.label} (${st.length} characters).${cleared}`, actions: 0 };
+    if (n > 0) return { status: 'done', reply: `That password has appeared ${n.toLocaleString('en-US')} ${n === 1 ? 'time' : 'times'} in known data breaches. Do not use it anywhere, and change it where you do.${cleared}`, actions: 0 };
+    return { status: 'done', reply: `That password is not in any known breach. It looks ${st.label}${st.label === 'weak' || st.label === 'fair' ? ': make it longer, with unrelated words' : ''}. That does not mean it is safe if you reuse it on several sites.${cleared}`, actions: 0 };
   }
 
   // ---- study mode ----

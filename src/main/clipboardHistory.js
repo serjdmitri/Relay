@@ -75,6 +75,9 @@ class ClipboardHistory {
     return best && Math.abs(best.t - target) <= Math.max(5, minutes * 0.5) * 60000 ? best : null;
   }
 
+  // Drops one entry (a password that was just checked, say).
+  forget(text) { const n = this.items.length; this.items = this.items.filter((i) => i.text !== text); return n - this.items.length; }
+
   clear() { const n = this.items.length; this.items = []; this.last = null; return n; }
 }
 
