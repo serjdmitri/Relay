@@ -725,6 +725,7 @@ app.whenReady().then(() => {
   });
   glass = new Glass({ binPath: glassBinPath() });
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
+  ask.onLanguage = () => { ask.wake.disarm(); ask.ducker.recover(); prepareSpeech().finally(() => ask.wake.refresh()); broadcast(); }; // "speak Spanish" said out loud
   ask.inboxDir = path.join(app.getPath('userData'), 'inbox'); // photos and PDFs shared from the phone wait here
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.

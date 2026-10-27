@@ -45,6 +45,8 @@ const { shouldFollowUp } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
+const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
+const { translateCommand, localizeReply } = require('./i18n');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
@@ -135,6 +137,7 @@ class AskController {
     this.holos = null; // set by the app: the holograms
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
+    this.onLanguage = null; // set by the app: the microphone's language changed (a locale id)
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -1453,6 +1456,11 @@ class AskController {
           const ac = parseAgentCommand(effective);
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
         }
+        if (!opts.shown) {
+          const lc = parseLanguageCommand(effective);
+          if (lc) return this.finish(entry, await this.runLanguage(lc));
+          entry.lang = this.requestLanguage(effective); // the language it was said in: the answer is spoken in it
+        }
         if (!opts.shown && !opts.scheduled && this.scheduler) {
           const sc = sched.parseScheduleCommand(effective);
           if (sc) return this.finish(entry, await this.runSchedule(sc));
@@ -1678,12 +1686,41 @@ class AskController {
     setTimeout(() => this.sound('Glass'), 900);
   }
 
+  // The language a request is in: what the words say, else the language the microphone is listening for (a word or two cannot be told).
+  requestLanguage(text) {
+    const seen = detectLanguage(text);
+    if (seen) return seen.lang;
+    const listening = String(this.store.get('settings.speech.locale') || 'en-US').slice(0, 2).toLowerCase();
+    return LANGS[listening] ? listening : 'en';
+  }
+
+  // "Speak Spanish": the microphone listens in it from now on; answers follow the language they are asked in.
+  async runLanguage(cmd) {
+    if (cmd.type === 'languages') return { status: 'done', reply: `I understand and answer in any language. I can listen in: ${Object.values(LANGS).map((l) => l.name).join(', ')} (if this Mac has the speech model for it). Say, for example, “speak Spanish”.`, actions: 0 };
+    const l = LANGS[cmd.lang];
+    const list = await this.speech.locales().catch(() => []);
+    if (list.length && !list.some((x) => String(x.id).toLowerCase().startsWith(cmd.lang))) return { status: 'failed', reply: `This Mac cannot listen in ${l.name} (it has no on-device speech model for it). I can still answer you in ${l.name} if you type.`, actions: 0 };
+    const id = (list.find((x) => String(x.id).toLowerCase() === l.locale.toLowerCase()) || list.find((x) => String(x.id).toLowerCase().startsWith(cmd.lang)) || { id: l.locale }).id;
+    this.store.set('settings.speech.locale', id);
+    this.onLanguage?.(id); // main prepares the speech model for it and re-arms "Hey Jarvis"
+    this.onChange();
+    return { status: 'done', reply: switchedReply(cmd.lang), actions: 1 };
+  }
+
   async quick(text, requestId) {
-    const q = parseQuick(text);
+    let q = parseQuick(text);
+    let foreign = null;
+    if (!q) { // an everyday command in another language ("pausa", "baisse le volume")
+      for (const lang of new Set([detectLanguage(text)?.lang, this.requestLanguage(text)])) {
+        const f = lang && lang !== 'en' && translateCommand(text, lang);
+        if (f && (q = parseQuick(f.english))) { foreign = f; break; }
+      }
+    }
     if (!q) return null;
     try {
       const r = await runQuick(q, this.mac, this.quickContext());
       if (!r) return null;
+      if (foreign) r.reply = localizeReply(foreign.lang, q, r.reply);
       const actionId = crypto.randomUUID();
       this.store.addAction({ id: actionId, requestId, tool: r.tool, input: r.input, result: r.reply, ok: true, ts: Date.now() });
       if (r.undo) this.undos?.register(actionId, r.undo);
@@ -1867,7 +1904,7 @@ class AskController {
         this.forceTier = null;
         session.onRate = (r) => { this.rate = r; };
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')) }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
         return result;
       } catch (e) {
@@ -1949,7 +1986,7 @@ class AskController {
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, profileFor(jobFor(reply, res.job), this.store.get('settings') || {}));
+    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     this.holdForHolos = !!this.holos?.hasUnpinned();

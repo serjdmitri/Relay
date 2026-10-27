@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Many languages.** Relay already understood and answered in any language through the model; now the rest follows along. Say "speak Spanish", "habla español", "parle français", "sprich Deutsch" (15 languages: English, Spanish, French, German, Italian, Portuguese, Dutch, Japanese, Chinese, Korean, Russian, Arabic, Hindi, Turkish, Polish) and the microphone listens in it (if this Mac has the speech model for it; otherwise it says so). Answers come back in the language you asked in (or one language you choose: Settings > Speech > Answers in), and are read aloud with a voice for that language. Everyday instant commands (pause, play, next, previous, volume, mute, lock, the time, the date, timers, open an app) work in Spanish, French, German, Italian and Portuguese with no model and are answered in the same language; everything else goes to the model. Not translated: Relay's own menus and settings. Tested with simulated speech; the microphone's language switch and the foreign voices are not tried on a real Mac yet.
+
 ## 0.29.0
 
 _Built from the cloud session's work. The new features were tested with unit tests only (486 pass); the real-app check is listed in the release notes._

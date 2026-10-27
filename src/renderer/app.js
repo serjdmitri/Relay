@@ -686,6 +686,16 @@ const PAGES = {
     if (!locales) relay.speechLocales().then((l) => { locales = l; if (page === 'speech') fill(l); });
     sel.onchange = () => { relay.setSpeechLocale(sel.value); $('#lname', lang).textContent = sel.options[sel.selectedIndex].text; };
     card.append(lang);
+    card.append(h('<div class="row"><div class="grow"><div class="d">You can also change it by voice: say “speak Spanish”, “habla español” or “parle français”. Relay understands and answers in any language; the microphone listens in one at a time, and answers are read in the language they are written in.</div></div></div>'));
+    {
+      const replyNow = (S.settings.language && S.settings.language.reply) || 'auto';
+      const names = [['auto', 'The language I asked in'], ['en', 'English'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['it', 'Italian'], ['pt', 'Portuguese'], ['nl', 'Dutch'], ['ja', 'Japanese'], ['zh', 'Chinese'], ['ko', 'Korean'], ['ru', 'Russian'], ['ar', 'Arabic'], ['hi', 'Hindi'], ['tr', 'Turkish'], ['pl', 'Polish']];
+      const row = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Answers in</div><div class="d">Auto: the language you spoke or typed. Or always one language.</div></div><div class="select" style="margin:0"><span id="rlname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="rlsel">${names.map(([v, n]) => `<option value="${v}" ${v === replyNow ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>`);
+      const rs = $('#rlsel', row);
+      $('#rlname', row).textContent = rs.options[rs.selectedIndex].text;
+      rs.onchange = () => { relay.set('settings.language.reply', rs.value); $('#rlname', row).textContent = rs.options[rs.selectedIndex].text; };
+      card.append(row);
+    }
     const mic = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Microphone</div><div class="d" id="mdesc"></div></div><div class="select" style="margin:0;max-width:260px"><span id="mname" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="msel"></select></div></div>');
     const msel = $('#msel', mic);
     const curIn = S.settings.speech.input || 'auto';

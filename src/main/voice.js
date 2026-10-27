@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const cloud = require('./tts/cloud');
 const { pickJarvis, JARVIS } = require('./voiceProfile');
+const { LANGS } = require('./lang');
 
 // Novelty and robotic voices: never picked automatically.
 const NOVELTY = new Set(['Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos', 'Good News', 'Jester', 'Organ', 'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox', 'Fred', 'Junior', 'Kathy', 'Ralph', 'Grandma', 'Grandpa', 'Eddy', 'Flo', 'Reed', 'Rocko', 'Sandy', 'Shelley']);
@@ -91,26 +92,29 @@ class Speaker {
     return this.voices;
   }
 
-  async resolve(pref) {
+  // lang: the language of what is about to be said. A voice for another language than English is picked by that language (the voice chosen in Settings is an English one).
+  async resolve(pref, lang = 'en') {
+    if (lang && lang !== 'en' && LANGS[lang]) return pickVoice(await this.voiceList(), 'auto', LANGS[lang].say) || pickVoice(await this.voiceList(), pref, process.env.RELAY_LOCALE || 'en_US');
     return pickVoice(await this.voiceList(), pref, process.env.RELAY_LOCALE || 'en_US');
   }
 
   // Which engine will speak, and why not the one chosen (a missing key, a voice not downloaded).
-  engineFor(tts) {
+  engineFor(tts, lang = 'en') {
     const e = tts.engine;
+    if (e === 'kokoro' && lang && lang !== 'en') return 'system'; // the on-device voice here is English only
     if (e === 'openai' || e === 'elevenlabs') return tts[e] && tts[e].key ? e : 'system';
     if (e === 'kokoro') return this.kokoro && this.kokoro.installed() ? 'kokoro' : 'system';
     return 'system';
   }
 
-  async speak(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice } = {}) {
+  async speak(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice, lang = 'en' } = {}) {
     this.stop();
     const say = speakable(text);
     if (!say) return;
     this.currentText = say;
     const tts = this.getTts() || { engine: 'system' };
-    const engine = this.engineFor(tts);
-    if (engine === 'system') return this.speakSystem(say, { voice, rate, volume });
+    const engine = this.engineFor(tts, lang);
+    if (engine === 'system') return this.speakSystem(say, { voice, rate, volume, lang });
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
@@ -121,7 +125,7 @@ class Speaker {
       if ((e && e.name === 'AbortError') || token !== this.token) return;
       this.log.error?.('voice:', e.message);
       if (this.onProblem) this.onProblem(e.message);
-      await this.speakSystem(say, { voice, rate, volume }); // never leave the user without an answer
+      await this.speakSystem(say, { voice, rate, volume, lang }); // never leave the user without an answer
     } finally {
       if (token === this.token) { this.busy = false; if (!this.child) this.setTalking(false); }
     }
@@ -189,8 +193,8 @@ class Speaker {
     });
   }
 
-  async speakSystem(say, { voice, rate, volume = 1 }) {
-    const name = await this.resolve(voice);
+  async speakSystem(say, { voice, rate, volume = 1, lang = 'en' }) {
+    const name = await this.resolve(voice, lang);
     const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
     const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
     this.child = child;
