@@ -587,6 +587,19 @@ const PAGES = {
         $('input', row).onchange = (e) => { const v = e.target.value.trim().toLowerCase(); if (v) relay.set('settings.wake.phrase', v); };
         return row;
       })(),
+      (() => {
+        const row = h(`<div class="row"><div class="grow"><div class="t">Only listen in these apps</div><div class="d">Optional. Names separated by commas, like “Xcode, Terminal”: “Hey Jarvis” then only works while one of them is in front, which cuts false triggers. Leave empty to listen everywhere, always.</div></div><input class="field" style="width:200px" placeholder="everywhere" value="${esc(((S.settings.wake && S.settings.wake.apps) || []).join(', '))}"></div>`);
+        $('input', row).onchange = (e) => relay.set('settings.wake.apps', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
+        return row;
+      })(),
+      toggleRow('Keep listening after an answer', 'After you ask out loud and Relay answers, it listens for a few seconds more, so you can say “and the next one?” without pressing anything.', 'settings.followUp.enabled'),
+      toggleRow('Interrupt by talking', 'While Relay is speaking, say “stop” or just start talking and it stops mid-sentence. Works best with headphones (without them it can hear itself).', 'settings.bargeIn.enabled'),
+      (() => {
+        const cur = (S.settings.bargeIn && S.settings.bargeIn.mode) || 'talk';
+        const row = h(`<div class="row"><div class="grow"><div class="t">Interrupt with</div><div class="d">“Any speech” also stops when you talk over it. “Stop words only” listens just for stop, quiet, wait and similar.</div></div><div class="seg sm">${[['talk', 'Any speech'], ['word', 'Stop words only']].map(([v, l]) => `<button data-v="${v}" class="${cur === v ? 'on' : ''}" style="width:110px">${l}</button>`).join('')}</div></div>`);
+        row.onclick = (e) => e.target.dataset.v && relay.set('settings.bargeIn.mode', e.target.dataset.v);
+        return row;
+      })(),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')
     );
@@ -649,7 +662,7 @@ const PAGES = {
     const curVoice = S.settings.voice || 'auto';
     const fillVoices = (info) => {
       const list = info?.voices || [];
-      const opts = [['auto', `Automatic${info?.picked ? ` (${info.picked.replace(/ \(.*$/, '')})` : ''}`], ...list.map((v) => [v.name, `${v.name.replace(/ \(.*$/, '')}${v.kind === 'Standard' ? '' : ' · ' + v.kind}${v.lang !== 'en_US' ? ' · ' + v.lang.replace('_', '-') : ''}`])];
+      const opts = [['auto', `Automatic${info?.picked ? ` (${info.picked.replace(/ \(.*$/, '')})` : ''}`], ['jarvis', `Jarvis (British${info?.jarvis ? `, ${info.jarvis.replace(/ \(.*$/, '')}` : ''})`], ...list.map((v) => [v.name, `${v.name.replace(/ \(.*$/, '')}${v.kind === 'Standard' ? '' : ' · ' + v.kind}${v.lang !== 'en_US' ? ' · ' + v.lang.replace('_', '-') : ''}`])];
       const seen = new Set();
       vsel.innerHTML = opts.filter(([v]) => !seen.has(v) && seen.add(v)).map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
       vsel.value = [...vsel.options].some((o) => o.value === curVoice) ? curVoice : 'auto';
@@ -663,6 +676,18 @@ const PAGES = {
     vsel.onchange = () => { relay.set('settings.voice', vsel.value); $('#vname', vrow).textContent = vsel.options[vsel.selectedIndex].text; };
     $('#vprev', vrow).onclick = () => relay.previewVoice(vsel.value, S.settings.voiceRate);
     vcard.append(vrow);
+    const jrow = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Sound like Jarvis</div><div class="d">A calm British male voice, and replies read aloud. With the on-device voice installed it uses George; otherwise Daniel (download his Premium or Enhanced version for the best sound).</div></div><button class="btn" id="jset">Use it</button></div>');
+    $('#jset', jrow).onclick = () => {
+      relay.set('settings.voice', 'jarvis');
+      relay.set('settings.speakReplies', true);
+      if (S.kokoro && S.kokoro.installed) { relay.set('settings.tts.engine', 'kokoro'); relay.set('settings.tts.kokoro.voice', 'bm_george'); }
+      relay.previewVoice('jarvis', S.settings.voiceRate);
+    };
+    vcard.append(jrow);
+    const softOn = ((S.settings.voices && S.settings.voices.quiet && S.settings.voices.quiet.volume) ?? 0.55) < 1;
+    const qrow = h(`<div class="row"><div class="grow"><div class="t">Soft voice for confirmations</div><div class="d">“Timer set for 5 minutes” and similar are spoken quietly. Long answers are read a little slower.</div></div><div class="toggle ${softOn ? 'on' : ''}"></div></div>`);
+    qrow.onclick = () => relay.set('settings.voices.quiet.volume', softOn ? 1 : 0.55);
+    vcard.append(qrow);
     const rrow = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Speed</div></div><div class="seg sm">${[['slower', 'Slower'], ['normal', 'Normal'], ['faster', 'Faster']].map(([v, l]) => `<button data-v="${v}" class="${(S.settings.voiceRate || 'normal') === v ? 'on' : ''}" style="width:78px">${l}</button>`).join('')}</div></div>`);
     rrow.onclick = (e) => e.target.dataset.v && relay.set('settings.voiceRate', e.target.dataset.v);
     vcard.append(rrow);

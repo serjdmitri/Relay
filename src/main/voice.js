@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const cloud = require('./tts/cloud');
+const { pickJarvis, JARVIS } = require('./voiceProfile');
 
 // Novelty and robotic voices: never picked automatically.
 const NOVELTY = new Set(['Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos', 'Good News', 'Jester', 'Organ', 'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox', 'Fred', 'Junior', 'Kathy', 'Ralph', 'Grandma', 'Grandpa', 'Eddy', 'Flo', 'Reed', 'Rocko', 'Sandy', 'Shelley']);
@@ -34,7 +35,8 @@ const RANK = { Premium: 4, Siri: 4, Enhanced: 3, Standard: 2, Novelty: 0 };
 
 // Best everyday voice for your language and region: a natural one if you have downloaded one, else Samantha.
 function pickVoice(voices, pref = 'auto', locale = 'en_US') {
-  if (pref && pref !== 'auto') {
+  if (pref === JARVIS) { const j = pickJarvis(voices); if (j) return j; }
+  if (pref && pref !== 'auto' && pref !== JARVIS) {
     const chosen = voices.find((v) => v.name === pref);
     if (chosen) return chosen.name;
   }
@@ -81,6 +83,7 @@ class Speaker {
     this.busy = false;
     this.onState = null; // set by the app: called with true while a voice is speaking and false when it stops, for the ring
     this.talking = false;
+    this.currentText = ''; // what is being said right now (the microphone also hears it; see barge.js)
   }
 
   async voiceList() {
@@ -100,24 +103,25 @@ class Speaker {
     return 'system';
   }
 
-  async speak(text, { voice = 'auto', rate = 'normal' } = {}) {
+  async speak(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice } = {}) {
     this.stop();
     const say = speakable(text);
     if (!say) return;
+    this.currentText = say;
     const tts = this.getTts() || { engine: 'system' };
     const engine = this.engineFor(tts);
-    if (engine === 'system') return this.speakSystem(say, { voice, rate });
+    if (engine === 'system') return this.speakSystem(say, { voice, rate, volume });
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
     this.setTalking(true);
     try {
-      await this.speakWith(engine, tts, say, rate, token, this.abort.signal);
+      await this.speakWith(engine, tts, say, rate, token, this.abort.signal, { volume, kokoroVoice });
     } catch (e) {
       if ((e && e.name === 'AbortError') || token !== this.token) return;
       this.log.error?.('voice:', e.message);
       if (this.onProblem) this.onProblem(e.message);
-      await this.speakSystem(say, { voice, rate }); // never leave the user without an answer
+      await this.speakSystem(say, { voice, rate, volume }); // never leave the user without an answer
     } finally {
       if (token === this.token) { this.busy = false; if (!this.child) this.setTalking(false); }
     }
@@ -147,9 +151,9 @@ class Speaker {
   }
 
   // Makes and plays a reply with one engine. Throws when the engine fails.
-  async speakWith(engine, tts, say, rate, token, signal) {
+  async speakWith(engine, tts, say, rate, token, signal, { volume = 1, kokoroVoice } = {}) {
     const make = (piece) => (engine === 'kokoro'
-      ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), rate })
+      ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate })
       : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
     const pieces = cloud.sentences(say);
     let pending = make(pieces[0]);
@@ -158,7 +162,7 @@ class Speaker {
       if (token !== this.token) { this.discard(file); return; }
       pending = i + 1 < pieces.length ? make(pieces[i + 1]) : null; // the next sentence is made while this one plays
       if (pending) pending.catch(() => {});
-      await this.play(file, token);
+      await this.play(file, token, volume);
       this.discard(file);
       if (token !== this.token) return;
     }
@@ -174,10 +178,10 @@ class Speaker {
     try { fs.rmSync(file, { force: true }); } catch {}
   }
 
-  play(file, token) {
+  play(file, token, volume = 1) {
     return new Promise((resolve) => {
       if (token !== this.token) return resolve();
-      const child = this.spawnFn('afplay', [file], { stdio: 'ignore' });
+      const child = this.spawnFn('afplay', volume < 1 ? ['-v', String(volume), file] : [file], { stdio: 'ignore' });
       this.child = child;
       const done = () => { if (this.child === child) this.child = null; resolve(); };
       child.on('exit', done);
@@ -185,7 +189,7 @@ class Speaker {
     });
   }
 
-  async speakSystem(say, { voice, rate }) {
+  async speakSystem(say, { voice, rate, volume = 1 }) {
     const name = await this.resolve(voice);
     const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
     const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -194,7 +198,7 @@ class Speaker {
     child.on('exit', () => { if (this.child === child) { this.child = null; this.setTalking(false); } });
     child.on('error', (e) => this.log.error?.('say:', e.message));
     child.stdin.on('error', () => {});
-    child.stdin.end(say);
+    child.stdin.end(volume < 1 ? `[[volm ${volume}]] ${say}` : say); // [[volm]] is the system voice's own loudness command
   }
 
   setTalking(on) {

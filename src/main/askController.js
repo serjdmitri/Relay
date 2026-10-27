@@ -39,6 +39,9 @@ const { AgentManager, parseAgentCommand } = require('./agents');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
+const { BargeIn } = require('./barge');
+const { shouldFollowUp } = require('./conversation');
+const { jobFor, profileFor } = require('./voiceProfile');
 const { Ducker } = require('./duck');
 const { markRegion } = require('./overlayGeometry');
 
@@ -148,12 +151,28 @@ class AskController {
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
-    if (this.speaker) this.speaker.onState = (on) => { this.overlay.speaking(on); this.wakeSoon(); };
+    // Interrupt by talking: while it speaks, the microphone listens for "stop" or for you talking over it.
+    this.barge = new BargeIn({
+      speech,
+      getConfig: () => this.store.get('settings.bargeIn'),
+      getSpoken: () => this.speaker?.currentText || '',
+      getDevice: () => this.store.get('settings.speech.input') || 'auto',
+      onInterrupt: (kind) => this.interrupted(kind),
+      log: console
+    });
+    if (this.speaker) {
+      this.speaker.onState = (on) => {
+        this.overlay.speaking(on);
+        if (on) this.barge.arm(); else { this.barge.disarm(); this.followUpSoon(); }
+        this.wakeSoon();
+      };
+    }
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis' }),
+      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [] }),
       canListen: () => !this.suspended && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
+      getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
       onArmed: (on) => this.overlay.setArmed(on),
       onWake: () => this.wakeTriggered(),
@@ -1091,6 +1110,44 @@ class AskController {
     return status === 'granted';
   }
 
+  // You talked over it, or said stop. "stop" only stops; talking stops it and listens, so you can say what you wanted instead.
+  async interrupted(kind) {
+    this.followFor = null;
+    this.speaker?.stop();
+    if (kind === 'talk' && this.state === 'done') {
+      await new Promise((r) => setTimeout(r, 200)); // let the interrupting session close before a new one opens
+      await this.listen('ask', false, { auto: true });
+    }
+  }
+
+  // After a spoken ask is answered (and spoken), go on listening for a few seconds, so "and the next one?" needs no key.
+  followUpSoon(delay = 500) {
+    clearTimeout(this.followTimer);
+    this.followTimer = setTimeout(() => {
+      const cfg = this.store.get('settings.followUp') || {};
+      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.followChain });
+      if (!ok) return;
+      this.followFor = null;
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+    }, delay);
+  }
+
+  // The app in front, kept up to date only while the wake phrase is limited to some apps.
+  watchFront() {
+    const apps = this.store.get('settings.wake.apps') || [];
+    clearInterval(this.frontTimer);
+    this.frontTimer = null;
+    if (!apps.length) { this.wakeFront = null; return; }
+    const tick = async () => {
+      const was = this.wakeFront;
+      this.wakeFront = await fastFrontmost().catch(() => null);
+      if (this.wakeFront !== was) this.wake.refresh();
+    };
+    tick();
+    this.frontTimer = setInterval(tick, 2500);
+    this.frontTimer.unref?.();
+  }
+
   // Re-check, a moment after something changed, whether "Hey Jarvis" should be listening. The pause keeps it from
   // opening the microphone while a reply is still being shown or spoken.
   wakeSoon(delay = 700) {
@@ -1116,13 +1173,16 @@ class AskController {
     const voice = level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
     if (voice) { a.spoke = true; a.lastVoice = now; }
     if (a.spoke && now - a.lastVoice > 1300) { this.autoEnd = null; this.finishListening(); }
-    else if (!a.spoke && now - a.startedAt > 7000) { this.autoEnd = null; this.cancelAll(); }
+    else if (!a.spoke && now - a.startedAt > (a.noSpeechMs || 7000)) { this.autoEnd = null; this.cancelAll(); }
     else if (now - a.startedAt > 25000) { this.autoEnd = null; this.finishListening(); }
   }
 
   async listen(mode, held, opts = {}) {
     this.wake?.disarm(); // the microphone is needed for this
-    this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null } : null;
+    this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null, noSpeechMs: opts.noSpeechMs || 7000 } : null;
+    this.followChain = opts.followUp ? (this.followChain || 0) + 1 : 0;
+    this.followFor = null;
+    clearTimeout(this.followTimer);
     clearTimeout(this.doneTimer);
     this.mode = mode;
     this.heldStart = held;
@@ -1185,7 +1245,7 @@ class AskController {
     text = applyReplacements(text, this.store.get('replacements'));
     if (this.mode === 'dictate') return this.insertDictation(text);
     this.state = 'input';
-    return this.submit(text);
+    return this.submit(text, { voice: this.mode === 'ask' });
   }
 
   async insertDictation(text) {
@@ -1294,8 +1354,9 @@ class AskController {
     }
   }
 
-  async submit(raw) {
+  async submit(raw, { voice = false } = {}) {
     const text = String(raw || '').trim();
+    this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
     if (this.runningTask && this.state === 'working') return this.enqueue(text); // typed or re-asked while one is running
     if (this.state !== 'input') return;
@@ -1315,6 +1376,7 @@ class AskController {
     this.ensureWindow(); // the pill window is created even when the ring shows everything, because other code reads it
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
     if (!opts.drain) { this.queue = []; this.tasks = []; }
+    if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
     if (!opts.shown) {
       const waiting = opts.drain && opts.drain !== true ? opts.drain : null; // a task that was already on the list
       this.runningTask = waiting || { id: crypto.randomUUID(), text, status: 'running' };
@@ -1454,7 +1516,7 @@ class AskController {
     // Answers that change nothing (the time, a timer's status) leave "undo that" pointing at what came before.
     if (!r.readonly) this.lastAction = { kind: 'quick', ts: Date.now(), undo: r.undo };
     this.dropWarm();
-    return this.finish(entry, { status: 'done', reply: r.reply, actions: 1 });
+    return this.finish(entry, { status: 'done', reply: r.reply, actions: 1, job: r.readonly ? 'reply' : 'quiet' }); // a confirmation of something just done is spoken softly
   }
 
   upsertRoutine(name, steps, learned = null) {
@@ -1696,7 +1758,9 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
-    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
+    this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
+    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, profileFor(jobFor(reply, res.job), this.store.get('settings') || {}));
+    if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     this.holdForHolos = !!this.holos?.hasUnpinned();
     if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
