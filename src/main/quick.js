@@ -12,6 +12,7 @@ const { calc } = require('./calc');
 const { parseLayoutCommand } = require('./layouts');
 const { parseFocusCommand } = require('./focus');
 const { parseOcrCommand } = require('./ocr');
+const { parseHoloCommand } = require('./holo/commands');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -111,7 +112,7 @@ function parseQuick(text, now = new Date()) {
   if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
 
   // ----- window layouts, focus mode, text from the screen -----
-  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text);
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text);
   if (lay) return lay;
 
   // ----- the web -----
@@ -437,6 +438,11 @@ async function runQuick(cmd, mac, ctx = {}) {
     case 'ocr': {
       if (!ctx.ocr) return null;
       return { tool: 'ocr', input: { source: cmd.source, mode: cmd.mode }, reply: await ctx.ocr(cmd), readonly: true };
+    }
+    case 'holo-library': case 'holo-find': case 'holo-open': case 'scene-save': case 'scene-open': case 'scene-list': case 'scene-delete': {
+      if (!ctx.holoLib) return null;
+      const r = await ctx.holoLib(cmd);
+      return r ? { tool: cmd.type.replace('-', '_'), input: { query: cmd.query, name: cmd.name }, reply: r, readonly: true } : null;
     }
     case 'calc':
       return { tool: 'calc', input: { kind: cmd.kind }, reply: cmd.reply, readonly: true };

@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { HoloLibrary } = require('./holo/library');
 const { nightlyDue, dayKey } = require('./drive/nightly');
 const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
@@ -671,6 +672,7 @@ app.whenReady().then(() => {
     cursor: () => hands?.virtualCursor() || holoWin.cursor(), getUi: () => store.get('settings.holoUi'), area: holoWin.area, displayFor: holoWin.displayFor, download: (u) => downloadStl(u),
     generate: (c) => ask.generatePhotoModel(c), readFile: (f) => ask.modelCache?.readInside(f),
     fit: (base, item, hint) => ask.fitModels(base, item, hint), putFile: (b) => ask.modelCache?.put(ask.modelCache.key('part', b.length, b.slice(0, 64).toString('hex'), b.slice(-64).toString('hex')), b) || '',
+    library: new HoloLibrary({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } }),
     saved: () => store.get('holograms') || [], save: (l) => { store.data.holograms = l; store.save(); }
   });
   holoWin.registerHoloIpc(holos);
@@ -716,6 +718,7 @@ app.whenReady().then(() => {
     log: { read: () => store.get('driveLog') || [], write: (l) => { store.data.driveLog = l; store.save(); } }
   });
   cardPanel.onFile = (p) => ask.drive.openFile(p);
+  cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   hands = new HandControl({
     preview: !!store.get('settings.hands.preview'),
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
