@@ -6,7 +6,7 @@ import * as THREE from './vendor/three/three.module.min.js';
 import { STLLoader } from './vendor/three/STLLoader.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 import { GLTFExporter } from './vendor/three/GLTFExporter.js';
-import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
+import { splitTriangles, splitSurface, explodeOffsets, placeItems } from './holo-parts.js';
 import { CadView } from './holo-cad.js';
 import * as S from './holo-cad-spec.js';
 import { toStl, to3mf, toStep, zUp } from './holo-export.js';
@@ -222,11 +222,62 @@ let hovered = null;
 
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 
+// One colour per triangle (r, g, b in 0..1), read from the texture at the triangle's UV middle, or from vertex colours, or the flat material colour.
+function triangleColors(mesh) {
+  const geo = mesh.geometry;
+  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  const index = geo.index ? geo.index.array : null;
+  const nt = index ? Math.floor(index.length / 3) : Math.floor(geo.attributes.position.count / 3);
+  const out = new Float32Array(nt * 3);
+  const corner = (t, k) => (index ? index[t * 3 + k] : t * 3 + k);
+  const vc = geo.attributes.color;
+  const uv = geo.attributes.uv;
+  const img = mat?.map?.image;
+  if (uv && img && (img.width || img.naturalWidth)) {
+    try {
+      const w0 = img.width || img.naturalWidth, h0 = img.height || img.naturalHeight;
+      const k = Math.min(1, 512 / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const flip = mat.map.flipY; // glTF textures are not flipped, three's default ones are
+      for (let t = 0; t < nt; t++) {
+        let u = 0, v = 0;
+        for (let c = 0; c < 3; c++) { u += uv.getX(corner(t, c)); v += uv.getY(corner(t, c)); }
+        u = (u / 3) % 1; v = (v / 3) % 1;
+        if (u < 0) u += 1;
+        if (v < 0) v += 1;
+        const x = Math.min(w - 1, Math.floor(u * w)), y = Math.min(h - 1, Math.floor((flip ? 1 - v : v) * h));
+        const o = (y * w + x) * 4;
+        out[t * 3] = px[o] / 255; out[t * 3 + 1] = px[o + 1] / 255; out[t * 3 + 2] = px[o + 2] / 255;
+      }
+      return out;
+    } catch { /* a tainted or closed image: fall through to the other sources */ }
+  }
+  if (vc) {
+    for (let t = 0; t < nt; t++) {
+      let r = 0, g = 0, b = 0;
+      for (let c = 0; c < 3; c++) { const i = corner(t, c); r += vc.getX(i); g += vc.getY(i); b += vc.getZ(i); }
+      out[t * 3] = r / 3; out[t * 3 + 1] = g / 3; out[t * 3 + 2] = b / 3;
+    }
+    return out;
+  }
+  return null; // flat colour: only creases will cut
+}
+
 // A solid model has nothing to pull apart along, so it is cut into regions; a model made of several bodies splits along them.
 function splitMesh(mesh) {
   const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
   const pos = geo.attributes.position.array;
-  const res = splitTriangles(pos, { regions: 5 });
+  let res = splitTriangles(pos, { regions: 5 });
+  // one solid skin (a model made from a photo): cut it along its creases and colours first, which gives wheels, doors and glass instead of slices
+  if (!res || res.kind === 'regions') {
+    const cut = splitSurface({ positions: mesh.geometry.attributes.position.array, index: mesh.geometry.index ? mesh.geometry.index.array : null, colors: triangleColors(mesh) });
+    if (cut && cut.groups.length >= 3) res = cut;
+  }
   if (!res) return null;
   const nor = geo.attributes.normal?.array;
   const uv = geo.attributes.uv?.array;
