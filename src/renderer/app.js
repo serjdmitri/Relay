@@ -212,8 +212,10 @@ const PAGES = {
       };
       drawDict();
     } else {
-      c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Use this to see what happened when a request did not work.</div>'));
-      c.append(h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span></div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`));
+      c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Where an action can be put back (a moved file, a window, the volume, a timer, a note…), it has an Undo button until Relay quits. Use this to see what happened when a request did not work.</div>'));
+      const actCard = h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span>${a.undoable ? `<button class="btn" data-undo="${esc(a.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`);
+      actCard.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
+      c.append(actCard);
     }
   },
 
@@ -327,6 +329,29 @@ const PAGES = {
     $('#rtog', sw).onclick = () => relay.setRemote({ enabled: !R.enabled });
     $('#rlan', sw).onclick = () => relay.setRemote({ lan: !R.lan });
     c.append(sw);
+
+    {
+      c.append(h('<div class="section-title" style="margin-top:0">Tell my phone when a long job finishes</div>'));
+      const N = S.settings.notify || {};
+      const nc = h('<div class="card flat" style="margin-bottom:14px"></div>');
+      nc.append(toggleRow('Send a message to my phone', 'When a request takes more than 30 seconds (or a background agent finishes) you get a short message, so you can leave the desk. Only “Done: …” and the first words of what you asked are sent, never the answer.', 'settings.notify.enabled'));
+      const chan = h(`<div class="row"><div class="grow"><div class="t">How</div><div class="d">ntfy: a free notification app (ntfy.sh); the message goes through its server. iMessage: Relay texts you from this Mac, nothing else is involved.</div></div><div class="seg sm">${[['ntfy', 'ntfy'], ['imessage', 'iMessage']].map(([v, l]) => `<button data-v="${v}" class="${(N.channel || 'ntfy') === v ? 'on' : ''}" style="width:80px">${l}</button>`).join('')}</div></div>`);
+      chan.onclick = (e) => e.target.dataset.v && relay.set('settings.notify.channel', e.target.dataset.v);
+      nc.append(chan);
+      if ((N.channel || 'ntfy') === 'ntfy') {
+        const top = h(`<div class="row"><div class="grow"><div class="t">Topic</div><div class="d">Install the ntfy app on your iPhone, tap +, and subscribe to this topic. It is the only secret: keep it to yourself.</div><div class="d" style="user-select:text;font-family:ui-monospace,Menlo,monospace">${esc(N.ntfyTopic || 'not made yet')}</div></div><button class="btn" id="ntop">${N.ntfyTopic ? 'New topic' : 'Make a topic'}</button></div>`);
+        $('#ntop', top).onclick = () => relay.notifyTopic();
+        nc.append(top);
+      } else {
+        const to = h(`<div class="row"><div class="grow"><div class="t">Send iMessages to</div><div class="d">Your own phone number or Apple ID email. The first time, macOS asks whether Relay may control Messages.</div></div><input class="field" style="width:200px" value="${esc(N.imessageTo || '')}" placeholder="+1 555 123 4567"></div>`);
+        $('input', to).onchange = (e) => relay.set('settings.notify.imessageTo', e.target.value.trim());
+        nc.append(to);
+      }
+      const test = h('<div class="row"><div class="grow"><div class="t">Try it</div><div class="d" id="ntres">Sends a test message now.</div></div><button class="btn" id="ntest">Send a test</button></div>');
+      $('#ntest', test).onclick = async () => { $('#ntres', test).textContent = 'Sending…'; const r = await relay.notifyTest(); $('#ntres', test).textContent = r.ok ? `Sent (${r.via}). Check your phone.` : r.error; };
+      nc.append(test);
+      c.append(nc);
+    }
 
     if (R.enabled && R.running) {
       c.append(h('<div class="section-title" style="margin-top:0">Pair a phone</div>'));
@@ -552,6 +577,14 @@ const PAGES = {
     const hcard = h('<div class="card flat"></div>');
     hcard.append(segRow('Buttons on a hologram', 'Menu: one small ⋯ button that opens the list. Side: a slim column beside the model. Bar: a row under its name. All stay clear of the model.', [['menu', 'Menu'], ['side', 'Side'], ['bar', 'Bar']], hv.controls, (v) => relay.set('settings.holoUi.controls', v)));
     hcard.append(segRow('File when I drag a hologram into an app', 'The hologram button "Drag to an app" hands over the model as a file you can drop into Fusion, FreeCAD, a slicer, a folder or a message. STL for printing, 3MF for slicers (keeps millimetres), STEP for CAD.', [['stl', 'STL'], ['3mf', '3MF'], ['step', 'STEP']], hv.dragFormat || 'stl', (v) => relay.set('settings.holoUi.dragFormat', v)));
+    {
+      const ppi0 = hv.pointsPerInch || 125;
+      const cal = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Screen size (for real size)</div><div class="d">Hold a credit card flat against the screen and drag the slider until the outline below is exactly as wide as the card. Then “show it life size” is true to the millimetre.</div></div><div style="flex-basis:100%;padding-top:8px"><div id="calcard" style="height:${Math.round(53.98 / 25.4 * ppi0)}px;width:${Math.round(85.6 / 25.4 * ppi0)}px;border:2px solid var(--accent,#59dcff);border-radius:${Math.round(3.2 / 25.4 * ppi0)}px;margin-bottom:10px"></div><input id="calsl" type="range" min="70" max="260" step="1" value="${ppi0}" style="width:260px"> <span id="calv">${ppi0}</span> points per inch</div></div>`);
+      const sl = $('#calsl', cal);
+      sl.oninput = () => { const v = +sl.value; const c = $('#calcard', cal); c.style.width = `${Math.round(85.6 / 25.4 * v)}px`; c.style.height = `${Math.round(53.98 / 25.4 * v)}px`; c.style.borderRadius = `${Math.round(3.2 / 25.4 * v)}px`; $('#calv', cal).textContent = v; };
+      sl.onchange = () => relay.set('settings.holoUi.pointsPerInch', +sl.value);
+      hcard.append(cal);
+    }
     hcard.append(toggleRow('Holograms slowly turn', 'A hologram turns by itself until you touch it.', 'settings.holoUi.spin'));
     hcard.append(segRow('Leave it still after I touch it', 'How long before it starts turning again.', [[3, '3 s'], [10, '10 s'], [30, '30 s'], [120, '2 min']], hv.spinDelay, (v) => relay.set('settings.holoUi.spinDelay', Number(v))));
     const hs = S.handsInfo || { status: 'off', message: '' };
@@ -587,6 +620,33 @@ const PAGES = {
         $('input', row).onchange = (e) => { const v = e.target.value.trim().toLowerCase(); if (v) relay.set('settings.wake.phrase', v); };
         return row;
       })(),
+      (() => {
+        const row = h(`<div class="row"><div class="grow"><div class="t">Only listen in these apps</div><div class="d">Optional. Names separated by commas, like “Xcode, Terminal”: “Hey Jarvis” then only works while one of them is in front, which cuts false triggers. Leave empty to listen everywhere, always.</div></div><input class="field" style="width:200px" placeholder="everywhere" value="${esc(((S.settings.wake && S.settings.wake.apps) || []).join(', '))}"></div>`);
+        $('input', row).onchange = (e) => relay.set('settings.wake.apps', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
+        return row;
+      })(),
+      toggleRow('Keep listening after an answer', 'After you ask out loud and Relay answers, it listens for a few seconds more, so you can say “and the next one?” without pressing anything.', 'settings.followUp.enabled'),
+      toggleRow('Interrupt by talking', 'While Relay is speaking, say “stop” or just start talking and it stops mid-sentence. Works best with headphones (without them it can hear itself).', 'settings.bargeIn.enabled'),
+      (() => {
+        const cur = (S.settings.bargeIn && S.settings.bargeIn.mode) || 'talk';
+        const row = h(`<div class="row"><div class="grow"><div class="t">Interrupt with</div><div class="d">“Any speech” also stops when you talk over it. “Stop words only” listens just for stop, quiet, wait and similar.</div></div><div class="seg sm">${[['talk', 'Any speech'], ['word', 'Stop words only']].map(([v, l]) => `<button data-v="${v}" class="${cur === v ? 'on' : ''}" style="width:110px">${l}</button>`).join('')}</div></div>`);
+        row.onclick = (e) => e.target.dataset.v && relay.set('settings.bargeIn.mode', e.target.dataset.v);
+        return row;
+      })(),
+      (() => {
+        const row = h(`<div class="row"><div class="grow"><div class="t">Focus mode closes these apps</div><div class="d">Say “focus mode for 25 minutes”: these apps are quit, a timer starts, and they reopen when it ends. For Do Not Disturb, make two Shortcuts named “Relay Focus On” and “Relay Focus Off” with the Set Focus action.</div></div><input class="field" style="width:230px" value="${esc(((S.settings.focus && S.settings.focus.apps) || []).join(', '))}"></div>`);
+        $('input', row).onchange = (e) => relay.set('settings.focus.apps', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
+        return row;
+      })(),
+      toggleRow('Pause music when I leave the desk', 'Uses the camera, all the time while on (the green light stays on): it only counts faces once a second, on this Mac. Nothing is recognised, saved or sent. When nobody has been there for a minute it pauses the music, and plays it again when you are back.', 'settings.presence.enabled'),
+      toggleRow('Lock my Mac when I leave too', 'Also locks the screen when you have been away.', 'settings.presence.lock'),
+      (() => {
+        const cur = (S.settings.presence && S.settings.presence.awayAfter) || 60;
+        const row = h(`<div class="row"><div class="grow"><div class="t">Count me as away after</div><div class="d">How long with no face in front of the camera. Short enough to notice you left, long enough not to fire when you look away.</div></div><div class="seg sm">${[[30, '30 s'], [60, '1 min'], [180, '3 min'], [600, '10 min']].map(([v, l]) => `<button data-v="${v}" class="${cur === v ? 'on' : ''}" style="width:64px">${l}</button>`).join('')}</div></div>`);
+        row.onclick = (e) => e.target.dataset.v && relay.set('settings.presence.awayAfter', Number(e.target.dataset.v));
+        return row;
+      })(),
+      toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')
     );
@@ -649,7 +709,7 @@ const PAGES = {
     const curVoice = S.settings.voice || 'auto';
     const fillVoices = (info) => {
       const list = info?.voices || [];
-      const opts = [['auto', `Automatic${info?.picked ? ` (${info.picked.replace(/ \(.*$/, '')})` : ''}`], ...list.map((v) => [v.name, `${v.name.replace(/ \(.*$/, '')}${v.kind === 'Standard' ? '' : ' · ' + v.kind}${v.lang !== 'en_US' ? ' · ' + v.lang.replace('_', '-') : ''}`])];
+      const opts = [['auto', `Automatic${info?.picked ? ` (${info.picked.replace(/ \(.*$/, '')})` : ''}`], ['jarvis', `Jarvis (British${info?.jarvis ? `, ${info.jarvis.replace(/ \(.*$/, '')}` : ''})`], ...list.map((v) => [v.name, `${v.name.replace(/ \(.*$/, '')}${v.kind === 'Standard' ? '' : ' · ' + v.kind}${v.lang !== 'en_US' ? ' · ' + v.lang.replace('_', '-') : ''}`])];
       const seen = new Set();
       vsel.innerHTML = opts.filter(([v]) => !seen.has(v) && seen.add(v)).map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
       vsel.value = [...vsel.options].some((o) => o.value === curVoice) ? curVoice : 'auto';
@@ -663,6 +723,18 @@ const PAGES = {
     vsel.onchange = () => { relay.set('settings.voice', vsel.value); $('#vname', vrow).textContent = vsel.options[vsel.selectedIndex].text; };
     $('#vprev', vrow).onclick = () => relay.previewVoice(vsel.value, S.settings.voiceRate);
     vcard.append(vrow);
+    const jrow = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Sound like Jarvis</div><div class="d">A calm British male voice, and replies read aloud. With the on-device voice installed it uses George; otherwise Daniel (download his Premium or Enhanced version for the best sound).</div></div><button class="btn" id="jset">Use it</button></div>');
+    $('#jset', jrow).onclick = () => {
+      relay.set('settings.voice', 'jarvis');
+      relay.set('settings.speakReplies', true);
+      if (S.kokoro && S.kokoro.installed) { relay.set('settings.tts.engine', 'kokoro'); relay.set('settings.tts.kokoro.voice', 'bm_george'); }
+      relay.previewVoice('jarvis', S.settings.voiceRate);
+    };
+    vcard.append(jrow);
+    const softOn = ((S.settings.voices && S.settings.voices.quiet && S.settings.voices.quiet.volume) ?? 0.55) < 1;
+    const qrow = h(`<div class="row"><div class="grow"><div class="t">Soft voice for confirmations</div><div class="d">“Timer set for 5 minutes” and similar are spoken quietly. Long answers are read a little slower.</div></div><div class="toggle ${softOn ? 'on' : ''}"></div></div>`);
+    qrow.onclick = () => relay.set('settings.voices.quiet.volume', softOn ? 1 : 0.55);
+    vcard.append(qrow);
     const rrow = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Speed</div></div><div class="seg sm">${[['slower', 'Slower'], ['normal', 'Normal'], ['faster', 'Faster']].map(([v, l]) => `<button data-v="${v}" class="${(S.settings.voiceRate || 'normal') === v ? 'on' : ''}" style="width:78px">${l}</button>`).join('')}</div></div>`);
     rrow.onclick = (e) => e.target.dataset.v && relay.set('settings.voiceRate', e.target.dataset.v);
     vcard.append(rrow);

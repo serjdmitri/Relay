@@ -14,7 +14,12 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
-    wake: { enabled: false, phrase: 'hey jarvis' }, // listen for a wake phrase while Relay is idle (on-device)
+    wake: { enabled: false, phrase: 'hey jarvis', apps: [] }, // listen for a wake phrase while Relay is idle (on-device). apps: only while one of these is in front; empty means always
+    followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
+    bargeIn: { enabled: true, mode: 'talk' }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones
+    focus: { apps: ['Messages', 'Slack', 'Discord', 'Mail', 'Telegram', 'WhatsApp', 'Steam', 'Twitter', 'Instagram', 'Facebook', 'Reddit'], minutes: 25, shortcutOn: 'Relay Focus On', shortcutOff: 'Relay Focus Off', reopen: true }, // focus mode by voice: apps it closes, default length, and the two Shortcuts that switch Do Not Disturb
+    downloadsTidy: { enabled: true, hour: 21, minute: 0, lastRun: '' }, // each evening: work out where new downloads belong and SHOW it (nothing moves until you say yes; nothing is ever deleted)
+    voices: { quiet: { volume: 0.55 }, reading: {} }, // how confirmations and long answers sound (see voiceProfile.js)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
     hfTokenEnc: '', // an optional free Hugging Face token: more free GPU time for the better 3D generators (TRELLIS)
     models3dFromPhotos: true, // make realistic 3D models from real photos with a free online service (only the public photo is sent)
@@ -37,13 +42,15 @@ const DEFAULTS = {
       openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
       elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
     },
+    notify: { enabled: false, channel: 'ntfy', ntfyTopic: '', ntfyServer: 'https://ntfy.sh', imessageTo: '', minSeconds: 30, includeText: false }, // tell the phone when a long job finishes (see notify.js)
     remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone
     connectors: { // Notion (a token you paste) and Google (your own OAuth app, several accounts): secrets are encrypted
       notion: { tokenEnc: '', name: '' },
       google: { clientId: '', clientSecretEnc: '', accounts: [] }, // accounts: { email, refreshEnc }
       apps: { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 } // Composio (or any MCP server): its address and key
     },
-    holoUi: { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl' }, // holograms: where the controls are (menu, side, bar), slow turning, and how long to leave it alone after a touch
+    holoUi: { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl', pointsPerInch: 125 }, // holograms: where the controls are (menu, side, bar), slow turning, and how long to leave it alone after a touch
+    presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
     hands: { enabled: false, preview: false }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
@@ -67,6 +74,10 @@ const DEFAULTS = {
     },
     firefox: { enabled: false, port: 47831 }
   },
+  stickies: [], // sticky notes on the screen: { id, text, color, x, y } (see stickies.js)
+  stickiesHidden: false,
+  holoLibrary: [], // every hologram that has been on screen, with a small picture (see holo/library.js)
+  holoScenes: [], // saved sets of holograms: where each is and how big
   history: [], // {id, text, status, reply, ts, actions}
   dictations: [], // {id, text, ts}
   actions: [], // {id, requestId, tool, input, result, ok, ts}

@@ -1,15 +1,17 @@
 # Where things stand (for whoever picks this up next)
 
-Released: 0.28.0 (tag v0.28.0). Its arm64 CI job failed once for lack of a runner and was re-run; check the Releases page.
+Released: 0.28.0 (tag v0.28.0, both DMGs attached; marked pre-release on GitHub). Everything below is on branch `claude/zealous-allen-5y9opn` (PR 1), not yet released. See CHANGELOG.md "Unreleased" for each item.
 
-## In progress: photo-made models that pull apart into real parts
-- `src/renderer/holo-parts.js` has `splitSurface()`: cuts one solid skin along sharp creases and colour changes, merges small bits, returns <= maxParts pieces. One synthetic test passes (`test/holo-surface.test.mjs`).
-- NOT wired in yet. To finish:
-  1. In `src/renderer/holo.js` `splitMesh()` (about line 225): if `splitTriangles` gives `kind: 'regions'` or `null`, try `splitSurface` on the (indexed) geometry; use it when it returns >= 3 groups. The old splitter refuses > 250,000 triangles, so TRELLIS.2 models (about 293,000) cannot be pulled apart today; `splitSurface` allows 900,000.
-  2. Per-triangle colours: sample the texture at each triangle's UV centre into a Float32Array (r, g, b per triangle) and pass it as `colors`.
-  3. Test on real photo models (`car-trellis2.glb`, `corolla-best-2048.glb` made earlier), look at the pieces, tune `convexDeg`, `concaveDeg`, `colorStep`, `minShare`.
-  4. Release as 0.29.0.
-- No free hosted part-aware generator (PartCrafter) is running; check again later.
+## Built, tested with fakes and in a headless browser, NOT yet tried on a real Mac / phone
+Voice: keep listening after an answer, interrupt by talking (best with headphones), Jarvis voice (Daniel / Kokoro George), soft confirmations, wake phrase only in chosen apps.
+Mac: nightly Downloads tidy (propose only), window layouts, focus mode (needs the "Relay Focus On/Off" Shortcuts for Do Not Disturb), copy text from screen (Apple Vision via osascript), quick maths and unit conversions, zip/convert with undo, Print check, activity log Undo.
+Holograms: library with thumbnails, scenes, notes pinned to a model, real size (credit-card calibration in Settings), stickies, draw shapes in the air (one hand a fist, the other pinching), presence (pause music when you leave; camera, opt-in).
+Phone: quick action chips, `/?say=`, messages when a long job finishes (ntfy or iMessage), lock screen push to talk via the Shortcut (docs/phone.md).
 
-## Ideas the user liked
-Drop files on the reactor (done), Send to Relay share sheet (done), Measure (done). Next: direct Google Drive/Docs/Sheets connector, clipboard history, read any app's screen, undoable file actions (zip/convert/rename), teach-your-own hand gestures, hand practice mode, iPhone control through iPhone Mirroring.
+Things most likely to need a fix once run for real: the `windowList()` AppleScript and `ocrFile()` JXA in `src/main/agent/mac.js`; barge-in false triggers without headphones (`src/main/conversation.js`, `interruption()`); whether a real fist reports a pinch ratio below 0.28 (the pen test in `src/main/hands/logic.js` uses the gesture name, not the ratio); sticky windows taking the keyboard (`src/main/stickyPanel.js`); the on-screen size after calibration (`realSize()` in `src/renderer/holo.js`).
+
+## Still to do
+1. Photo-made models that pull apart into real parts: splitter is connected (`splitMesh()` in `src/renderer/holo.js`) but not tuned on the real car models (`car-trellis2.glb`, `corolla-best-2048.glb`, on the user's Mac). Tune `convexDeg`, `concaveDeg`, `colorStep`, `minShare`; check the texture V flip. Then release 0.29.0.
+2. Saved for later (user said so): animation of assemblies / record an exploded view as video, compare two models side by side with cuts, "ask before anything outside my home folder" switch, guided first run that tests each permission.
+3. Not built: meeting helper (the user has their own notch app for it), direct Google Drive/Docs/Sheets connector, clipboard history, read any app's screen, teach-your-own hand gestures and a practice mode, iPhone control through iPhone Mirroring, morning briefing.
+4. The user mentioned a GitHub repo for a Jarvis-like voice ("openhiggfirld", not found by that name). Relay uses Kokoro's British voice for now (`bm_george`, `src/main/voiceProfile.js`); another engine would plug in beside `src/main/tts/`.

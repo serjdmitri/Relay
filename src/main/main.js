@@ -10,6 +10,14 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { newTopic } = require('./notify');
+const { shapeToModel } = require('./hands/shape');
+const { PresenceControl } = require('./presence');
+const { Stickies } = require('./stickies');
+const { StickyPanel } = require('./stickyPanel');
+const { HoloLibrary } = require('./holo/library');
+const { nightlyDue, dayKey } = require('./drive/nightly');
+const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
@@ -37,7 +45,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -119,11 +127,12 @@ function publicState() {
     hasTtsKeys,
     hasHfToken,
     handsInfo: { status: hands?.status || 'off', message: hands?.message || '' },
+    presenceInfo: { status: presence?.status || 'off', message: presence?.message || '', state: presence?.state || 'unknown', faces: presence?.faces || 0 },
     voiceProblem,
     kokoro: kokoro.status(),
     presetInfo: PRESETS,
     history: d.history.slice(0, 200),
-    actions: d.actions.slice(0, 300),
+    actions: (() => { const can = ask?.undos?.ids(); return d.actions.slice(0, 300).map((a) => (can && can.has(a.id) ? { ...a, undoable: true } : a)); })(),
     stats: store.stats(),
     labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
     claude: claudeState,
@@ -156,6 +165,15 @@ async function setHands(on, { quiet = false } = {}) {
   hands.disable();
   broadcast();
   return { ok: true };
+}
+
+// Presence (opt-in): the camera counts faces so Relay knows when you leave the desk.
+async function setPresence(on) {
+  if (on) {
+    const r = await presence.enable();
+    if (!r.ok) { store.set('settings.presence.enabled', false); ask.notice(r.error, 'failed'); }
+  } else presence.disable();
+  broadcast();
 }
 
 // The camera view in the top right (hands, outlines, gesture, count). Needs hand control on to show anything.
@@ -273,6 +291,8 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.presence.enabled') setPresence(!!value);
+    if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
@@ -348,7 +368,8 @@ function registerIpc() {
   });
   ipcMain.handle('voice:list', async () => ({
     voices: (await speaker.voiceList()).filter((v) => v.kind !== 'Novelty' && v.lang.startsWith('en')),
-    picked: await speaker.resolve(store.get('settings.voice'))
+    picked: await speaker.resolve(store.get('settings.voice')),
+    jarvis: await speaker.resolve('jarvis')
   }));
   ipcMain.handle('models3d:test', () => ask.testPhotoModels().catch((e) => ({ ok: false, error: e.message, attempts: [] })));
   ipcMain.handle('models3d:set-hf-token', (_e, token) => {
@@ -384,7 +405,7 @@ function registerIpc() {
     if (store.get('settings.tts.engine') === 'kokoro') store.set('settings.tts.engine', 'system');
     broadcast();
   });
-  ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', { voice, rate }));
+  ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', profileFor('reply', { ...(store.get('settings') || {}), voice, voiceRate: rate })));
   ipcMain.handle('app:open-link', (_e, url) => {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
     if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
@@ -542,6 +563,11 @@ function registerIpc() {
   });
   ipcMain.handle('remote:tailscale-check', async () => { await remote.refreshTailscale(); broadcast(); return { ok: true }; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
+  ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
+  ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
+  ipcMain.handle('notify:test', () => ask.phone.test());
+  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); });
+  ipcMain.handle('presence:status', (_e, st) => { presence?.setStatus(st); });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
   ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
@@ -667,6 +693,7 @@ app.whenReady().then(() => {
     cursor: () => hands?.virtualCursor() || holoWin.cursor(), getUi: () => store.get('settings.holoUi'), area: holoWin.area, displayFor: holoWin.displayFor, download: (u) => downloadStl(u),
     generate: (c) => ask.generatePhotoModel(c), readFile: (f) => ask.modelCache?.readInside(f),
     fit: (base, item, hint) => ask.fitModels(base, item, hint), putFile: (b) => ask.modelCache?.put(ask.modelCache.key('part', b.length, b.slice(0, 64).toString('hex'), b.slice(-64).toString('hex')), b) || '',
+    library: new HoloLibrary({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } }),
     saved: () => store.get('holograms') || [], save: (l) => { store.data.holograms = l; store.save(); }
   });
   holoWin.registerHoloIpc(holos);
@@ -693,6 +720,7 @@ app.whenReady().then(() => {
       const text = t.missed ? `${body} It finished while Relay was closed.` : body;
       if (Notification.isSupported()) new Notification({ title: alarm ? 'Alarm' : 'Timer done', body: text }).show();
       ask.alert(text);
+      if (t.focus) ask.focusMode().end({ auto: true }).then((r) => { if (r.reply) ask.alert(r.reply); }).catch(() => {}); // focus time is over: notifications back, apps reopened
     }
   });
   glass = new Glass({ binPath: glassBinPath() });
@@ -703,6 +731,9 @@ app.whenReady().then(() => {
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
   ask.holos = holos;
+  ask.stickies = new Stickies({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } });
+  stickyPanel = new StickyPanel({ stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });
+  stickyPanel.sync(); // the stickies you left are still there
   ask.drive = new Drive({
     fs: require('fs'), home: os.homedir(), cards: cardPanel,
     exec: (file, args) => new Promise((res) => execFile(file, args, { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => res(out || ''))),
@@ -711,6 +742,7 @@ app.whenReady().then(() => {
     log: { read: () => store.get('driveLog') || [], write: (l) => { store.data.driveLog = l; store.save(); } }
   });
   cardPanel.onFile = (p) => ask.drive.openFile(p);
+  cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   hands = new HandControl({
     preview: !!store.get('settings.hands.preview'),
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
@@ -750,14 +782,30 @@ app.whenReady().then(() => {
       return { moveTo: (pt) => { if (!win.isDestroyed()) { if (!win.isVisible()) win.showInactive(); win.setPosition(Math.round(pt.x - 28), Math.round(pt.y - 28)); } }, hide: () => { if (!win.isDestroyed()) win.hide(); }, close: () => { if (!win.isDestroyed()) win.close(); }, setState: (c) => { if (!win.isDestroyed()) win.webContents.executeJavaScript(`document.body.className=${JSON.stringify(String(c).replace(/[^a-z]/g, ''))}`).catch(() => {}); } };
     },
     air: (type, x, y) => overlay.air(type, x, y),
+    shape: (r) => { const m = shapeToModel(r); if (m) holos.show({ title: m.title, items: [{ kind: 'shapes', title: m.title, credit: 'Drawn in the air', parts: m.parts }], x: Math.round(r.cx), y: Math.round(r.cy), scale: m.scale }).catch(() => {}); },
     onMic: (id) => ask.listenFromHand(id).catch(() => {}),
     notify: (m) => ask.notice(m, 'failed')
   });
   hands.onChange = () => { rebuildTray(); broadcast(); };
+  presence = new PresenceControl({
+    getConfig: () => store.get('settings.presence'),
+    askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
+    createCamera: async () => {
+      const win = new BrowserWindow({ width: 320, height: 240, show: false, focusable: false, skipTaskbar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
+      win.loadFile(path.join(__dirname, '../renderer/presence.html'));
+      return { close: () => { if (!win.isDestroyed()) win.close(); } };
+    },
+    onAway: () => ask.presenceAway(),
+    onBack: () => ask.presenceBack(),
+    notify: (m) => ask.notice(m, 'failed')
+  });
+  presence.onChange = broadcast;
+  if (store.get('settings.presence.enabled')) presence.enable().then((r) => { if (!r.ok) store.set('settings.presence.enabled', false); broadcast(); });
   ask.onHands = handsCommand;
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
   holos.onChange = () => { rebuildTray(); ask.holosChanged(); };
   holos.onAsk = (h, d) => ask.askAboutHologram(h, d);
+  holos.onAnnotate = (h, d) => ask.annotateByVoice(h, d);
   holos.onFiles = (h, paths) => ask.filesOnHologram(h, paths);
   ask.modelCache = new ModelCache(path.join(app.getPath('userData'), 'holo-cache'));
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
@@ -769,6 +817,14 @@ app.whenReady().then(() => {
     for (const s of missed) if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: `"${s.text}" was due while the Mac was asleep or Relay was closed. It will run next time.` }).show();
     for (const s of due) ask.runScheduled(s);
     if (due.length || missed.length) broadcast();
+    // Each evening: look at Downloads and show where the new files would go. Only when Relay is free; it moves nothing without a yes.
+    const dt = store.get('settings.downloadsTidy');
+    if (nightlyDue(dt) && ask.canRunScheduled()) {
+      store.set('settings.downloadsTidy.lastRun', dayKey(new Date()));
+      ask.drive.proposeDownloads().then((r) => {
+        if (r.moves && Notification.isSupported()) new Notification({ title: 'Downloads tidy-up', body: `${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads could be sorted. The plan is on screen: say “apply the plan” or “skip the plan”.`, silent: true }).show();
+      }).catch(() => {});
+    }
   }, 15000);
   ask.onLearn = (from, to) => { // a word you keep fixing by hand becomes a word fix
     const list = (store.data.replacements || []).filter((r) => r.from.toLowerCase() !== from.toLowerCase());
@@ -827,6 +883,7 @@ app.whenReady().then(() => {
   rebuildTray();
   startHotkeysWhenTrusted();
   refreshClaude().then(broadcast);
+  ask.watchFront();
   prepareSpeech().finally(() => ask.wake.refresh()); // "Hey Jarvis" starts listening once the speech model is ready
   // Headsets come and go: keep the microphone label in the title bar current.
   setInterval(async () => {

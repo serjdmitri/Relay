@@ -1,6 +1,7 @@
 const { app, BrowserWindow, screen, clipboard, desktopCapturer, safeStorage, systemPreferences, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 
 const { parseCommand } = require('./commands');
@@ -39,6 +40,15 @@ const { AgentManager, parseAgentCommand } = require('./agents');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
+const { BargeIn } = require('./barge');
+const { shouldFollowUp } = require('./conversation');
+const { Layouts } = require('./layouts');
+const { PhoneNotifier } = require('./notify');
+const { UndoRegistry } = require('./activity');
+const { FocusMode } = require('./focus');
+const ocrLib = require('./ocr');
+const { defaultExec } = require('./agent/mac');
+const { jobFor, profileFor } = require('./voiceProfile');
 const { Ducker } = require('./duck');
 const { markRegion } = require('./overlayGeometry');
 
@@ -125,6 +135,8 @@ class AskController {
     this.holos = null; // set by the app: the holograms
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
+    this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
+    this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
     this.tasks = []; // what was asked this round: { id, text, status: 'queued' | 'running' | 'done' | 'failed' }, shown as bullets
@@ -148,12 +160,28 @@ class AskController {
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
-    if (this.speaker) this.speaker.onState = (on) => { this.overlay.speaking(on); this.wakeSoon(); };
+    // Interrupt by talking: while it speaks, the microphone listens for "stop" or for you talking over it.
+    this.barge = new BargeIn({
+      speech,
+      getConfig: () => this.store.get('settings.bargeIn'),
+      getSpoken: () => this.speaker?.currentText || '',
+      getDevice: () => this.store.get('settings.speech.input') || 'auto',
+      onInterrupt: (kind) => this.interrupted(kind),
+      log: console
+    });
+    if (this.speaker) {
+      this.speaker.onState = (on) => {
+        this.overlay.speaking(on);
+        if (on) this.barge.arm(); else { this.barge.disarm(); this.followUpSoon(); }
+        this.wakeSoon();
+      };
+    }
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis' }),
+      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [] }),
       canListen: () => !this.suspended && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
+      getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
       onArmed: (on) => this.overlay.setArmed(on),
       onWake: () => this.wakeTriggered(),
@@ -778,6 +806,7 @@ class AskController {
     this.onChange();
     if (a.status !== 'stopped') this.sound(a.status === 'done' ? 'Pop' : 'Basso');
     this.onAgentDone?.(a);
+    this.phone?.jobDone({ text: a.task, reply: a.result, status: a.status, agent: true });
   }
 
   runAgentCommand(cmd) {
@@ -990,7 +1019,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1091,6 +1120,44 @@ class AskController {
     return status === 'granted';
   }
 
+  // You talked over it, or said stop. "stop" only stops; talking stops it and listens, so you can say what you wanted instead.
+  async interrupted(kind) {
+    this.followFor = null;
+    this.speaker?.stop();
+    if (kind === 'talk' && this.state === 'done') {
+      await new Promise((r) => setTimeout(r, 200)); // let the interrupting session close before a new one opens
+      await this.listen('ask', false, { auto: true });
+    }
+  }
+
+  // After a spoken ask is answered (and spoken), go on listening for a few seconds, so "and the next one?" needs no key.
+  followUpSoon(delay = 500) {
+    clearTimeout(this.followTimer);
+    this.followTimer = setTimeout(() => {
+      const cfg = this.store.get('settings.followUp') || {};
+      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.followChain });
+      if (!ok) return;
+      this.followFor = null;
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+    }, delay);
+  }
+
+  // The app in front, kept up to date only while the wake phrase is limited to some apps.
+  watchFront() {
+    const apps = this.store.get('settings.wake.apps') || [];
+    clearInterval(this.frontTimer);
+    this.frontTimer = null;
+    if (!apps.length) { this.wakeFront = null; return; }
+    const tick = async () => {
+      const was = this.wakeFront;
+      this.wakeFront = await fastFrontmost().catch(() => null);
+      if (this.wakeFront !== was) this.wake.refresh();
+    };
+    tick();
+    this.frontTimer = setInterval(tick, 2500);
+    this.frontTimer.unref?.();
+  }
+
   // Re-check, a moment after something changed, whether "Hey Jarvis" should be listening. The pause keeps it from
   // opening the microphone while a reply is still being shown or spoken.
   wakeSoon(delay = 700) {
@@ -1116,13 +1183,16 @@ class AskController {
     const voice = level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
     if (voice) { a.spoke = true; a.lastVoice = now; }
     if (a.spoke && now - a.lastVoice > 1300) { this.autoEnd = null; this.finishListening(); }
-    else if (!a.spoke && now - a.startedAt > 7000) { this.autoEnd = null; this.cancelAll(); }
+    else if (!a.spoke && now - a.startedAt > (a.noSpeechMs || 7000)) { this.autoEnd = null; this.cancelAll(); }
     else if (now - a.startedAt > 25000) { this.autoEnd = null; this.finishListening(); }
   }
 
   async listen(mode, held, opts = {}) {
     this.wake?.disarm(); // the microphone is needed for this
-    this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null } : null;
+    this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null, noSpeechMs: opts.noSpeechMs || 7000 } : null;
+    this.followChain = opts.followUp ? (this.followChain || 0) + 1 : 0;
+    this.followFor = null;
+    clearTimeout(this.followTimer);
     clearTimeout(this.doneTimer);
     this.mode = mode;
     this.heldStart = held;
@@ -1184,8 +1254,9 @@ class AskController {
     if (!text) return this.runningTask ? this.resumeWork() : this.close(); // heard nothing: the reactor just fades away where it is
     text = applyReplacements(text, this.store.get('replacements'));
     if (this.mode === 'dictate') return this.insertDictation(text);
+    if (this.mode === 'note') return this.finishNote(text);
     this.state = 'input';
-    return this.submit(text);
+    return this.submit(text, { voice: this.mode === 'ask' });
   }
 
   async insertDictation(text) {
@@ -1294,8 +1365,9 @@ class AskController {
     }
   }
 
-  async submit(raw) {
+  async submit(raw, { voice = false } = {}) {
     const text = String(raw || '').trim();
+    this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
     if (this.runningTask && this.state === 'working') return this.enqueue(text); // typed or re-asked while one is running
     if (this.state !== 'input') return;
@@ -1315,6 +1387,7 @@ class AskController {
     this.ensureWindow(); // the pill window is created even when the ring shows everything, because other code reads it
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
     if (!opts.drain) { this.queue = []; this.tasks = []; }
+    if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
     if (!opts.shown) {
       const waiting = opts.drain && opts.drain !== true ? opts.drain : null; // a task that was already on the list
       this.runningTask = waiting || { id: crypto.randomUUID(), text, status: 'running' };
@@ -1415,13 +1488,186 @@ class AskController {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
   }
 
+  // Sticky notes, by voice. Returns { reply, undo? } or null to leave it to the model.
+  async stickyCommand(cmd) {
+    const st = this.stickies;
+    const short = (t, n = 60) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t).replace(/\s+/g, ' ');
+    switch (cmd.type) {
+      case 'sticky-add': {
+        const s = st.add(cmd.text);
+        if (!s) return null;
+        return { reply: `Made a sticky: “${short(cmd.text)}”. It is at the top right; drag it where you like.`, undo: async () => { st.remove(s.id); return 'Removed that sticky.'; } };
+      }
+      case 'sticky-show': st.setHidden(false); return { reply: st.items.length ? `Here ${st.items.length === 1 ? 'is your sticky' : `are your ${st.items.length} stickies`}.` : 'You have no stickies yet. Say “make a sticky saying …”.' };
+      case 'sticky-hide': st.setHidden(true); return { reply: 'Put your stickies away. Say “show my stickies” to bring them back.' };
+      case 'sticky-list': {
+        const L = st.items;
+        if (!L.length) return { reply: 'You have no stickies.' };
+        return { reply: `You have ${L.length} ${L.length === 1 ? 'sticky' : 'stickies'}: ${L.slice(-5).reverse().map((s) => `“${short(s.text, 80)}”`).join('; ')}${L.length > 5 ? `, and ${L.length - 5} more` : ''}.` };
+      }
+      case 'sticky-remove': {
+        const found = st.find(cmd.query);
+        if (!found.length) return { reply: `I do not see a sticky about “${cmd.query}”.` };
+        const gone = st.remove(found[0].id);
+        return { reply: `Removed the sticky “${short(gone.text)}”.${found.length > 1 ? ` ${found.length - 1} more match${found.length === 2 ? 'es' : ''}; say it again to remove the next.` : ''}`, undo: async () => { st.restore([gone]); return 'Put that sticky back.'; } };
+      }
+      case 'sticky-clear': {
+        const was = st.clear();
+        return was.length ? { reply: `Cleared ${was.length} ${was.length === 1 ? 'sticky' : 'stickies'}.`, undo: async () => { st.restore(was); return `Put ${was.length} ${was.length === 1 ? 'sticky' : 'stickies'} back.`; } } : { reply: 'You have no stickies.' };
+      }
+      case 'sticky-append': {
+        const found = st.find(cmd.query);
+        if (!found.length) return { reply: `I do not see a sticky about “${cmd.query}”.` };
+        const before = found[0].text;
+        st.append(found[0].id, cmd.text);
+        return { reply: `Added “${short(cmd.text)}” to that sticky.`, undo: async () => { st.setText(found[0].id, before); return 'Took that off the sticky.'; } };
+      }
+      default: return null;
+    }
+  }
+
+  // You left the desk (the camera has seen no face for a while): pause what is playing, and lock the screen if that is asked for.
+  async presenceAway() {
+    const cfg = this.store.get('settings.presence') || {};
+    this.pausedByPresence = false;
+    if (cfg.pause !== false) {
+      const r = await this.quick('pause').catch(() => null);
+      if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
+    }
+    if (cfg.lock) await this.mac.lockScreen().catch(() => {});
+  }
+
+  // You are back: start what it paused (not what you paused yourself).
+  async presenceBack() {
+    const cfg = this.store.get('settings.presence') || {};
+    if (this.pausedByPresence && cfg.resume !== false) await this.quick('play').catch(() => {});
+    this.pausedByPresence = false;
+  }
+
+  // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).
+  async holoRealSize(mm) {
+    const h = this.holos.latest();
+    if (!h) return 'There is no hologram on screen.';
+    const r = await this.holos.requestRealSize(h, mm);
+    if (r.ok) return `Life size: ${r.mm} mm long, as it would be on your desk. Calibrate your screen in Settings if it looks off.`;
+    return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
+  }
+
+  // The activity log's Undo button: reverses one action, once, and records that it did.
+  async undoAction(id) {
+    const r = await this.undos.run(String(id));
+    if (r.ok) this.store.addAction({ id: crypto.randomUUID(), requestId: '', tool: 'undo', input: { action: String(id).slice(0, 8) }, result: r.message, ok: true, ts: Date.now() });
+    this.onChange();
+    return r;
+  }
+
+  // Library and scenes of holograms, by voice. Returns the reply, or null to leave it to the model (nothing to bring back by that name).
+  async holoLibraryCommand(cmd) {
+    const lib = this.holos.library;
+    const ago = (t) => { const d = Math.max(0, Date.now() - t); const m = Math.round(d / 60000); return m < 2 ? 'just now' : m < 90 ? `${m} min ago` : d < 36 * 3600000 ? `${Math.round(d / 3600000)} h ago` : `${Math.round(d / 86400000)} days ago`; };
+    const showCard = async (title, list) => {
+      await this.cardPanel?.show({ kind: 'list', title, subtitle: 'Click one to bring it back', summary: '', facts: [], links: [], image: null, credit: '',
+        items: list.map((e) => ({ title: e.title, subtitle: `${e.saved.items.length} ${e.saved.items.length === 1 ? 'model' : 'models'}${e.saved.pinned ? ' · pinned' : ''}`, note: ago(e.updatedAt), image: e.thumb || null, url: `holo:${e.id}` })) });
+    };
+    switch (cmd.type) {
+      case 'holo-library': {
+        const list = lib.recent(8);
+        if (!list.length) return 'You have not made any holograms yet. Ask me to show you something in 3D.';
+        await showCard('Your holograms', list);
+        return `Showing your ${list.length} most recent ${list.length === 1 ? 'hologram' : 'holograms'} (${lib.entries.length} in all). Click one to bring it back.`;
+      }
+      case 'holo-find': {
+        const list = lib.search(cmd.query, 8);
+        if (!list.length) return `I do not have a hologram matching “${cmd.query}”.`;
+        await showCard(`Holograms matching “${cmd.query.slice(0, 30)}”`, list);
+        return `Found ${list.length} matching “${cmd.query}”. Click one to bring it back.`;
+      }
+      case 'holo-open': {
+        const best = lib.search(cmd.query, 3)[0];
+        if (!best) return null; // not one of yours: the model may make it
+        const id = await this.holos.openFromLibrary(best.id);
+        return id ? `Brought back ${best.title}.` : `I could not bring back ${best.title}: its model is no longer stored.`;
+      }
+      case 'scene-save': {
+        const r = this.holos.saveScene(cmd.name);
+        return r.ok ? `${r.replaced ? 'Updated' : 'Saved'} the ${cmd.name} scene: ${r.count} ${r.count === 1 ? 'hologram' : 'holograms'}${r.skipped ? ` (${r.skipped} could not be kept)` : ''}.` : r.reason;
+      }
+      case 'scene-open': {
+        const r = await this.holos.openScene(cmd.name);
+        return r.ok ? `The ${r.name} scene is up: ${r.shown} ${r.shown === 1 ? 'hologram' : 'holograms'}${r.shown < r.total ? ` (${r.total - r.shown} could not be loaded)` : ''}.` : r.reason;
+      }
+      case 'scene-list': {
+        const s = lib.scenes;
+        return s.length ? `You have ${s.length} ${s.length === 1 ? 'scene' : 'scenes'}: ${s.map((x) => `${x.name} (${x.holos.length})`).join(', ')}.` : 'You have no saved scenes. Put some holograms where you want them and say “save this scene as engine bay”.';
+      }
+      case 'scene-delete': {
+        const gone = lib.deleteScene(cmd.name);
+        return gone ? `Deleted the ${gone.name} scene.` : `I do not have a scene called ${cmd.name}.`;
+      }
+      default: return null;
+    }
+  }
+
+  layouts() {
+    return this._layouts || (this._layouts = new Layouts({ store: this.store, mac: this.mac, displays: () => this.displayAreas() }));
+  }
+
+  focusMode() {
+    return this.focus || (this.focus = new FocusMode({ store: this.store, mac: this.mac, timers: this.timers }));
+  }
+
+  // "Copy the text from my screen / last screenshot", "turn this table into a spreadsheet": read on this Mac (Apple Vision), put on the clipboard.
+  async readScreenText({ source, mode }) {
+    const fs = require('fs');
+    let file = null;
+    let temp = false;
+    if (source === 'screenshot') {
+      const where = String(await defaultExec('defaults', ['read', 'com.apple.screencapture', 'location']).catch(() => '') || '').trim().replace(/^~/, os.homedir());
+      file = ocrLib.latestScreenshot(fs, [where, path.join(os.homedir(), 'Desktop')].filter(Boolean));
+      if (!file) return 'I could not find a screenshot. They are normally on your Desktop.';
+    } else {
+      this.hideSoft?.();
+      await new Promise((r) => setTimeout(r, 250)); // the reactor must not be in the picture
+      file = await this.mac.screenToFile();
+      temp = true;
+    }
+    try {
+      const obs = await this.mac.ocrFile(file);
+      if (!obs.length) return 'I could not find any text there.';
+      if (mode === 'table') {
+        const t = ocrLib.toTable(obs);
+        if (t) { await this.mac.clipboardWrite(ocrLib.toTsv(t.rows)); return `Copied the table: ${t.rows.length} rows, ${t.columns} columns. Paste it into Numbers, Excel or Sheets.`; }
+        const text = ocrLib.plainText(obs);
+        await this.mac.clipboardWrite(text);
+        return 'I could not find a clear table, so I copied the text as it reads instead.';
+      }
+      const text = ocrLib.plainText(obs);
+      await this.mac.clipboardWrite(text);
+      const words = text.split(/\s+/).filter(Boolean).length;
+      return `Copied the text (${words} ${words === 1 ? 'word' : 'words'}) to your clipboard.`;
+    } finally {
+      if (temp) try { fs.rmSync(file, { force: true }); } catch { /* it is a temporary file */ }
+    }
+  }
+
   quickContext() {
     return {
       displays: () => this.displayAreas(),
       timers: this.timers,
       brightness: { get: () => this.speech.brightness(), set: (v) => this.speech.brightness(v) },
       prevApp: this.prevApp,
-      runningApps: this.lastApps
+      runningApps: this.lastApps,
+      layouts: this.layouts(),
+      stickies: this.stickies ? (cmd) => this.stickyCommand(cmd) : null,
+      holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
+      holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
+      focus: this.focusMode(),
+      ocr: (cmd) => this.readScreenText(cmd),
+      downloads: this.drive ? {
+        plan: async () => { const r = await this.drive.proposeDownloads({ nightly: false }); return r.moves ? `Here is where ${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads would go. Say “apply the plan” to do it, or “skip the plan”.` : 'Nothing in Downloads needs tidying right now.'; },
+        apply: () => this.drive.applyDownloads(),
+        skip: () => this.drive.skipDownloads()
+      } : null
     };
   }
 
@@ -1438,7 +1684,9 @@ class AskController {
     try {
       const r = await runQuick(q, this.mac, this.quickContext());
       if (!r) return null;
-      this.store.addAction({ id: crypto.randomUUID(), requestId, tool: r.tool, input: r.input, result: r.reply, ok: true, ts: Date.now() });
+      const actionId = crypto.randomUUID();
+      this.store.addAction({ id: actionId, requestId, tool: r.tool, input: r.input, result: r.reply, ok: true, ts: Date.now() });
+      if (r.undo) this.undos?.register(actionId, r.undo);
       this.onChange();
       return r;
     } catch {
@@ -1454,7 +1702,7 @@ class AskController {
     // Answers that change nothing (the time, a timer's status) leave "undo that" pointing at what came before.
     if (!r.readonly) this.lastAction = { kind: 'quick', ts: Date.now(), undo: r.undo };
     this.dropWarm();
-    return this.finish(entry, { status: 'done', reply: r.reply, actions: 1 });
+    return this.finish(entry, { status: 'done', reply: r.reply, actions: 1, job: r.readonly ? 'reply' : 'quiet' }); // a confirmation of something just done is spoken softly
   }
 
   upsertRoutine(name, steps, learned = null) {
@@ -1595,7 +1843,10 @@ class AskController {
       if (e.type === 'tool-start') this.push({ label: e.label || e.name.replace(/_/g, ' '), stream: '' });
       if (e.type === 'text-delta') this.streamText(e.text);
       if (e.type === 'tool') {
-        this.store.addAction({ id: crypto.randomUUID(), requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
+        const actionId = crypto.randomUUID();
+        this.store.addAction({ id: actionId, requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
+        // what can be put back: moved files, files Relay made (the new file goes to the Trash)
+        if (e.ok && (e.name === 'drive_apply' || e.name === 'drive_make') && this.drive?.lastLogId) { const logId = this.drive.lastLogId; this.undos.register(actionId, () => this.drive.undo(logId)); }
         this.onChange();
       }
     };
@@ -1696,7 +1947,10 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
-    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, { voice: this.store.get('settings.voice'), rate: this.store.get('settings.voiceRate') });
+    this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
+    this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
+    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, profileFor(jobFor(reply, res.job), this.store.get('settings') || {}));
+    if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     this.holdForHolos = !!this.holos?.hasUnpinned();
     if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
@@ -1803,6 +2057,27 @@ class AskController {
     this.holoFocus = h ? { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), piece, ts: Date.now() } : null;
     await this.listen('ask', false, { auto: true });
     return true;
+  }
+
+  // A spot on a hologram was picked for a note: Relay listens for what it should say.
+  async annotateByVoice(h, spot) {
+    if (!['idle', 'done'].includes(this.state)) return;
+    this.pendingNote = { holoId: h.id, spot, ts: Date.now() };
+    await this.listen('note', false, { auto: true });
+  }
+
+  // What was said becomes the note, pinned to the spot and kept with the hologram.
+  finishNote(text) {
+    const pending = this.pendingNote;
+    this.pendingNote = null;
+    this.state = 'idle';
+    this.hideSoft();
+    const h = pending && Date.now() - pending.ts < 90000 && this.holos?.get(pending.holoId);
+    const words = String(text || '').replace(/^(?:the )?note(?: says?)?[:,]? /i, '').trim();
+    if (!h || !words) { this.mode = 'ask'; return; }
+    this.holos.setAnnotations(h, [...(h.annotations || []), { id: crypto.randomUUID(), text: words[0].toUpperCase() + words.slice(1), item: pending.spot.item, p: pending.spot.p, n: pending.spot.n }]);
+    this.sound('Pop');
+    this.mode = 'ask';
   }
 
   holoHint() {
