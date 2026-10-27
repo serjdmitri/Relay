@@ -11,6 +11,7 @@ const { AskController, encryptKey, decryptKey, compatProvider } = require('./ask
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
 const { shapeToModel } = require('./hands/shape');
+const { PresenceControl } = require('./presence');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
@@ -43,7 +44,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -125,6 +126,7 @@ function publicState() {
     hasTtsKeys,
     hasHfToken,
     handsInfo: { status: hands?.status || 'off', message: hands?.message || '' },
+    presenceInfo: { status: presence?.status || 'off', message: presence?.message || '', state: presence?.state || 'unknown', faces: presence?.faces || 0 },
     voiceProblem,
     kokoro: kokoro.status(),
     presetInfo: PRESETS,
@@ -162,6 +164,15 @@ async function setHands(on, { quiet = false } = {}) {
   hands.disable();
   broadcast();
   return { ok: true };
+}
+
+// Presence (opt-in): the camera counts faces so Relay knows when you leave the desk.
+async function setPresence(on) {
+  if (on) {
+    const r = await presence.enable();
+    if (!r.ok) { store.set('settings.presence.enabled', false); ask.notice(r.error, 'failed'); }
+  } else presence.disable();
+  broadcast();
 }
 
 // The camera view in the top right (hands, outlines, gesture, count). Needs hand control on to show anything.
@@ -279,6 +290,7 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
@@ -550,6 +562,8 @@ function registerIpc() {
   });
   ipcMain.handle('remote:tailscale-check', async () => { await remote.refreshTailscale(); broadcast(); return { ok: true }; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
+  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); });
+  ipcMain.handle('presence:status', (_e, st) => { presence?.setStatus(st); });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
   ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
@@ -769,6 +783,20 @@ app.whenReady().then(() => {
     notify: (m) => ask.notice(m, 'failed')
   });
   hands.onChange = () => { rebuildTray(); broadcast(); };
+  presence = new PresenceControl({
+    getConfig: () => store.get('settings.presence'),
+    askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
+    createCamera: async () => {
+      const win = new BrowserWindow({ width: 320, height: 240, show: false, focusable: false, skipTaskbar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
+      win.loadFile(path.join(__dirname, '../renderer/presence.html'));
+      return { close: () => { if (!win.isDestroyed()) win.close(); } };
+    },
+    onAway: () => ask.presenceAway(),
+    onBack: () => ask.presenceBack(),
+    notify: (m) => ask.notice(m, 'failed')
+  });
+  presence.onChange = broadcast;
+  if (store.get('settings.presence.enabled')) presence.enable().then((r) => { if (!r.ok) store.set('settings.presence.enabled', false); broadcast(); });
   ask.onHands = handsCommand;
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
   holos.onChange = () => { rebuildTray(); ask.holosChanged(); };

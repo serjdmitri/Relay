@@ -49,6 +49,7 @@ const DEFAULTS = {
       apps: { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 } // Composio (or any MCP server): its address and key
     },
     holoUi: { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl', pointsPerInch: 125 }, // holograms: where the controls are (menu, side, bar), slow turning, and how long to leave it alone after a touch
+    presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
     hands: { enabled: false, preview: false }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
