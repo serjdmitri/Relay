@@ -4,6 +4,7 @@
 const path = require('path');
 const { buildPlan, applyPlan, undoMoves } = require('./plan');
 const { pathProblem } = require('./guard');
+const { planMake, runMake } = require('./make');
 const { scanFolder, describeScan, findFiles, kindOf, size, day, tilde, OPEN_SAFE } = require('./files');
 
 const PLAN_TTL = 30 * 60 * 1000;
@@ -84,14 +85,40 @@ class Drive {
     return `${bits.join(' and ')}.${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 5).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''} It can be undone with drive_undo.`;
   }
 
-  // Puts the last tidy-up back (files that went to the Trash are put back by the user, from the Trash).
-  undo() {
+  // What drive_make will do, said to the person before it happens; null when there is nothing to do (drive_make then says why).
+  makeConfirmText(raw) {
+    const { jobs } = planMake(raw, { fs: this.fs, home: this.home });
+    if (!jobs.length) return null;
+    const j = jobs[0];
+    if (j.kind === 'zip') return `Zip ${j.sources.length} ${j.sources.length === 1 ? 'item' : 'items'} into ${tilde(j.out, this.home)}? Your originals stay as they are, and it can be undone.`;
+    return `Make ${jobs.length} ${jobs.length === 1 ? 'copy' : 'copies'} as ${j.format.toUpperCase()} next to the originals? Nothing is replaced, and it can be undone.`;
+  }
+
+  async make(raw) {
+    const { jobs, skipped } = planMake(raw, { fs: this.fs, home: this.home });
+    const why = skipped.length ? ` Left alone: ${skipped.slice(0, 6).map((s) => `${path.basename(String(s.path)) || 'request'} (${s.reason})`).join('; ')}` : '';
+    if (!jobs.length) return `Nothing was made.${why}`;
+    const res = await runMake(jobs, { fs: this.fs, home: this.home, exec: this.exec, trashItem: this.trashItem });
+    if (res.made.length) this.log.write([...(this.log.read() || []), { id: `make-${Date.now()}`, ts: Date.now(), done: [], made: res.made, trashed: [] }].slice(-30));
+    const names = res.made.map((m) => tilde(m, this.home)).join(', ');
+    return `${res.made.length ? `Made ${names}. It can be undone with drive_undo.` : 'Nothing was made.'}${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 4).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''}${why}`;
+  }
+
+  // Puts the last thing back: moved files go back where they were, and files Relay made go to the Trash (nothing is deleted; the person can take them back).
+  async undo() {
     const list = this.log.read() || [];
     const last = list.at(-1);
-    if (!last || !last.done?.length) return 'There is nothing to undo.';
-    const { back, left } = undoMoves(last, { fs: this.fs });
+    if (!last || !(last.done?.length || last.made?.length)) return 'There is nothing to undo.';
+    const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs });
+    const gone = [];
+    for (const m of last.made || []) {
+      try { if (!this.fs.existsSync(m)) { left.push({ path: m, reason: 'It is no longer there.' }); continue; } await this.trashItem(m); gone.push(m); } catch (e) { left.push({ path: m, reason: e.message }); }
+    }
     this.log.write(list.slice(0, -1));
-    return `Put ${back.length} back where they were.${left.length ? ` ${left.length} could not be put back: ${left.slice(0, 4).map((l) => `${path.basename(l.path)} (${l.reason})`).join('; ')}.` : ''}${last.trashed?.length ? ` ${last.trashed.length} went to the Trash: open the Trash and choose Put Back.` : ''}`;
+    const bits = [];
+    if (back.length) bits.push(`Put ${back.length} back where ${back.length === 1 ? 'it was' : 'they were'}.`);
+    if (gone.length) bits.push(`Put ${gone.length} ${gone.length === 1 ? 'file' : 'files'} Relay made in the Trash (Put Back there if you want ${gone.length === 1 ? 'it' : 'them'} again).`);
+    return `${bits.join(' ') || 'Nothing could be undone.'}${left.length ? ` ${left.length} could not be put back: ${left.slice(0, 4).map((l) => `${path.basename(l.path)} (${l.reason})`).join('; ')}.` : ''}${last.trashed?.length ? ` ${last.trashed.length} went to the Trash: open the Trash and choose Put Back.` : ''}`;
   }
 
   // A click on a result: a file of a safe kind opens, anything else is shown in Finder.
