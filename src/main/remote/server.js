@@ -57,10 +57,10 @@ class RemoteServer {
     res.end(JSON.stringify(obj));
   }
 
-  body(req) {
+  body(req, max = MAX_BODY) {
     return new Promise((resolve, reject) => {
       let s = '';
-      req.on('data', (c) => { s += c; if (s.length > MAX_BODY) { reject(new Error('too large')); req.destroy(); } });
+      req.on('data', (c) => { s += c; if (s.length > max) { reject(new Error('too large')); req.destroy(); } });
       req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch { reject(new Error('bad json')); } });
     });
   }
@@ -118,6 +118,21 @@ class RemoteServer {
         this.waiters.set(id, (r) => { clearTimeout(timer); resolve(r); });
       });
       await this.control.ask(text, device, id);
+      return this.json(res, 200, await answer);
+    }
+    // Something shared from the phone's share sheet (a photo, a PDF, a web address, some text) with what to do with it: base64 in "data".
+    if (p === '/api/send' && req.method === 'POST') {
+      const b = await this.body(req, 45 * 1024 * 1024).catch(() => null);
+      if (!b || !b.data) return this.json(res, 400, { error: 'Nothing to send, or it was too big (30 MB at most).' });
+      const id = crypto.randomUUID();
+      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || '') }, device, id); return r; };
+      if (!(b.wait === true || /^(true|1|yes)$/i.test(String(b.wait ?? '')))) { const r = await start(); return r?.ok ? this.json(res, 200, { id }) : this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
+      const answer = new Promise((resolve) => {
+        const timer = setTimeout(() => { if (this.waiters.delete(id)) resolve({ id, status: 'working', reply: 'Still working on it. Ask again in a moment.' }); }, this.waitMs ?? 110000);
+        this.waiters.set(id, (r) => { clearTimeout(timer); resolve(r); });
+      });
+      const r = await start();
+      if (!r?.ok) { this.waiters.delete(id); return this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
       return this.json(res, 200, await answer);
     }
     if (p === '/api/holos' && req.method === 'GET') return this.json(res, 200, { holos: this.control.holos?.() || [] });

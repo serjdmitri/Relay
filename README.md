@@ -157,6 +157,9 @@ Settings > General > Holograms and hands: choose **Menu** (one small ⋯ button 
 ### Zoom, cut and edit from the phone
 Pinch the trackpad over a hologram to zoom it. **Cut through it** (in the hologram menu) opens a bar: pick X, Y or Z and slide it, and a plane moves through the model taking material away so you can see inside; the flip button changes which side goes. The phone's model page has the same Cut bar and an **Edit** panel: for a model you designed, change sizes and positions, add, copy and delete shapes, make holes; for any hologram, type what you want changed and Relay does it on the Mac.
 
+### Cut, measure, and the hologram as a file
+**Cut through it** slides a plane through the model along the screen's directions. **Measure** reads the distance between two clicked points in millimetres. Every hologram is also a file: drag the **Drag to an app** button into Fusion, FreeCAD, a slicer, a folder or a message (STL, 3MF or STEP; a setting). Drag a file onto the reactor and Relay asks what to do with it. After Make a Shortcut key in Settings > Remote, **Save “Send to Relay”** makes an iPhone Shortcut for the share sheet.
+
 ### Pull a hologram apart
 Double-click a hologram (or press the four-diamond button) and it comes apart. Drag any piece anywhere, drag one far out to make it its own hologram, or onto another hologram to combine them (Claude decides where it goes). Double-click a piece to close the rest back up without the piece you took. Holograms are drawn without any window or base, anywhere on the display; drag up, down or diagonally to turn one every way, and drag its name to move it. Assemblies split into their real bodies; a single solid model is cut into regions. See the changelog for limits.
 

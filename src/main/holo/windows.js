@@ -1,12 +1,12 @@
 // The Electron side of the holograms: the window itself, and the messages the hologram page sends.
 
-const { BrowserWindow, screen, ipcMain, app, shell } = require('electron');
+const { BrowserWindow, screen, ipcMain, app, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { sanitizeCad } = require('../models/cad');
 const { cleanFree } = require('./fit');
 const { installedApps, known } = require('./apps3d');
-const { uniquePath } = require('./logic');
+const { uniquePath, safeName } = require('./logic');
 
 // A window with no frame, no shadow and no background (as big as the display it is placed on): only what the page draws is there. It never takes the keyboard.
 function createHoloWindow({ preload, width, height }) {
@@ -48,6 +48,26 @@ function registerHoloIpc(mgr) {
   // Saves a model as a file in Downloads/Relay 3D (never over a file that is there).
   ipcMain.handle('holo:glb', (e, r) => { mgr.finishGlb(of(e), r); });
   ipcMain.handle('holo:slicers', () => installedApps((p) => fs.existsSync(p), app.getPath('home')));
+  // The hologram as a file, to be dragged into another app: written to a folder of Relay's (one per hologram), not to your files.
+  try { fs.rmSync(path.join(app.getPath('userData'), 'hologram-files'), { recursive: true, force: true }); } catch { /* a leftover is harmless */ }
+  ipcMain.handle('holo:stage', async (e, d) => {
+    const h = of(e);
+    if (!h || !d || !(d.bytes instanceof Uint8Array || Buffer.isBuffer(d.bytes)) || d.bytes.length < 84 || d.bytes.length > 200 * 1024 * 1024) return { ok: false };
+    const ext = ['stl', '3mf', 'step'].includes(d.ext) ? d.ext : 'stl';
+    const dir = path.join(app.getPath('userData'), 'hologram-files', String(h.id).replace(/[^\w-]/g, '').slice(0, 64));
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${safeName(d.name)}.${ext}`);
+    fs.writeFileSync(file, Buffer.from(d.bytes));
+    h.stagedFile = file;
+    return { ok: true, path: file };
+  });
+  ipcMain.on('holo:dragstart', (e) => {
+    const h = of(e);
+    if (!h?.stagedFile || !fs.existsSync(h.stagedFile)) return;
+    const icon = nativeImage.createFromPath(path.join(__dirname, '../../../assets/icon.png')).resize({ width: 64, height: 64 });
+    try { e.sender.startDrag({ file: h.stagedFile, icon }); } catch { /* the system refused the drag */ }
+  });
   ipcMain.handle('holo:save', async (e, d) => {
     const res = (r) => { mgr.finishSave(of(e), r); return r; };
     try {

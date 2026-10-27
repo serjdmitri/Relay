@@ -71,6 +71,7 @@
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); will-change: transform; }
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)); }
   /* the glow is part of the scaled picture, so at .27 it would shrink to a thread: widen it by the same factor to keep the same glow as the big one */
+  #hud.dropping #hudc { filter: drop-shadow(0 0 14px rgba(76, 194, 255, 1)) drop-shadow(0 0 60px rgba(76, 194, 255, .8)); }
   #hud.corner #hudc { filter: drop-shadow(0 0 17px rgba(0, 212, 255, .85)) drop-shadow(0 0 70px rgba(0, 160, 230, .55)) drop-shadow(0 6px 17px rgba(0, 12, 28, .8)); }
   /* a glow in the reactor's own cyan, and a soft dark shadow so it reads on a white window too */
   #hud.snap #hudR, #hud.snap #hudT { transition: none !important; }

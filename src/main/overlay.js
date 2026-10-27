@@ -267,6 +267,37 @@ class Overlay {
     }
   }
 
+  // A file dragged onto the reactor: the overlay window is click-through, so while the mouse button is held and the pointer is over the reactor it
+  // takes the mouse (and so the drop), and gives it back when the button goes up. The page says where the reactor is.
+  dropWatch(down) {
+    if (down) {
+      if (!this.hudEntry || this.dropTimer) return;
+      this.dropTimer = setInterval(() => this.dropCheck(), 80);
+      this.dropCheck();
+    } else {
+      if (this.dropTimer) { clearInterval(this.dropTimer); this.dropTimer = null; }
+      setTimeout(() => this.dropRestore(), 250); // let a drop that is happening finish first
+    }
+  }
+
+  async dropCheck() {
+    const e = this.hudEntry;
+    if (!e || e.win.isDestroyed() || e.interactive || this.dropBusy) return;
+    this.dropBusy = true;
+    try {
+      const l = this.local(e, screen.getCursorScreenPoint());
+      const inside = !!(await e.win.webContents.executeJavaScript(`window.__hudHit ? window.__hudHit(${Math.round(l.x)}, ${Math.round(l.y)}) : false`).catch(() => false));
+      if (inside !== !!e.accepting) { e.accepting = inside; e.win.setIgnoreMouseEvents(!inside); }
+    } finally { this.dropBusy = false; }
+  }
+
+  dropRestore() {
+    const e = this.hudEntry;
+    if (!e || !e.accepting || e.win.isDestroyed()) return;
+    e.accepting = false;
+    if (!e.interactive) e.win.setIgnoreMouseEvents(true);
+  }
+
   // "Hey Jarvis" is listening: the ring shows a quiet sign of it.
   setArmed(on) {
     this.armed = !!on;

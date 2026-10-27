@@ -365,4 +365,10 @@
   function focusInput() { if (shownState === 'input') inEl.focus(); }
 
   window.Hud = { apply, focusInput, setSpeaking, get on() { return on; } };
+  // Where the reactor is, for a file dragged onto it (the page is click-through until then): is this point (in the window's pixels) on the reactor?
+  window.__hudHit = (x, y) => {
+    if (!hud.classList.contains('on')) return false;
+    const r = document.getElementById('hudR').getBoundingClientRect();
+    return Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)) <= (r.width / 3) * 1.12;
+  };
 })();

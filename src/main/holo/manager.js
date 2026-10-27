@@ -97,7 +97,7 @@ class HoloManager {
 
   ui() {
     const u = this.getUi() || {};
-    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)) };
+    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
   }
 
   // Settings changed: every hologram takes the new look at once.

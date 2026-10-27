@@ -87,14 +87,17 @@ async function showModel() {
   const tn = new THREE.Vector3(), tp = new THREE.Vector3();
   const updateClip = () => {
     if (!clip.on) { clipPlane.set(tn.set(0, -1, 0), 1e6); sheet.visible = false; return; }
+    // the screen's planes: X left to right, Y up and down, Z front to back, whatever way the model is turned
     pivot.updateMatrixWorld(true);
+    const wb = new THREE.Box3().setFromObject(pivot);
+    if (wb.isEmpty()) return;
     const sign = clip.flip ? -1 : 1;
-    const half = (localBox.max.getComponent(clip.axis) - localBox.min.getComponent(clip.axis)) / 2;
-    tp.copy(localBox.getCenter(new THREE.Vector3())).addScaledVector(AX[clip.axis], sign * clip.t * half);
-    const pw = model.localToWorld(tp.clone());
-    tn.copy(AX[clip.axis]).multiplyScalar(sign).transformDirection(pivot.matrixWorld);
+    const half = (wb.max.getComponent(clip.axis) - wb.min.getComponent(clip.axis)) / 2;
+    tp.copy(wb.getCenter(new THREE.Vector3())).addScaledVector(AX[clip.axis], sign * clip.t * half * 1.02);
+    const pw = tp.clone();
+    tn.copy(AX[clip.axis]).multiplyScalar(sign);
     clipPlane.set(tn.clone().negate(), tn.dot(pw));
-    const sz = localBox.getSize(new THREE.Vector3()).length() * unit * 0.62;
+    const sz = wb.getSize(new THREE.Vector3()).length() * 0.62;
     sheet.visible = true; sheet.position.copy(pw); sheet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tn); sheet.scale.set(sz, sz, 1);
   };
 
@@ -118,7 +121,7 @@ async function showModel() {
   const spin = new THREE.Quaternion();
   const loop = (now) => {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (now - touchedAt > 6000 && !editingNow()) { spin.setFromAxisAngle(qy, dt * 0.4); pivot.quaternion.premultiply(spin).normalize(); }
+    if (now - touchedAt > 6000 && !editingNow() && !clip.on) { spin.setFromAxisAngle(qy, dt * 0.4); pivot.quaternion.premultiply(spin).normalize(); }
     updateClip();
     renderer.render(scene, camera);
     requestAnimationFrame(loop);

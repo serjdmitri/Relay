@@ -15,7 +15,7 @@ app.whenReady().then(async () => {
   holoWin.registerHoloIpc(mgr);
   const result = {};
   try {
-    const found = await findStls('skull', { n: 3 });
+    const found = await findStls(process.env.QUERY || 'skull', { n: 3 });
     const opts = found.map((m) => ({ kind: 'stl', title: m.title, url: m.url, credit: m.credit }));
     const wa = holoWin.area();
     const id = await mgr.show({ title: 'Human skull', items: [{ kind: 'stl', title: found[0].title, credit: found[0].credit, url: found[0].url, bytes: await downloadStl(found[0].url) }], options: { list: opts, index: 0 }, x: Math.round(wa.x + wa.width * 0.5), y: Math.round(wa.y + wa.height * 0.4) });
@@ -46,7 +46,8 @@ app.whenReady().then(async () => {
     const px = async () => { const img = h.win.webContents.capturePage ? await h.win.webContents.capturePage() : null; const b = img.toBitmap(); const sz = img.getSize(); let lit = 0; for (let i = 0; i < b.length; i += 4) if (b[i] + b[i + 1] + b[i + 2] > 120) lit++; return { lit, sz }; };
     const shot = async (name) => { await wait(250); fs.writeFileSync(path.join(out, name), (await h.win.webContents.capturePage()).toPNG()); };
     result.full = await px(); await shot('cut-0-full.png');
-    result.cutOn = await T('cut(true, 1, 0.0)'); await wait(300); await shot('cut-1-half-y.png'); result.half = await px();
+    result.info = await T('info()');
+    result.cutOn = await T('cut(true, 1, 0.0)'); result.info2 = await T('info()'); await wait(300); await shot('cut-1-half-y.png'); result.half = await px();
     result.cutLow = await T('cut(true, 1, -0.5)'); await wait(300); await shot('cut-2-low-y.png'); result.low = await px();
     result.cutX = await T('cut(true, 0, 0.0)'); await wait(300); await shot('cut-3-half-x.png'); result.halfX = await px();
     result.flip = await T('cut(true, 0, 0.0, true)'); await wait(300); await shot('cut-4-flipped.png');
