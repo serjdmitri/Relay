@@ -439,6 +439,10 @@ async function runQuick(cmd, mac, ctx = {}) {
       if (!ctx.ocr) return null;
       return { tool: 'ocr', input: { source: cmd.source, mode: cmd.mode }, reply: await ctx.ocr(cmd), readonly: true };
     }
+    case 'holo-realsize': {
+      if (!ctx.holoReal) return null;
+      return { tool: 'holo_realsize', input: { mm: cmd.mm }, reply: await ctx.holoReal(cmd.mm), readonly: true };
+    }
     case 'holo-library': case 'holo-find': case 'holo-open': case 'scene-save': case 'scene-open': case 'scene-list': case 'scene-delete': {
       if (!ctx.holoLib) return null;
       const r = await ctx.holoLib(cmd);

@@ -1482,6 +1482,15 @@ class AskController {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
   }
 
+  // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).
+  async holoRealSize(mm) {
+    const h = this.holos.latest();
+    if (!h) return 'There is no hologram on screen.';
+    const r = await this.holos.requestRealSize(h, mm);
+    if (r.ok) return `Life size: ${r.mm} mm long, as it would be on your desk. Calibrate your screen in Settings if it looks off.`;
+    return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
+  }
+
   // Library and scenes of holograms, by voice. Returns the reply, or null to leave it to the model (nothing to bring back by that name).
   async holoLibraryCommand(cmd) {
     const lib = this.holos.library;
@@ -1579,6 +1588,7 @@ class AskController {
       prevApp: this.prevApp,
       runningApps: this.lastApps,
       layouts: this.layouts(),
+      holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
       holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),
       ocr: (cmd) => this.readScreenText(cmd),

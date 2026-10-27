@@ -38,6 +38,7 @@ class HoloManager {
     this.dragging = null;
     this.onChange = () => {};
     this.onAsk = async () => {};
+    this.onAnnotate = async () => {}; // (hologram, { item, p, n }): a spot was picked for a note
     this.onFiles = async () => {}; // (hologram, paths): files were dropped on it // (hologram, { region, part }): the user asks Relay about it
   }
 
@@ -89,6 +90,21 @@ class HoloManager {
     });
   }
 
+  // Asks the page to show the model at life size. mm: how long its longest side really is, when the model itself does not know (a designed
+  // model knows). Resolves with { ok, mm } or { ok: false, reason }.
+  requestRealSize(h, mm = 0) {
+    return new Promise((resolve) => {
+      h.pendingReal = resolve;
+      h.win.webContents.send('holo:state', 'real-size', { mm: +mm || 0 });
+      const t = setTimeout(() => { if (h.pendingReal === resolve) { h.pendingReal = null; resolve({ ok: false, reason: 'It took too long.' }); } }, 8000);
+      t.unref?.();
+    });
+  }
+
+  finishRealSize(h, r) {
+    if (h?.pendingReal) { const f = h.pendingReal; h.pendingReal = null; f(r && typeof r === 'object' ? r : { ok: false, reason: 'No answer.' }); }
+  }
+
   finishGlb(h, r) {
     if (h?.pendingGlb) { const f = h.pendingGlb; h.pendingGlb = null; f(r && r.bytes ? { bytes: Buffer.from(r.bytes), mm: !!r.mm } : null); }
   }
@@ -99,7 +115,7 @@ class HoloManager {
 
   ui() {
     const u = this.getUi() || {};
-    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
+    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl', pointsPerInch: Math.min(400, Math.max(50, Number(u.pointsPerInch) || 125)) };
   }
 
   // Settings changed: every hologram takes the new look at once.

@@ -552,6 +552,14 @@ const PAGES = {
     const hcard = h('<div class="card flat"></div>');
     hcard.append(segRow('Buttons on a hologram', 'Menu: one small ⋯ button that opens the list. Side: a slim column beside the model. Bar: a row under its name. All stay clear of the model.', [['menu', 'Menu'], ['side', 'Side'], ['bar', 'Bar']], hv.controls, (v) => relay.set('settings.holoUi.controls', v)));
     hcard.append(segRow('File when I drag a hologram into an app', 'The hologram button "Drag to an app" hands over the model as a file you can drop into Fusion, FreeCAD, a slicer, a folder or a message. STL for printing, 3MF for slicers (keeps millimetres), STEP for CAD.', [['stl', 'STL'], ['3mf', '3MF'], ['step', 'STEP']], hv.dragFormat || 'stl', (v) => relay.set('settings.holoUi.dragFormat', v)));
+    {
+      const ppi0 = hv.pointsPerInch || 125;
+      const cal = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Screen size (for real size)</div><div class="d">Hold a credit card flat against the screen and drag the slider until the outline below is exactly as wide as the card. Then “show it life size” is true to the millimetre.</div></div><div style="flex-basis:100%;padding-top:8px"><div id="calcard" style="height:${Math.round(53.98 / 25.4 * ppi0)}px;width:${Math.round(85.6 / 25.4 * ppi0)}px;border:2px solid var(--accent,#59dcff);border-radius:${Math.round(3.2 / 25.4 * ppi0)}px;margin-bottom:10px"></div><input id="calsl" type="range" min="70" max="260" step="1" value="${ppi0}" style="width:260px"> <span id="calv">${ppi0}</span> points per inch</div></div>`);
+      const sl = $('#calsl', cal);
+      sl.oninput = () => { const v = +sl.value; const c = $('#calcard', cal); c.style.width = `${Math.round(85.6 / 25.4 * v)}px`; c.style.height = `${Math.round(53.98 / 25.4 * v)}px`; c.style.borderRadius = `${Math.round(3.2 / 25.4 * v)}px`; $('#calv', cal).textContent = v; };
+      sl.onchange = () => relay.set('settings.holoUi.pointsPerInch', +sl.value);
+      hcard.append(cal);
+    }
     hcard.append(toggleRow('Holograms slowly turn', 'A hologram turns by itself until you touch it.', 'settings.holoUi.spin'));
     hcard.append(segRow('Leave it still after I touch it', 'How long before it starts turning again.', [[3, '3 s'], [10, '10 s'], [30, '30 s'], [120, '2 min']], hv.spinDelay, (v) => relay.set('settings.holoUi.spinDelay', Number(v))));
     const hs = S.handsInfo || { status: 'off', message: '' };

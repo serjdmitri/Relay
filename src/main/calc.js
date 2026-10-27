@@ -189,4 +189,15 @@ function calc(text) {
   }
 }
 
-module.exports = { calc, fmt, convert, wordsToNumber, tokenize, UNITS };
+// "30 cm", "twelve inches", "1.5 meters long", "4 feet": a length in millimetres, or null.
+function lengthToMm(text) {
+  const q = String(text || '').toLowerCase().replace(/\b(?:long|wide|tall|high|across|big|in size|in length)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = q.match(new RegExp(`^(.+?)\\s*(${UNIT_RE})$`));
+  if (!m) return null;
+  const v = numberText(m[1]);
+  const u = lookup.get(m[2].trim());
+  if (v === null || !u || u.kind !== 'length' || !(v > 0)) return null;
+  return convert(v, u, lookup.get('mm'));
+}
+
+module.exports = { lengthToMm, calc, fmt, convert, wordsToNumber, tokenize, UNITS };

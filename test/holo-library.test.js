@@ -135,3 +135,13 @@ test('quick commands route the library and scenes, and leave an unknown hologram
   assert.equal(await runQuick(parseQuick('show my holograms'), {}, {}), null, 'no library: left to the model');
   assert.deepEqual(seen, ['scene-list', 'holo-open']);
 });
+
+test('life size: the phrases, and a length said in any unit', () => {
+  const P = parseHoloCommand;
+  assert.deepEqual(P('show it life size'), { type: 'holo-realsize', mm: 0 });
+  assert.deepEqual(P('real size'), { type: 'holo-realsize', mm: 0 });
+  assert.deepEqual(P('show it at real size, it is 30 cm long'), { type: 'holo-realsize', mm: 300 });
+  assert.equal(P('actual size about 2 meters').mm, 2000);
+  assert.equal(Math.round(P('life size it is 12 inches').mm), 305);
+  assert.equal(P('show it life size it is blue'), null);
+});
