@@ -804,7 +804,7 @@ class AskController {
     this.onChange();
     if (a.status !== 'stopped') this.sound(a.status === 'done' ? 'Pop' : 'Basso');
     this.onAgentDone?.(a);
-    this.phone.jobDone({ text: a.task, reply: a.result, status: a.status, agent: true });
+    this.phone?.jobDone({ text: a.task, reply: a.result, status: a.status, agent: true });
   }
 
   runAgentCommand(cmd) {
@@ -1933,7 +1933,7 @@ class AskController {
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
-    this.phone.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
+    this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
     if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, profileFor(jobFor(reply, res.job), this.store.get('settings') || {}));
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
