@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { shapeToModel } = require('./hands/shape');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
@@ -763,6 +764,7 @@ app.whenReady().then(() => {
       return { moveTo: (pt) => { if (!win.isDestroyed()) { if (!win.isVisible()) win.showInactive(); win.setPosition(Math.round(pt.x - 28), Math.round(pt.y - 28)); } }, hide: () => { if (!win.isDestroyed()) win.hide(); }, close: () => { if (!win.isDestroyed()) win.close(); }, setState: (c) => { if (!win.isDestroyed()) win.webContents.executeJavaScript(`document.body.className=${JSON.stringify(String(c).replace(/[^a-z]/g, ''))}`).catch(() => {}); } };
     },
     air: (type, x, y) => overlay.air(type, x, y),
+    shape: (r) => { const m = shapeToModel(r); if (m) holos.show({ title: m.title, items: [{ kind: 'shapes', title: m.title, credit: 'Drawn in the air', parts: m.parts }], x: Math.round(r.cx), y: Math.round(r.cy), scale: m.scale }).catch(() => {}); },
     onMic: (id) => ask.listenFromHand(id).catch(() => {}),
     notify: (m) => ask.notice(m, 'failed')
   });

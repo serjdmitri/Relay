@@ -4,14 +4,16 @@
 // on only while this is on, and no picture is ever kept or sent. The window and the camera are injected, so the mapping is tested.
 
 const { HandPointer } = require('./logic');
+const { recognizeStroke } = require('./shape');
 
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, preview = false, now = Date.now }) {
-    Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, now });
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now }) {
+    Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.preview = !!preview; // the camera view in the top right of the screen (what the hand finder sees, its hand outlines, the gesture and the hand count)
-    this.drawing = false; // a pinch held in empty space draws a glowing line in the air
+    this.drawing = false; // a fist in one hand and a pinch in the other: the pinching hand draws a glowing line in the air, and a rough shape becomes a model
+    this.stroke = []; // the points of what is being drawn, in screen points
     this.enabled = false;
     this.status = 'off';
     this.message = '';
@@ -119,7 +121,7 @@ class HandControl {
   async handle(e) {
     if (!this.enabled) return;
     if (this.preview && e.type !== 'move') { try { this.cam?.action?.({ type: e.type, dir: e.dir, open: e.open, factor: e.factor }); } catch { /* the view is only a hint */ } }
-    if (e.type === 'lost') { if (this.drawing) { this.drawing = false; this.air('end', 0, 0); } this.release(); this.ring?.hide?.(); this.pos = null; return; }
+    if (e.type === 'lost') { if (this.drawing) { this.drawing = false; this.air('end', 0, 0); this.stroke = []; } this.release(); this.ring?.hide?.(); this.pos = null; return; }
     if (e.type === 'scale') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-scale', e.factor); return; }
     if (e.type === 'twist') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-twist', e.angle); return; }
     if (e.type === 'pull') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-explode', e.open); return; }
@@ -127,8 +129,20 @@ class HandControl {
     const pt = this.toScreen(e);
     this.pos = pt;
     this.ring?.moveTo?.(pt);
+    if (e.type === 'drawstart') { this.release(); this.drawing = true; this.stroke = [pt]; this.ringState('pinch'); this.air('start', pt.x, pt.y); return; }
+    if (e.type === 'drawmove') { if (this.drawing) { this.stroke.push(pt); this.air('point', pt.x, pt.y); } return; }
+    if (e.type === 'drawend') {
+      if (!this.drawing) return;
+      this.drawing = false;
+      this.air('end', pt.x, pt.y);
+      this.ringState('open');
+      const r = recognizeStroke(this.stroke);
+      this.stroke = [];
+      if (r.kind !== 'none') this.shape(r);
+      else if (r.why === 'unclear' || r.why === 'not closed') this.notify('That did not look like a circle, a box, a triangle or a line. Draw it a little bigger and close the shape.');
+      return;
+    }
     if (e.type === 'move') {
-      if (this.drawing) { this.air('point', pt.x, pt.y); return; }
       this.ringState(e.held ? 'held' : 'open');
       const h = this.target(pt);
       if (h) { const now = this.now(); if (now - this.lastMoveSent >= 16) { this.lastMoveSent = now; this.send(h, 'mouseMove', pt, this.captured ? { modifiers: ['leftButtonDown'] } : {}); } }
@@ -145,8 +159,8 @@ class HandControl {
       return;
     }
     if (e.type === 'release') { this.ringState('open'); this.release(); return; }
-    if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (!h) { this.drawing = true; this.air('start', pt.x, pt.y); return; } if (h) { this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; }
-    if (e.type === 'pinchup') { this.ringState('open'); if (this.drawing) { this.drawing = false; this.air('end', pt.x, pt.y); return; } this.release(); return; }
+    if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (h) { this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; } // a pinch held on a hologram turns it; drawing needs the other hand to be a fist
+    if (e.type === 'pinchup') { this.ringState('open'); this.release(); return; }
     if (e.type === 'click') {
       this.ringState('click');
       setTimeout(() => this.ringState('open'), 220);
