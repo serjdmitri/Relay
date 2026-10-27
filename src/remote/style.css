@@ -47,3 +47,23 @@ header button { background: none; border: 0; color: var(--dim); font-size: 22px;
 #vbar button:active { background: var(--acc); color: #00141c; }
 #vmsg { text-align: center; min-height: 1.4em; padding: 0 20px; font-size: 14px; }
 #holobtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-left: auto; margin-right: 6px; }
+
+#vtools { display: flex; gap: 10px; padding: 6px 20px 0; }
+#vtools button { flex: 1; padding: 10px 0; border-radius: 12px; border: 1px solid rgba(0, 212, 255, .35); background: rgba(0, 30, 50, .55); color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: .06em; }
+#vtools button.on { background: var(--acc); color: #00141c; }
+.panel { margin: 8px 20px 0; padding: 10px 12px; border-radius: 16px; background: var(--card); border: 1px solid rgba(0, 212, 255, .3); max-height: 36vh; overflow-y: auto; }
+.panel[hidden] { display: none; }
+.prow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.plbl { flex: 1; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+#cutax { display: flex; gap: 4px; }
+#pcut button, #cadact button, #addrow button, #chips button, #tell button { min-width: 40px; height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(0, 212, 255, .35); background: rgba(0, 20, 36, .7); color: var(--ink); font-size: 14px; font-weight: 600; }
+#pcut button.on, #chips button.on, #cadact button.on { background: var(--acc); color: #00141c; }
+#cutr { width: 100%; height: 34px; accent-color: var(--acc); }
+#tell { display: flex; gap: 8px; margin-bottom: 8px; }
+#tell input { flex: 1; text-align: left; font-size: 16px; padding: 10px 12px; }
+#tell button { background: var(--acc); color: #00141c; }
+#chips, #addrow, #cadact { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+#fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 8px; margin: 8px 0; }
+#fields label { display: grid; gap: 2px; font-size: 11px; letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
+#fields input { width: 100%; padding: 8px 6px; font-size: 16px; text-align: center; border-radius: 10px; }
+#fields input { background: rgba(0, 20, 36, .8); color: var(--ink); border: 1px solid rgba(0, 212, 255, .35); outline: 0; }

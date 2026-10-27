@@ -492,6 +492,28 @@ class AskController {
     return [...(this.holos?.holos.values() || [])].map((h) => ({ id: h.id, title: h.title, pinned: !!h.pinned, designed: h.items.some((i) => i.kind === 'cad') }));
   }
 
+  // The shapes of a designed hologram, for editing on the phone.
+  remoteHoloCad(id) {
+    const h = this.holos?.get(id);
+    return h?.items.find((i) => i.kind === 'cad')?.cad || null;
+  }
+
+  // The phone changed the shapes: checked like a change made by hand on the Mac, then the hologram on the Mac shows it.
+  remoteSetHoloCad(id, cad) {
+    const h = this.holos?.get(id);
+    const index = h ? h.items.findIndex((i) => i.kind === 'cad') : -1;
+    if (index < 0) return false;
+    try { return this.holos.setCad(h, index, cadModel.sanitizeCad(cad), { push: true }); } catch { return false; }
+  }
+
+  // "Tell Relay what to change" about one hologram, from the phone: the request knows which hologram it is about.
+  async remoteHoloAsk(id, text, device) {
+    const h = this.holos?.get(id);
+    if (!h) return null;
+    this.holoFocus = { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), piece: null, ts: Date.now() };
+    return this.remoteAsk(text, device);
+  }
+
   async remoteHoloModel(id) {
     const h = this.holos?.get(id);
     if (!h) return null;
