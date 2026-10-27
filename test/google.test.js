@@ -101,3 +101,34 @@ test('sending asks first; reading does not', () => {
   assert.match(t.gmail_send.confirm({ to: 'a@b.c', subject: 'Hello', account: 'me@gmail.com' }), /Send "Hello" to a@b\.c from me@gmail\.com/);
   for (const n of ['gmail_search', 'gmail_read', 'gmail_draft', 'gcal_events', 'gcal_create']) assert.equal(t[n].confirm, undefined, n);
 });
+
+test('Drive search, reading a Doc and a Sheet, and adding rows', async () => {
+  const { g, calls } = api({
+    '/drive/v3/files?': { files: [{ id: 'f1', name: 'Budget', mimeType: 'application/vnd.google-apps.spreadsheet', modifiedTime: 't', webViewLink: 'L' }] },
+    '/export?': () => ({ ok: true, status: 200, text: async () => 'a,b\n1,2' }),
+    'fields=name,mimeType': { name: 'Budget', mimeType: 'application/vnd.google-apps.spreadsheet' },
+    '/values/Sheet1:append': { updates: { updatedRows: 2, updatedRange: 'Sheet1!A5:B6' } },
+    '/values/': { range: 'A1:B2', values: [['a', 'b'], ['1', '2']] }
+  });
+  const found = await g.driveSearch(null, "it's budget", 5);
+  assert.equal(found[0].id, 'f1');
+  const q = new URL(calls.at(-1).url).searchParams.get('q');
+  assert.equal(q, "fullText contains 'it s budget' and trashed = false", 'a quote in the words cannot break out of the query');
+  const f = await g.driveRead(null, 'f1');
+  assert.equal(f.text, 'a,b\n1,2');
+  assert.match(calls.at(-1).url, /export\?mimeType=text%2Fcsv/);
+  assert.deepEqual((await g.sheetRead(null, 's1', 'A1:B2')).rows, [['a', 'b'], ['1', '2']]);
+  const r = await g.sheetAppend(null, 's1', 'Sheet1', [['x', 1], ['y', 2]]);
+  assert.equal(r.updated, 2);
+  assert.deepEqual(calls.at(-1).body, { values: [['x', 1], ['y', '2'].map(String)].map((row, i) => (i ? ['y', 2] : row)) });
+  await assert.rejects(() => g.sheetAppend(null, 's1', 'Sheet1', []), /no rows/);
+  const tools = googleTools(g);
+  const add = tools.find((t) => t.name === 'sheet_append');
+  assert.match(add.confirm({ rows: [['a']] }), /Add 1 row/);
+  assert.ok(['drive_search', 'drive_read', 'sheet_read'].every((n) => tools.some((t) => t.name === n)));
+});
+
+test('a file that is not text is refused, not downloaded', async () => {
+  const { g } = api({ 'fields=name,mimeType': { name: 'pic.png', mimeType: 'image/png' } });
+  await assert.rejects(() => g.driveRead(null, 'x'), /cannot read as text/);
+});
