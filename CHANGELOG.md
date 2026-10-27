@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.1
+
+- **Settings > General > Hugging Face token > Test it.** Makes a model of a car from the clearest photo with the generators in order, puts it on screen as a hologram, and lists what each generator did (made it in N s, or why not: no token, quota used up, service changed).
+
 ## 0.23.0
 
 - **Better photos in, better models out.** Relay now collects up to eight photos of the thing (from several searches, not just one), looks at each, and sends the **clearest** one to the generator: a whole object on a plain background, seen from the side or a corner, big and sharp, beats a busy scene, an object cut off by the edge, or a close-up of a part. A title that says "interior", "gauge", "diagram" and the like counts against a photo hard. Real test: for "Toyota Corolla" the first photo Commons returned was a **fuel gauge** and the model came out a gauge; Relay now skips it and builds the actual car from the best photo.

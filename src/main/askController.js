@@ -564,6 +564,24 @@ class AskController {
     return { kind: 'glb', title: c.title, credit: label(made.name), ...(file ? { file } : {}), bytes: made.bytes, engine: made.engine };
   }
 
+  // Settings > General > Test it: makes a model of a car from the clearest photo with the generators in order, shows it as a hologram, and
+  // reports what each generator did (so a missing token, a used-up quota or a changed service is visible, not guessed).
+  async testPhotoModels() {
+    const token = this.hfToken();
+    const found = await findPhotos('Toyota Corolla', { n: 6 });
+    const best = (await this.rankedPhotos(found, 1))[0];
+    if (!best) return { ok: false, error: 'No sample photo could be fetched.', hasToken: !!token, attempts: [] };
+    const t0 = Date.now();
+    try {
+      const made = await photoToModel({ bytes: best.bytes, type: best.type || 'image/jpeg' }, { token, order: this.engineOrder() });
+      const item = { kind: 'glb', title: 'Test model', credit: `${best.credit ? `${best.credit} · ` : ''}made into 3D from a photo with ${made.name}`, bytes: made.bytes, engine: made.engine };
+      if (this.holos) await this.holos.show({ title: `Test: ${made.name}`, items: [item] });
+      return { ok: true, engine: made.engine, name: made.name, seconds: +((Date.now() - t0) / 1000).toFixed(1), attempts: made.attempts, hasToken: !!token };
+    } catch (e) {
+      return { ok: false, error: e.message, attempts: e.attempts || [], hasToken: !!token };
+    }
+  }
+
   // Photos of the thing, the clearest first: each is fetched and scored (a whole object on a plain background beats a busy scene, a part or
   // a diagram), so the best goes to the generator first.
   async rankedPhotos(photos, limit = 3) {

@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('relay', {
   recentAsk: (text) => invoke('recent:ask', text),
   onRecent: (cb) => on('recent:state', cb),
   openExternal: (url) => invoke('app:open-link', url),
+  testModels3d: () => invoke('models3d:test'),
   setHfToken: (t) => invoke('models3d:set-hf-token', t),
   setTtsKey: (engine, key) => invoke('tts:set-key', engine, key),
   testTts: () => invoke('tts:test'),

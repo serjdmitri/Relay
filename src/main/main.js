@@ -316,6 +316,7 @@ function registerIpc() {
     voices: (await speaker.voiceList()).filter((v) => v.kind !== 'Novelty' && v.lang.startsWith('en')),
     picked: await speaker.resolve(store.get('settings.voice'))
   }));
+  ipcMain.handle('models3d:test', () => ask.testPhotoModels().catch((e) => ({ ok: false, error: e.message, attempts: [] })));
   ipcMain.handle('models3d:set-hf-token', (_e, token) => {
     const t = String(token || '').trim();
     if (t && !/^hf_[A-Za-z0-9]{20,}$/.test(t)) return { ok: false, error: 'That does not look like a Hugging Face token (it starts with hf_). Make a free one at huggingface.co/settings/tokens (a "read" token is enough).' };
