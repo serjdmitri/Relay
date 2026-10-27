@@ -98,6 +98,8 @@ function publicState() {
     hasTtsKeys[id] = !!decryptKey(d.settings.tts[id].keyEnc);
     delete d.settings.tts[id].keyEnc;
   }
+  const hasHfToken = !!decryptKey(d.settings.hfTokenEnc);
+  delete d.settings.hfTokenEnc;
   const cn = d.settings.connectors || {};
   const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { clientId: cn.google?.clientId || '', hasSecret: !!decryptKey(cn.google?.clientSecretEnc), accounts: (cn.google?.accounts || []).map((a) => a.email) }, apps: { connected: !!(cn.apps?.url && decryptKey(cn.apps?.keyEnc)), url: cn.apps?.url ? (() => { try { return new URL(cn.apps.url).host; } catch { return ''; } })() : '', count: cn.apps?.count || 0, headerName: cn.apps?.headerName || 'x-api-key' } };
   delete d.settings.connectors;
@@ -114,6 +116,7 @@ function publicState() {
     hasKey,
     hasKeys,
     hasTtsKeys,
+    hasHfToken,
     voiceProblem,
     kokoro: kokoro.status(),
     presetInfo: PRESETS,
@@ -313,6 +316,13 @@ function registerIpc() {
     voices: (await speaker.voiceList()).filter((v) => v.kind !== 'Novelty' && v.lang.startsWith('en')),
     picked: await speaker.resolve(store.get('settings.voice'))
   }));
+  ipcMain.handle('models3d:set-hf-token', (_e, token) => {
+    const t = String(token || '').trim();
+    if (t && !/^hf_[A-Za-z0-9]{20,}$/.test(t)) return { ok: false, error: 'That does not look like a Hugging Face token (it starts with hf_). Make a free one at huggingface.co/settings/tokens (a "read" token is enough).' };
+    store.set('settings.hfTokenEnc', t ? encryptKey(t) : '');
+    broadcast();
+    return { ok: true };
+  });
   ipcMain.handle('tts:set-key', (_e, engine, key) => {
     if (!['openai', 'elevenlabs'].includes(engine)) return;
     store.set(`settings.tts.${engine}.keyEnc`, encryptKey(String(key || '').trim()));

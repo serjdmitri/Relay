@@ -16,6 +16,7 @@ const DEFAULTS = {
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
     wake: { enabled: false, phrase: 'hey jarvis' }, // listen for a wake phrase while Relay is idle (on-device)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
+    hfTokenEnc: '', // an optional free Hugging Face token: more free GPU time for the better 3D generators (TRELLIS)
     models3dFromPhotos: true, // make realistic 3D models from real photos with a free online service (only the public photo is sent)
     models3d: true, // show a 3D model you can turn: a real one when there is one, else built from shapes
     cards: true, // answer cards with a picture, facts and links

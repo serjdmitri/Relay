@@ -50,7 +50,7 @@ async function call(fetchImpl, base, session, fnIndex, data, timeoutMs) {
 const fileValue = (d) => (d && typeof d === 'object' ? d.value ?? d : null);
 
 // photo: { bytes, type }. Returns the GLB as a Buffer.
-async function photoToGlb(photo, { fetchImpl = fetch, base = BASE, timeoutMs = 150000 } = {}) {
+async function photoToGlb(photo, { fetchImpl = fetch, base = BASE, timeoutMs = 150000, texture = 2048, foreground = 0.85 } = {}) {
   const session = Math.random().toString(36).slice(2, 12);
   const form = new FormData();
   form.append('files', new Blob([photo.bytes], { type: photo.type }), `photo.${photo.type.split('/')[1] || 'jpg'}`);
@@ -60,9 +60,9 @@ async function photoToGlb(photo, { fetchImpl = fetch, base = BASE, timeoutMs = 1
   if (!paths?.[0]) throw new Sf3dError(friendly(''));
   const file = { path: paths[0], url: `${base}/file=${paths[0]}`, orig_name: 'photo', mime_type: photo.type, meta: { _type: 'gradio.FileData' } };
   // The Space's own two clicks: "Remove Background", then "Run". The same function (fn_index 5) answers both.
-  const first = await call(fetchImpl, base, session, 5, ['Remove Background', file, null, 0.85, 'None', -1, 1024], timeoutMs);
+  const first = await call(fetchImpl, base, session, 5, ['Remove Background', file, null, foreground, 'None', -1, texture], timeoutMs);
   const label = fileValue(first[0]);
-  const second = await call(fetchImpl, base, session, 5, [typeof label === 'string' ? label : 'Run', file, null, 0.85, 'None', -1, 1024], timeoutMs);
+  const second = await call(fetchImpl, base, session, 5, [typeof label === 'string' ? label : 'Run', file, null, foreground, 'None', -1, texture], timeoutMs);
   const glb = fileValue(second[4]);
   const url = glb && glb.url;
   if (!url || !/^https:\/\/[a-z0-9-]+\.hf\.space\//.test(url)) throw new Sf3dError(friendly(''));
