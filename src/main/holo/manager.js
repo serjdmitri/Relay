@@ -507,6 +507,7 @@ class HoloManager {
 
   setAnnotations(h, list) {
     h.annotations = cleanAnnotations(list);
+    if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'annotations', h.annotations);
     this.persist();
     return h.annotations;
   }

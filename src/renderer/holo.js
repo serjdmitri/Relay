@@ -751,7 +751,7 @@ function pickPart(e) {
 function pick(e) {
   const ui = document.elementFromPoint(e.clientX, e.clientY);
   if (ui && ui.closest('#move, #title')) return 'move';
-  if (ui && ui.closest('.btn, .cadui, .num')) return 'ui';
+  if (ui && ui.closest('.btn, .cadui, .num, .notex')) return 'ui';
   setRay(e);
   const meshes = [];
   holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
@@ -789,6 +789,7 @@ addEventListener('pointerdown', (e) => {
   if (!e.target.closest('#ctl')) document.body.classList.remove('menu-open');
   if (!e.target.closest('#savemenu, #save')) saveMenu.classList.remove('open');
   if (measuring && pick(e) === 'model') { measureClick(e); e.preventDefault(); return; }
+  if (annotating && pick(e) === 'model') { annotateClick(e); e.preventDefault(); return; }
   if (editDown(e)) return;
   const p = pick(e);
   if (p === 'move' || (p === 'model' && e.altKey)) { dragging = 'move'; relay.holoDrag('start'); }
@@ -922,6 +923,7 @@ relay.onHolo((m, d) => {
   if (m === 'init' || m === 'items') {
     if (m === 'init') { applyUi(d.ui); document.body.classList.toggle('hand', !!d.handMode); solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
     items = d.items;
+    if (Array.isArray(d.annotations)) { notes = d.annotations; drawNotes(); }
     $('title').textContent = d.title || '';
     $('credit').textContent = items.map((i) => i.credit).filter(Boolean).join('  ·  ');
     $('err').textContent = '';
@@ -937,6 +939,7 @@ relay.onHolo((m, d) => {
   else if (m === 'save') saveModel(d?.format || 'stl', d?.openWith || '');
   else if (m === 'hand-scale') { touched(); userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
+  else if (m === 'annotations') { notes = Array.isArray(d) ? d : []; drawNotes(); }
   else if (m === 'real-size') relay.holoRealSize(realSize(d?.mm || 0));
   else if (m === 'error') $('err').textContent = d;
 });
@@ -996,6 +999,66 @@ function setMeasure(on) {
   document.body.classList.remove('menu-open');
 }
 $('measure').onclick = () => setMeasure(!measuring);
+
+// ---------- notes pinned to spots on the model ----------
+// A note is { id, text, item, p (the spot, in the model's own space, so it turns and grows with it), n (which way the surface faces) }. Click "Add a note",
+// then a spot: Relay asks what the note should say and the answer is kept with the hologram (and comes back when it does).
+let notes = [];
+let annotating = false;
+const notesEl = $('notes');
+function drawNotes() {
+  notesEl.textContent = '';
+  for (const n of notes) {
+    const d = document.createElement('div');
+    d.className = 'note';
+    d.dataset.id = n.id;
+    const t = document.createElement('span'); t.className = 'txt'; t.textContent = n.text;
+    const x = document.createElement('span'); x.className = 'notex'; x.textContent = '×'; x.title = 'Remove this note';
+    x.onclick = (e) => { e.stopPropagation(); notes = notes.filter((m) => m.id !== n.id); drawNotes(); relay.holoAnnotations(notes); };
+    d.append(t, x);
+    notesEl.append(d);
+  }
+}
+const noteV = new THREE.Vector3(), noteN = new THREE.Vector3(), noteQ = new THREE.Quaternion();
+function placeNotes() {
+  if (!notes.length) return;
+  holo.updateMatrixWorld(true);
+  noteQ.copy(holo.getWorldQuaternion(noteQ));
+  for (const el of notesEl.children) {
+    const n = notes.find((m) => m.id === el.dataset.id);
+    if (!n) continue;
+    noteV.set(...n.p).applyMatrix4(holo.matrixWorld);
+    const toCam = camera.position.clone().sub(noteV).normalize();
+    const facing = n.n ? noteN.set(...n.n).applyQuaternion(noteQ).dot(toCam) : 1;
+    noteV.project(camera);
+    el.style.left = `${(noteV.x + 1) / 2 * innerWidth}px`;
+    el.style.top = `${(1 - noteV.y) / 2 * innerHeight}px`;
+    el.classList.toggle('back', facing < -0.1 && !exploded); // on the far side of the model: hidden until it turns round
+  }
+}
+function annotateClick(e) {
+  setRay(e);
+  const meshes = [];
+  holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const hit = ray.intersectObjects(meshes, false)[0];
+  if (!hit) return null;
+  const p = holo.worldToLocal(hit.point.clone());
+  const nrm = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).applyQuaternion(holo.getWorldQuaternion(new THREE.Quaternion()).invert()) : null;
+  const item = Math.max(0, itemWraps.findIndex((w) => { let o = hit.object; while (o) { if (o === w) return true; o = o.parent; } return false; }));
+  const spot = { item, p: p.toArray().map((v) => +v.toFixed(5)), ...(nrm ? { n: nrm.toArray().map((v) => +v.toFixed(5)) } : {}) };
+  setAnnotate(false);
+  relay.holoAnnotate(spot); // Relay listens for what the note says; the text comes back in a 'annotations' message
+  return spot;
+}
+function setAnnotate(on) {
+  annotating = !!on;
+  $('annotate').classList.toggle('on', annotating);
+  document.body.classList.toggle('annotating', annotating);
+  if (annotating) { $('hint2').textContent = 'Click a spot on the model to pin a note there'; if (measuring) setMeasure(false); }
+  else if ($('hint2').textContent.startsWith('Click a spot')) $('hint2').textContent = '';
+  document.body.classList.remove('menu-open');
+}
+$('annotate').onclick = () => setAnnotate(!annotating);
 
 // Life size: the model drawn so that a millimetre of it is a millimetre of your screen. The screen's points per inch is a setting (calibrated against
 // a credit card in Settings > General > Holograms); a point is a CSS pixel. A designed model knows its size in millimetres; any other needs to be told
@@ -1158,6 +1221,7 @@ function frame(now) {
   }
   if (clip.on) updateClip();
   updateMeasure();
+  placeNotes();
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -1177,6 +1241,9 @@ window.__holoTest = {
   cut: (on, axis = 1, t = 0, flip = false) => { clip.axis = axis; clip.flip = flip; $('cutr').value = String(Math.round(t * 100)); setCut(on); clip.t = t; updateClip(); return { on: clip.on, d: uniforms.clipD.value, n: uniforms.clipN.value.toArray() }; },
   save: (fmt) => saveModel(fmt),
   printCheck: () => runPrintCheck(),
+  notes: () => notes.map((n) => ({ ...n })),
+  annotateAt: (x, y) => { if (!annotating) setAnnotate(true); return annotateClick({ clientX: x, clientY: y }); },
+  noteBoxes: () => [...notesEl.children].map((el) => { const r = el.getBoundingClientRect(); return { id: el.dataset.id, x: Math.round(r.left), y: Math.round(r.top), hidden: el.classList.contains('back') }; }),
   yaw: (deg) => { orient.setFromAxisAngle(axisY, (deg * Math.PI) / 180); holo.quaternion.copy(orient); return true; },
   stlBytes: () => { const { tris } = collectTriangles(); return tris.length ? { bytes: toStl(zUp(tris), 'x').length, tris: tris.length / 9 } : 0; },
   mode: () => (exploded || editing ? 'parts' : items.length > 1 ? 'items' : 'whole'),

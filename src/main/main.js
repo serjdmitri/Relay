@@ -766,6 +766,7 @@ app.whenReady().then(() => {
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
   holos.onChange = () => { rebuildTray(); ask.holosChanged(); };
   holos.onAsk = (h, d) => ask.askAboutHologram(h, d);
+  holos.onAnnotate = (h, d) => ask.annotateByVoice(h, d);
   holos.onFiles = (h, paths) => ask.filesOnHologram(h, paths);
   ask.modelCache = new ModelCache(path.join(app.getPath('userData'), 'holo-cache'));
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
