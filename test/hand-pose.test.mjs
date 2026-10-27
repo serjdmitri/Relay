@@ -37,3 +37,13 @@ test('thumb and index tip together read as a pinch, apart as open', () => {
   assert.ok(pinchOf(hand({ index: true, middle: true, ring: true, pinky: true, pinch: true })) < 0.2);
   assert.ok(pinchOf(hand({ thumb: true, index: true, middle: true, ring: true, pinky: true })) > 0.45);
 });
+
+test('a thumb held straight up or straight down on a closed hand is told from a fist', () => {
+  const up = hand({});
+  up[4] = { x: up[0].x, y: up[0].y - 0.3 }; up[3] = { x: up[0].x, y: up[0].y - 0.2 }; up[2] = { x: up[0].x, y: up[0].y - 0.1 };
+  assert.equal(poseOf(up), 'Thumb_Up');
+  const down = hand({});
+  down[4] = { x: down[0].x, y: down[0].y + 0.3 }; down[3] = { x: down[0].x, y: down[0].y + 0.2 }; down[2] = { x: down[0].x, y: down[0].y + 0.1 };
+  assert.equal(poseOf(down), 'Thumb_Down');
+  assert.equal(poseOf(hand({})), 'Closed_Fist', 'a plain fist is still a fist');
+});

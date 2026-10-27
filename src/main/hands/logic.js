@@ -3,8 +3,11 @@
 //   open hand            moves the pointer
 //   fist                 grabs: 'grab', moves while held, 'release' when the hand opens
 //   thumb + index tap    a click; held (and moved) it is a press-and-drag: 'pinchdown' ... 'pinchup'
-//   both hands pinching or in fists, moving apart or together   'scale' (resize)
+//   both hands pinching, moving apart or together               'scale' (resize); turning them like a wheel: 'twist' (roll)
+//   both hands in fists, pulled apart or pushed together         'pull' (take the model apart into pieces / put it back)
+//   a quick sideways swipe of the open hand                      'swipe' (the next or the previous model)
 //   a peace sign held for a moment                               'mic' (start listening)
+//   a thumb up held / a thumb down held                          'thumbup' (keep it) / 'thumbdown' (close it)
 // Positions come out as 0..1 across the screen: the picture is mirrored (your right is the screen's right) and only its middle part is
 // used, so the pointer reaches the screen's edges without stretching the arm. No Electron in here, so it can be tested.
 
@@ -37,7 +40,9 @@ class HandPointer {
     this.fistFrames = 0; this.openFrames = 0; this.pinchOn = 0; this.pinchOff = 0; this.lost = 0;
     this.pinch = null; // { t0, x0, y0, held }
     this.two = null; // { d }
-    this.victoryMs = 0; this.victorySince = 0; this.victoryAway = Infinity; this.victoryDone = false;
+    this.holds = {}; // gesture name -> { since, away, done }
+    this.trail = []; // recent positions of the open hand, for swipes
+    this.swipeAt = 0;
     this.last = 0;
   }
 
@@ -55,27 +60,37 @@ class HandPointer {
     const x = this.sx.filter(p.x, dt), y = this.sy.filter(p.y, dt);
     const isFist = h.gesture === 'Closed_Fist';
 
-    // ---- the mic sign: a peace sign held ----
-    if (h.gesture === 'Victory') {
-      if (!this.victorySince) this.victorySince = t;
-      this.victoryAway = 0;
-      if (!this.victoryDone && t - this.victorySince >= 600) { this.victoryDone = true; this.emit({ type: 'mic', x, y }); }
-    } else {
-      if (this.victorySince && (this.victoryAway += dt * 1000) > 900) { this.victorySince = 0; this.victoryDone = false; }
-      else if (!this.victorySince) this.victoryAway = Infinity;
-    }
+    // ---- signs held a moment: a peace sign opens the mic, a thumb up keeps, a thumb down closes ----
+    this.hold('Victory', 'mic', h, t, dt, x, y);
+    this.hold('Thumb_Up', 'thumbup', h, t, dt, x, y);
+    this.hold('Thumb_Down', 'thumbdown', h, t, dt, x, y);
 
-    // ---- two hands: resize ----
+    // ---- two hands: pinching resizes and turns, fists pull it apart ----
     const second = hands[1];
-    const holding = (g) => g.gesture === 'Closed_Fist' || (g.pinch !== undefined && g.pinch < 0.3);
-    if (second && holding(h) && holding(second)) {
-      const a = this.map(h), b = this.map(second);
-      const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (!this.two) { this.two = { d }; this.releaseAll(x, y); this.emit({ type: 'twohands', x, y }); }
-      else if (this.two.d > 0.02) {
+    const fist = (g) => g.gesture === 'Closed_Fist';
+    const pinched = (g) => g.pinch !== undefined && g.pinch < 0.3;
+    if (second && ((fist(h) && fist(second)) || (pinched(h) && pinched(second)))) {
+      const mode = fist(h) && fist(second) ? 'fist' : 'pinch';
+      const [l, r] = [this.map(h), this.map(second)].sort((p, q) => p.x - q.x);
+      const d = Math.hypot(l.x - r.x, l.y - r.y);
+      const angle = Math.atan2(r.y - l.y, r.x - l.x);
+      if (!this.two || this.two.mode !== mode) { this.releaseAll(x, y); this.two = { d, angle, mode, total: 1 }; this.emit({ type: 'twohands', mode, x, y }); return; }
+      if (this.two.d > 0.02) {
         const f = d / this.two.d;
-        if (Math.abs(f - 1) > 0.015) { this.emit({ type: 'scale', factor: f, x, y }); this.two.d = d; }
+        if (Math.abs(f - 1) > 0.015) {
+          if (mode === 'pinch') this.emit({ type: 'scale', factor: f, x, y });
+          else { // fists: far enough apart takes the model apart, far enough back together puts it back
+            this.two.total *= f;
+            if (this.two.total > 1.3) { this.emit({ type: 'pull', open: true, x, y }); this.two.total = 1; }
+            else if (this.two.total < 0.75) { this.emit({ type: 'pull', open: false, x, y }); this.two.total = 1; }
+          }
+          this.two.d = d;
+        }
       }
+      let da = angle - this.two.angle;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      if (mode === 'pinch' && Math.abs(da) > 0.012) { this.emit({ type: 'twist', angle: da, x, y }); this.two.angle = angle; } else if (mode === 'fist') this.two.angle = angle;
       return;
     }
     if (this.two) { this.two = null; this.state = 'none'; this.fistFrames = 0; this.pinchOn = 0; }
@@ -111,7 +126,32 @@ class HandPointer {
       return;
     }
     if (this.state === 'none') this.state = 'open';
+    this.swipe(t, x, y, h);
     this.emit({ type: 'move', x, y, held: false });
+  }
+
+  // A sign held for a moment fires once, and again only after it was put down for a while.
+  hold(name, type, h, t, dt, x, y) {
+    const k = this.holds[name] || (this.holds[name] = { since: 0, away: Infinity, done: false });
+    if (h.gesture === name) {
+      if (!k.since) k.since = t;
+      k.away = 0;
+      if (!k.done && t - k.since >= 600) { k.done = true; this.emit({ type, x, y }); }
+    } else if (k.since) {
+      k.away += dt * 1000;
+      if (k.away > 900) { k.since = 0; k.done = false; }
+    }
+  }
+
+  // A quick flick of the open hand sideways: the next or the previous. Slow pointing is never a swipe.
+  swipe(t, x, y, h) {
+    if (h.gesture !== 'Open_Palm' || h.pinch < 0.42) { this.trail.length = 0; return; }
+    this.trail.push({ t, x, y });
+    while (this.trail.length && t - this.trail[0].t > 240) this.trail.shift();
+    if (t - this.swipeAt < 900 || this.trail.length < 3) return;
+    const a = this.trail[0];
+    const dx = x - a.x, dy = y - a.y;
+    if (Math.abs(dx) > 0.3 && Math.abs(dy) < 0.14) { this.swipeAt = t; this.trail.length = 0; this.emit({ type: 'swipe', dir: dx > 0 ? 'right' : 'left', x, y }); }
   }
 
   endPinch(x, y) {
@@ -134,7 +174,7 @@ class HandPointer {
     if (this.lost === 8) {
       this.releaseAll(this.sx.x ?? 0, this.sy.x ?? 0);
       this.two = null;
-      this.victorySince = 0; this.victoryDone = false;
+      this.holds = {}; this.trail.length = 0;
       this.sx.reset(); this.sy.reset();
       this.fistFrames = 0; this.openFrames = 0; this.pinchOn = 0; this.pinchOff = 0;
       this.emit({ type: 'lost' });

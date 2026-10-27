@@ -652,6 +652,7 @@ addEventListener('pointerdown', (e) => {
 const qDrag = new THREE.Quaternion();
 const axisX = new THREE.Vector3(1, 0, 0);
 const axisY = new THREE.Vector3(0, 1, 0);
+const axisZ = new THREE.Vector3(0, 0, 1);
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 addEventListener('pointermove', (e) => {
@@ -755,7 +756,7 @@ function setOptions(o) {
 
 relay.onHolo((m, d) => {
   if (m === 'init' || m === 'items') {
-    if (m === 'init') { solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
+    if (m === 'init') { document.body.classList.toggle('hand', !!d.handMode); solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
     items = d.items;
     $('title').textContent = d.title || '';
     $('credit').textContent = items.map((i) => i.credit).filter(Boolean).join('  ·  ');
@@ -764,6 +765,9 @@ relay.onHolo((m, d) => {
     rebuild().catch(() => { $('err').textContent = 'Could not draw that model.'; });
   } else if (m === 'merge-hint') { document.body.classList.toggle('merging', !!d); $('merge').textContent = d === 'fit' ? 'Fitting…' : 'Release to combine'; }
   else if (m === 'pos') setPos(d.x, d.y);
+  else if (m === 'hand-mode') { document.body.classList.toggle('hand', !!d); applyScale(); }
+  else if (m === 'hand-explode') { if (!editing && !!d !== exploded) toggleExplode(); }
+  else if (m === 'hand-twist') { qDrag.setFromAxisAngle(axisZ, -d); holo.quaternion.premultiply(qDrag).normalize(); orient.copy(holo.quaternion); }
   else if (m === 'save') saveStl();
   else if (m === 'hand-scale') { userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
