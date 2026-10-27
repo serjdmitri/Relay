@@ -39,7 +39,8 @@ const DEFAULTS = {
     remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone
     connectors: { // Notion (a token you paste) and Google (your own OAuth app, several accounts): secrets are encrypted
       notion: { tokenEnc: '', name: '' },
-      google: { clientId: '', clientSecretEnc: '', accounts: [] } // accounts: { email, refreshEnc }
+      google: { clientId: '', clientSecretEnc: '', accounts: [] }, // accounts: { email, refreshEnc }
+      apps: { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 } // Composio (or any MCP server): its address and key
     },
     openAtLogin: false,
     showInDock: true,

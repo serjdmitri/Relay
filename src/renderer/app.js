@@ -404,7 +404,8 @@ const PAGES = {
   },
 
   connectors(c) {
-    const C = S.connectors || { notion: {}, google: { accounts: [] } };
+    const C = S.connectors || { notion: {}, google: { accounts: [] }, apps: {} };
+    C.apps = C.apps || {};
     c.append(h('<div class="lead">Let Relay read and write in the services you use. Each one is connected by you, on this Mac, and the secrets are kept encrypted here. Reading is free; sending an email always asks you first. Background agents can use them too.</div>'));
 
     // Notion
@@ -449,6 +450,27 @@ const PAGES = {
     };
     g.append(add);
     c.append(g);
+
+    // Composio (or any MCP server)
+    c.append(h('<div class="section-title">All your other apps (Composio)</div>'));
+    const ap = h('<div class="card" style="padding:14px"></div>');
+    if (C.apps.connected) {
+      ap.append(h(`<div class="row" style="padding:0;min-height:36px"><div class="grow"><div class="t">Connected to ${esc(C.apps.url)}</div><div class="d">${C.apps.count} tools. Relay can look things up and, after asking you, send, create and change. It never deletes.</div></div><button class="btn" id="aout">Disconnect</button></div>`));
+      $('#aout', ap).onclick = () => relay.clearApps();
+    } else {
+      ap.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Composio reaches Gmail, Slack, GitHub, Linear, Google Sheets and hundreds of other apps with the logins you already set up there. In Composio, make a Tool Router session or MCP server, and copy its <b>MCP URL</b> and your <b>API key</b>. Paste them here (any other MCP server over https works too). The key is kept encrypted on this Mac, and Relay asks you before anything is sent or changed. Anything that deletes is refused.</div>'));
+      const row = h('<div class="field-row"><input class="field" id="aurl" placeholder="MCP URL (https://…)"><input class="field" id="akey" type="password" placeholder="API key"><button class="btn primary" id="aset" style="height:28px">Connect</button></div>');
+      const go = async () => {
+        const btn = $('#aset', row); btn.textContent = 'Checking…';
+        const r = await relay.setApps($('#aurl', row).value, $('#akey', row).value, 'x-api-key');
+        btn.textContent = 'Connect';
+        if (!r.ok) alert(r.error);
+      };
+      $('#aset', row).onclick = go;
+      $('#akey', row).onkeydown = (e) => e.key === 'Enter' && go();
+      ap.append(row);
+    }
+    c.append(ap);
 
     c.append(h('<div class="section-title">Try saying</div>'));
     c.append(h('<div class="card" style="padding:12px 14px"><div class="d" style="line-height:1.8">“Do I have any unread email from Anna?” · “Read me my last email from the bank” · “What is on my Google calendar this week?” · “Add dentist Friday at 3 to my calendar” · “Draft an email to Sam saying I will be late” · “Search Notion for the trip plan” · “In the background, summarize my Notion trip notes into a new page”.</div></div>'));

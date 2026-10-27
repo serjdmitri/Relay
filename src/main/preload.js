@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('relay', {
   runRoutine: (id) => invoke('routine:run', id),
   setNotionToken: (t) => invoke('connectors:notion:set', t),
   clearNotion: () => invoke('connectors:notion:clear'),
+  setApps: (url, key, header) => invoke('connectors:apps:set', url, key, header),
+  clearApps: () => invoke('connectors:apps:clear'),
   setGoogleClient: (id, secret) => invoke('connectors:google:client', id, secret),
   connectGoogle: () => invoke('connectors:google:connect'),
   removeGoogle: (email) => invoke('connectors:google:remove', email),
