@@ -4,7 +4,7 @@
 // on another to combine them. The window itself is injected, so all of this can be tested.
 
 const crypto = require('crypto');
-const { mergeTarget, cycle, toSaved, cleanSaved } = require('./logic');
+const { mergeTarget, cycle, toSaved, cleanSaved, cleanAnnotations } = require('./logic');
 
 const R = 150; // half the size, in pixels, of the square a hologram takes up at normal size (for telling when one is over another)
 const MAX_HOLOS = 6;
@@ -13,7 +13,7 @@ const MAX_ITEMS = 4;
 class HoloManager {
   // createWindow(): a window-like object; cursor(): { x, y }; area(): the work area to place new ones in; download(url) -> Buffer;
   // saved(): the stored list; save(list): store it.
-  constructor({ createWindow, cursor, area, displayFor = null, getUi = () => ({ controls: 'menu', spin: true, spinDelay: 10 }), download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
+  constructor({ createWindow, cursor, area, displayFor = null, getUi = () => ({ controls: 'menu', spin: true, spinDelay: 10 }), download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, library = null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
     this.createWindow = createWindow;
     this.cursor = cursor;
     this.area = area;
@@ -24,6 +24,8 @@ class HoloManager {
     this.putFile = putFile; // bytes -> a file in the model cache (so a pinned hologram can come back)
     this.generate = generate; // a photo candidate -> a real-looking model (a GLB item)
     this.readFile = readFile; // a saved GLB's file -> its bytes
+    this.library = library; // every hologram that has been on screen, and the saved scenes (library.js)
+    this.thumbTimers = new Map();
     this.saved = saved;
     this.save = save;
     this.setTimer = setTimer;
@@ -36,6 +38,7 @@ class HoloManager {
     this.dragging = null;
     this.onChange = () => {};
     this.onAsk = async () => {};
+    this.onAnnotate = async () => {}; // (hologram, { item, p, n }): a spot was picked for a note
     this.onFiles = async () => {}; // (hologram, paths): files were dropped on it // (hologram, { region, part }): the user asks Relay about it
   }
 
@@ -87,6 +90,21 @@ class HoloManager {
     });
   }
 
+  // Asks the page to show the model at life size. mm: how long its longest side really is, when the model itself does not know (a designed
+  // model knows). Resolves with { ok, mm } or { ok: false, reason }.
+  requestRealSize(h, mm = 0) {
+    return new Promise((resolve) => {
+      h.pendingReal = resolve;
+      h.win.webContents.send('holo:state', 'real-size', { mm: +mm || 0 });
+      const t = setTimeout(() => { if (h.pendingReal === resolve) { h.pendingReal = null; resolve({ ok: false, reason: 'It took too long.' }); } }, 8000);
+      t.unref?.();
+    });
+  }
+
+  finishRealSize(h, r) {
+    if (h?.pendingReal) { const f = h.pendingReal; h.pendingReal = null; f(r && typeof r === 'object' ? r : { ok: false, reason: 'No answer.' }); }
+  }
+
   finishGlb(h, r) {
     if (h?.pendingGlb) { const f = h.pendingGlb; h.pendingGlb = null; f(r && r.bytes ? { bytes: Buffer.from(r.bytes), mm: !!r.mm } : null); }
   }
@@ -97,7 +115,7 @@ class HoloManager {
 
   ui() {
     const u = this.getUi() || {};
-    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
+    return { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.min(120, Math.max(0, Number(u.spinDelay) || 10)), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl', pointsPerInch: Math.min(400, Math.max(50, Number(u.pointsPerInch) || 125)) };
   }
 
   // Settings changed: every hologram takes the new look at once.
@@ -180,24 +198,25 @@ class HoloManager {
   }
 
   // item: { kind: 'stl', title, credit, url, bytes } or { kind: 'shapes', title, credit, parts }.
-  async show({ title, items, options = null, pinned = false, x, y, scale = 1, solid = false, id = crypto.randomUUID() }) {
+  async show({ title, items, options = null, pinned = false, x, y, scale = 1, solid = false, annotations = [], id = crypto.randomUUID() }) {
     if (this.holos.size >= MAX_HOLOS) this.close([...this.holos.values()].find((h) => !h.pinned)?.id || this.holos.keys().next().value);
     const pos = x === undefined ? this.position(this.holos.size) : { x, y };
     const d = this.displayFor(pos);
     const win = this.createWindow({ width: d.width, height: d.height });
-    const h = { id, win, title, items, options, pinned, scale, solid, x: pos.x, y: pos.y, disp: null };
+    const h = { id, win, title, items, options, pinned, scale, solid, x: pos.x, y: pos.y, disp: null, annotations: cleanAnnotations(annotations) };
     this.place(h);
     this.holos.set(id, h);
     this.byWindow.set(win.webContents.id, id);
     await win.ready;
     this.push(h, 'init');
     win.showInactive();
+    this.syncLibrary(h);
     this.onChange();
     return id;
   }
 
   payload(h) {
-    return { id: h.id, title: h.title, items: h.items, options: h.options && h.options.list.length > 1 ? { index: h.options.index, count: h.options.list.length } : null, pinned: h.pinned, scale: h.scale, solid: h.solid, pos: this.local(h), handMode: this.handMode, ui: this.ui() };
+    return { id: h.id, title: h.title, items: h.items, options: h.options && h.options.list.length > 1 ? { index: h.options.index, count: h.options.list.length } : null, pinned: h.pinned, scale: h.scale, solid: h.solid, annotations: h.annotations || [], pos: this.local(h), handMode: this.handMode, ui: this.ui() };
   }
 
   push(h, kind = 'items') {
@@ -420,20 +439,94 @@ class HoloManager {
   persist() {
     const list = [...this.holos.values()].filter((h) => h.pinned).map((h) => toSaved(h));
     this.save(list);
+    this.syncLibrary();
+  }
+
+  // ----- the library and scenes -----
+  // Keeps the library in step with what is on screen, and (a moment later, once the model has drawn) takes a small picture of what is new or changed.
+  syncLibrary(only = null) {
+    if (!this.library) return;
+    const hs = [...this.holos.values()];
+    const before = new Map(this.library.entries.map((e) => [e.id, JSON.stringify(e.saved)]));
+    this.library.sync(hs.map((h) => ({ id: h.id, saved: toSaved(h), pinned: h.pinned })));
+    for (const h of only ? [only] : hs) {
+      const e = this.library.get(h.id);
+      if (e && (!e.thumb || before.get(h.id) !== JSON.stringify(e.saved))) this.scheduleThumb(h);
+    }
+  }
+
+  scheduleThumb(h, wait = 2600) {
+    clearTimeout(this.thumbTimers.get(h.id));
+    const t = setTimeout(() => { this.thumbTimers.delete(h.id); this.captureThumb(h).catch(() => {}); }, wait);
+    t.unref?.();
+    this.thumbTimers.set(h.id, t);
+  }
+
+  // A small picture of the hologram (its window is see-through, so it is the model on black).
+  async captureThumb(h) {
+    if (!this.library || h.win.isDestroyed() || typeof h.win.webContents.capturePage !== 'function') return false;
+    const l = this.local(h);
+    const r = Math.round(R * (h.scale || 1) * 1.15);
+    const img = await h.win.webContents.capturePage({ x: Math.max(0, l.x - r), y: Math.max(0, l.y - r), width: r * 2, height: r * 2 });
+    if (!img || img.isEmpty()) return false;
+    const small = img.resize({ width: 132 });
+    return this.library.setThumb(h.id, `data:image/jpeg;base64,${small.toJPEG(60).toString('base64')}`);
+  }
+
+  // What is on screen now, in the form that is stored.
+  snapshot() {
+    return [...this.holos.values()].map((h) => ({ saved: toSaved(h), pinned: h.pinned }));
+  }
+
+  saveScene(name) {
+    if (!this.library) return { ok: false, reason: 'Scenes are not available.' };
+    return this.library.saveScene(name, this.snapshot());
+  }
+
+  // Replaces what is on screen with a saved scene. Returns { ok, shown, name } or { ok: false, reason }.
+  async openScene(name) {
+    const sc = this.library?.findScene(name);
+    if (!sc) return { ok: false, reason: this.library?.scenes.length ? `I do not have a scene called ${name}. You have: ${this.library.scenes.map((s) => s.name).join(', ')}.` : `I do not have a scene called ${name} yet. Arrange some holograms and say “save this scene as ${name}”.` };
+    this.closeAll();
+    let shown = 0;
+    for (const s of cleanSaved(sc.holos, { anyPinned: true })) {
+      try { await this.restoreSaved(s, { pinned: !!s.pinned, id: crypto.randomUUID() }); shown++; } catch { /* a model that cannot be fetched is skipped */ }
+    }
+    return shown ? { ok: true, shown, name: sc.name, total: sc.holos.length } : { ok: false, reason: `None of the holograms in the ${sc.name} scene could be loaded.` };
+  }
+
+  // A hologram from the library, brought back (or the one already on screen).
+  async openFromLibrary(id) {
+    if (this.holos.has(id)) return id;
+    const e = this.library?.get(id);
+    if (!e) return null;
+    const [s] = cleanSaved([{ ...e.saved, pinned: true }]);
+    if (!s) return null;
+    try { return await this.restoreSaved(s, { pinned: !!e.saved.pinned, id: e.id }); } catch { return null; }
+  }
+
+  setAnnotations(h, list) {
+    h.annotations = cleanAnnotations(list);
+    if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'annotations', h.annotations);
+    this.persist();
+    return h.annotations;
+  }
+
+  // Shows one saved hologram: its models are fetched again from their links or the model cache.
+  async restoreSaved(s, { pinned = true, id = s.id } = {}) {
+    const items = await Promise.all(s.items.map(async (i) => {
+      if (i.kind === 'stl') return { ...i, bytes: await this.download(i.url) };
+      if (i.kind === 'glb') { const bytes = this.readFile(i.file); if (!bytes) throw new Error('model file is gone'); return { ...i, bytes }; }
+      return i;
+    }));
+    const old = !s.center; // saved by an earlier version: x and y were a window's corner, not the middle of the model
+    return this.show({ id, title: s.title, items, pinned, x: s.x + (old ? 230 : 0), y: s.y + (old ? 200 : 0), scale: s.scale, solid: s.solid, annotations: s.annotations });
   }
 
   // At launch: the pinned ones come back where they were. Models are fetched again from their links.
   async restore() {
     for (const s of cleanSaved(this.saved())) {
-      try {
-        const items = await Promise.all(s.items.map(async (i) => {
-          if (i.kind === 'stl') return { ...i, bytes: await this.download(i.url) };
-          if (i.kind === 'glb') { const bytes = this.readFile(i.file); if (!bytes) throw new Error('model file is gone'); return { ...i, bytes }; }
-          return i;
-        }));
-        const old = !s.center; // saved by an earlier version: x and y were a window's corner, not the middle of the model
-        await this.show({ id: s.id, title: s.title, items, pinned: true, x: s.x + (old ? 230 : 0), y: s.y + (old ? 200 : 0), scale: s.scale, solid: s.solid });
-      } catch { /* a model that cannot be fetched is skipped */ }
+      try { await this.restoreSaved(s, { pinned: true, id: s.id }); } catch { /* a model that cannot be fetched is skipped */ }
     }
   }
 }

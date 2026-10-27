@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sticky</title>
+<style>
+  :root { --paper: #ffe98a; --edge: #f2d24b; --ink: #3a2f00; }
+  body.pink { --paper: #ffc2d4; --edge: #f59cb8; --ink: #4a1228; }
+  body.blue { --paper: #bfe3ff; --edge: #8cc7f2; --ink: #0d2a44; }
+  body.green { --paper: #c6f0b8; --edge: #98d886; --ink: #12350a; }
+  body.orange { --paper: #ffd4a1; --edge: #f2b06a; --ink: #4a2503; }
+  body.purple { --paper: #dccbff; --edge: #b9a0f2; --ink: #25124a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; }
+  #card { position: absolute; inset: 6px 8px 10px 6px; display: flex; flex-direction: column; border-radius: 4px 4px 10px 4px; background: var(--paper); color: var(--ink); box-shadow: 0 6px 18px rgba(0, 0, 0, .35), 0 0 0 .5px rgba(0, 0, 0, .25); overflow: hidden; }
+  #bar { flex: 0 0 22px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 8px; background: var(--edge); -webkit-app-region: drag; cursor: grab; user-select: none; }
+  #bar span { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .55; }
+  #x { -webkit-app-region: no-drag; width: 16px; height: 16px; line-height: 15px; text-align: center; border-radius: 50%; font-size: 12px; font-weight: 800; cursor: pointer; opacity: .55; }
+  #x:hover { opacity: 1; background: rgba(0, 0, 0, .12); }
+  #t { flex: 1; width: 100%; resize: none; border: 0; outline: 0; padding: 8px 10px 10px; background: transparent; color: inherit; font: 500 14px/1.35 -apple-system, 'SF Pro Text', system-ui, sans-serif; }
+  #t::placeholder { color: inherit; opacity: .45; }
+</style>
+</head>
+<body>
+  <div id="card">
+    <div id="bar"><span>Relay</span><div id="x" title="Remove this sticky">×</div></div>
+    <textarea id="t" spellcheck="false" placeholder="Write something…"></textarea>
+  </div>
+  <script src="sticky.js"></script>
+</body>
+</html>

@@ -129,13 +129,18 @@ class KokoroVoice {
     fs.rmSync(this.dir, { recursive: true, force: true });
   }
 
+  // The British voices (bf_, bm_) are pronounced with the British lexicon when the model has one.
+  britishLexicon(voice) {
+    return /^b[fm]_/.test(voice) && fs.existsSync(path.join(this.model, 'lexicon-gb-en.txt'));
+  }
+
   // The command that makes one piece of speech.
   args(text, { voice = 'af_heart', rate = 'normal', out }) {
     const sid = Math.max(0, SPEAKERS.indexOf(voice));
     const m = this.model;
     return [
       `--kokoro-model=${path.join(m, 'model.int8.onnx')}`, `--kokoro-voices=${path.join(m, 'voices.bin')}`, `--kokoro-tokens=${path.join(m, 'tokens.txt')}`,
-      `--kokoro-lexicon=${path.join(m, 'lexicon-us-en.txt')},${path.join(m, 'lexicon-zh.txt')}`, `--kokoro-lang=en`,
+      `--kokoro-lexicon=${path.join(m, this.britishLexicon(voice) ? 'lexicon-gb-en.txt' : 'lexicon-us-en.txt')},${path.join(m, 'lexicon-zh.txt')}`, `--kokoro-lang=en`,
       `--kokoro-length-scale=${LENGTH[rate] || 1}`, `--num-threads=4`, `--sid=${sid}`, `--output-filename=${out}`, text
     ];
   }

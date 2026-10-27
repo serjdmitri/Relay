@@ -157,9 +157,9 @@ test('tidying: the plan is shown first and nothing moves until it is applied; ap
   assert.ok(!fs.existsSync(a) && fs.existsSync(path.join(home, 'Documents/Invoices/invoice.pdf')));
   assert.equal(log().length, 1);
   assert.match(await d.apply({ plan_id: id }), /no such plan/, 'a plan is used once');
-  assert.match(d.undo(), /Put 2 back/);
+  assert.match(await d.undo(), /Put 2 back/);
   assert.ok(fs.existsSync(a) && fs.existsSync(b));
-  assert.match(d.undo(), /nothing to undo/);
+  assert.match(await d.undo(), /nothing to undo/);
 });
 
 test('a plan of things that cannot be done says so, and trash is only for what is listed', async () => {
@@ -174,4 +174,64 @@ test('a plan of things that cannot be done says so, and trash is only for what i
   assert.deepEqual(trashed, [junk], 'only what was listed, through the Trash (never deleted)');
   assert.match(r, /put 1 in the Trash/);
   assert.ok(fs.existsSync(keep));
+});
+
+// A stand-in for zip and sips: makes the output file the way the real tools would, and records the call.
+function makerExec(calls) {
+  return async (cmd, args, opts) => {
+    calls.push({ cmd, args, opts });
+    const out = cmd.endsWith('zip') ? args[args.indexOf('--') - 1] : args[args.indexOf('--out') + 1];
+    fs.writeFileSync(out, 'made');
+    return '';
+  };
+}
+
+test('zipping makes one archive next to the first item, never over a file, leaves the originals, and undo puts it in the Trash', async () => {
+  const { home, w } = sandbox();
+  const a = w('Downloads/report.pdf', 'A'), b = w('Downloads/notes/one.txt', 'B');
+  w('Downloads/Archive.zip', 'EXISTING');
+  const calls = []; const { d, trashed, log } = driveOn(home, { exec: makerExec(calls) });
+  assert.match(d.makeConfirmText({ action: 'zip', paths: [a, path.join(home, 'Downloads/notes')] }), /Zip 2 items into ~\/Downloads\/Archive \(2\)\.zip.*originals stay.*undone/);
+  const r = await d.make({ action: 'zip', paths: [a, path.join(home, 'Downloads/notes')] });
+  assert.match(r, /Made ~\/Downloads\/Archive \(2\)\.zip/);
+  assert.deepEqual(calls[0].args.slice(-3), ['--', 'Downloads/report.pdf', 'Downloads/notes'], 'paths are given relative to home');
+  assert.equal(calls[0].opts.cwd, home);
+  assert.equal(fs.readFileSync(path.join(home, 'Downloads/Archive.zip'), 'utf8'), 'EXISTING', 'nothing replaced');
+  assert.ok(fs.existsSync(a) && fs.existsSync(b), 'originals untouched');
+  assert.equal(log().length, 1);
+  assert.match(await d.undo(), /Put 1 file Relay made in the Trash/);
+  assert.deepEqual(trashed, [path.join(home, 'Downloads/Archive (2).zip')], 'through the Trash, not deleted');
+  assert.match(await d.undo(), /nothing to undo/);
+});
+
+test('converting makes a copy in the new format beside each picture, skips what cannot be converted, and names the file the user can undo', async () => {
+  const { home, w } = sandbox();
+  const heic = w('Pictures/a.HEIC'), png = w('Pictures/b.png'), doc = w('Pictures/c.pdf');
+  w('Pictures/a.jpg', 'EXISTING');
+  const calls = []; const { d, trashed } = driveOn(home, { exec: makerExec(calls) });
+  assert.match(d.makeConfirmText({ action: 'convert', paths: [heic, png], format: 'jpg' }), /Make 2 copies as JPEG/);
+  const r = await d.make({ action: 'convert', paths: [heic, png, doc], format: 'JPG' });
+  assert.match(r, /Made ~\/Pictures\/a \(2\)\.jpg, ~\/Pictures\/b\.jpg/);
+  assert.match(r, /c\.pdf \(Not a picture/);
+  assert.deepEqual(calls.map((c) => c.args.slice(0, 3)), [['-s', 'format', 'jpeg'], ['-s', 'format', 'jpeg']]);
+  assert.equal(fs.readFileSync(path.join(home, 'Pictures/a.jpg'), 'utf8'), 'EXISTING');
+  assert.match(await d.undo(), /Put 2 files Relay made in the Trash/);
+  assert.equal(trashed.length, 2);
+  // already in that format, and a format that is not supported
+  assert.match(await d.make({ action: 'convert', paths: [png], format: 'png' }), /Nothing was made.*Already a PNG/);
+  assert.match(await d.make({ action: 'convert', paths: [png], format: 'webm' }), /Nothing was made.*converted to/);
+  assert.equal(d.makeConfirmText({ action: 'convert', paths: [png], format: 'webm' }), null);
+});
+
+test('making files keeps to the same rules: only inside home, no protected places, a failed job leaves nothing half-made', async () => {
+  const { home, w } = sandbox();
+  const a = w('Downloads/a.txt');
+  const { d, trashed } = driveOn(home);
+  assert.match(await d.make({ action: 'zip', paths: ['/etc/hosts', '~/Documents', path.join(home, 'Downloads/ghost')] }), /Nothing was made.*outside your home.*Documents folder itself.*not there/);
+  const bad = driveOn(home, { exec: async (cmd, args) => { fs.writeFileSync(args[args.indexOf('--') - 1], 'half'); throw new Error('zip: out of space'); } });
+  const r = await bad.d.make({ action: 'zip', paths: [a] });
+  assert.match(r, /Nothing was made.*out of space/);
+  assert.deepEqual(bad.trashed, [path.join(home, 'Downloads/a.zip')], 'the half-made file goes to the Trash, not deleted');
+  assert.match(await d.make({ action: 'shred', paths: [a] }), /Say zip or convert/);
+  assert.deepEqual(trashed, []);
 });

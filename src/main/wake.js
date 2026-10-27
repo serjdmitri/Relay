@@ -1,6 +1,8 @@
 // "Hey Jarvis": listening for a wake phrase while Relay is idle. It uses the same on-device speech helper as dictation,
 // so nothing is recorded and nothing leaves the Mac. The words are read into text, compared with the phrase, and thrown away.
 
+const { wakeAllowedIn } = require('./conversation');
+
 const GREETINGS = new Set(['hey', 'hi', 'ok', 'okay', 'hay', 'a', 'hello']);
 
 const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -35,10 +37,11 @@ function heardWake(text, phrase) {
 class WakeWord {
   // speech: the Speech wrapper (events 'partial', and listen()/cancel()).
   // getConfig(): { enabled, phrase }. canListen(): false while Relay is busy, speaking or being configured.
-  constructor({ speech, getConfig, canListen, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout }) {
     this.speech = speech;
     this.getConfig = getConfig;
     this.canListen = canListen;
+    this.getFront = getFront; // the app in front (only asked when the wake phrase is limited to some apps)
     this.onWake = onWake;
     this.onArmed = onArmed;
     this.getDevice = getDevice;
@@ -58,7 +61,7 @@ class WakeWord {
 
   get wanted() {
     const c = this.getConfig();
-    return !!c.enabled && !!c.phrase && !!this.canListen();
+    return !!c.enabled && !!c.phrase && !!this.canListen() && wakeAllowedIn(c.apps, c.apps && c.apps.length ? this.getFront() : null);
   }
 
   // Start or stop listening to match what should be happening right now. Safe to call as often as you like.

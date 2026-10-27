@@ -8,6 +8,12 @@ const { normalize } = require('./commands');
 const { parseDuration, parseWhen, splitReminder, localIso } = require('./when');
 const { humanDuration } = require('./timers');
 const { parseWindowCommand, layoutRect, pickArea, NAMES: WINDOW_NAMES } = require('./windows');
+const { calc } = require('./calc');
+const { parseLayoutCommand } = require('./layouts');
+const { parseFocusCommand } = require('./focus');
+const { parseOcrCommand } = require('./ocr');
+const { parseHoloCommand } = require('./holo/commands');
+const { parseStickyCommand } = require('./stickies');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -85,6 +91,11 @@ function parseQuick(text, now = new Date()) {
     return { type: 'note', title: body.length > 60 ? body.slice(0, 57).trimEnd() + '…' : body, body: body.length > 60 ? body : '' };
   }
 
+  // ----- the Downloads tidy-up (its plan is shown first; these only answer to it) -----
+  if (/^(?:yes )?(?:apply|run|do|approve|accept|go ahead with)(?: all of)? (?:the |tonights |that |this )?(?:downloads? )?(?:plan|tidy up|tidy)$/.test(n) || /^(?:yes )?go ahead and (?:tidy|apply)(?: my downloads| the plan)?$/.test(n)) return { type: 'downloads-apply' };
+  if (/^(?:skip|dismiss|ignore|decline|cancel|not now for) (?:the |tonights |that |this )?(?:downloads? )?(?:plan|tidy up|tidy)$/.test(n)) return { type: 'downloads-skip' };
+  if (/^(?:tidy|clean|sort|organi[sz]e)(?: up)?(?: my| the)? downloads(?: folder)?(?: now)?$/.test(n)) return { type: 'downloads-plan' };
+
   // ----- timers and alarms -----
   if (/^(?:cancel|stop|clear|delete|remove|turn off|dismiss) (?:the |my |all |every )?(?:timers?|alarms?)$/.test(n)) return { type: 'timer-cancel' };
   if (/^(?:how (?:much )?(?:time|long)(?: is)? (?:left|remaining)(?: on (?:the |my )?(?:timer|alarm))?|how long is (?:the |my )?timer|what is left on (?:the |my )?timer|whats left on (?:the |my )?timer|timer status|check (?:the |my )?timer|how much time is left)$/.test(n)) return { type: 'timer-status' };
@@ -96,6 +107,14 @@ function parseQuick(text, now = new Date()) {
     const when = parseWhen(/^wake me(?: up)? in /i.test(L) ? 'in ' + m[1] : m[1], now);
     if (when) return { type: 'alarm', when };
   }
+
+  // ----- maths and unit conversions: answered here, no model -----
+  const sum = calc(text);
+  if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
+
+  // ----- window layouts, focus mode, text from the screen -----
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text);
+  if (lay) return lay;
 
   // ----- the web -----
   let engine = null;
@@ -137,6 +156,8 @@ function parseQuick(text, now = new Date()) {
   if (/^(?:pause|stop)(?: the)?(?: music| song| track| playback| audio| video| spotify| apple music)?$/.test(n)) return { type: 'media', op: 'pause' };
   if (/^(?:next|skip|next song|next track|skip song|skip track|skip this song|skip this track|skip it|play the next song|play the next track|go to the next song|go to the next track)$/.test(n)) return { type: 'media', op: 'next' };
   if (/^(?:previous|previous song|previous track|last song|last track|play the previous song|play the previous track|play the last song|go back a song|go back a track|go back one song)$/.test(n)) return { type: 'media', op: 'previous' };
+
+  if (/^(?:whats|what is) playing(?: right now| now)?$|^what song is (?:this|playing)(?: right now)?$|^(?:whats|what is) this (?:song|track)$|^now playing$|^what am i listening to$|^what(?:s| is) the (?:song|track) (?:that is )?playing$/.test(n)) return { type: 'now-playing' };
 
   // ----- facts and small system things -----
   if (/^(?:whats|what is) the time(?: right now| now)?$|^what time is it(?: right now| now)?$|^tell me the time$|^the time$/.test(n)) return { type: 'info', what: 'time' };
@@ -335,6 +356,13 @@ async function runQuick(cmd, mac, ctx = {}) {
       }
       return { tool: 'media', input: { op: cmd.op, app: target.app }, reply, undo: async () => { await mac.mediaControl(target.app, flip[cmd.op]); return cmd.op === 'play' ? 'Paused.' : cmd.op === 'pause' ? 'Playing again.' : 'Went back.'; } };
     }
+    case 'now-playing': {
+      const { states, playing } = await players(mac);
+      const target = playing || states.find((x) => x.state.includes('paused'));
+      if (!target) return { tool: 'media', input: { op: 'now-playing' }, reply: 'Nothing is playing.', readonly: true };
+      const track = await nowPlaying(mac, target.app);
+      return { tool: 'media', input: { op: 'now-playing', app: target.app }, reply: track ? `${playing ? 'Playing' : 'Paused on'} ${track} (${target.app}).` : `${target.app} is ${playing ? 'playing' : 'paused'}.`, readonly: true };
+    }
     case 'timer': {
       if (!ctx.timers) return null;
       const t = ctx.timers.add(cmd.seconds, cmd.label);
@@ -378,6 +406,65 @@ async function runQuick(cmd, mac, ctx = {}) {
       if (!b) return { tool: 'battery', input: {}, reply: 'This Mac has no battery.', readonly: true };
       return { tool: 'battery', input: {}, reply: `Battery is at ${b.percent}%${b.state ? ', ' + b.state : ''}${b.remaining ? ', about ' + b.remaining + ' left' : ''}.`, readonly: true };
     }
+    case 'downloads-apply':
+      if (!ctx.downloads) return null;
+      return { tool: 'downloads_apply', input: {}, reply: await ctx.downloads.apply() };
+    case 'downloads-skip':
+      if (!ctx.downloads) return null;
+      return { tool: 'downloads_skip', input: {}, reply: ctx.downloads.skip(), readonly: true };
+    case 'downloads-plan': {
+      if (!ctx.downloads) return null;
+      const r = await ctx.downloads.plan();
+      return { tool: 'downloads_plan', input: {}, reply: r, readonly: true };
+    }
+    case 'layout-save': {
+      if (!ctx.layouts) return null;
+      const r = await ctx.layouts.remember(cmd.name);
+      return { tool: 'layout_save', input: { name: cmd.name }, reply: r.reply, readonly: true };
+    }
+    case 'layout-restore': {
+      if (!ctx.layouts) return null;
+      const r = await ctx.layouts.restore(cmd.name);
+      return { tool: 'layout_restore', input: { name: cmd.name }, reply: r.reply, ...(r.undo ? { undo: r.undo } : { readonly: true }) };
+    }
+    case 'layout-list':
+      if (!ctx.layouts) return null;
+      return { tool: 'layout_list', input: {}, reply: ctx.layouts.list(), readonly: true };
+    case 'layout-forget':
+      if (!ctx.layouts) return null;
+      return { tool: 'layout_forget', input: { name: cmd.name }, reply: ctx.layouts.forget(cmd.name), readonly: true };
+    case 'focus-start': {
+      if (!ctx.focus) return null;
+      const r = await ctx.focus.start({ minutes: cmd.minutes });
+      return { tool: 'focus', input: { minutes: cmd.minutes }, reply: r.reply, undo: r.undo };
+    }
+    case 'focus-end': {
+      if (!ctx.focus) return null;
+      return { tool: 'focus', input: { end: true }, reply: (await ctx.focus.end({})).reply, readonly: true };
+    }
+    case 'focus-status':
+      if (!ctx.focus) return null;
+      return { tool: 'focus', input: { status: true }, reply: ctx.focus.status(), readonly: true };
+    case 'ocr': {
+      if (!ctx.ocr) return null;
+      return { tool: 'ocr', input: { source: cmd.source, mode: cmd.mode }, reply: await ctx.ocr(cmd), readonly: true };
+    }
+    case 'sticky-add': case 'sticky-show': case 'sticky-hide': case 'sticky-remove': case 'sticky-clear': case 'sticky-append': case 'sticky-list': {
+      if (!ctx.stickies) return null;
+      const r = await ctx.stickies(cmd);
+      return r ? { tool: cmd.type.replace('-', '_'), input: { text: cmd.text, query: cmd.query }, reply: r.reply, ...(r.undo ? { undo: r.undo } : { readonly: true }) } : null;
+    }
+    case 'holo-realsize': {
+      if (!ctx.holoReal) return null;
+      return { tool: 'holo_realsize', input: { mm: cmd.mm }, reply: await ctx.holoReal(cmd.mm), readonly: true };
+    }
+    case 'holo-library': case 'holo-find': case 'holo-open': case 'scene-save': case 'scene-open': case 'scene-list': case 'scene-delete': {
+      if (!ctx.holoLib) return null;
+      const r = await ctx.holoLib(cmd);
+      return r ? { tool: cmd.type.replace('-', '_'), input: { query: cmd.query, name: cmd.name }, reply: r, readonly: true } : null;
+    }
+    case 'calc':
+      return { tool: 'calc', input: { kind: cmd.kind }, reply: cmd.reply, readonly: true };
     case 'lock':
       await mac.lockScreen();
       return { tool: 'lock_screen', input: {}, reply: 'Locked.' };

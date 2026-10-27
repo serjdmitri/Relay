@@ -6,10 +6,10 @@ import * as THREE from './vendor/three/three.module.min.js';
 import { STLLoader } from './vendor/three/STLLoader.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 import { GLTFExporter } from './vendor/three/GLTFExporter.js';
-import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
+import { splitTriangles, splitSurface, explodeOffsets, placeItems } from './holo-parts.js';
 import { CadView } from './holo-cad.js';
 import * as S from './holo-cad-spec.js';
-import { toStl, to3mf, toStep, zUp } from './holo-export.js';
+import { toStl, to3mf, toStep, zUp, printCheck } from './holo-export.js';
 
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
@@ -37,6 +37,7 @@ const touched = () => { lastTouch = performance.now(); };
 function applyUi(u) {
   if (!u) return;
   ui = { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.max(0, Number(u.spinDelay) || 0), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
+  pointsPerInch = Math.min(400, Math.max(50, Number(u.pointsPerInch) || 125));
   for (const c of ['menu', 'side', 'bar']) document.body.classList.toggle(`ui-${c}`, ui.controls === c);
   document.body.classList.remove('menu-open');
 }
@@ -45,6 +46,7 @@ scene.add(anchor);
 let holo = new THREE.Group(); // everything that turns (about its middle)
 anchor.add(holo);
 let userScale = 1;
+let pointsPerInch = 125; // this screen's points to an inch (set in Settings, used for life size)
 let kFit = 1;
 let modelR = 1.3; // the model's radius in units, once fitted
 let ui = { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl' };
@@ -222,11 +224,62 @@ let hovered = null;
 
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 
+// One colour per triangle (r, g, b in 0..1), read from the texture at the triangle's UV middle, or from vertex colours, or the flat material colour.
+function triangleColors(mesh) {
+  const geo = mesh.geometry;
+  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  const index = geo.index ? geo.index.array : null;
+  const nt = index ? Math.floor(index.length / 3) : Math.floor(geo.attributes.position.count / 3);
+  const out = new Float32Array(nt * 3);
+  const corner = (t, k) => (index ? index[t * 3 + k] : t * 3 + k);
+  const vc = geo.attributes.color;
+  const uv = geo.attributes.uv;
+  const img = mat?.map?.image;
+  if (uv && img && (img.width || img.naturalWidth)) {
+    try {
+      const w0 = img.width || img.naturalWidth, h0 = img.height || img.naturalHeight;
+      const k = Math.min(1, 512 / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const flip = mat.map.flipY; // glTF textures are not flipped, three's default ones are
+      for (let t = 0; t < nt; t++) {
+        let u = 0, v = 0;
+        for (let c = 0; c < 3; c++) { u += uv.getX(corner(t, c)); v += uv.getY(corner(t, c)); }
+        u = (u / 3) % 1; v = (v / 3) % 1;
+        if (u < 0) u += 1;
+        if (v < 0) v += 1;
+        const x = Math.min(w - 1, Math.floor(u * w)), y = Math.min(h - 1, Math.floor((flip ? 1 - v : v) * h));
+        const o = (y * w + x) * 4;
+        out[t * 3] = px[o] / 255; out[t * 3 + 1] = px[o + 1] / 255; out[t * 3 + 2] = px[o + 2] / 255;
+      }
+      return out;
+    } catch { /* a tainted or closed image: fall through to the other sources */ }
+  }
+  if (vc) {
+    for (let t = 0; t < nt; t++) {
+      let r = 0, g = 0, b = 0;
+      for (let c = 0; c < 3; c++) { const i = corner(t, c); r += vc.getX(i); g += vc.getY(i); b += vc.getZ(i); }
+      out[t * 3] = r / 3; out[t * 3 + 1] = g / 3; out[t * 3 + 2] = b / 3;
+    }
+    return out;
+  }
+  return null; // flat colour: only creases will cut
+}
+
 // A solid model has nothing to pull apart along, so it is cut into regions; a model made of several bodies splits along them.
 function splitMesh(mesh) {
   const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
   const pos = geo.attributes.position.array;
-  const res = splitTriangles(pos, { regions: 5 });
+  let res = splitTriangles(pos, { regions: 5 });
+  // one solid skin (a model made from a photo): cut it along its creases and colours first, which gives wheels, doors and glass instead of slices
+  if (!res || res.kind === 'regions') {
+    const cut = splitSurface({ positions: mesh.geometry.attributes.position.array, index: mesh.geometry.index ? mesh.geometry.index.array : null, colors: triangleColors(mesh) });
+    if (cut && cut.groups.length >= 3) res = cut;
+  }
   if (!res) return null;
   const nor = geo.attributes.normal?.array;
   const uv = geo.attributes.uv?.array;
@@ -265,7 +318,7 @@ function collectParts() {
         parent.remove(meshes[0]);
         sp.meshes.forEach((m) => parent.add(m));
         pieces = sp.meshes;
-        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : '';
+        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : sp.kind === 'surface' ? 'one solid piece, cut along its creases and colours' : '';
       }
     }
     if (ud.edges) ud.edges.visible = false;
@@ -698,7 +751,7 @@ function pickPart(e) {
 function pick(e) {
   const ui = document.elementFromPoint(e.clientX, e.clientY);
   if (ui && ui.closest('#move, #title')) return 'move';
-  if (ui && ui.closest('.btn, .cadui, .num')) return 'ui';
+  if (ui && ui.closest('.btn, .cadui, .num, .notex')) return 'ui';
   setRay(e);
   const meshes = [];
   holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
@@ -736,6 +789,7 @@ addEventListener('pointerdown', (e) => {
   if (!e.target.closest('#ctl')) document.body.classList.remove('menu-open');
   if (!e.target.closest('#savemenu, #save')) saveMenu.classList.remove('open');
   if (measuring && pick(e) === 'model') { measureClick(e); e.preventDefault(); return; }
+  if (annotating && pick(e) === 'model') { annotateClick(e); e.preventDefault(); return; }
   if (editDown(e)) return;
   const p = pick(e);
   if (p === 'move' || (p === 'model' && e.altKey)) { dragging = 'move'; relay.holoDrag('start'); }
@@ -869,6 +923,7 @@ relay.onHolo((m, d) => {
   if (m === 'init' || m === 'items') {
     if (m === 'init') { applyUi(d.ui); document.body.classList.toggle('hand', !!d.handMode); solid = !!d.solid; userScale = d.scale || 1; if (d.pos) setPos(d.pos.x, d.pos.y); applyScale(); $('pin').classList.toggle('on', !!d.pinned); $('solid').classList.toggle('on', solid); }
     items = d.items;
+    if (Array.isArray(d.annotations)) { notes = d.annotations; drawNotes(); }
     $('title').textContent = d.title || '';
     $('credit').textContent = items.map((i) => i.credit).filter(Boolean).join('  ·  ');
     $('err').textContent = '';
@@ -884,6 +939,8 @@ relay.onHolo((m, d) => {
   else if (m === 'save') saveModel(d?.format || 'stl', d?.openWith || '');
   else if (m === 'hand-scale') { touched(); userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
+  else if (m === 'annotations') { notes = Array.isArray(d) ? d : []; drawNotes(); }
+  else if (m === 'real-size') relay.holoRealSize(realSize(d?.mm || 0));
   else if (m === 'error') $('err').textContent = d;
 });
 
@@ -942,6 +999,112 @@ function setMeasure(on) {
   document.body.classList.remove('menu-open');
 }
 $('measure').onclick = () => setMeasure(!measuring);
+
+// ---------- notes pinned to spots on the model ----------
+// A note is { id, text, item, p (the spot, in the model's own space, so it turns and grows with it), n (which way the surface faces) }. Click "Add a note",
+// then a spot: Relay asks what the note should say and the answer is kept with the hologram (and comes back when it does).
+let notes = [];
+let annotating = false;
+const notesEl = $('notes');
+function drawNotes() {
+  notesEl.textContent = '';
+  for (const n of notes) {
+    const d = document.createElement('div');
+    d.className = 'note';
+    d.dataset.id = n.id;
+    const t = document.createElement('span'); t.className = 'txt'; t.textContent = n.text;
+    const x = document.createElement('span'); x.className = 'notex'; x.textContent = '×'; x.title = 'Remove this note';
+    x.onclick = (e) => { e.stopPropagation(); notes = notes.filter((m) => m.id !== n.id); drawNotes(); relay.holoAnnotations(notes); };
+    d.append(t, x);
+    notesEl.append(d);
+  }
+}
+const noteV = new THREE.Vector3(), noteN = new THREE.Vector3(), noteQ = new THREE.Quaternion();
+function placeNotes() {
+  if (!notes.length) return;
+  holo.updateMatrixWorld(true);
+  noteQ.copy(holo.getWorldQuaternion(noteQ));
+  for (const el of notesEl.children) {
+    const n = notes.find((m) => m.id === el.dataset.id);
+    if (!n) continue;
+    noteV.set(...n.p).applyMatrix4(holo.matrixWorld);
+    const toCam = camera.position.clone().sub(noteV).normalize();
+    const facing = n.n ? noteN.set(...n.n).applyQuaternion(noteQ).dot(toCam) : 1;
+    noteV.project(camera);
+    el.style.left = `${(noteV.x + 1) / 2 * innerWidth}px`;
+    el.style.top = `${(1 - noteV.y) / 2 * innerHeight}px`;
+    el.classList.toggle('back', facing < -0.1 && !exploded); // on the far side of the model: hidden until it turns round
+  }
+}
+function annotateClick(e) {
+  setRay(e);
+  const meshes = [];
+  holo.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const hit = ray.intersectObjects(meshes, false)[0];
+  if (!hit) return null;
+  const p = holo.worldToLocal(hit.point.clone());
+  const nrm = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).applyQuaternion(holo.getWorldQuaternion(new THREE.Quaternion()).invert()) : null;
+  const item = Math.max(0, itemWraps.findIndex((w) => { let o = hit.object; while (o) { if (o === w) return true; o = o.parent; } return false; }));
+  const spot = { item, p: p.toArray().map((v) => +v.toFixed(5)), ...(nrm ? { n: nrm.toArray().map((v) => +v.toFixed(5)) } : {}) };
+  setAnnotate(false);
+  relay.holoAnnotate(spot); // Relay listens for what the note says; the text comes back in a 'annotations' message
+  return spot;
+}
+function setAnnotate(on) {
+  annotating = !!on;
+  $('annotate').classList.toggle('on', annotating);
+  document.body.classList.toggle('annotating', annotating);
+  if (annotating) { $('hint2').textContent = 'Click a spot on the model to pin a note there'; if (measuring) setMeasure(false); }
+  else if ($('hint2').textContent.startsWith('Click a spot')) $('hint2').textContent = '';
+  document.body.classList.remove('menu-open');
+}
+$('annotate').onclick = () => setAnnotate(!annotating);
+
+// Life size: the model drawn so that a millimetre of it is a millimetre of your screen. The screen's points per inch is a setting (calibrated against
+// a credit card in Settings > General > Holograms); a point is a CSS pixel. A designed model knows its size in millimetres; any other needs to be told
+// how long its longest side is (mm). Returns { ok, mm } or { ok: false, reason }.
+function realSize(mmLongest = 0) {
+  const ptsPerMm = pointsPerInch / 25.4;
+  const cad = items.length === 1 && itemWraps[0]?.userData.cadView?.mesh;
+  let k; // pixels one millimetre of the model takes up now
+  let mm;
+  if (cad) {
+    cad.updateWorldMatrix(true, false);
+    const s = new THREE.Vector3().setFromMatrixScale(cad.matrixWorld).x || 1; // scene units to a millimetre
+    k = s * PPU;
+    const box = new THREE.Box3().setFromObject(cad);
+    mm = Math.max(...box.getSize(new THREE.Vector3()).toArray()) / s;
+  } else if (mmLongest > 0) {
+    const longest = Math.max(...new THREE.Box3().setFromObject(holo).getSize(new THREE.Vector3()).toArray());
+    if (!(longest > 0)) return { ok: false, reason: 'The model has no size yet.' };
+    k = (longest * PPU) / mmLongest;
+    mm = mmLongest;
+  } else return { ok: false, reason: 'need-size' };
+  const want = userScale * ptsPerMm / k;
+  const px = mm * ptsPerMm;
+  if (want > 4 || want < 0.3) { userScale = Math.min(4, Math.max(0.3, want)); applyScale(); relay.holoScale(userScale); return { ok: false, reason: px > Math.min(innerWidth, innerHeight) ? 'It is bigger than your screen at life size, so it is as large as it goes.' : 'It is too small to show clearly at life size.', mm }; }
+  userScale = want;
+  applyScale();
+  relay.holoScale(userScale);
+  return { ok: true, mm: Math.round(mm * 10) / 10 };
+}
+$('realsize').onclick = () => {
+  const r = realSize(0);
+  $('err').textContent = r.ok ? `Life size: ${r.mm} mm long, on your screen.` : r.reason === 'need-size' ? 'Say how big it really is, for example “show it life size, it is 30 cm long”.' : r.reason;
+  setTimeout(() => { $('err').textContent = ''; }, 6000);
+  document.body.classList.remove('menu-open');
+};
+
+// Print check: the model as a printer would see it (z up, on the bed, millimetres), said in a few lines.
+function runPrintCheck() {
+  const { tris, mm } = collectTriangles();
+  const r = tris.length ? printCheck(zUp(tris, { scaleTo: mm ? 0 : 100 })) : null;
+  if (!r) { $('err').textContent = 'There is nothing to check yet.'; setTimeout(() => { $('err').textContent = ''; }, 4000); return null; }
+  $('err').textContent = `${r.sizeMm.join(' × ')} mm${mm ? '' : ' (a guess: 100 mm across)'}${r.volumeCm3 !== null ? `, ${r.volumeCm3} cm³` : ''}. ${r.notes.join(' ')}`;
+  setTimeout(() => { $('err').textContent = ''; }, 12000);
+  return r;
+}
+$('printcheck').onclick = () => runPrintCheck();
 const mw = new THREE.Vector3();
 function updateMeasure() {
   if (!measuring) return;
@@ -1058,6 +1221,7 @@ function frame(now) {
   }
   if (clip.on) updateClip();
   updateMeasure();
+  placeNotes();
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -1076,6 +1240,10 @@ window.__holoTest = {
   info: () => { const kinds = {}; let meshes = 0; holo.traverse((o) => { if (o.isMesh) { meshes++; for (const m of [].concat(o.material)) { const k = m.isShaderMaterial ? (m.uniforms.clipOn ? 'shader+clip' : 'shader') : m.type; kinds[k] = (kinds[k] || 0) + 1; } } }); return { meshes, kinds, box: clip.box && [clip.box.min.toArray(), clip.box.max.toArray()], items: items.map((i) => i.kind) }; },
   cut: (on, axis = 1, t = 0, flip = false) => { clip.axis = axis; clip.flip = flip; $('cutr').value = String(Math.round(t * 100)); setCut(on); clip.t = t; updateClip(); return { on: clip.on, d: uniforms.clipD.value, n: uniforms.clipN.value.toArray() }; },
   save: (fmt) => saveModel(fmt),
+  printCheck: () => runPrintCheck(),
+  notes: () => notes.map((n) => ({ ...n })),
+  annotateAt: (x, y) => { if (!annotating) setAnnotate(true); return annotateClick({ clientX: x, clientY: y }); },
+  noteBoxes: () => [...notesEl.children].map((el) => { const r = el.getBoundingClientRect(); return { id: el.dataset.id, x: Math.round(r.left), y: Math.round(r.top), hidden: el.classList.contains('back') }; }),
   yaw: (deg) => { orient.setFromAxisAngle(axisY, (deg * Math.PI) / 180); holo.quaternion.copy(orient); return true; },
   stlBytes: () => { const { tris } = collectTriangles(); return tris.length ? { bytes: toStl(zUp(tris), 'x').length, tris: tris.length / 9 } : 0; },
   mode: () => (exploded || editing ? 'parts' : items.length > 1 ? 'items' : 'whole'),

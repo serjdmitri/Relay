@@ -173,3 +173,42 @@ test('a pointing finger held a moment picks what it points at, once', () => {
   r.run(20, [r.hand({ gesture: 'Pointing_Up' })]);
   assert.equal(r.types().filter((t) => t === 'point').length, 1);
 });
+
+test('a fist in one hand and a pinch in the other draws: start, moves, end; a single pinch never draws', () => {
+  const r = rig();
+  const fist = r.hand({ gesture: 'Closed_Fist', pinch: 0.15, x: 0.8 });
+  r.run(5, [fist, r.hand({ x: 0.4 })]);
+  r.clear();
+  r.run(6, (i) => [fist, r.hand({ gesture: 'Open_Palm', pinch: 0.1, x: 0.4 - i * 0.01 })]);
+  assert.equal(r.types().filter((t) => t === 'drawstart').length, 1);
+  assert.ok(r.types().filter((t) => t === 'drawmove').length >= 5);
+  assert.ok(!r.types().includes('pinchdown') && !r.types().includes('click'), 'the pinch is the pen, not a click');
+  r.clear();
+  r.run(1, [fist, r.hand({ gesture: 'Open_Palm', pinch: 0.8 })]);
+  assert.ok(!r.types().includes('drawend'), 'a single frame of doubt is the hand wobbling');
+  r.run(4, [fist, r.hand({ gesture: 'Open_Palm', pinch: 0.8 })]);
+  assert.equal(r.types().filter((t) => t === 'drawend').length, 1);
+  assert.ok(!r.types().includes('twohands'));
+  // one hand pinching alone: a click or a press and drag, never a drawing
+  const lone = rig();
+  lone.run(5, [lone.hand()]);
+  lone.run(30, [lone.hand({ gesture: 'Open_Palm', pinch: 0.1 })]);
+  assert.ok(lone.types().includes('pinchdown'));
+  assert.ok(!lone.types().includes('drawstart'));
+});
+
+test('two fists still pull apart and two pinches still resize: neither is a pen', () => {
+  const r = rig();
+  r.run(3, [r.hand({ gesture: 'Closed_Fist', pinch: 0.1, x: 0.3 }), r.hand({ gesture: 'Closed_Fist', pinch: 0.1, x: 0.7 })]);
+  assert.ok(!r.types().includes('drawstart'));
+  assert.ok(r.types().includes('twohands'));
+  const p = rig();
+  p.run(3, [p.hand({ pinch: 0.1, x: 0.3 }), p.hand({ pinch: 0.1, x: 0.7 })]);
+  assert.ok(!p.types().includes('drawstart'));
+  assert.ok(p.types().includes('twohands'));
+  const gone = rig();
+  const f = gone.hand({ gesture: 'Closed_Fist', pinch: 0.15, x: 0.8 });
+  gone.run(5, [f, gone.hand({ gesture: 'Open_Palm', pinch: 0.1 })]);
+  gone.run(10, []);
+  assert.equal(gone.types().filter((t) => t === 'drawend').length, 1, 'losing the hands ends the drawing');
+});

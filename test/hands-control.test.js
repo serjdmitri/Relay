@@ -133,23 +133,45 @@ test('pointing clicks where the finger is (picking a piece), and the peace sign 
   assert.deepEqual(mics, [h.id]);
 });
 
-test('a pinch held in empty space draws a line in the air; over a hologram it turns the model instead', async () => {
+test('a pinch alone never draws (over a hologram it turns the model); a fist and a pinch draw, and a rough circle becomes a shape', async () => {
   const calls = [];
+  const shapes = [];
+  const notes = [];
   const wins = [];
   const holos = new HoloManager({ createWindow: () => { const w = fakeHolo(); wins.push(w); return w; }, cursor: () => ({ x: 0, y: 0 }), area: () => ({ x: 0, y: 0, width: 1800, height: 1100 }), download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
   const h = holos.get(await holos.show({ title: 'A', items: [{ kind: 'shapes', title: 'A', parts: [] }], x: 400, y: 400 }));
-  const hc = new HandControl({ holos, display: () => ({ x: 0, y: 0, width: 1801, height: 1101 }), askAccess: async () => true, createCamera: async () => ({ close() {} }), createCursor: () => ({ moveTo() {}, setState() {}, hide() {}, close() {} }), air: (t, x, y) => calls.push([t, Math.round(x), Math.round(y)]) });
+  const hc = new HandControl({ holos, display: () => ({ x: 0, y: 0, width: 1801, height: 1101 }), askAccess: async () => true, createCamera: async () => ({ close() {} }), createCursor: () => ({ moveTo() {}, setState() {}, hide() {}, close() {} }), air: (t, x, y) => calls.push([t, Math.round(x), Math.round(y)]), shape: (r) => shapes.push(r), notify: (m) => notes.push(m) });
   await hc.enable();
   const at = (x, y) => ({ x: x / 1800, y: y / 1100 });
+  // one pinch, far from any hologram: nothing is drawn and nothing is pressed
   await hc.handle({ type: 'pinchdown', ...at(1400, 900) });
   await hc.handle({ type: 'move', held: true, ...at(1450, 920) });
-  await hc.handle({ type: 'move', held: true, ...at(1500, 950) });
   await hc.handle({ type: 'pinchup', ...at(1500, 950) });
-  assert.deepEqual(calls.map((c) => c[0]), ['start', 'point', 'point', 'end']);
-  assert.equal(h.win.input.length, 0, 'nothing was pressed on the hologram');
+  assert.deepEqual(calls, []);
+  assert.equal(h.win.input.length, 0);
+  // over the hologram it is a press
   await hc.handle({ type: 'pinchdown', ...at(400, 400) });
-  assert.equal(h.win.input.at(-1).type, 'mouseDown', 'over the hologram it is a press');
-  assert.equal(calls.length, 4, 'and nothing more was drawn');
+  assert.equal(h.win.input.at(-1).type, 'mouseDown');
+  await hc.handle({ type: 'pinchup', ...at(400, 400) });
+  // a fist in one hand and a pinch in the other: a circle drawn in the air
+  const n = 40;
+  await hc.handle({ type: 'drawstart', ...at(1500 + 150, 700) });
+  for (let i = 1; i < n; i++) { const a = (i / (n - 1)) * Math.PI * 2; await hc.handle({ type: 'drawmove', ...at(1500 + 150 * Math.cos(a), 700 + 150 * Math.sin(a)) }); }
+  await hc.handle({ type: 'drawend', ...at(1650, 700) });
+  assert.deepEqual([calls[0][0], calls.at(-1)[0]], ['start', 'end']);
+  assert.equal(shapes.length, 1);
+  assert.equal(shapes[0].kind, 'circle');
+  assert.ok(Math.abs(shapes[0].cx - 1500) < 20 && Math.abs(shapes[0].w - 300) < 30);
+  // a scribble that is nothing: told so, nothing made
+  await hc.handle({ type: 'drawstart', ...at(1000, 500) });
+  for (let i = 1; i < 30; i++) await hc.handle({ type: 'drawmove', ...at(1000 + Math.sin(i * 0.9) * 140, 500 + Math.cos(i * 2.3) * 120) });
+  await hc.handle({ type: 'drawend', ...at(1000, 500) });
+  assert.equal(shapes.length, 1);
+  assert.match(notes[0], /did not look like a circle/);
+  // losing the hands in the middle of a drawing ends it
+  await hc.handle({ type: 'drawstart', ...at(900, 900) });
+  await hc.handle({ type: 'lost' });
+  assert.equal(calls.at(-1)[0], 'end');
 });
 
 test('the hand view: shown and hidden on the camera window, remembered when the camera starts, and told what the hands do', async () => {
