@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.2
+
+- **Tested with a real token: TRELLIS.2 works** (a car from one photo in about 63 s: real body shape, windows, mirrors, wheels, and a believable back with a plate, where Stable Fast 3D gives a flat, blobby car).
+- **Fixed models looking too dark.** Textures that carry their own colour-space tag (TRELLIS's) were shown without the final brightness step; they now match Stable Fast 3D's brightness.
+- **Test it** now builds the Stable Fast 3D version too and puts the two side by side as holograms; both are kept in the model cache.
+
 ## 0.23.1
 
 - **Settings > General > Hugging Face token > Test it.** Makes a model of a car from the clearest photo with the generators in order, puts it on screen as a hologram, and lists what each generator did (made it in N s, or why not: no token, quota used up, service changed).

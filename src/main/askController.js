@@ -573,10 +573,21 @@ class AskController {
     if (!best) return { ok: false, error: 'No sample photo could be fetched.', hasToken: !!token, attempts: [] };
     const t0 = Date.now();
     try {
-      const made = await photoToModel({ bytes: best.bytes, type: best.type || 'image/jpeg' }, { token, order: this.engineOrder() });
-      const item = { kind: 'glb', title: 'Test model', credit: `${best.credit ? `${best.credit} · ` : ''}made into 3D from a photo with ${made.name}`, bytes: made.bytes, engine: made.engine };
-      if (this.holos) await this.holos.show({ title: `Test: ${made.name}`, items: [item] });
-      return { ok: true, engine: made.engine, name: made.name, seconds: +((Date.now() - t0) / 1000).toFixed(1), attempts: made.attempts, hasToken: !!token };
+      const photo = { bytes: best.bytes, type: best.type || 'image/jpeg' };
+      const made = await photoToModel(photo, { token, order: this.engineOrder() });
+      const keep = (r, label) => {
+        const key = this.modelCache?.key(best.url, `test-${r.engine}`);
+        const file = this.modelCache ? this.modelCache.put(key, r.bytes) : '';
+        return { kind: 'glb', title: `Test: ${r.name}`, credit: `${best.credit ? `${best.credit} · ` : ''}made into 3D from a photo with ${r.name}`, bytes: r.bytes, engine: r.engine, ...(file ? { file } : {}), label };
+      };
+      const first = keep(made);
+      const shown = [first];
+      let compare = null;
+      if (made.engine !== 'sf3d') { // the fast one beside it, to compare
+        try { compare = await photoToModel(photo, { token, only: 'sf3d' }); shown.push(keep(compare)); } catch { /* the comparison is a bonus */ }
+      }
+      if (this.holos) for (const it of shown) await this.holos.show({ title: it.title, items: [it] });
+      return { ok: true, engine: made.engine, name: made.name, seconds: +((Date.now() - t0) / 1000).toFixed(1), attempts: [...made.attempts, ...(compare ? compare.attempts : [])], hasToken: !!token, files: shown.map((x) => x.file).filter(Boolean) };
     } catch (e) {
       return { ok: false, error: e.message, attempts: e.attempts || [], hasToken: !!token };
     }
