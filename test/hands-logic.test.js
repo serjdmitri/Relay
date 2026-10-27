@@ -104,3 +104,64 @@ test('a hand that leaves the picture lets go of what it held, and the pointer hi
   r.run(3, []);
   assert.deepEqual(r.types(), [], 'nothing more once lost');
 });
+
+test('two fists pulled apart take the model apart, pushed together put it back; two pinches resize and do not', () => {
+  const r = rig();
+  const two = (gap, g) => [r.hand({ x: 0.5 - gap / 2, gesture: g, pinch: g === 'Closed_Fist' ? 0.8 : 0.1, size: 0.25 }), r.hand({ x: 0.5 + gap / 2, gesture: g, pinch: g === 'Closed_Fist' ? 0.8 : 0.1, size: 0.2 })];
+  r.run(5, two(0.2, 'Closed_Fist'));
+  assert.ok(r.types().includes('twohands') && !r.types().includes('grab'), 'two fists together are not a grab');
+  r.clear();
+  r.run(30, (i) => two(0.2 + i * 0.01, 'Closed_Fist'));
+  const pulls = r.events.filter((e) => e.type === 'pull');
+  assert.ok(pulls.length >= 1 && pulls.every((p) => p.open === true), 'apart: open it');
+  assert.ok(!r.types().includes('scale'), 'fists do not resize');
+  r.clear();
+  r.run(40, (i) => two(0.5 - i * 0.01, 'Closed_Fist'));
+  assert.ok(r.events.some((e) => e.type === 'pull' && e.open === false), 'together: close it');
+  const p = rig();
+  p.run(5, [p.hand({ x: 0.4, pinch: 0.1, size: 0.25 }), p.hand({ x: 0.6, pinch: 0.1, size: 0.2 })]);
+  p.clear();
+  p.run(25, (i) => [p.hand({ x: 0.4 - i * 0.005, pinch: 0.1, size: 0.25 }), p.hand({ x: 0.6 + i * 0.005, pinch: 0.1, size: 0.2 })]);
+  assert.ok(p.types().includes('scale') && !p.types().includes('pull'), 'pinches resize, they do not pull apart');
+});
+
+test('turning two pinching hands like a wheel rolls the model, the right way round', () => {
+  const r = rig();
+  const wheel = (a) => [r.hand({ x: 0.5 - 0.15 * Math.cos(a), y: 0.5 - 0.15 * Math.sin(a), pinch: 0.1, size: 0.25 }), r.hand({ x: 0.5 + 0.15 * Math.cos(a), y: 0.5 + 0.15 * Math.sin(a), pinch: 0.1, size: 0.2 })];
+  r.run(5, wheel(0));
+  r.clear();
+  r.run(20, (i) => wheel(i * 0.04));
+  const twists = r.events.filter((e) => e.type === 'twist');
+  assert.ok(twists.length >= 4);
+  const total = twists.reduce((s, t) => s + t.angle, 0);
+  assert.ok(total < -0.5 && total > -1.0, `about as far as the hands turned (0.76 rad), the other way because the picture is mirrored: ${total}`);
+  assert.ok(!r.types().includes('scale'), 'turning in place does not resize');
+});
+
+test('a quick flick sideways is a swipe (once, in the right direction); slow pointing never is', () => {
+  const r = rig();
+  r.run(6, [r.hand({ x: 0.5 })]);
+  r.clear();
+  r.run(5, (i) => [r.hand({ x: 0.5 - i * 0.07 })]); // the picture is mirrored: the hand going left in the picture is the pointer going right
+  r.run(15, [r.hand({ x: 0.1 })]);
+  const swipes = r.events.filter((e) => e.type === 'swipe');
+  assert.equal(swipes.length, 1);
+  assert.equal(swipes[0].dir, 'right');
+  const slow = rig();
+  slow.run(6, [slow.hand({ x: 0.2 })]);
+  slow.clear();
+  slow.run(60, (i) => [slow.hand({ x: 0.2 + i * 0.01 })]);
+  assert.ok(!slow.types().includes('swipe'), 'a slow move across the whole picture is just pointing');
+});
+
+test('a thumb up held keeps, a thumb down held closes, each once', () => {
+  const r = rig();
+  r.run(8, [r.hand({ gesture: 'Thumb_Up' })]);
+  assert.equal(r.types().filter((t) => t === 'thumbup').length, 0);
+  r.run(15, [r.hand({ gesture: 'Thumb_Up' })]);
+  r.run(20, [r.hand({ gesture: 'Thumb_Up' })]);
+  assert.equal(r.types().filter((t) => t === 'thumbup').length, 1);
+  r.run(40, [r.hand({ gesture: 'Open_Palm' })]);
+  r.run(25, [r.hand({ gesture: 'Thumb_Down' })]);
+  assert.equal(r.types().filter((t) => t === 'thumbdown').length, 1);
+});

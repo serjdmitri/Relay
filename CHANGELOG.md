@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.24.0
+
+- **Bigger controls while your hands are in use.** When Hand control sees a hand, the buttons under every hologram, their labels and the editor's panels double in size (64 x 60 instead of 32 x 30) and stay visible; a couple of seconds after your hand leaves they shrink back.
+- **Two fists, pulled apart: the model comes apart into its pieces; pushed together: it goes back.** (Two pinches pulled apart still resize it.)
+- **Two pinching hands turned like a steering wheel roll the model** about the line you are looking along.
+- **Swipe** your open hand quickly sideways over a hologram: the next or the previous model (the arrows). Slow pointing never counts.
+- **Thumb up** held for a moment keeps (pins) the hologram under your hand; **thumb down** held closes it. The peace sign still opens the mic.
+- Honest limits: tested with scripted hand sequences and in real hologram windows, not with a live camera and hand. The swipe is the gesture most likely to need tuning (a very fast flick to a far-away button could be taken for one).
+
 ## 0.23.2
 
 - **Tested with a real token: TRELLIS.2 works** (a car from one photo in about 63 s: real body shape, windows, mirrors, wheels, and a believable back with a plate, where Stable Fast 3D gives a flat, blobby car).

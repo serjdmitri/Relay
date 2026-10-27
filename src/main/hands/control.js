@@ -19,6 +19,8 @@ class HandControl {
     this.captured = null; // the hologram a grab or a held pinch belongs to
     this.pointer = new HandPointer({ onEvent: (e) => this.handle(e).catch(() => {}) });
     this.lastMoveSent = 0;
+    this.handMode = false;
+    this.handTimer = null;
     this.onChange = () => {};
   }
 
@@ -43,6 +45,8 @@ class HandControl {
     this.release();
     try { this.cam?.close?.(); } catch { /* gone */ }
     try { this.ring?.close?.(); } catch { /* gone */ }
+    clearTimeout(this.handTimer); this.handTimer = null;
+    this.setHandMode(false);
     this.cam = null; this.ring = null; this.pos = null;
     this.pointer = new HandPointer({ onEvent: (e) => this.handle(e).catch(() => {}) });
     this.onChange();
@@ -58,7 +62,18 @@ class HandControl {
   }
 
   frame(f) {
-    if (this.enabled && f && Array.isArray(f.hands)) this.pointer.update(f);
+    if (!this.enabled || !f || !Array.isArray(f.hands)) return;
+    if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }
+    else if (this.handMode && !this.handTimer) this.handTimer = setTimeout(() => { this.handTimer = null; this.setHandMode(false); }, 2500);
+    this.pointer.update(f);
+  }
+
+  // While a hand is in view the holograms show bigger controls (easy to hit from a distance); they go back to normal after the hand has left.
+  setHandMode(on) {
+    if (on === this.handMode) return;
+    this.handMode = on;
+    this.holos.handMode = on;
+    for (const h of this.holos.holos.values()) if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'hand-mode', on);
   }
 
   toScreen(e) {
@@ -95,6 +110,8 @@ class HandControl {
     if (!this.enabled) return;
     if (e.type === 'lost') { this.release(); this.ring?.hide?.(); this.pos = null; return; }
     if (e.type === 'scale') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-scale', e.factor); return; }
+    if (e.type === 'twist') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-twist', e.angle); return; }
+    if (e.type === 'pull') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-explode', e.open); return; }
     if (e.x === undefined) return;
     const pt = this.toScreen(e);
     this.pos = pt;
@@ -125,6 +142,9 @@ class HandControl {
       if (h) { this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); }
       return;
     }
+    if (e.type === 'swipe') { const h = this.holos.holoNear(pt, 330); if (h) this.holos.step(h.id, e.dir === 'right' ? 1 : -1); return; }
+    if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
+    if (e.type === 'thumbdown') { const h = this.holos.holoNear(pt, 330); if (h) this.holos.close(h.id); return; }
     if (e.type === 'mic') {
       const h = this.holos.holoNear(pt, 330) || this.holos.latest();
       this.ringState('mic');

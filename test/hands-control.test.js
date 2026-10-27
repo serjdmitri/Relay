@@ -93,3 +93,34 @@ test('it is off until enabled, needs the camera allowed, and turning it off clos
   assert.equal(ok.status, 'off');
   ok.frame({ t: 1, hands: [{ x: 0.5, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, size: 0.2, score: 1 }] }); // ignored once off
 });
+
+test('thumb up pins the hologram, thumb down closes it, a swipe steps to the next model, fists pull apart, twisting rolls', async () => {
+  const { hc, h, ev, at } = await rig();
+  const stepped = [];
+  hc.holos.step = async (id, dir) => stepped.push([id, dir]);
+  await ev({ type: 'move', ...at(900, 550) });
+  await ev({ type: 'swipe', dir: 'right', ...at(900, 550) });
+  await ev({ type: 'swipe', dir: 'left', ...at(900, 550) });
+  assert.deepEqual(stepped, [[h.id, 1], [h.id, -1]]);
+  await ev({ type: 'pull', open: true, ...at(900, 550) });
+  assert.deepEqual(h.win.sent.at(-1), ['holo:state', 'hand-explode', true]);
+  await ev({ type: 'twist', angle: 0.2, ...at(900, 550) });
+  assert.deepEqual(h.win.sent.at(-1), ['holo:state', 'hand-twist', 0.2]);
+  await ev({ type: 'thumbup', ...at(900, 550) });
+  assert.equal(h.pinned, true);
+  assert.deepEqual(h.win.sent.at(-1), ['holo:state', 'pinned', true]);
+  await ev({ type: 'thumbdown', ...at(900, 550) });
+  assert.equal(hc.holos.get(h.id), null, 'closed');
+});
+
+test('while a hand is in view the controls are drawn bigger, and they go back a moment after it leaves', async () => {
+  const { hc, h } = await rig();
+  hc.frame({ t: 1, hands: [{ x: 0.5, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, size: 0.2, score: 1 }] });
+  assert.deepEqual(h.win.sent.filter((s) => s[1] === 'hand-mode').at(-1), ['holo:state', 'hand-mode', true]);
+  assert.equal(hc.holos.handMode, true, 'new holograms start big too');
+  assert.equal(hc.holos.payload(h).handMode, true);
+  hc.frame({ t: 2, hands: [] });
+  assert.ok(hc.handTimer, 'back to normal after a short wait, not at once');
+  hc.disable();
+  assert.deepEqual(h.win.sent.filter((s) => s[1] === 'hand-mode').at(-1), ['holo:state', 'hand-mode', false]);
+});

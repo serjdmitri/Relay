@@ -28,6 +28,7 @@ class HoloManager {
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
     this.holos = new Map();
+    this.handMode = false; // hands are in use: the controls are drawn bigger
     this.byWindow = new Map(); // webContents id -> hologram id
     this.dragging = null;
     this.onChange = () => {};
@@ -135,7 +136,7 @@ class HoloManager {
   }
 
   payload(h) {
-    return { id: h.id, title: h.title, items: h.items, options: h.options && h.options.list.length > 1 ? { index: h.options.index, count: h.options.list.length } : null, pinned: h.pinned, scale: h.scale, solid: h.solid, pos: this.local(h) };
+    return { id: h.id, title: h.title, items: h.items, options: h.options && h.options.list.length > 1 ? { index: h.options.index, count: h.options.list.length } : null, pinned: h.pinned, scale: h.scale, solid: h.solid, pos: this.local(h), handMode: this.handMode };
   }
 
   push(h, kind = 'items') {

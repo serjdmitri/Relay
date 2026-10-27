@@ -14,11 +14,16 @@ export function fingers(l) {
   };
 }
 
-// 'Closed_Fist' | 'Open_Palm' | 'Victory' | 'Pointing_Up' | 'None' (the names the rest of Relay uses)
+// 'Closed_Fist' | 'Open_Palm' | 'Victory' | 'Pointing_Up' | 'Thumb_Up' | 'Thumb_Down' | 'None' (the names the rest of Relay uses)
 export function poseOf(l) {
   if (!l || l.length < 21) return 'None';
   const f = fingers(l);
   const n = [f.index, f.middle, f.ring, f.pinky].filter(Boolean).length;
+  if (n === 0 && f.thumb) { // a thumb held up or down on a closed hand
+    const size = d(l[0], l[9]) || 1e-6;
+    if (l[4].y < l[0].y - 0.9 * size) return 'Thumb_Up';
+    if (l[4].y > l[0].y + 0.9 * size) return 'Thumb_Down';
+  }
   if (n === 0) return 'Closed_Fist';
   if (f.index && f.middle && !f.ring && !f.pinky) return 'Victory';
   if (f.index && !f.middle && !f.ring && !f.pinky) return 'Pointing_Up';
