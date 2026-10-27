@@ -35,3 +35,11 @@ test('the file is a valid property list, and signing is asked of the Mac with th
   const bad = await writeShortcutFile({ url: 'u', token: 'k', outPath: '/tmp/o', exec: async () => ({ ok: false, err: 'nope' }) });
   assert.equal(bad.ok, false);
 });
+
+test('the open-the-page Shortcut is one URL step then Open URLs on that URL', () => {
+  const { buildOpenShortcut } = require('../src/main/remote/shortcutFile');
+  const s = buildOpenShortcut({ url: 'https://mac.ts.net/', uuid: () => 'U1' });
+  assert.equal(s.WFWorkflowActions.length, 2);
+  assert.equal(s.WFWorkflowActions[0].WFWorkflowActionParameters.WFURLActionURL, 'https://mac.ts.net/');
+  assert.equal(s.WFWorkflowActions[1].WFWorkflowActionParameters.WFInput.Value.OutputUUID, 'U1');
+});
