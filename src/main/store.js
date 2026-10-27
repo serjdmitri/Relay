@@ -15,6 +15,7 @@ const DEFAULTS = {
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
     wake: { enabled: false, phrase: 'hey jarvis', apps: [] }, // listen for a wake phrase while Relay is idle (on-device). apps: only while one of these is in front; empty means always
+    briefing: { city: '', name: '', units: 'f' }, // the morning briefing: where to get the weather for (a city name), what to call you, f or c
     language: { reply: 'auto' }, // what language answers come in: auto (the one you asked in) or a code like 'es'
     followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
     bargeIn: { enabled: true, mode: 'talk' }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones

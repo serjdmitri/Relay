@@ -48,6 +48,7 @@ const { UndoRegistry } = require('./activity');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
+const { parseBriefingCommand, buildBriefing, fetchWeather, parseMacEvents, parseMacDue, mergeEvents } = require('./briefing');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
@@ -1042,16 +1043,40 @@ class AskController {
         tools.push(...mcpTools(this.appsClient, { label: 'your apps' }));
       } catch { /* a bad address is shown in Settings; nothing is added */ }
     }
-    if (c.google?.clientId && (c.google.accounts || []).length) {
-      if (!this.googleApi) {
-        this.googleApi = new GoogleApi({
-          accounts: () => (this.store.get('settings.connectors.google.accounts') || []).map((a) => ({ email: a.email, refreshToken: decryptKey(a.refreshEnc) })).filter((a) => a.refreshToken),
-          client: () => ({ clientId: this.store.get('settings.connectors.google.clientId'), clientSecret: decryptKey(this.store.get('settings.connectors.google.clientSecretEnc')) })
-        });
-      }
-      tools.push(...googleTools(this.googleApi));
-    }
+    const gapi = this.googleApiIfConnected();
+    if (gapi) tools.push(...googleTools(gapi));
     return tools;
+  }
+
+  // The Google connection, when an account is connected (made once).
+  googleApiIfConnected() {
+    const c = this.store.get('settings.connectors') || {};
+    if (!(c.google?.clientId && (c.google.accounts || []).length)) return null;
+    if (!this.googleApi) {
+      this.googleApi = new GoogleApi({
+        accounts: () => (this.store.get('settings.connectors.google.accounts') || []).map((a) => ({ email: a.email, refreshToken: decryptKey(a.refreshEnc) })).filter((a) => a.refreshToken),
+        client: () => ({ clientId: this.store.get('settings.connectors.google.clientId'), clientSecret: decryptKey(this.store.get('settings.connectors.google.clientSecretEnc')) })
+      });
+    }
+    return this.googleApi;
+  }
+
+  // "Good morning": the weather, the calendar (this Mac's and Google's), what is due and the important unread email, as one short spoken summary.
+  async briefingText() {
+    const cfg = this.store.get('settings.briefing') || {};
+    const now = new Date();
+    const missing = [];
+    const within = (p, ms = 7000) => Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error('too slow')), ms))]);
+    const g = this.googleApiIfConnected();
+    const [mac, due, gev, mail, weather] = await Promise.all([
+      within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
+      within(this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
+      g ? within(g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => []) : [],
+      g ? within(g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => null) : null,
+      cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null
+    ]);
+    if (!cfg.city) missing.push('weather');
+    return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -1461,6 +1486,11 @@ class AskController {
         if (!opts.shown) {
           const ac = parseAgentCommand(effective);
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
+        }
+        if (!opts.shown && parseBriefingCommand(effective)) {
+          const text = await this.briefingText();
+          // in another language the same facts are said by the model, which answers in the language it was asked in
+          return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
         }
         if (!opts.shown && !opts.scheduled) {
           const sc = parseStudyCommand(effective);

@@ -252,6 +252,15 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay, axBin =
       ]);
       return out || 'No open reminders.';
     },
+    // Open reminders that are due by the end of today (or overdue): "name | due date" lines, or "No reminders due."
+    async remindersDue() {
+      const out = await osa([
+        'tell application "Reminders"', 'set e to current date', 'set time of e to 0', 'set e to e + 1 * days', 'set out to {}',
+        'repeat with r in (reminders whose completed is false)', 'try', 'set d to due date of r', 'if d is not missing value and d < e then set end of out to (name of r) & " | " & (d as string)', 'end try', 'end repeat',
+        'set AppleScript\'s text item delimiters to linefeed', 'return out as text', 'end tell'
+      ]);
+      return out || 'No reminders due.';
+    },
     async remindersComplete(title) {
       return osa(['tell application "Reminders"', `set r to (reminders whose name is ${q(title)} and completed is false)`, 'if (count of r) = 0 then return "No open reminder with that exact name."', 'set completed of item 1 of r to true', 'return "Completed."', 'end tell']);
     },

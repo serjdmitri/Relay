@@ -646,6 +646,13 @@ const PAGES = {
         row.onclick = (e) => e.target.dataset.v && relay.set('settings.presence.awayAfter', Number(e.target.dataset.v));
         return row;
       })(),
+      (() => {
+        const b = S.settings.briefing || {};
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Morning briefing</div><div class="d">Say “good morning” or “brief me”: the weather, today's calendar (this Mac's and Google's), what is due, and important unread email. To hear it every day, say “every weekday at 7 brief me”. Your city is only used to look up the weather.</div></div><input class="field" id="bcity" style="width:170px" placeholder="City, e.g. Hollywood, Florida" value="${esc(b.city || '')}"><input class="field" id="bname" style="width:110px;margin-left:8px" placeholder="Your name" value="${esc(b.name || '')}"></div>`);
+        $('#bcity', row).onchange = (e) => relay.set('settings.briefing.city', e.target.value.trim().slice(0, 80));
+        $('#bname', row).onchange = (e) => relay.set('settings.briefing.name', e.target.value.trim().slice(0, 30));
+        return row;
+      })(),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')
