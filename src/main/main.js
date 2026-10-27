@@ -529,6 +529,7 @@ function registerIpc() {
   ipcMain.handle('remote:shortcut', async () => { await remote.sync(); if (!remote.server) return { error: remote.error || 'Turn Relay Remote on first.' }; const k = remote.shortcutKey(); broadcast(); return k; });
   ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
+  ipcMain.handle('remote:tailscale-check', async () => { await remote.refreshTailscale(); broadcast(); return { ok: true }; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });

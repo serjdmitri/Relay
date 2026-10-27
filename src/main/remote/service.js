@@ -82,6 +82,12 @@ class RemoteService {
     return { token, url: `${best}/api/ask` };
   }
 
+  // Looks at Tailscale again (it can be installed or signed in after Relay started).
+  async refreshTailscale() {
+    this.ts = await tailscale.status().catch(() => this.ts || { installed: false });
+    return this.ts;
+  }
+
   async enableTailscale() {
     const r = await tailscale.serve(this.settings.port);
     if (r.ok) this.store.set('settings.remote.tailscaleServing', true);
