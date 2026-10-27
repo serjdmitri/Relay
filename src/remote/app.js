@@ -174,6 +174,7 @@
       waiting = r.id;
     } catch (e) { waiting = null; setMode('idle'); line(e.message); }
   }
+  for (const b of document.querySelectorAll('#quick button')) b.onclick = () => ask(b.dataset.say);
   $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value; $('text').value = ''; $('text').blur(); ask(v); };
 
   let unlocked = false;
@@ -241,6 +242,9 @@
       applyStatus(s);
     } catch { return; }
     connect();
+    // /?say=lock%20my%20mac (a bookmark, or a Shortcut's Open URL) sends that phrase as soon as the page is up, then forgets it
+    const say = new URLSearchParams(location.search).get('say');
+    if (say) { history.replaceState(null, '', location.pathname); ask(say.slice(0, 300)); }
   }
   if (token) start(); else show('pair');
 })();

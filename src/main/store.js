@@ -42,6 +42,7 @@ const DEFAULTS = {
       openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
       elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
     },
+    notify: { enabled: false, channel: 'ntfy', ntfyTopic: '', ntfyServer: 'https://ntfy.sh', imessageTo: '', minSeconds: 30, includeText: false }, // tell the phone when a long job finishes (see notify.js)
     remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone
     connectors: { // Notion (a token you paste) and Google (your own OAuth app, several accounts): secrets are encrypted
       notion: { tokenEnc: '', name: '' },

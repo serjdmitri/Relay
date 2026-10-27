@@ -328,6 +328,29 @@ const PAGES = {
     $('#rlan', sw).onclick = () => relay.setRemote({ lan: !R.lan });
     c.append(sw);
 
+    {
+      c.append(h('<div class="section-title" style="margin-top:0">Tell my phone when a long job finishes</div>'));
+      const N = S.settings.notify || {};
+      const nc = h('<div class="card flat" style="margin-bottom:14px"></div>');
+      nc.append(toggleRow('Send a message to my phone', 'When a request takes more than 30 seconds (or a background agent finishes) you get a short message, so you can leave the desk. Only “Done: …” and the first words of what you asked are sent, never the answer.', 'settings.notify.enabled'));
+      const chan = h(`<div class="row"><div class="grow"><div class="t">How</div><div class="d">ntfy: a free notification app (ntfy.sh); the message goes through its server. iMessage: Relay texts you from this Mac, nothing else is involved.</div></div><div class="seg sm">${[['ntfy', 'ntfy'], ['imessage', 'iMessage']].map(([v, l]) => `<button data-v="${v}" class="${(N.channel || 'ntfy') === v ? 'on' : ''}" style="width:80px">${l}</button>`).join('')}</div></div>`);
+      chan.onclick = (e) => e.target.dataset.v && relay.set('settings.notify.channel', e.target.dataset.v);
+      nc.append(chan);
+      if ((N.channel || 'ntfy') === 'ntfy') {
+        const top = h(`<div class="row"><div class="grow"><div class="t">Topic</div><div class="d">Install the ntfy app on your iPhone, tap +, and subscribe to this topic. It is the only secret: keep it to yourself.</div><div class="d" style="user-select:text;font-family:ui-monospace,Menlo,monospace">${esc(N.ntfyTopic || 'not made yet')}</div></div><button class="btn" id="ntop">${N.ntfyTopic ? 'New topic' : 'Make a topic'}</button></div>`);
+        $('#ntop', top).onclick = () => relay.notifyTopic();
+        nc.append(top);
+      } else {
+        const to = h(`<div class="row"><div class="grow"><div class="t">Send iMessages to</div><div class="d">Your own phone number or Apple ID email. The first time, macOS asks whether Relay may control Messages.</div></div><input class="field" style="width:200px" value="${esc(N.imessageTo || '')}" placeholder="+1 555 123 4567"></div>`);
+        $('input', to).onchange = (e) => relay.set('settings.notify.imessageTo', e.target.value.trim());
+        nc.append(to);
+      }
+      const test = h('<div class="row"><div class="grow"><div class="t">Try it</div><div class="d" id="ntres">Sends a test message now.</div></div><button class="btn" id="ntest">Send a test</button></div>');
+      $('#ntest', test).onclick = async () => { $('#ntres', test).textContent = 'Sending…'; const r = await relay.notifyTest(); $('#ntres', test).textContent = r.ok ? `Sent (${r.via}). Check your phone.` : r.error; };
+      nc.append(test);
+      c.append(nc);
+    }
+
     if (R.enabled && R.running) {
       c.append(h('<div class="section-title" style="margin-top:0">Pair a phone</div>'));
       const box = h('<div class="card" style="padding:14px"></div>');

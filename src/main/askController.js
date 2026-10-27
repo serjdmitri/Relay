@@ -43,6 +43,7 @@ const { WakeWord } = require('./wake');
 const { BargeIn } = require('./barge');
 const { shouldFollowUp } = require('./conversation');
 const { Layouts } = require('./layouts');
+const { PhoneNotifier } = require('./notify');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
@@ -133,6 +134,7 @@ class AskController {
     this.holos = null; // set by the app: the holograms
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
+    this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
     this.tasks = []; // what was asked this round: { id, text, status: 'queued' | 'running' | 'done' | 'failed' }, shown as bullets
@@ -802,6 +804,7 @@ class AskController {
     this.onChange();
     if (a.status !== 'stopped') this.sound(a.status === 'done' ? 'Pop' : 'Basso');
     this.onAgentDone?.(a);
+    this.phone.jobDone({ text: a.task, reply: a.result, status: a.status, agent: true });
   }
 
   runAgentCommand(cmd) {
@@ -1930,6 +1933,7 @@ class AskController {
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
+    this.phone.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
     if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, profileFor(jobFor(reply, res.job), this.store.get('settings') || {}));
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
