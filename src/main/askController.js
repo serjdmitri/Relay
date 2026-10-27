@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, clipboard, desktopCapturer, safeStorage, systemPreferences } = require('electron');
+const { app, BrowserWindow, screen, clipboard, desktopCapturer, safeStorage, systemPreferences, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 const crypto = require('crypto');
@@ -23,7 +23,8 @@ const { findStls, downloadStl } = require('./models/lookup');
 const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
 const { CLOSE_HOLOS } = require('./holo/closeWords');
 const cadModel = require('./models/cad');
-const { photoToGlb } = require('./models/sf3d');
+const { photoToModel, byId: engineById } = require('./models/generators');
+const { rankPhotos, decodeWith } = require('./models/photoscore');
 const { fitPrompt, parsePlacement, heuristicPlacement } = require('./holo/fit');
 const { normalizeParts } = require('./models/shapes');
 const { NotionApi, notionTools } = require('./connectors/notion');
@@ -541,18 +542,39 @@ class AskController {
     } catch { return fallback; }
   }
 
-  // A real-looking model made from a photo of the real thing, kept in the cache so it is only made once.
+  // The engines to try for a photo, best first. The sharper ones (TRELLIS) need the person's free Hugging Face token: without one the free
+  // GPU time is used up in a few tries a day, so the fast one (Stable Fast 3D) leads.
+  hfToken() { return decryptKey(this.store.get('settings.hfTokenEnc')) || ''; }
+
+  engineOrder() { return this.hfToken() ? ['trellis2', 'trellis', 'sf3d'] : ['sf3d']; }
+
+  // A real-looking model made from a photo of the real thing, kept in the cache so it is only made once. c.engine asks for one generator
+  // only (to compare them); without it the best one that works is used.
   async generatePhotoModel(c) {
-    const key = this.modelCache?.key(c.url, 'sf3d-v1');
-    const credit = `${c.credit ? `${c.credit} · ` : ''}made into 3D from a photo`;
+    const token = this.hfToken();
+    const key = this.modelCache?.key(c.url, `gen-v3-${c.engine || (token ? 'auto-hf' : 'auto')}`);
+    const label = (name) => `${c.credit ? `${c.credit} · ` : ''}made into 3D from a photo${name ? ` with ${name}` : ''}`;
     const hit = key && this.modelCache.get(key);
-    if (hit) return { kind: 'glb', title: c.title, credit, file: this.modelCache.file(key), bytes: hit };
-    const photo = await fetchPhoto(c.url);
+    if (hit) return { kind: 'glb', title: c.title, credit: label(c.engine ? engineById(c.engine)?.name : ''), file: this.modelCache.file(key), bytes: hit };
+    const photo = c.bytes ? { bytes: c.bytes, type: c.type || 'image/jpeg' } : await fetchPhoto(c.url);
     if (!photo) throw new Error('That photo could not be fetched.');
-    const bytes = await photoToGlb(photo);
-    const file = this.modelCache ? this.modelCache.put(key, bytes) : '';
+    const made = await photoToModel(photo, { token, only: c.engine || null, order: this.engineOrder() });
+    const file = this.modelCache ? this.modelCache.put(key, made.bytes) : '';
     this.modelCache?.trim();
-    return { kind: 'glb', title: c.title, credit, ...(file ? { file } : {}), bytes };
+    return { kind: 'glb', title: c.title, credit: label(made.name), ...(file ? { file } : {}), bytes: made.bytes, engine: made.engine };
+  }
+
+  // Photos of the thing, the clearest first: each is fetched and scored (a whole object on a plain background beats a busy scene, a part or
+  // a diagram), so the best goes to the generator first.
+  async rankedPhotos(photos, limit = 3) {
+    const bytes = new Map();
+    const ranked = await rankPhotos(photos, async (p) => {
+      const f = await fetchPhoto(p.url).catch(() => null);
+      if (!f) return null;
+      bytes.set(p.url, f);
+      return decodeWith(nativeImage, f.bytes);
+    });
+    return ranked.slice(0, limit).map((p) => ({ ...p, ...(bytes.get(p.url) ? { bytes: bytes.get(p.url).bytes, type: bytes.get(p.url).type } : {}) }));
   }
 
   // Looks for the most realistic model: a real one from Wikimedia Commons when its title matches well, otherwise a model made from a
@@ -568,13 +590,21 @@ class AskController {
     if (raw.query) { try { stls = await findStls(raw.query, { n: 3 }); } catch { stls = []; } }
     if (fromPhotos) {
       if (raw.photo_url && safePhotoUrl(raw.photo_url)) photos.push({ url: safePhotoUrl(raw.photo_url), title, credit: 'A photo Relay found while researching' });
-      try { photos.push(...(await findPhotos(raw.photo_query || raw.query || title, { n: 3 }))); } catch { /* no photos */ }
-      photos = photos.filter((p, i) => photos.findIndex((x) => x.url === p.url) === i).slice(0, 3);
+      for (const q of [...new Set([raw.photo_query, raw.query, title].filter(Boolean))].slice(0, 3)) {
+        try { photos.push(...(await findPhotos(q, { n: 5 }))); } catch { /* no photos */ }
+      }
+      photos = photos.filter((p, i) => photos.findIndex((x) => x.url === p.url) === i).slice(0, 8);
+      photos = await this.rankedPhotos(photos, 3).catch(() => photos.slice(0, 3));
     }
     const stl = (m) => ({ kind: 'stl', title: m.title, url: m.url, credit: m.credit });
     // a ready-made model goes first only when its title clearly is the thing: most of the words, or half of them in a short title ("Eiffel")
     const strong = stls.filter((m) => m.match >= 0.6 || (m.match >= 0.5 && m.titleWords <= 2)).slice(0, 1);
-    const options = [...strong.map(stl), ...photos.map((p) => ({ kind: 'photo', title: p.title, url: p.url, credit: p.credit })), ...stls.filter((m) => !strong.includes(m)).map(stl)];
+    // the clearest photo first; with the person's Hugging Face token it is also made with the fast generator, to compare the two side by side
+    const photoOptions = photos.flatMap((p, i) => {
+      const base = { kind: 'photo', title: p.title, url: p.url, credit: p.credit, bytes: p.bytes, type: p.type };
+      return i === 0 && this.hfToken() ? [base, { ...base, engine: 'sf3d' }] : [base];
+    });
+    const options = [...strong.map(stl), ...photoOptions, ...stls.filter((m) => !strong.includes(m)).map(stl)];
     if (parts.length) options.push({ kind: 'shapes', title, parts, credit: 'Built by Relay from simple shapes' });
     if (!options.length) return 'No real 3D model or photo of that was found. Call show_3d again with a better query (the exact product or place name), a photo_url from your research, or parts to build a simple one from shapes; or tell the user there is none.';
     let item = null;
@@ -599,7 +629,8 @@ class AskController {
     if (raw.keep) this.holos.pin(id, true);
     const more = options.length > 1 ? ` There are ${options.length - 1} other option${options.length === 2 ? '' : 's'} (real models, or generated from other photos): the user can press the arrows under the hologram to switch.` : '';
     const what = stand ? 'a simple stand-in built from shapes' : item.kind === 'glb' ? `a realistic model generated from a real photo ("${item.title}")` : `a real 3D model, "${item.title}" (${item.credit})`;
-    const caution = stand ? 'say it is a simple stand-in' : item.kind === 'glb' ? 'say it was generated from one photo, so hidden sides and fine details are guessed' : 'say so if it looks like a different thing than they asked for';
+    const tip = item.kind === 'glb' && !this.hfToken() ? ' If they want sharper models they can add a free Hugging Face token in Settings > General (it unlocks the TRELLIS generators); mention it once, briefly.' : '';
+    const caution = stand ? 'say it is a simple stand-in' : item.kind === 'glb' ? `say it was generated from one photo (the clearest of the photos found), so hidden sides and fine details are guessed.${tip}` : 'say so if it looks like a different thing than they asked for';
     return `Showing a hologram of ${what}.${more} They can drag the glowing base to move it anywhere on the screen, drag the model to turn it, scroll to resize, pin it to keep it, and drop it on another hologram to combine them. Answer in one short sentence, and ${caution}.`;
   }
 

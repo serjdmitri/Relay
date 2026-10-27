@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.0
+
+- **Better photos in, better models out.** Relay now collects up to eight photos of the thing (from several searches, not just one), looks at each, and sends the **clearest** one to the generator: a whole object on a plain background, seen from the side or a corner, big and sharp, beats a busy scene, an object cut off by the edge, or a close-up of a part. A title that says "interior", "gauge", "diagram" and the like counts against a photo hard. Real test: for "Toyota Corolla" the first photo Commons returned was a **fuel gauge** and the model came out a gauge; Relay now skips it and builds the actual car from the best photo.
+- **Sharper textures** from Stable Fast 3D: 2048 instead of 1024 (about the same time).
+- **Stronger generators, ready for a free Hugging Face token.** TRELLIS.2 and TRELLIS (Microsoft) make much cleaner shapes and textures than Stable Fast 3D. Their free GPU time is rationed per person, and anonymous use was already used up when I tried ("120 s requested, 0 s left"). Settings > General > Hugging Face token (optional): paste a free "read" token from huggingface.co/settings/tokens and Relay tries TRELLIS.2, then TRELLIS, then Stable Fast 3D. The token is kept encrypted and sent only to Hugging Face; only the public photo is sent with it.
+- **Compare results yourself.** With a token, the arrows under a hologram step through the best photo made with the sharper generator, the same photo made with Stable Fast 3D, then the other photos, and the line under the name says which generator made each. Asking for one generator never swaps silently to another.
+- Honest limits: I could not run TRELLIS for real (quota), so it is tested against a pretend Space and the real Spaces' published call signatures, not a real model; Relay falls back to Stable Fast 3D if it fails. A model made from one photo still guesses the back and underside. Photo scoring is a rule of thumb, not an AI judge: it looks at the background, framing and size, and the title.
+
 ## 0.22.0
 
 - **The reactor stays while holograms are up.** When you ask for a hologram the reactor now stays, until you say "close" (or "that's all"), pin the holograms you want to keep, or close them one by one. Esc closes the reactor and **leaves your holograms on screen**; asking something else no longer takes them away. The pin button keeps a hologram through "close" and through restarts.
