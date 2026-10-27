@@ -3,6 +3,7 @@
 //   open hand            moves the pointer
 //   fist                 grabs: 'grab', moves while held, 'release' when the hand opens
 //   thumb + index tap    a click; held (and moved) it is a press-and-drag: 'pinchdown' ... 'pinchup'
+//   one hand a fist, the other pinching                         'drawstart' ... 'drawmove' ... 'drawend' (draw a shape in the air; the pinching hand is the pen)
 //   both hands pinching, moving apart or together               'scale' (resize); turning them like a wheel: 'twist' (roll)
 //   both hands in fists, pulled apart or pushed together         'pull' (take the model apart into pieces / put it back)
 //   a quick sideways swipe of the open hand                      'swipe' (the next or the previous model)
@@ -41,6 +42,8 @@ class HandPointer {
     this.fistFrames = 0; this.openFrames = 0; this.pinchOn = 0; this.pinchOff = 0; this.lost = 0;
     this.pinch = null; // { t0, x0, y0, held }
     this.two = null; // { d }
+    this.pen = null; // { missed } while a shape is being drawn: one hand a fist, the other pinching
+    this.px = new Smooth(); this.py = new Smooth();
     this.holds = {}; // gesture name -> { since, away, done }
     this.trail = []; // recent positions of the open hand, for swipes
     this.swipeAt = 0;
@@ -67,8 +70,25 @@ class HandPointer {
     this.hold('Thumb_Down', 'thumbdown', h, t, dt, x, y);
     this.hold('Pointing_Up', 'point', h, t, dt, x, y);
 
-    // ---- two hands: pinching resizes and turns, fists pull it apart ----
+    // ---- fist in one hand, pinch in the other: the pinching hand draws ----
     const second = hands[1];
+    if (second) {
+      // the pen pinches without making a fist (the same test a click uses); the other hand is a fist, whatever its thumb is doing
+      const isPen = (g, o) => g.pinch !== undefined && g.pinch < (this.pen ? 0.45 : 0.28) && g.gesture !== 'Closed_Fist' && o.gesture === 'Closed_Fist';
+      const pen = isPen(h, second) ? h : isPen(second, h) ? second : null;
+      if (pen) {
+        const q = this.map(pen);
+        const pxv = this.px.filter(q.x, dt), pyv = this.py.filter(q.y, dt);
+        if (!this.pen) { this.releaseAll(x, y); this.two = null; this.state = 'none'; this.pen = { missed: 0 }; this.emit({ type: 'drawstart', x: pxv, y: pyv }); }
+        this.pen.missed = 0;
+        this.emit({ type: 'drawmove', x: pxv, y: pyv });
+        return;
+      }
+    }
+    if (this.pen && ++this.pen.missed >= 3) this.endPen(x, y); // a few frames of doubt are the hand wobbling, not the end
+    else if (this.pen) return;
+
+    // ---- two hands: pinching resizes and turns, fists pull it apart ----
     const fist = (g) => g.gesture === 'Closed_Fist';
     const pinched = (g) => g.pinch !== undefined && g.pinch < 0.3;
     if (second && ((fist(h) && fist(second)) || (pinched(h) && pinched(second)))) {
@@ -156,6 +176,14 @@ class HandPointer {
     if (Math.abs(dx) > 0.3 && Math.abs(dy) < 0.14) { this.swipeAt = t; this.trail.length = 0; this.emit({ type: 'swipe', dir: dx > 0 ? 'right' : 'left', x, y }); }
   }
 
+  endPen(x, y) {
+    if (!this.pen) return;
+    this.pen = null;
+    const ex = this.px.x ?? x, ey = this.py.x ?? y;
+    this.px.reset(); this.py.reset();
+    this.emit({ type: 'drawend', x: ex, y: ey });
+  }
+
   endPinch(x, y) {
     const pz = this.pinch;
     this.pinch = null;
@@ -175,6 +203,7 @@ class HandPointer {
     this.lost++;
     if (this.lost === 8) {
       this.releaseAll(this.sx.x ?? 0, this.sy.x ?? 0);
+      this.endPen(this.sx.x ?? 0, this.sy.x ?? 0);
       this.two = null;
       this.holds = {}; this.trail.length = 0;
       this.sx.reset(); this.sy.reset();
