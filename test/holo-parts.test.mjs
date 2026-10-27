@@ -43,9 +43,10 @@ test('one solid skin is cut into regions by where its triangles are', () => {
   }
 });
 
-test('too few or too many triangles are not split', () => {
+test('too few triangles, or far too many, are not split', () => {
   assert.equal(splitTriangles(new Float32Array(9)), null);
-  assert.equal(splitTriangles(new Float32Array(9 * 250001)), null);
+  assert.equal(splitTriangles(new Float32Array(9 * 900001)), null);
+  assert.equal(splitTriangles(new Float32Array(9 * 250001).map((_, i) => (i * 7919) % 1000 / 1000)).kind, 'regions', 'a very detailed model is cut by position instead of refusing');
 });
 
 test('pieces move away from the middle, and one at the middle is sent up', () => {

@@ -11,7 +11,8 @@ const MAX_PARTS = 12;
 // is a list of triangle numbers, or null when the model has too many triangles to split quickly.
 export function splitTriangles(positions, { regions = 5 } = {}) {
   const n = Math.floor(positions.length / 9);
-  if (n < 2 || n > MAX_TRIS) return null;
+  if (n < 2 || n > 900000) return null;
+  if (n > MAX_TRIS) return { kind: 'regions', groups: kmeans(positions, n, Math.max(2, Math.min(regions, 8))) }; // too big to look for separate bodies: cut by position
   // how far apart two corners can be and still be "the same point" (a ten-thousandth of the model's size)
   let minx = Infinity, miny = Infinity, minz = Infinity, maxx = -Infinity, maxy = -Infinity, maxz = -Infinity;
   for (let i = 0; i < positions.length; i += 3) {
@@ -181,6 +182,21 @@ export function splitSurface(geo, { maxParts = 10, minShare = 0.025, convexDeg =
     if (small < 0 || (sa >= minArea && alive.size <= maxParts)) break;
     if (!mergeInto(small)) loose.add(small);
   }
+  // specks floating on their own (no neighbour to join) go to the nearest real piece
+  const acc = new Map();
+  for (let t = 0; t < nt; t++) { const r = root(seg[t]); const c = acc.get(r) || acc.set(r, [0, 0, 0, 0]).get(r); c[0] += cx[t] * area[t]; c[1] += cy[t] * area[t]; c[2] += cz[t] * area[t]; c[3] += area[t]; }
+  const real = [...alive].filter((sp) => areaOf[sp] >= minArea);
+  if (real.length >= 2) {
+    for (const sp of [...alive]) {
+      if (areaOf[sp] >= minArea) continue;
+      const c = acc.get(sp); if (!c || !c[3]) continue;
+      let best = real[0], bd = Infinity;
+      for (const r of real) { const k = acc.get(r); const d = (k[0] / k[3] - c[0] / c[3]) ** 2 + (k[1] / k[3] - c[1] / c[3]) ** 2 + (k[2] / k[3] - c[2] / c[3]) ** 2; if (d < bd) { bd = d; best = r; } }
+      redirect[sp] = best; areaOf[best] += areaOf[sp]; alive.delete(sp);
+    }
+  }
+  // a cut that left one huge piece (a smooth skin with no creases) is no use: the caller falls back to cutting by position
+  if (alive.size < 3 || Math.max(...[...alive].map((sp) => areaOf[sp])) > total * 0.7) return null;
   const groups = new Map();
   for (let t = 0; t < nt; t++) { const r = root(seg[t]); (groups.get(r) || groups.set(r, []).get(r)).push(t); }
   const out = [...groups.values()].sort((a, b) => b.length - a.length);

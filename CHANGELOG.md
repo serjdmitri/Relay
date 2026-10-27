@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.29.0
+
+_Built from the cloud session's work. The new features were tested with unit tests only (486 pass); the real-app check is listed in the release notes._
 
 - **Undo in the activity log.** History > Actions now has an Undo button on each action that can be put back: a timer, an alarm, a note, a reminder, a window move, the volume or brightness, dark mode, an app opened, files moved or made by the Drive tools (the made file goes to the Trash). It lasts until Relay quits, works once, and the undo is logged too.
 - **Phone quick actions.** A row of buttons under the reactor on the phone page: Lock my Mac, What's playing, Pause, Play, Next song, Previous, Quieter, Louder, Mute, Focus 25 min, End focus, Screen off. Each is one instant command (no model). "What's playing" is also a new spoken command. `/?say=lock%20my%20mac` on the phone page sends that phrase on opening (for bookmarks and Shortcuts). Checked in a browser with a stand-in server.
@@ -26,6 +28,9 @@
 - **Zip and convert, with undo.** New `drive_make`: zip files or folders into one archive, or convert pictures to PNG, JPEG, TIFF, HEIC, GIF or BMP. Originals are untouched, a new file never replaces one that is there (it gets a free name), and you are asked first. `drive_undo` now also covers these: the new file goes to the Trash (never deleted). Renames already worked through `drive_propose`; the tool now says so.
 - **Print check.** A new button in the hologram menu (next to Measure): says the model's size in millimetres, whether its skin is closed (a slicer needs that), how much of it overhangs past 45 degrees, and its volume. Checked in a real browser page for loading only; not clicked in the Electron app.
 - **Photo-made models pull apart along their own creases and colours** (including TRELLIS.2 models over 250,000 triangles). Not yet tuned on real car models.
+
+- **Checked on real car models (a TRELLIS.2 car and two Stable Fast 3D cars) without colours:** their surfaces are smooth, so the crease cut found no useful pieces and, as a safeguard added in this release, they fall back to cutting by position (the old chunks); loose specks now join the nearest piece, and a cut that leaves one huge piece is rejected. Very detailed models (over 250,000 triangles, like TRELLIS.2 cars) can now be pulled apart at all. Whether colours (tyres against paint) give better pieces in the app is not checked.
+- Tested for real in the installed app: quick maths ("15% of 80 is 12"), a unit conversion (5 miles is 8.047 km) and a sticky note by voice. The rest of the new features are covered by unit tests only.
 
 ## 0.28.0
 
