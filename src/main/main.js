@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
@@ -273,6 +274,7 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
@@ -348,7 +350,8 @@ function registerIpc() {
   });
   ipcMain.handle('voice:list', async () => ({
     voices: (await speaker.voiceList()).filter((v) => v.kind !== 'Novelty' && v.lang.startsWith('en')),
-    picked: await speaker.resolve(store.get('settings.voice'))
+    picked: await speaker.resolve(store.get('settings.voice')),
+    jarvis: await speaker.resolve('jarvis')
   }));
   ipcMain.handle('models3d:test', () => ask.testPhotoModels().catch((e) => ({ ok: false, error: e.message, attempts: [] })));
   ipcMain.handle('models3d:set-hf-token', (_e, token) => {
@@ -384,7 +387,7 @@ function registerIpc() {
     if (store.get('settings.tts.engine') === 'kokoro') store.set('settings.tts.engine', 'system');
     broadcast();
   });
-  ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', { voice, rate }));
+  ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', profileFor('reply', { ...(store.get('settings') || {}), voice, voiceRate: rate })));
   ipcMain.handle('app:open-link', (_e, url) => {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
     if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
@@ -827,6 +830,7 @@ app.whenReady().then(() => {
   rebuildTray();
   startHotkeysWhenTrusted();
   refreshClaude().then(broadcast);
+  ask.watchFront();
   prepareSpeech().finally(() => ask.wake.refresh()); // "Hey Jarvis" starts listening once the speech model is ready
   // Headsets come and go: keep the microphone label in the title bar current.
   setInterval(async () => {

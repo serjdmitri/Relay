@@ -14,7 +14,10 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
-    wake: { enabled: false, phrase: 'hey jarvis' }, // listen for a wake phrase while Relay is idle (on-device)
+    wake: { enabled: false, phrase: 'hey jarvis', apps: [] }, // listen for a wake phrase while Relay is idle (on-device). apps: only while one of these is in front; empty means always
+    followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
+    bargeIn: { enabled: true, mode: 'talk' }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones
+    voices: { quiet: { volume: 0.55 }, reading: {} }, // how confirmations and long answers sound (see voiceProfile.js)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
     hfTokenEnc: '', // an optional free Hugging Face token: more free GPU time for the better 3D generators (TRELLIS)
     models3dFromPhotos: true, // make realistic 3D models from real photos with a free online service (only the public photo is sent)
