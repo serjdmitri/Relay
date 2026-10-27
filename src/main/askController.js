@@ -1249,6 +1249,7 @@ class AskController {
     if (!text) return this.runningTask ? this.resumeWork() : this.close(); // heard nothing: the reactor just fades away where it is
     text = applyReplacements(text, this.store.get('replacements'));
     if (this.mode === 'dictate') return this.insertDictation(text);
+    if (this.mode === 'note') return this.finishNote(text);
     this.state = 'input';
     return this.submit(text, { voice: this.mode === 'ask' });
   }
@@ -1980,6 +1981,27 @@ class AskController {
     this.holoFocus = h ? { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), piece, ts: Date.now() } : null;
     await this.listen('ask', false, { auto: true });
     return true;
+  }
+
+  // A spot on a hologram was picked for a note: Relay listens for what it should say.
+  async annotateByVoice(h, spot) {
+    if (!['idle', 'done'].includes(this.state)) return;
+    this.pendingNote = { holoId: h.id, spot, ts: Date.now() };
+    await this.listen('note', false, { auto: true });
+  }
+
+  // What was said becomes the note, pinned to the spot and kept with the hologram.
+  finishNote(text) {
+    const pending = this.pendingNote;
+    this.pendingNote = null;
+    this.state = 'idle';
+    this.hideSoft();
+    const h = pending && Date.now() - pending.ts < 90000 && this.holos?.get(pending.holoId);
+    const words = String(text || '').replace(/^(?:the )?note(?: says?)?[:,]? /i, '').trim();
+    if (!h || !words) { this.mode = 'ask'; return; }
+    this.holos.setAnnotations(h, [...(h.annotations || []), { id: crypto.randomUUID(), text: words[0].toUpperCase() + words.slice(1), item: pending.spot.item, p: pending.spot.p, n: pending.spot.n }]);
+    this.sound('Pop');
+    this.mode = 'ask';
   }
 
   holoHint() {

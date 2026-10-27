@@ -53,6 +53,14 @@
   body.hand .cutlbl { font-size: 18px; }
   body.hand #cutr { height: 44px; }
   /* measuring: a label at the middle of the line between two points */
+  #notes { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 4; pointer-events: none; }
+  .note { position: fixed; left: 0; top: 0; display: flex; align-items: center; gap: 6px; transform: translate(10px, -50%); pointer-events: none; transition: opacity .2s; white-space: nowrap; }
+  .note::before { content: ''; position: absolute; left: -14px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: #ffd24a; box-shadow: 0 0 10px 2px rgba(255, 210, 74, .8); }
+  .note .txt { max-width: 220px; overflow: hidden; text-overflow: ellipsis; padding: 3px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #231a00; background: #ffd24a; box-shadow: 0 0 14px rgba(255, 210, 74, .45); }
+  .note .notex { pointer-events: auto; cursor: pointer; width: 18px; height: 18px; border-radius: 50%; text-align: center; line-height: 18px; font-size: 12px; font-weight: 800; color: #231a00; background: rgba(255, 210, 74, .85); opacity: 0; }
+  .note:hover .notex, body.annotating .note .notex { opacity: 1; }
+  .note.back { opacity: .0; }
+  body.hand .note .txt { font-size: 22px; padding: 6px 16px; }
   #mlabel { position: fixed; left: 0; top: 0; transform: translate(-50%, -140%); padding: 3px 10px; border-radius: 999px; font-size: 14px; font-weight: 700; letter-spacing: .04em; color: #04121c; background: #4cc2ff; box-shadow: 0 0 14px rgba(0, 212, 255, .6); pointer-events: none; display: none; white-space: nowrap; z-index: 5; }
   body.hand #mlabel { font-size: 24px; padding: 5px 16px; }
   #merge { position: absolute; left: 0; right: 0; top: -4px; text-align: center; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: 0; transition: opacity .2s; pointer-events: none; }
@@ -117,6 +125,7 @@
       <div class="btn" id="solid" data-name="Solid or light" data-tip="Switch between hologram and solid">&#9680;</div>
       <div class="btn" id="dragout" draggable="true" data-name="Drag to an app" data-tip="Drag this into Fusion, a slicer, a folder or a message: it is the model as a file">&#8689;</div>
       <div class="btn" id="measure" data-name="Measure" data-tip="Measure: click two points on the model to see the distance in millimetres">&#10231;</div>
+      <div class="btn" id="annotate" data-name="Add a note" data-tip="Add a note: click a spot on the model, then say what the note should say. Notes stay with the model">&#9998;&#xFE0E;</div>
       <div class="btn" id="realsize" data-name="Real size" data-tip="Real size: show it at life size on your screen, to check whether a part fits (calibrate your screen in Settings)">&#8596;</div>
       <div class="btn" id="printcheck" data-name="Print check" data-tip="Print check: is the skin closed, how much overhangs, how big it is in millimetres">&#9113;</div>
       <div class="btn" id="cut" data-name="Cut through it" data-tip="Slide a cutting plane through it to look inside">&#9704;</div>
@@ -128,6 +137,7 @@
   <div id="cutbar" class="cadui glow"><div class="cutrow"><span class="cutlbl">Cut</span><span id="cutax"><b data-ax="0" title="Slide it left to right">&#8596;</b><b data-ax="1" class="on" title="Slide it up and down">&#8597;</b><b data-ax="2" title="Slide it front to back">&#9678;</b></span><b id="cutflip" class="cutb" title="Cut away the other side">&#8644;</b><b id="cutx" class="cutb" title="Close the cut">&#10005;</b></div><input id="cutr" type="range" min="-100" max="100" value="100"></div>
   <div id="dropring"></div>
   <div id="mlabel"></div>
+  <div id="notes"></div>
   <div id="cap" class="glow"><div id="title" data-tip="Drag the name to move it anywhere"></div><div id="credit"></div></div>
 </div>
 <div id="cad"><div id="cadL" class="cadcol"></div><div id="cadR" class="cadcol"></div></div>
