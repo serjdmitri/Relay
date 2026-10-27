@@ -31,6 +31,7 @@ function profileFor(job, settings = {}) {
   for (const k of ['voice', 'rate', 'volume', 'kokoroVoice']) out[k] = own[k] !== undefined && own[k] !== '' ? own[k] : base[k];
   // a slower "reading" voice must not undo a faster speed the person chose for everything
   if (job === 'reading' && settings.voiceRate === 'slower') out.rate = 'slower';
+  if (settings.workshop && settings.workshop.enabled) { out.rate = 'slower'; out.volume = Math.min(out.volume, 0.95); } // workshop mode: calm and unhurried
   if (out.voice === JARVIS && !out.kokoroVoice) out.kokoroVoice = JARVIS_KOKORO;
   const vol = Number(out.volume);
   out.volume = Number.isFinite(vol) ? Math.max(0.1, Math.min(1, vol)) : 1;

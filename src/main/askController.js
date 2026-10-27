@@ -50,6 +50,7 @@ const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
 const { parseExplainCommand, explainPrompt } = require('./explain');
 const phish = require('./phish');
+const workshop = require('./workshop');
 const { parseBriefingCommand, buildBriefing, fetchWeather, parseMacEvents, parseMacDue, mergeEvents } = require('./briefing');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
@@ -1499,6 +1500,10 @@ class AskController {
           if (sc) return this.studyStart(sc, effective, entry);
         }
         if (!opts.shown && !opts.scheduled) {
+          const wc = workshop.parseWorkshopCommand(effective);
+          if (wc) return this.finish(entry, await this.workshopCommand(wc));
+        }
+        if (!opts.shown && !opts.scheduled) {
           const ec = parseExplainCommand(effective);
           if (ec) return this.explainError(ec, entry);
           const pc = phish.parsePhishCommand(effective);
@@ -1815,6 +1820,30 @@ class AskController {
     return { status: 'done', reply: `That password is not in any known breach. It looks ${st.label}${st.label === 'weak' || st.label === 'fair' ? ': make it longer, with unrelated words' : ''}. That does not mean it is safe if you reuse it on several sites.${cleared}`, actions: 0 };
   }
 
+  // ---- workshop mode ----
+  async workshopCommand(cmd) {
+    if (cmd.type === 'workshop-on') {
+      if (!this.store.get('settings.workshop.enabled')) this.store.set('settings.workshop.prevSpeak', !!this.store.get('settings.speakReplies'));
+      this.store.set('settings.workshop.enabled', true);
+      this.store.set('settings.speakReplies', true);
+      this.onChange();
+      return { status: 'done', reply: 'Workshop mode is on. I will speak slowly and keep things simple. Try “show me how phishing works”, or say “what demos do you have”.', actions: 1 };
+    }
+    if (cmd.type === 'workshop-off') {
+      const was = !!this.store.get('settings.workshop.enabled');
+      this.store.set('settings.workshop.enabled', false);
+      if (was) this.store.set('settings.speakReplies', !!this.store.get('settings.workshop.prevSpeak'));
+      this.onChange();
+      return { status: 'done', reply: was ? 'Workshop mode is off.' : 'Workshop mode was not on.', actions: 1 };
+    }
+    if (cmd.type === 'workshop-demos') return { status: 'done', reply: `I can show holograms of: ${Object.values(workshop.DEMOS).map((d) => d.title.replace(/^How (?:an? )?/, '').replace(/ works$/, '').replace(/^passwords are stored \(hashing\)$/, 'password hashing')).join(', ')}. Say “show me how phishing works”.`, actions: 0 };
+    const d = workshop.buildDemo(cmd.key);
+    if (!d || !this.holos) return { status: 'failed', reply: 'I cannot show holograms right now.', actions: 0 };
+    this.holos.hideUnpinned();
+    await this.holos.show({ title: d.title, items: [{ kind: 'shapes', title: d.title, credit: 'Relay workshop demo', parts: d.parts }], scale: 1.5 });
+    return { status: 'done', reply: d.explain, actions: 1 };
+  }
+
   // ---- study mode ----
   // The text on the screen, read on this Mac (Apple Vision); '' when it cannot be read.
   async screenTextOnly() {
@@ -2092,7 +2121,7 @@ class AskController {
         this.forceTier = null;
         session.onRate = (r) => { this.rate = r; };
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')) }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : '' }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
         return result;
       } catch (e) {
