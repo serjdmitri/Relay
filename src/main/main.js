@@ -143,12 +143,12 @@ function extensionPath() {
 }
 
 // Hand control on or off (the menu bar item and Settings both use this). Turning it on asks macOS for the camera the first time.
-async function setHands(on) {
+async function setHands(on, { quiet = false } = {}) {
   if (on) {
     store.set('settings.hands.enabled', true);
     const r = await hands.enable();
     if (!r.ok) { store.set('settings.hands.enabled', false); ask.notice(r.error, 'failed'); }
-    else ask.notice('Hand control is on. Hold up an open hand: it moves a ring. Fist grabs, thumb and finger tap clicks, peace sign talks.', 'done');
+    else if (!quiet) ask.notice('Hand control is on. Hold up an open hand: it moves a ring. Fist grabs, thumb and finger tap clicks, peace sign talks.', 'done');
     broadcast();
     return r;
   }
@@ -156,6 +156,25 @@ async function setHands(on) {
   hands.disable();
   broadcast();
   return { ok: true };
+}
+
+// The camera view in the top right (hands, outlines, gesture, count). Needs hand control on to show anything.
+function setHandsPreview(on) {
+  store.set('settings.hands.preview', !!on);
+  hands.setPreview(!!on);
+  broadcast();
+}
+
+// "hands" said to Relay: show / hide the view (turning control on if it is off) or stop it.
+async function handsCommand(cmd) {
+  if (cmd === 'off') { await setHands(false); return 'Hand control is off.'; }
+  if (cmd === 'hide') { setHandsPreview(false); return hands.enabled ? 'Hand view hidden. Hand control is still on.' : 'Hand control is off.'; }
+  setHandsPreview(true);
+  if (!hands.enabled) {
+    const r = await setHands(true, { quiet: true });
+    if (!r.ok) { setHandsPreview(false); return r.error || 'Hand control could not start.'; }
+  }
+  return 'Hand view is on, top right. Hold a hand up to the camera.';
 }
 
 function rebuildTray() {
@@ -168,6 +187,7 @@ function rebuildTray() {
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
     { label: holos?.holos.size ? `Clear ${holos.holos.size} Hologram${holos.holos.size === 1 ? '' : 's'}` : 'No Holograms', enabled: !!holos?.holos.size, click: () => holos.closeAll() },
     { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: (item) => setHands(item.checked) },
+    { label: 'Show Hand View (top right)', type: 'checkbox', checked: !!store.get('settings.hands.preview'), enabled: !!store.get('settings.hands.enabled'), click: (item) => setHandsPreview(item.checked) },
     { label: 'Stop Speaking', enabled: !!speaker?.speaking, click: () => ask.interruptSpeech() },
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
@@ -511,6 +531,7 @@ function registerIpc() {
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
+  ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
   ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
   ipcMain.handle('hands:status', (_e, st) => { hands?.setStatus(st); });
   ipcMain.handle('card:close', () => cardPanel?.hide());
@@ -678,12 +699,33 @@ app.whenReady().then(() => {
   });
   cardPanel.onFile = (p) => ask.drive.openFile(p);
   hands = new HandControl({
+    preview: !!store.get('settings.hands.preview'),
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
     createCamera: async () => {
-      const win = new BrowserWindow({ width: 320, height: 240, show: false, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
+      // The window that watches the camera. Hidden, unless the hand view is on: then it sits in the top right of the screen (above everything, never taking a click or focus,
+      // and kept out of screenshots Relay takes). The picture stays inside this window: it is drawn here and never saved or sent.
+      const W = 336, H = 300;
+      const win = new BrowserWindow({ width: W, height: H, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, type: 'panel', webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
+      win.setIgnoreMouseEvents(true);
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      win.setHiddenInMissionControl?.(true);
+      win.setContentProtection(true);
+      let shown = false;
+      const sync = () => { if (win.isDestroyed()) return; win.webContents.send('hands:preview', shown); };
+      win.webContents.on('did-finish-load', sync);
       win.loadFile(path.join(__dirname, '../renderer/hands.html'));
-      return win;
+      return {
+        close: () => { if (!win.isDestroyed()) win.close(); },
+        setPreview: (on) => {
+          if (win.isDestroyed()) return;
+          shown = !!on;
+          if (shown) { const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; win.setBounds({ x: wa.x + wa.width - W - 12, y: wa.y + 6, width: W, height: H }); win.showInactive(); } else win.hide();
+          sync();
+        },
+        action: (a) => { if (shown && !win.isDestroyed()) win.webContents.send('hands:action', a); }
+      };
     },
     createCursor: () => {
       const win = new BrowserWindow({ width: 56, height: 56, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
@@ -699,6 +741,7 @@ app.whenReady().then(() => {
     notify: (m) => ask.notice(m, 'failed')
   });
   hands.onChange = () => { rebuildTray(); broadcast(); };
+  ask.onHands = handsCommand;
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
   holos.onChange = () => { rebuildTray(); ask.holosChanged(); };
   holos.onAsk = (h, d) => ask.askAboutHologram(h, d);

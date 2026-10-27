@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.0
+
+- **Say "hands" and see what the camera sees.** "Hands" (or "show my hands", "open hand control") turns hand control on if it was off and opens the **hand view** in the top right of your screen: the camera picture like a mirror, the outline of each hand it finds, what each hand is doing (fist, open hand, pinch, peace sign, pointing, thumb up or down), how many hands it sees ("2 hands"), and a short flash of what Relay did with it (Grab, Click, Resize, Pull apart, Swipe…). "Hide hands" puts the view away and keeps control on; "stop hands" turns control off. The same switch is in Settings > General > Holograms and hands (Show hand view) and in the menu bar.
+- The view sits above everything, never takes a click or focus, and is kept out of screenshots Relay takes. The picture is only drawn in that window: it is never saved or sent. It is off until you ask for it.
+- **No Teachable Machine needed.** Hand finding and the gesture names already come from Google's MediaPipe hand model, running on this Mac; Relay adds its own rules on top (pinch, point, thumbs). Training a custom model would only be worth it for a brand-new gesture.
+- Tested for real: the app was built, installed and asked "hands", "hide hands", "hands" and "stop hands" by the pill; the real camera started at 30 frames a second and the view showed in the top right (1 hand, "Open hand"). The drawing was also checked on still hand photos. I did not test two hands at once, or every gesture on the live camera.
+
 ## 0.25.0
 
 - **Hologram buttons that stay out of the way.** Settings > General > Holograms and hands > Buttons on a hologram: **Menu** (one small ⋯ button that opens the list, the new default), **Side** (a slim column beside the model) or **Bar** (a row under its name). The controls now sit below or beside the model, never on top of it.
