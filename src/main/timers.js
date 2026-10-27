@@ -49,8 +49,8 @@ class Timers {
     this.onFire({ ...t, missed });
   }
 
-  add(seconds, label = '') {
-    const t = { id: crypto.randomUUID(), endsAt: this.now() + seconds * 1000, seconds, label };
+  add(seconds, label = '', extra = {}) {
+    const t = { id: crypto.randomUUID(), endsAt: this.now() + seconds * 1000, seconds, label, ...extra };
     this.store.data.timers = [...this.items, t];
     this.store.save();
     this._schedule(t);

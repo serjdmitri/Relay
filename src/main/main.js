@@ -697,6 +697,7 @@ app.whenReady().then(() => {
       const text = t.missed ? `${body} It finished while Relay was closed.` : body;
       if (Notification.isSupported()) new Notification({ title: alarm ? 'Alarm' : 'Timer done', body: text }).show();
       ask.alert(text);
+      if (t.focus) ask.focusMode().end({ auto: true }).then((r) => { if (r.reply) ask.alert(r.reply); }).catch(() => {}); // focus time is over: notifications back, apps reopened
     }
   });
   glass = new Glass({ binPath: glassBinPath() });

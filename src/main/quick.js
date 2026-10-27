@@ -9,6 +9,9 @@ const { parseDuration, parseWhen, splitReminder, localIso } = require('./when');
 const { humanDuration } = require('./timers');
 const { parseWindowCommand, layoutRect, pickArea, NAMES: WINDOW_NAMES } = require('./windows');
 const { calc } = require('./calc');
+const { parseLayoutCommand } = require('./layouts');
+const { parseFocusCommand } = require('./focus');
+const { parseOcrCommand } = require('./ocr');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -106,6 +109,10 @@ function parseQuick(text, now = new Date()) {
   // ----- maths and unit conversions: answered here, no model -----
   const sum = calc(text);
   if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
+
+  // ----- window layouts, focus mode, text from the screen -----
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text);
+  if (lay) return lay;
 
   // ----- the web -----
   let engine = null;
@@ -398,6 +405,38 @@ async function runQuick(cmd, mac, ctx = {}) {
       if (!ctx.downloads) return null;
       const r = await ctx.downloads.plan();
       return { tool: 'downloads_plan', input: {}, reply: r, readonly: true };
+    }
+    case 'layout-save': {
+      if (!ctx.layouts) return null;
+      const r = await ctx.layouts.remember(cmd.name);
+      return { tool: 'layout_save', input: { name: cmd.name }, reply: r.reply, readonly: true };
+    }
+    case 'layout-restore': {
+      if (!ctx.layouts) return null;
+      const r = await ctx.layouts.restore(cmd.name);
+      return { tool: 'layout_restore', input: { name: cmd.name }, reply: r.reply, ...(r.undo ? { undo: r.undo } : { readonly: true }) };
+    }
+    case 'layout-list':
+      if (!ctx.layouts) return null;
+      return { tool: 'layout_list', input: {}, reply: ctx.layouts.list(), readonly: true };
+    case 'layout-forget':
+      if (!ctx.layouts) return null;
+      return { tool: 'layout_forget', input: { name: cmd.name }, reply: ctx.layouts.forget(cmd.name), readonly: true };
+    case 'focus-start': {
+      if (!ctx.focus) return null;
+      const r = await ctx.focus.start({ minutes: cmd.minutes });
+      return { tool: 'focus', input: { minutes: cmd.minutes }, reply: r.reply, undo: r.undo };
+    }
+    case 'focus-end': {
+      if (!ctx.focus) return null;
+      return { tool: 'focus', input: { end: true }, reply: (await ctx.focus.end({})).reply, readonly: true };
+    }
+    case 'focus-status':
+      if (!ctx.focus) return null;
+      return { tool: 'focus', input: { status: true }, reply: ctx.focus.status(), readonly: true };
+    case 'ocr': {
+      if (!ctx.ocr) return null;
+      return { tool: 'ocr', input: { source: cmd.source, mode: cmd.mode }, reply: await ctx.ocr(cmd), readonly: true };
     }
     case 'calc':
       return { tool: 'calc', input: { kind: cmd.kind }, reply: cmd.reply, readonly: true };

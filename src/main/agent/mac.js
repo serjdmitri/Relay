@@ -16,6 +16,9 @@ function defaultExec(cmd, args, opts = {}) {
   });
 }
 
+// On-device text recognition (Apple Vision) from a script: prints [{ text, x, y, w, h }] with the box as fractions of the picture, y from the top.
+const OCR_SCRIPT = 'function run(argv){ ObjC.import("Vision"); ObjC.import("Foundation"); var url=$.NSURL.fileURLWithPath(argv[0]); var req=$.VNRecognizeTextRequest.alloc.init; req.recognitionLevel=0; req.usesLanguageCorrection=true; var h=$.VNImageRequestHandler.alloc.initWithURLOptions(url,$({})); var ok=h.performRequestsError($([req]),null); var res=req.results; var out=[]; var n=res?res.count:0; for(var i=0;i<n;i++){ var o=res.objectAtIndex(i); var c=o.topCandidates(1); if(!c.count) continue; var b=o.boundingBox; out.push({text:ObjC.unwrap(c.objectAtIndex(0).string), x:b.origin.x, y:1-b.origin.y-b.size.height, w:b.size.width, h:b.size.height}); } return JSON.stringify(out); }';
+
 // AppleScript string literal
 const q = (s) => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 
@@ -520,6 +523,36 @@ for (var i = 1; i <= ${double ? 2 : 1}; i++) { post($.${btnDown}, i); post($.${b
       if (out === 'none') throw new Error(`${app} has no open window.`);
       const f = parseFrame(out);
       return { x: f.x, y: f.y, w: f.w, h: f.h };
+    },
+    // Every visible app's front window: [{ app, x, y, w, h }]. Read-only; used to remember a window layout.
+    async windowList() {
+      const out = await osa([
+        'tell application "System Events"', 'set out to ""',
+        'repeat with p in (every process whose background only is false and visible is true)',
+        'try', 'if (count of windows of p) > 0 then',
+        'set pos to position of window 1 of p', 'set sz to size of window 1 of p',
+        'set out to out & (name of p) & "|" & (item 1 of pos) & "|" & (item 2 of pos) & "|" & (item 1 of sz) & "|" & (item 2 of sz) & linefeed',
+        'end if', 'end try', 'end repeat', 'return out', 'end tell'
+      ]);
+      return String(out).split('\n').map((l) => l.trim().split('|')).filter((p) => p.length === 5 && p.slice(1).every((n) => Number.isFinite(+n))).map(([app, x, y, w, h]) => ({ app, x: +x, y: +y, w: +w, h: +h }));
+    },
+    // Runs a Shortcut by name (the Shortcuts app's command line). Throws when there is no such Shortcut.
+    async runShortcut(name) {
+      await exec('/usr/bin/shortcuts', ['run', name], { timeout: 20000 });
+    },
+    async hasShortcut(name) {
+      try { return String(await exec('/usr/bin/shortcuts', ['list'], { timeout: 8000 })).split('\n').some((l) => l.trim() === name); } catch { return false; }
+    },
+    // A picture of the screen in a temporary file (needs Screen Recording), and the text found in a picture file (on-device, Apple Vision).
+    async screenToFile() {
+      const file = path.join(os.tmpdir(), `relay-screen-${process.pid}-${Date.now()}.png`);
+      await exec('/usr/sbin/screencapture', ['-x', file], { timeout: 15000 });
+      if (!fs.existsSync(file)) throw new Error('Could not capture the screen. Grant Screen Recording to Relay in System Settings.');
+      return file;
+    },
+    async ocrFile(file) {
+      const out = await exec('/usr/bin/osascript', ['-l', 'JavaScript', '-e', OCR_SCRIPT, file], { timeout: 60000, maxBuffer: 16 * 1024 * 1024 });
+      return JSON.parse(out || '[]');
     },
     async menuClick(app, menuPath) {
       if (!Array.isArray(menuPath) || menuPath.length < 2) throw new Error('menu_path needs at least [menu, item].');
