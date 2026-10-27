@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, stickies = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, stickies = null, study = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -417,6 +417,17 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: () => drive.undo()
       }
     );
+  }
+
+  // Study mode: the flashcards for a quiz.
+  if (study) {
+    tools.push({
+      name: 'start_quiz',
+      description: 'Start a spoken flashcard quiz. Call it ONCE, only in study mode (the request says [Study mode]), with the cards you made: each a short question and a short, exact answer. Relay asks them one at a time.',
+      input_schema: obj({ cards: { type: 'array', description: 'The flashcards', items: { type: 'object', properties: { question: str('One question'), answer: str('Its short exact answer') }, required: ['question', 'answer'] } }, minutes: num('Study timer in minutes, only if the request gave one') }, ['cards']),
+      describe: () => 'Making flashcards',
+      run: (i) => study.start(i)
+    });
   }
 
   // Sticky notes on the screen, like the Stickies app.
