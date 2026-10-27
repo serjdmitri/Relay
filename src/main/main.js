@@ -132,7 +132,7 @@ function publicState() {
     kokoro: kokoro.status(),
     presetInfo: PRESETS,
     history: d.history.slice(0, 200),
-    actions: d.actions.slice(0, 300),
+    actions: (() => { const can = ask?.undos?.ids(); return d.actions.slice(0, 300).map((a) => (can && can.has(a.id) ? { ...a, undoable: true } : a)); })(),
     stats: store.stats(),
     labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
     claude: claudeState,
@@ -563,6 +563,7 @@ function registerIpc() {
   });
   ipcMain.handle('remote:tailscale-check', async () => { await remote.refreshTailscale(); broadcast(); return { ok: true }; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
+  ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
   ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); });

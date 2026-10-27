@@ -84,6 +84,7 @@ class Drive {
     this.cards?.hide?.();
     const list = [...(this.log.read() || []), { id: res.id, ts: res.ts, done: res.done, trashed: res.trashed }].slice(-30);
     this.log.write(list);
+    this.lastLogId = res.id;
     const bits = [`Moved ${res.done.length}`];
     if (res.trashed.length) bits.push(`put ${res.trashed.length} in the Trash`);
     return `${bits.join(' and ')}.${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 5).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''} It can be undone with drive_undo.`;
@@ -103,22 +104,22 @@ class Drive {
     const why = skipped.length ? ` Left alone: ${skipped.slice(0, 6).map((s) => `${path.basename(String(s.path)) || 'request'} (${s.reason})`).join('; ')}` : '';
     if (!jobs.length) return `Nothing was made.${why}`;
     const res = await runMake(jobs, { fs: this.fs, home: this.home, exec: this.exec, trashItem: this.trashItem });
-    if (res.made.length) this.log.write([...(this.log.read() || []), { id: `make-${Date.now()}`, ts: Date.now(), done: [], made: res.made, trashed: [] }].slice(-30));
+    if (res.made.length) { this.lastLogId = `make-${Date.now()}`; this.log.write([...(this.log.read() || []), { id: this.lastLogId, ts: Date.now(), done: [], made: res.made, trashed: [] }].slice(-30)); }
     const names = res.made.map((m) => tilde(m, this.home)).join(', ');
     return `${res.made.length ? `Made ${names}. It can be undone with drive_undo.` : 'Nothing was made.'}${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 4).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''}${why}`;
   }
 
   // Puts the last thing back: moved files go back where they were, and files Relay made go to the Trash (nothing is deleted; the person can take them back).
-  async undo() {
+  async undo(id = '') {
     const list = this.log.read() || [];
-    const last = list.at(-1);
+    const last = (id && list.find((e) => e.id === id)) || list.at(-1);
     if (!last || !(last.done?.length || last.made?.length)) return 'There is nothing to undo.';
     const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs });
     const gone = [];
     for (const m of last.made || []) {
       try { if (!this.fs.existsSync(m)) { left.push({ path: m, reason: 'It is no longer there.' }); continue; } await this.trashItem(m); gone.push(m); } catch (e) { left.push({ path: m, reason: e.message }); }
     }
-    this.log.write(list.slice(0, -1));
+    this.log.write(list.filter((e) => e !== last));
     const bits = [];
     if (back.length) bits.push(`Put ${back.length} back where ${back.length === 1 ? 'it was' : 'they were'}.`);
     if (gone.length) bits.push(`Put ${gone.length} ${gone.length === 1 ? 'file' : 'files'} Relay made in the Trash (Put Back there if you want ${gone.length === 1 ? 'it' : 'them'} again).`);
