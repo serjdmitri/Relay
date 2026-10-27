@@ -1,11 +1,17 @@
 // Spoken commands about the hologram library and scenes. Pure.
 
 const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const { lengthToMm } = require('../calc');
 const strip = (s) => clean(s).replace(/^(?:my|the|a|an) /, '').replace(/ (?:scene|setup)$/, '').trim();
 
 function parseHoloCommand(text) {
   const n = clean(text).replace(/^(?:hey |ok |okay )?(?:relay|jarvis) /, '').replace(/^please /, '').replace(/ please$/, '');
   let m;
+  // life size: "show it life size", "real size", "actual size, it is 30 cm long"
+  if ((m = n.match(/^(?:show|make|put|display|set)(?: it| that| this| the hologram| the model)?(?: at| in| to)? (?:real|life|actual|true|full)[ -]?size(?:,? (?:it is|its|it s|its about|it is about|about|which is) (.+))?$/)) || (m = n.match(/^(?:real|life|actual|true)[ -]?size(?:,? (?:it is|its|it s|about) (.+))?$/))) {
+    const mm = m[1] ? lengthToMm(m[1]) : 0;
+    if (!m[1] || mm) return { type: 'holo-realsize', mm: mm || 0 };
+  }
   // scenes (the word "scene" is required, so "save this as stl" is never taken for one)
   if ((m = n.match(/^(?:save|remember|store|keep)(?: this| these| the current| my current| all these| the)?(?: holograms?)? scene as (?:my |the |a )?(.+)$/)) || (m = n.match(/^(?:save|remember|store|keep) (?:these|this|the|my) holograms? as (?:my |the |a )?(.+?) scene$/)) || (m = n.match(/^(?:save|remember|store|keep) (?:a |the |this )?scene (?:called |named |as )?(.+)$/))) {
     const name = strip(m[1]);

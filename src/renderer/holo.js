@@ -37,6 +37,7 @@ const touched = () => { lastTouch = performance.now(); };
 function applyUi(u) {
   if (!u) return;
   ui = { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.max(0, Number(u.spinDelay) || 0), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
+  pointsPerInch = Math.min(400, Math.max(50, Number(u.pointsPerInch) || 125));
   for (const c of ['menu', 'side', 'bar']) document.body.classList.toggle(`ui-${c}`, ui.controls === c);
   document.body.classList.remove('menu-open');
 }
@@ -45,6 +46,7 @@ scene.add(anchor);
 let holo = new THREE.Group(); // everything that turns (about its middle)
 anchor.add(holo);
 let userScale = 1;
+let pointsPerInch = 125; // this screen's points to an inch (set in Settings, used for life size)
 let kFit = 1;
 let modelR = 1.3; // the model's radius in units, once fitted
 let ui = { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl' };
@@ -935,6 +937,7 @@ relay.onHolo((m, d) => {
   else if (m === 'save') saveModel(d?.format || 'stl', d?.openWith || '');
   else if (m === 'hand-scale') { touched(); userScale = Math.min(3, Math.max(0.4, userScale * d)); applyScale(); clearTimeout(handScaleTimer); handScaleTimer = setTimeout(() => relay.holoScale(userScale), 250); }
   else if (m === 'pinned') $('pin').classList.toggle('on', !!d);
+  else if (m === 'real-size') relay.holoRealSize(realSize(d?.mm || 0));
   else if (m === 'error') $('err').textContent = d;
 });
 
@@ -993,6 +996,41 @@ function setMeasure(on) {
   document.body.classList.remove('menu-open');
 }
 $('measure').onclick = () => setMeasure(!measuring);
+
+// Life size: the model drawn so that a millimetre of it is a millimetre of your screen. The screen's points per inch is a setting (calibrated against
+// a credit card in Settings > General > Holograms); a point is a CSS pixel. A designed model knows its size in millimetres; any other needs to be told
+// how long its longest side is (mm). Returns { ok, mm } or { ok: false, reason }.
+function realSize(mmLongest = 0) {
+  const ptsPerMm = pointsPerInch / 25.4;
+  const cad = items.length === 1 && itemWraps[0]?.userData.cadView?.mesh;
+  let k; // pixels one millimetre of the model takes up now
+  let mm;
+  if (cad) {
+    cad.updateWorldMatrix(true, false);
+    const s = new THREE.Vector3().setFromMatrixScale(cad.matrixWorld).x || 1; // scene units to a millimetre
+    k = s * PPU;
+    const box = new THREE.Box3().setFromObject(cad);
+    mm = Math.max(...box.getSize(new THREE.Vector3()).toArray()) / s;
+  } else if (mmLongest > 0) {
+    const longest = Math.max(...new THREE.Box3().setFromObject(holo).getSize(new THREE.Vector3()).toArray());
+    if (!(longest > 0)) return { ok: false, reason: 'The model has no size yet.' };
+    k = (longest * PPU) / mmLongest;
+    mm = mmLongest;
+  } else return { ok: false, reason: 'need-size' };
+  const want = userScale * ptsPerMm / k;
+  const px = mm * ptsPerMm;
+  if (want > 4 || want < 0.3) { userScale = Math.min(4, Math.max(0.3, want)); applyScale(); relay.holoScale(userScale); return { ok: false, reason: px > Math.min(innerWidth, innerHeight) ? 'It is bigger than your screen at life size, so it is as large as it goes.' : 'It is too small to show clearly at life size.', mm }; }
+  userScale = want;
+  applyScale();
+  relay.holoScale(userScale);
+  return { ok: true, mm: Math.round(mm * 10) / 10 };
+}
+$('realsize').onclick = () => {
+  const r = realSize(0);
+  $('err').textContent = r.ok ? `Life size: ${r.mm} mm long, on your screen.` : r.reason === 'need-size' ? 'Say how big it really is, for example “show it life size, it is 30 cm long”.' : r.reason;
+  setTimeout(() => { $('err').textContent = ''; }, 6000);
+  document.body.classList.remove('menu-open');
+};
 
 // Print check: the model as a printer would see it (z up, on the bed, millimetres), said in a few lines.
 function runPrintCheck() {
