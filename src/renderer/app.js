@@ -355,18 +355,27 @@ const PAGES = {
       sc.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Safari only allows its microphone on a secure (https) address, so hold to talk needs Tailscale. A Shortcut works on plain Wi-Fi: say “Hey Siri, Relay”, talk, and it speaks the answer. Make the key here, then build the Shortcut below (about two minutes).</div>'));
       const mk = h('<button class="btn primary" id="skey">Make a Shortcut key</button>');
       const so = h('<div id="skout" style="margin-top:12px"></div>');
+      // The key is shown once, so it is kept here: making it changes the paired phones, which redraws this page, and it must not vanish.
+      const showKey = (r) => {
+        so.innerHTML = '';
+        so.append(h(`<div><div class="d" style="margin-bottom:4px">Address</div><div style="user-select:text;font:12px ui-monospace,Menlo,monospace;word-break:break-all">${esc(r.url)}</div></div>`));
+        so.append(h(`<div><div class="d" style="margin:10px 0 4px">Key (shown once)</div><div style="user-select:text;font:12px ui-monospace,Menlo,monospace;word-break:break-all">Bearer ${esc(r.token)}</div></div>`));
+        const file = h('<button class="btn primary" style="margin:10px 8px 10px 0">Save the Shortcut file</button>');
+        file.onclick = async () => { file.textContent = 'Making it…'; const f = await relay.shortcutFile({ url: r.url, token: r.token }); file.textContent = f.ok ? 'Saved: AirDrop it to your iPhone' : 'Save the Shortcut file'; if (!f.ok) alert(f.error); };
+        const copy = h('<button class="btn" style="margin:10px 8px 10px 0">Copy the key</button>');
+        copy.onclick = () => relay.copyText(`Bearer ${r.token}`);
+        so.append(file, copy);
+        so.append(h('<div class="d" style="line-height:1.6">The file is the finished Shortcut. It is saved in your Downloads folder and shown in Finder: AirDrop it to your iPhone, tap it, and tap <b>Add Shortcut</b>. Then say “Hey Siri, Relay”, or put it on the Action Button (Settings, Action Button, Shortcut, Relay). Or build it by hand:</div>'));
+        so.append(h(`<ol class="d" style="line-height:1.7;margin-left:18px"><li>Open <b>Shortcuts</b> on the iPhone, tap +, and name it <b>Relay</b>.</li><li>Add <b>Dictate Text</b>.</li><li>Add <b>Get Contents of URL</b>. URL: the address above. Show More: Method <b>POST</b>; Headers: <code>Authorization</code> = the key you copied, <code>X-Relay-Remote</code> = <code>1</code>; Request Body <b>JSON</b> with <code>text</code> (Text) = the <b>Dictated Text</b> variable and <code>wait</code> (Text) = <code>true</code>.</li><li>Add <b>Get Dictionary Value</b> for the key <code>reply</code> from the Contents of URL.</li><li>Add <b>Speak Text</b> with that value.</li></ol>`));
+        so.append(h('<div class="note" style="margin-top:6px">The key is saved as a paired phone named Siri Shortcut: unpair it below to cancel it. Tailscale must be on on the phone when you are away from home.</div>'));
+      };
       mk.onclick = async () => {
         const r = await relay.shortcutKey();
         if (r.error) { so.textContent = r.error; return; }
-        so.innerHTML = '';
-        so.append(h(`<div class="d" style="margin-bottom:4px">Address</div><div style="user-select:text;font:12px ui-monospace,Menlo,monospace;word-break:break-all">${esc(r.url)}</div>`));
-        so.append(h(`<div class="d" style="margin:10px 0 4px">Key (shown once)</div><div style="user-select:text;font:12px ui-monospace,Menlo,monospace;word-break:break-all">Bearer ${esc(r.token)}</div>`));
-        const copy = h('<button class="btn" style="margin:10px 8px 10px 0">Copy the key</button>');
-        copy.onclick = () => relay.copyText(`Bearer ${r.token}`);
-        so.append(copy);
-        so.append(h(`<ol class="d" style="line-height:1.7;margin-left:18px"><li>Open <b>Shortcuts</b> on the iPhone, tap +, and name it <b>Relay</b>.</li><li>Add <b>Dictate Text</b>.</li><li>Add <b>Get Contents of URL</b>. URL: the address above. Show More: Method <b>POST</b>; Headers: <code>Authorization</code> = the key you copied, <code>X-Relay-Remote</code> = <code>1</code>; Request Body <b>JSON</b> with <code>text</code> (Text) = the <b>Dictated Text</b> variable and <code>wait</code> (Boolean) = <b>On</b>.</li><li>Add <b>Get Dictionary Value</b> for the key <code>reply</code> from the Contents of URL.</li><li>Add <b>Speak Text</b> with that value.</li><li>Now say “Hey Siri, Relay”, or put it on the Action Button, Back Tap or your Home Screen.</li></ol>`));
-        so.append(h('<div class="note" style="margin-top:6px">Away from home, use the Tailscale address (http://100.x.x.x:47900) in the same Shortcut. The key is saved as a paired phone named Siri Shortcut: unpair it below to cancel it.</div>'));
+        window.__scKey = r;
+        showKey(r);
       };
+      if (window.__scKey) showKey(window.__scKey);
       sc.append(mk, so);
       c.append(sc);
 

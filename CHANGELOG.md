@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.27.1
+
+- **Fixed: "Make a Shortcut key" showed nothing.** Two faults: the page redrew itself when the new paired phone appeared and wiped the key, and, worse, the code that builds those little blocks of the page kept only the first element of each, so the address and the key were never drawn at all (the same fault hid the pairing code number and the secure address under "Secure link on"). Both are fixed; the key stays on screen until you leave the page.
+- **A finished Shortcut file.** After making the key, **Save the Shortcut file** writes `Relay.shortcut` to Downloads (signed by your Mac) and shows it in Finder: AirDrop it to your iPhone, tap it, Add Shortcut. It dictates, sends your words to Relay with the key inside, waits, and speaks the reply. The steps to build it by hand are still shown. I could not test importing the file on a real iPhone.
+- The Shortcut address is now the secure Tailscale one when it is on (it works from anywhere); the ask address also accepts `wait` written as the text "true", which is easier to write in a Shortcut.
+
 ## 0.27.0
 
 - **Pinch the trackpad to zoom a hologram.** Pinch in and out with two fingers over a hologram (a trackpad pinch arrives as a wheel with Ctrl held; it used to be far too weak to notice). Plain scrolling still zooms gently, and you can zoom out to 0.3x or in to 4x.

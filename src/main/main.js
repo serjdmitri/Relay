@@ -529,6 +529,16 @@ function registerIpc() {
   ipcMain.handle('remote:shortcut', async () => { await remote.sync(); if (!remote.server) return { error: remote.error || 'Turn Relay Remote on first.' }; const k = remote.shortcutKey(); broadcast(); return k; });
   ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
+  ipcMain.handle('remote:shortcut-file', async (_e, d) => {
+    const { writeShortcutFile } = require('./remote/shortcutFile');
+    const token = String(d?.token || '');
+    const url = String(d?.url || '');
+    if (!/^[\w-]{16,128}$/.test(token) || !/^https?:\/\//.test(url) || !remote.devices.find(token)) return { ok: false, error: 'Make a new Shortcut key first.' };
+    const out = path.join(app.getPath('downloads'), 'Relay.shortcut');
+    const r = await writeShortcutFile({ url, token, outPath: out });
+    if (r.ok) shell.showItemInFolder(out);
+    return r;
+  });
   ipcMain.handle('remote:tailscale-check', async () => { await remote.refreshTailscale(); broadcast(); return { ok: true }; });
   ipcMain.handle('remote:copy', (_e, text) => clipboard.writeText(String(text || '')));
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));

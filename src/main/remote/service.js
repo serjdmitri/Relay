@@ -78,7 +78,7 @@ class RemoteService {
   // A long-lived key for an iPhone Shortcut ("Hey Siri, Relay"), which cannot pair with a code. Shown once.
   shortcutKey() {
     const { token } = this.devices.add('Siri Shortcut');
-    const best = (this.urls().find((u) => u.startsWith('http://')) || this.urls()[0] || '');
+    const best = this.urls()[0] || ''; // the secure Tailscale address first (it works from anywhere), else the home Wi-Fi one
     return { token, url: `${best}/api/ask` };
   }
 
