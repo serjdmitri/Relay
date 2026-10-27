@@ -161,7 +161,7 @@ class AskController {
     this.frontP = null;
     this.appsP = null;
     this.mcp = new McpHost();
-    this.mac = createMac({ clipboard, capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
+    this.mac = createMac({ clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
@@ -1536,6 +1536,38 @@ class AskController {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
   }
 
+  // "What did I copy earlier?" and the rest of the clipboard history, by voice. Returns the reply.
+  async clipboardCommand(cmd) {
+    const h = this.clipHistory;
+    const cfg = this.store.get('settings.clipboardHistory') || {};
+    const ago = (t) => { const m = Math.round((h.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} minute${m === 1 ? '' : 's'} ago` : `${Math.round(m / 60)} hour${Math.round(m / 60) === 1 ? '' : 's'} ago`; };
+    const short = (t, n = 70) => { const x = t.replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n - 1).trimEnd()}…` : x; };
+    const put = (item) => { h.ignore(item.text); return this.mac.clipboardWrite(item.text); };
+    if (cmd.type === 'clip-off') { this.store.set('settings.clipboardHistory.enabled', false); h.clear(); return 'Clipboard history is off, and what it had is forgotten.'; }
+    if (cmd.type === 'clip-on') { this.store.set('settings.clipboardHistory.enabled', true); return 'Clipboard history is on. It keeps text for a day, only in memory, and never passwords or keys.'; }
+    if (cfg.enabled === false) return 'Clipboard history is off. Say “turn on clipboard history”.';
+    if (cmd.type === 'clip-clear') { const n = h.clear(); return n ? `Forgot ${n} ${n === 1 ? 'item' : 'items'}.` : 'There was nothing to forget.'; }
+    if (cmd.type === 'clip-list') {
+      const list = h.list(8);
+      if (!list.length) return 'I have not seen anything copied yet. (I never keep passwords or keys, and I only remember text.)';
+      await this.cardPanel?.show({ kind: 'list', title: 'What you copied', subtitle: `Newest first · kept in memory for a day`, summary: '', facts: [], links: [], image: null, credit: '', items: list.map((i) => ({ title: short(i.text, 60), subtitle: ago(i.t), note: '', image: null, url: '' })) });
+      return `You copied ${list.length === 1 ? 'one thing' : `${h.items.length} things`}. The latest: “${short(list[0].text, 80)}”, ${ago(list[0].t)}.${list[1] ? ` Before that: “${short(list[1].text, 60)}”.` : ''} Say “copy the second one” to get one back.`;
+    }
+    if (cmd.type === 'clip-ago') { const i = h.ago(cmd.minutes); return i ? `About ${cmd.minutes >= 60 ? `${cmd.minutes / 60} hour${cmd.minutes === 60 ? '' : 's'}` : `${cmd.minutes} minutes`} ago you copied: “${short(i.text, 160)}”.` : `I do not see anything you copied around ${cmd.minutes >= 60 ? 'then' : `${cmd.minutes} minutes ago`}.`; }
+    if (cmd.type === 'clip-find') {
+      const i = h.find(cmd.query);
+      if (!i) return `I do not see anything you copied about “${cmd.query}”.`;
+      await put(i);
+      if (cmd.paste) { await this.mac.typeText(i.text); return `Pasted: “${short(i.text, 80)}”.`; }
+      return `Found it, copied ${ago(i.t)}: “${short(i.text, 100)}”. It is on your clipboard again.`;
+    }
+    const i = h.get((cmd.index || 1) - 1);
+    if (!i) return cmd.index > 1 ? `I only have ${h.items.length} ${h.items.length === 1 ? 'item' : 'items'}.` : 'There is nothing in the history yet.';
+    await put(i);
+    if (cmd.type === 'clip-paste') { await this.mac.typeText(i.text); return `Pasted: “${short(i.text, 80)}”.`; }
+    return `Copied it back: “${short(i.text, 100)}”.`;
+  }
+
   // Sticky notes, by voice. Returns { reply, undo? } or null to leave it to the model.
   async stickyCommand(cmd) {
     const st = this.stickies;
@@ -1707,6 +1739,7 @@ class AskController {
       runningApps: this.lastApps,
       layouts: this.layouts(),
       stickies: this.stickies ? (cmd) => this.stickyCommand(cmd) : null,
+      clipboardHistory: this.clipHistory ? (cmd) => this.clipboardCommand(cmd) : null,
       holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
       holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),

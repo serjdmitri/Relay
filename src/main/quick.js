@@ -14,6 +14,7 @@ const { parseFocusCommand } = require('./focus');
 const { parseOcrCommand } = require('./ocr');
 const { parseHoloCommand } = require('./holo/commands');
 const { parseStickyCommand } = require('./stickies');
+const { parseClipboardCommand } = require('./clipboardHistory');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -113,7 +114,7 @@ function parseQuick(text, now = new Date()) {
   if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
 
   // ----- window layouts, focus mode, text from the screen -----
-  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text);
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text) || parseClipboardCommand(text);
   if (lay) return lay;
 
   // ----- the web -----
@@ -453,6 +454,11 @@ async function runQuick(cmd, mac, ctx = {}) {
       if (!ctx.stickies) return null;
       const r = await ctx.stickies(cmd);
       return r ? { tool: cmd.type.replace('-', '_'), input: { text: cmd.text, query: cmd.query }, reply: r.reply, ...(r.undo ? { undo: r.undo } : { readonly: true }) } : null;
+    }
+    case 'clip-list': case 'clip-ago': case 'clip-find': case 'clip-copy': case 'clip-paste': case 'clip-clear': case 'clip-on': case 'clip-off': {
+      if (!ctx.clipboardHistory) return null;
+      const r = await ctx.clipboardHistory(cmd);
+      return r ? { tool: cmd.type.replace('-', '_'), input: { query: cmd.query, index: cmd.index }, reply: r.reply ?? r, readonly: true } : null;
     }
     case 'holo-realsize': {
       if (!ctx.holoReal) return null;
