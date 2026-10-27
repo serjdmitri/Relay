@@ -86,6 +86,11 @@ function parseQuick(text, now = new Date()) {
     return { type: 'note', title: body.length > 60 ? body.slice(0, 57).trimEnd() + '…' : body, body: body.length > 60 ? body : '' };
   }
 
+  // ----- the Downloads tidy-up (its plan is shown first; these only answer to it) -----
+  if (/^(?:yes )?(?:apply|run|do|approve|accept|go ahead with)(?: all of)? (?:the |tonights |that |this )?(?:downloads? )?(?:plan|tidy up|tidy)$/.test(n) || /^(?:yes )?go ahead and (?:tidy|apply)(?: my downloads| the plan)?$/.test(n)) return { type: 'downloads-apply' };
+  if (/^(?:skip|dismiss|ignore|decline|cancel|not now for) (?:the |tonights |that |this )?(?:downloads? )?(?:plan|tidy up|tidy)$/.test(n)) return { type: 'downloads-skip' };
+  if (/^(?:tidy|clean|sort|organi[sz]e)(?: up)?(?: my| the)? downloads(?: folder)?(?: now)?$/.test(n)) return { type: 'downloads-plan' };
+
   // ----- timers and alarms -----
   if (/^(?:cancel|stop|clear|delete|remove|turn off|dismiss) (?:the |my |all |every )?(?:timers?|alarms?)$/.test(n)) return { type: 'timer-cancel' };
   if (/^(?:how (?:much )?(?:time|long)(?: is)? (?:left|remaining)(?: on (?:the |my )?(?:timer|alarm))?|how long is (?:the |my )?timer|what is left on (?:the |my )?timer|whats left on (?:the |my )?timer|timer status|check (?:the |my )?timer|how much time is left)$/.test(n)) return { type: 'timer-status' };
@@ -382,6 +387,17 @@ async function runQuick(cmd, mac, ctx = {}) {
       const b = await mac.batteryStatus();
       if (!b) return { tool: 'battery', input: {}, reply: 'This Mac has no battery.', readonly: true };
       return { tool: 'battery', input: {}, reply: `Battery is at ${b.percent}%${b.state ? ', ' + b.state : ''}${b.remaining ? ', about ' + b.remaining + ' left' : ''}.`, readonly: true };
+    }
+    case 'downloads-apply':
+      if (!ctx.downloads) return null;
+      return { tool: 'downloads_apply', input: {}, reply: await ctx.downloads.apply() };
+    case 'downloads-skip':
+      if (!ctx.downloads) return null;
+      return { tool: 'downloads_skip', input: {}, reply: ctx.downloads.skip(), readonly: true };
+    case 'downloads-plan': {
+      if (!ctx.downloads) return null;
+      const r = await ctx.downloads.plan();
+      return { tool: 'downloads_plan', input: {}, reply: r, readonly: true };
     }
     case 'calc':
       return { tool: 'calc', input: { kind: cmd.kind }, reply: cmd.reply, readonly: true };
