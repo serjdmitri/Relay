@@ -874,7 +874,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1496,7 +1496,7 @@ class AskController {
         this.forceTier = null;
         session.onRate = (r) => { this.rate = r; };
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
         return result;
       } catch (e) {
@@ -1510,7 +1510,7 @@ class AskController {
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
-      frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(),
+      frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'),
       firefoxConnected: this.bridge.isConnected(), screen: display.size, visionCapable: vision
     });
@@ -1606,6 +1606,23 @@ class AskController {
     } catch (e) { return `Could not change it: ${e.message}`; }
   }
 
+  // Saves a hologram as an STL in Downloads/Relay 3D, and opens it in an app (a slicer for 3D printing, Fusion...) when asked.
+  async save3d(raw = {}) {
+    const t = String(raw.title || '').toLowerCase().trim();
+    const all = [...(this.holos?.holos.values() || [])];
+    const h = (t && all.find((x) => x.title.toLowerCase().includes(t))) || all.at(-1);
+    if (!h) return 'There is no hologram on screen to save.';
+    const r = await this.holos.requestSave(h);
+    if (!r.ok) return `Could not save it: ${r.error}`;
+    let opened = '';
+    const app = String(raw.open_with || '').trim();
+    if (app) {
+      if (!/^[\p{L}\p{N} .+_-]{1,60}$/u.test(app)) return `Saved as ${r.where}, but "${app}" is not an app name I can open it with.`;
+      opened = await new Promise((resolve) => require('child_process').execFile('/usr/bin/open', ['-a', app, r.file], (e) => resolve(e ? ` Could not open it in ${app} (is it installed?).` : ` Opened it in ${app}.`)));
+    }
+    return `Saved the model as an STL: ${r.where} (in your Downloads folder).${opened}`;
+  }
+
   read3d(raw = {}) {
     const t = this.holos?.cadTarget(raw.title);
     return t ? `The designed model "${t.h.title}" now has:\n${cadModel.describeCad(t.h.items[t.index].cad)}` : 'There is no designed model on screen.';
@@ -1624,6 +1641,21 @@ class AskController {
     const text = `I am pointing at ${what} in the "${h.title}" hologram (the picture is my marked area). What is it, and what does it do? Answer in a few sentences.`;
     if (this.runningTask && this.state === 'working') return this.enqueue(text, { shown: part ? 'What is this piece?' : 'What is this?' });
     await this.handleText(text, { shown: part ? 'What is this piece?' : `What is this ${h.title}?` });
+  }
+
+  // The hand-gesture "listen": the mic opens, and what is said is about the hologram the hand is on.
+  async listenFromHand(holoId) {
+    if (!['idle', 'done'].includes(this.state)) return false;
+    const h = (holoId && this.holos?.get(holoId)) || this.holos?.latest();
+    this.holoFocus = h ? { id: h.id, title: h.title, designed: h.items.some((i) => i.kind === 'cad'), ts: Date.now() } : null;
+    await this.listen('ask', false, { auto: true });
+    return true;
+  }
+
+  holoHint() {
+    const f = this.holoFocus;
+    if (!f || Date.now() - f.ts > 120000 || !this.holos?.get(f.id)) return null;
+    return { title: f.title, designed: f.designed };
   }
 
   // A hologram was pinned, closed or added: once none is left unpinned, the reactor can go (the pinned ones stay).

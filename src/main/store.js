@@ -42,6 +42,7 @@ const DEFAULTS = {
       google: { clientId: '', clientSecretEnc: '', accounts: [] }, // accounts: { email, refreshEnc }
       apps: { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 } // Composio (or any MCP server): its address and key
     },
+    hands: { enabled: false }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

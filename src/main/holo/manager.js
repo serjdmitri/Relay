@@ -62,6 +62,20 @@ class HoloManager {
     return true;
   }
 
+  // Asks a hologram's page to save itself as an STL (the same as its save button); resolves with where it went.
+  requestSave(h) {
+    return new Promise((resolve) => {
+      h.pendingSave = resolve;
+      h.win.webContents.send('holo:state', 'save');
+      const t = setTimeout(() => { if (h.pendingSave === resolve) { h.pendingSave = null; resolve({ ok: false, error: 'Saving took too long.' }); } }, 20000);
+      t.unref?.();
+    });
+  }
+
+  finishSave(h, result) {
+    if (h?.pendingSave) { const r = h.pendingSave; h.pendingSave = null; r(result); }
+  }
+
   hasUnpinned() {
     return [...this.holos.values()].some((h) => !h.pinned);
   }
@@ -248,6 +262,17 @@ class HoloManager {
       if (point.x >= r.x && point.x <= r.x + r.width && point.y >= r.y && point.y <= r.y + r.height) return o;
     }
     return null;
+  }
+
+  // The hologram nearest to a point of the screen, if the point is on it or within slack pixels of it (a hand pointing at a model).
+  holoNear(point, slack = 200) {
+    let best = null;
+    for (const o of this.holos.values()) {
+      if (o.win.isDestroyed()) continue;
+      const dist = Math.hypot(point.x - o.x, point.y - o.y);
+      if (dist <= R * (o.scale || 1) + slack && (!best || dist < best.dist)) best = { o, dist };
+    }
+    return best ? best.o : null;
   }
 
   // A piece is being carried (point in the window's own pixels): the hologram it is over shows that it will take it.

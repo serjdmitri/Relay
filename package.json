@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Voice-first Mac agent. Dictate with Talkify, Relay does the rest.",
   "main": "src/main/main.js",
   "scripts": {
@@ -71,6 +71,7 @@
       "extendInfo": {
         "NSAppleEventsUsageDescription": "Relay controls your apps (Notes, Reminders, Messages, Calendar, Finder, Firefox) when you ask it to.",
         "NSMicrophoneUsageDescription": "Relay listens while you hold or tap its shortcut. Audio is turned into words on this Mac and never leaves it.",
+        "NSCameraUsageDescription": "Relay watches your hands through the camera, only while Hand control is on, so you can move holograms in the air. Pictures stay on this Mac and are never saved.",
         "NSSpeechRecognitionUsageDescription": "Relay turns what you say into text using Apple's on-device speech recognition."
       }
     }

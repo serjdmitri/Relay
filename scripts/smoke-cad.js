@@ -90,6 +90,7 @@ app.whenReady().then(async () => {
     await wait(2500);
     result.afterVoice = { shapes: (await T('cad()')).spec.shapes.length, editing: (await T('cad()')).editing, hole: edited.shapes[1].size };
     await shot('cad-6-voice-edit.png');
+    result.stl = await T('stlBytes()');
     result.fps = await T('fps()');
   } catch (e) { result.error = e.stack; }
   console.log('RESULT', JSON.stringify(result));
