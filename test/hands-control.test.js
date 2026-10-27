@@ -151,3 +151,20 @@ test('a pinch held in empty space draws a line in the air; over a hologram it tu
   assert.equal(h.win.input.at(-1).type, 'mouseDown', 'over the hologram it is a press');
   assert.equal(calls.length, 4, 'and nothing more was drawn');
 });
+
+test('the hand view: shown and hidden on the camera window, remembered when the camera starts, and told what the hands do', async () => {
+  const seen = [];
+  const cam = { close() {}, setPreview: (on) => seen.push(['preview', on]), action: (a) => seen.push(['action', a.type, a.dir]) };
+  const holos = new HoloManager({ createWindow: () => fakeHolo(), cursor: () => ({ x: 0, y: 0 }), area: () => ({ x: 0, y: 0, width: 1800, height: 1100 }) });
+  const hc = new HandControl({ holos, display: () => ({ x: 0, y: 0, width: 1801, height: 1101 }), askAccess: async () => true, createCamera: async () => cam, createCursor: () => ({ moveTo() {}, hide() {}, close() {}, setState() {} }), preview: true });
+  await hc.enable();
+  assert.deepEqual(seen.at(-1), ['preview', true], 'a view that was on stays on when the camera starts');
+  await hc.handle({ type: 'move', x: 0.5, y: 0.5 });
+  assert.equal(seen.filter((s) => s[0] === 'action').length, 0, 'plain moves are not announced');
+  await hc.handle({ type: 'swipe', dir: 'left', x: 0.5, y: 0.5 });
+  assert.deepEqual(seen.at(-1), ['action', 'swipe', 'left']);
+  hc.setPreview(false);
+  assert.deepEqual(seen.at(-1), ['preview', false]);
+  await hc.handle({ type: 'click', x: 0.5, y: 0.5 });
+  assert.equal(seen.filter((s) => s[0] === 'action').length, 1, 'with the view away nothing is sent to it');
+});

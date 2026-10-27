@@ -8,8 +8,9 @@ const { HandPointer } = require('./logic');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, now = Date.now }) {
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, preview = false, now = Date.now }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, now });
+    this.preview = !!preview; // the camera view in the top right of the screen (what the hand finder sees, its hand outlines, the gesture and the hand count)
     this.drawing = false; // a pinch held in empty space draws a glowing line in the air
     this.enabled = false;
     this.status = 'off';
@@ -36,6 +37,7 @@ class HandControl {
     if (!(await this.askAccess())) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
     this.enabled = true;
     this.cam = await this.createCamera();
+    this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor();
     return { ok: true };
   }
@@ -50,6 +52,13 @@ class HandControl {
     this.setHandMode(false);
     this.cam = null; this.ring = null; this.pos = null;
     this.pointer = new HandPointer({ onEvent: (e) => this.handle(e).catch(() => {}) });
+    this.onChange();
+  }
+
+  // Show or put away the camera view. Hand control itself is not changed.
+  setPreview(on) {
+    this.preview = !!on;
+    try { this.cam?.setPreview?.(this.preview); } catch { /* the view is only a hint */ }
     this.onChange();
   }
 
@@ -109,6 +118,7 @@ class HandControl {
 
   async handle(e) {
     if (!this.enabled) return;
+    if (this.preview && e.type !== 'move') { try { this.cam?.action?.({ type: e.type, dir: e.dir, open: e.open, factor: e.factor }); } catch { /* the view is only a hint */ } }
     if (e.type === 'lost') { if (this.drawing) { this.drawing = false; this.air('end', 0, 0); } this.release(); this.ring?.hide?.(); this.pos = null; return; }
     if (e.type === 'scale') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-scale', e.factor); return; }
     if (e.type === 'twist') { const h = this.target(this.pos || { x: 0, y: 0 }); if (h) h.win.webContents.send('holo:state', 'hand-twist', e.angle); return; }

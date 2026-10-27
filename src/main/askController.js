@@ -22,6 +22,7 @@ const { buildCard } = require('./cards/card');
 const { findStls, downloadStl } = require('./models/lookup');
 const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
 const { CLOSE_HOLOS } = require('./holo/closeWords');
+const { parseHandsCommand } = require('./hands/words');
 const cadModel = require('./models/cad');
 const { known: known3d } = require('./holo/apps3d');
 const { photoToModel, byId: engineById } = require('./models/generators');
@@ -1289,6 +1290,10 @@ class AskController {
     if (!opts.shown && this.holos?.holos.size && CLOSE_HOLOS.test(String(text).trim())) {
       this.closeHolograms();
       return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: 'Closed.', actions: 0 });
+    }
+    if (!opts.shown && this.onHands) { // "hands": the camera view and hand control, on the spot
+      const hc = parseHandsCommand(text);
+      if (hc) return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: await this.onHands(hc), actions: 0 });
     }
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.

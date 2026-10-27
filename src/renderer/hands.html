@@ -4,10 +4,28 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob: data:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'unsafe-inline'">
 <title>Hand control</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; font: 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, Arial, sans-serif; color: #eef6fb; -webkit-user-select: none; user-select: none; }
+  #card { position: absolute; left: 8px; top: 4px; width: 320px; border-radius: 16px; overflow: hidden; background: rgba(6, 14, 22, .94); border: 1px solid rgba(76, 194, 255, .38); box-shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 0 22px rgba(76, 194, 255, .16); }
+  #card[hidden] { display: none; }
+  #head { display: flex; justify-content: space-between; align-items: center; height: 32px; padding: 0 12px; letter-spacing: .02em; }
+  #count { font-weight: 600; color: #4cc2ff; }
+  #state { color: #9db4c4; font-size: 12px; }
+  #stage { position: relative; width: 320px; height: 240px; background: #04080d; }
+  canvas { display: block; width: 320px; height: 240px; }
+  #act { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 12px; border-radius: 999px; background: rgba(76, 194, 255, .92); color: #04121c; font-weight: 700; font-size: 12px; letter-spacing: .02em; opacity: 0; transition: opacity .25s; white-space: nowrap; }
+  #act.on { opacity: 1; }
+  #none { position: absolute; inset: 0; display: grid; place-items: center; color: #9db4c4; font-size: 13px; pointer-events: none; }
+  #none[hidden] { display: none; }
+</style>
 </head>
-<body style="margin:0;background:#000">
-<!-- No picture is shown or kept: the camera feeds the hand finder (on this Mac) and only where your hands are is sent on. -->
+<body>
+<!-- The camera picture is only drawn here, in this small window (the "hand view"), when you turn the view on. It is never saved or sent; only where your hands are is passed on. -->
 <video id="v" autoplay muted playsinline width="640" height="480" style="display:none"></video>
+<div id="card" hidden>
+  <div id="head"><span id="count">No hand</span><span id="state">Hand view</span></div>
+  <div id="stage"><canvas id="cv" width="640" height="480"></canvas><div id="none">Hold a hand up</div><div id="act"></div></div>
+</div>
 <script type="module" src="hands.js"></script>
 </body>
 </html>
