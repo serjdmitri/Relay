@@ -47,6 +47,7 @@ const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
+const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
@@ -1022,7 +1023,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1138,10 +1139,10 @@ class AskController {
     clearTimeout(this.followTimer);
     this.followTimer = setTimeout(() => {
       const cfg = this.store.get('settings.followUp') || {};
-      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.followChain });
+      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz ? 0 : this.followChain });
       if (!ok) return;
       this.followFor = null;
-      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
     }, delay);
   }
 
@@ -1415,6 +1416,11 @@ class AskController {
     }
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
+    // While a quiz runs, "next", "got it" and whatever you say are for the quiz, not for the music or the model.
+    if (this.quiz && !opts.shown && !opts.scheduled) {
+      if (Date.now() - this.quizAt > 2 * 3600000) this.quiz = null;
+      else { const qc = parseStudyCommand(text, { quizActive: true }); if (qc) return this.finish(entry, { status: 'done', reply: await this.quizCommand(qc), actions: 0 }); }
+    }
     const gc = this.guide.command(text);
     if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
     switch (cmd.type) {
@@ -1455,6 +1461,10 @@ class AskController {
         if (!opts.shown) {
           const ac = parseAgentCommand(effective);
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const sc = parseStudyCommand(effective);
+          if (sc) return this.studyStart(sc, effective, entry);
         }
         if (!opts.shown) {
           const lc = parseLanguageCommand(effective);
@@ -1684,6 +1694,65 @@ class AskController {
     if (['idle', 'done'].includes(this.state)) this.notice(text, 'done');
     this.sound('Glass');
     setTimeout(() => this.sound('Glass'), 900);
+  }
+
+  // ---- study mode ----
+  // The text on the screen, read on this Mac (Apple Vision); '' when it cannot be read.
+  async screenTextOnly() {
+    const fs = require('fs');
+    this.hideSoft?.();
+    await new Promise((r) => setTimeout(r, 250)); // the reactor must not be in the picture
+    const file = await this.mac.screenToFile();
+    try { return ocrLib.plainText(await this.mac.ocrFile(file)); } finally { try { fs.rmSync(file, { force: true }); } catch { /* temporary */ } }
+  }
+
+  // "Quiz me on this": gets what to study from, has the model make the cards (it calls start_quiz), and the quiz starts when the cards arrive.
+  async studyStart(cmd, text, entry) {
+    if (cmd.source === 'ask') {
+      if (cmd.minutes) { const r = await this.focusMode().start({ minutes: cmd.minutes }); return this.finish(entry, { status: 'done', reply: `Study session for ${cmd.minutes} minutes. ${r.reply.replace(/^Focus mode on for [^.]*\.\s*/, '')} Say “quiz me on this” when you want questions.`, actions: 1 }); }
+      return this.finish(entry, { status: 'done', reply: 'Say what to study: “quiz me on this” (what is on your screen), “quiz me on my notes about photosynthesis”, or “quiz me on the Krebs cycle”.', actions: 0 });
+    }
+    let material = '';
+    try {
+      if (cmd.source === 'screen') material = await this.screenTextOnly();
+      else if (cmd.source === 'selection') material = await this.mac.selectedText();
+      else if (cmd.source === 'clipboard') material = await this.mac.clipboardRead();
+      else if (cmd.source === 'notes') material = await this.mac.notesRead(cmd.topic);
+    } catch (e) {
+      if (cmd.source === 'notes') return this.finish(entry, { status: 'failed', reply: `I could not find a note about ${cmd.topic}. Say its title as it is in Notes.`, actions: 0 });
+      if (cmd.source === 'screen') return this.finish(entry, { status: 'failed', reply: 'I could not read the screen. Allow Screen Recording for Relay in System Settings, or copy the text and say “quiz me on what I copied”.', actions: 0 });
+    }
+    material = String(material || '').trim();
+    if (cmd.source !== 'topic' && material.length < 40) return this.finish(entry, { status: 'failed', reply: cmd.source === 'selection' ? 'Nothing is selected. Select some text first.' : cmd.source === 'clipboard' ? 'There is not enough copied text to make questions from.' : 'There is not enough text there to make questions from.', actions: 0 });
+    this.quiz = null;
+    return this.runRequest(quizPrompt({ text: cmd.source === 'topic' ? '' : material, topic: cmd.topic, minutes: cmd.minutes }), entry);
+  }
+
+  // The start_quiz tool: the cards the model made. The quiz is asked once its sentence has been said (finish() puts the first question after it).
+  startQuiz({ cards, minutes }) {
+    const quiz = new Quiz(Array.isArray(cards) ? cards : [], { minutes: Number(minutes) || 0 });
+    if (quiz.total < 2) return 'Could not make enough cards.';
+    this.quiz = quiz;
+    this.quizAt = Date.now();
+    this.quizFresh = true;
+    if (quiz.minutes) this.focusMode().start({ minutes: quiz.minutes }).catch(() => {});
+    return `Quiz ready with ${quiz.total} cards. Reply with one short sentence.`;
+  }
+
+  async quizCommand(cmd) {
+    const q = this.quiz;
+    this.quizAt = Date.now();
+    let reply;
+    if (cmd.type === 'quiz-answer') reply = q.attempt(cmd.text).reply;
+    else if (cmd.op === 'reveal') reply = `${q.reveal()} Say “got it” or “missed it”.`;
+    else if (cmd.op === 'right') reply = q.revealed || q.current ? q.mark(true) : q.summary();
+    else if (cmd.op === 'wrong') reply = q.mark(false);
+    else if (cmd.op === 'skip') reply = q.skip();
+    else if (cmd.op === 'repeat') reply = q.ask();
+    else if (cmd.op === 'score') reply = `${q.right} right so far, out of ${q.answered} asked, ${q.total} cards in all.`;
+    else { reply = q.summary(); q.done = true; }
+    if (q.done) this.quiz = null;
+    return reply;
   }
 
   // The language a request is in: what the words say, else the language the microphone is listening for (a word or two cannot be told).
@@ -1952,6 +2021,7 @@ class AskController {
   }
 
   finish(entry, res) {
+    if (this.quizFresh && this.quiz) { this.quizFresh = false; res = { ...res, status: 'done', reply: `${String(res.reply || '').trim().replace(/\s+$/, '')} ${this.quiz.ask()}`.trim() }; } else this.quizFresh = false;
     const reply = res.reply || '';
     const u = res.usage;
     const used = u && (u.in || u.out) ? { model: u.model || '', ms: Date.now() - entry.ts, in: u.in, out: u.out } : null;
