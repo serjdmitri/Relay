@@ -55,21 +55,30 @@ const ENGINES = [
 const byId = (id) => ENGINES.find((e) => e.id === id);
 
 // Tries the engines in order (or just the one asked for, with the rest as fallbacks) until one makes a model.
-// Returns { bytes, engine, name } or throws the last problem. onTry(engine) is told which one is being tried.
+// Returns { bytes, engine, name, attempts } or throws the last problem (with .attempts). onTry(engine) is told which one is being tried.
+// attempts: what each tried engine did: { engine, name, ok, seconds, error }.
 async function photoToModel(photo, { fetchImpl = fetch, token = '', prefer = null, only = null, onTry = () => {}, order = ENGINES.map((e) => e.id) } = {}) {
   const ids = only ? [only] : prefer ? [prefer, ...order.filter((i) => i !== prefer)] : order;
+  const attempts = [];
   let last = null;
   for (const id of ids) {
     const e = byId(id);
     if (!e) continue;
     onTry(e);
+    const t0 = Date.now();
     try {
       const bytes = await e.run(photo, { fetchImpl, token });
       if (bytes.length < 1000 || bytes.slice(0, 4).toString() !== 'glTF') throw new GradioError(friendly(''));
-      return { bytes, engine: e.id, name: e.name };
-    } catch (err) { last = err; }
+      attempts.push({ engine: e.id, name: e.name, ok: true, seconds: +((Date.now() - t0) / 1000).toFixed(1) });
+      return { bytes, engine: e.id, name: e.name, attempts };
+    } catch (err) {
+      last = err;
+      attempts.push({ engine: e.id, name: e.name, ok: false, seconds: +((Date.now() - t0) / 1000).toFixed(1), error: String(err.message || '').slice(0, 160), raw: String(err.raw || '').slice(0, 240) });
+    }
   }
-  throw last || new GradioError(friendly(''));
+  const out = last || new GradioError(friendly(''));
+  out.attempts = attempts;
+  throw out;
 }
 
 module.exports = { ENGINES, photoToModel, findGlb, byId };
