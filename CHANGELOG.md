@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Zip and convert, with undo.** New `drive_make`: zip files or folders into one archive, or convert pictures to PNG, JPEG, TIFF, HEIC, GIF or BMP. Originals are untouched, a new file never replaces one that is there (it gets a free name), and you are asked first. `drive_undo` now also covers these: the new file goes to the Trash (never deleted). Renames already worked through `drive_propose`; the tool now says so.
+- **Print check.** A new button in the hologram menu (next to Measure): says the model's size in millimetres, whether its skin is closed (a slicer needs that), how much of it overhangs past 45 degrees, and its volume. Checked in a real browser page for loading only; not clicked in the Electron app.
 - **Photo-made models pull apart along their own creases and colours** (including TRELLIS.2 models over 250,000 triangles). Not yet tuned on real car models.
 
 ## 0.28.0

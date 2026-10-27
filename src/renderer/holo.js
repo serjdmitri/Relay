@@ -9,7 +9,7 @@ import { GLTFExporter } from './vendor/three/GLTFExporter.js';
 import { splitTriangles, splitSurface, explodeOffsets, placeItems } from './holo-parts.js';
 import { CadView } from './holo-cad.js';
 import * as S from './holo-cad-spec.js';
-import { toStl, to3mf, toStep, zUp } from './holo-export.js';
+import { toStl, to3mf, toStep, zUp, printCheck } from './holo-export.js';
 
 const $ = (id) => document.getElementById(id);
 const cv = $('cv');
@@ -993,6 +993,17 @@ function setMeasure(on) {
   document.body.classList.remove('menu-open');
 }
 $('measure').onclick = () => setMeasure(!measuring);
+
+// Print check: the model as a printer would see it (z up, on the bed, millimetres), said in a few lines.
+function runPrintCheck() {
+  const { tris, mm } = collectTriangles();
+  const r = tris.length ? printCheck(zUp(tris, { scaleTo: mm ? 0 : 100 })) : null;
+  if (!r) { $('err').textContent = 'There is nothing to check yet.'; setTimeout(() => { $('err').textContent = ''; }, 4000); return null; }
+  $('err').textContent = `${r.sizeMm.join(' × ')} mm${mm ? '' : ' (a guess: 100 mm across)'}${r.volumeCm3 !== null ? `, ${r.volumeCm3} cm³` : ''}. ${r.notes.join(' ')}`;
+  setTimeout(() => { $('err').textContent = ''; }, 12000);
+  return r;
+}
+$('printcheck').onclick = () => runPrintCheck();
 const mw = new THREE.Vector3();
 function updateMeasure() {
   if (!measuring) return;
@@ -1127,6 +1138,7 @@ window.__holoTest = {
   info: () => { const kinds = {}; let meshes = 0; holo.traverse((o) => { if (o.isMesh) { meshes++; for (const m of [].concat(o.material)) { const k = m.isShaderMaterial ? (m.uniforms.clipOn ? 'shader+clip' : 'shader') : m.type; kinds[k] = (kinds[k] || 0) + 1; } } }); return { meshes, kinds, box: clip.box && [clip.box.min.toArray(), clip.box.max.toArray()], items: items.map((i) => i.kind) }; },
   cut: (on, axis = 1, t = 0, flip = false) => { clip.axis = axis; clip.flip = flip; $('cutr').value = String(Math.round(t * 100)); setCut(on); clip.t = t; updateClip(); return { on: clip.on, d: uniforms.clipD.value, n: uniforms.clipN.value.toArray() }; },
   save: (fmt) => saveModel(fmt),
+  printCheck: () => runPrintCheck(),
   yaw: (deg) => { orient.setFromAxisAngle(axisY, (deg * Math.PI) / 180); holo.quaternion.copy(orient); return true; },
   stlBytes: () => { const { tris } = collectTriangles(); return tris.length ? { bytes: toStl(zUp(tris), 'x').length, tris: tris.length / 9 } : 0; },
   mode: () => (exploded || editing ? 'parts' : items.length > 1 ? 'items' : 'whole'),

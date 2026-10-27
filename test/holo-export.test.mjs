@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { toStl, to3mf, toStep, zUp, crc32, indexed, STEP_MAX_TRIS } from '../src/renderer/holo-export.js';
+import { toStl, to3mf, toStep, zUp, crc32, indexed, printCheck, STEP_MAX_TRIS } from '../src/renderer/holo-export.js';
 
 // a 10 mm cube standing on the floor (y up), as 12 triangles
 function cube(s = 10) {
@@ -64,4 +64,31 @@ test('STEP has the header, one solid with a face per triangle, and is refused wh
   for (const m of s.matchAll(/#(\d+)/g)) assert.ok(defined.has(m[1]), `#${m[1]} is defined`);
   assert.throws(() => toStep(new Float32Array((STEP_MAX_TRIS + 1) * 9)), /too detailed for STEP/);
   assert.deepEqual(indexed(cube()).idx.length, 36);
+});
+
+
+function solidCube(s, z0 = 0) { // closed, outward-facing triangles
+  const v = [[0, 0, 0], [s, 0, 0], [s, s, 0], [0, s, 0], [0, 0, s], [s, 0, s], [s, s, s], [0, s, s]].map(([x, y, z]) => [x, y, z + z0]);
+  const f = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [3, 6, 2], [3, 7, 6], [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5]];
+  return f.flatMap(([a, b, c]) => [...v[a], ...v[b], ...v[c]]);
+}
+
+test('print check: a closed cube on the bed is fine, with its size and volume', () => {
+  const r = printCheck(new Float32Array(solidCube(20)));
+  assert.deepEqual(r.sizeMm, [20, 20, 20]);
+  assert.equal(r.closed, true);
+  assert.equal(r.overhangPct, 0, 'the bottom is on the bed, not an overhang');
+  assert.equal(r.volumeCm3, 8);
+});
+
+test('print check: a hole in the skin and a floating block are reported', () => {
+  const holed = solidCube(20).slice(9); // one triangle missing
+  const r = printCheck(new Float32Array(holed));
+  assert.equal(r.closed, false);
+  assert.ok(r.openEdges >= 3);
+  assert.match(r.notes[0], /open or doubled/);
+  const two = new Float32Array([...solidCube(20), ...solidCube(10, 30)]); // a small block hanging in the air above: its underside overhangs
+  const t = printCheck(two);
+  assert.ok(t.overhangPct > 0, `${t.overhangPct}`);
+  assert.equal(printCheck(new Float32Array(0)), null);
 });

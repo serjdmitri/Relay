@@ -170,3 +170,39 @@ export function zUp(tris, { scaleTo = 0 } = {}) {
   for (let i = 0; i < out.length; i += 3) { out[i] = (out[i] - cx) * s; out[i + 1] = (out[i + 1] - cy) * s; out[i + 2] = (out[i + 2] - min[2]) * s; }
   return out;
 }
+
+// Will it print? tris: z up, on the bed (what zUp gives), in millimetres. Reports the size, whether the skin is closed (a slicer needs that), how much
+// of it hangs out over nothing (more than 45 degrees past straight up needs supports), and the volume of a closed model.
+export function printCheck(tris, { minOverhang = 45 } = {}) {
+  const n = Math.floor(tris.length / 9);
+  if (!n) return null;
+  const { pts, idx } = indexed(tris);
+  const edges = new Map();
+  const bump = (a, b) => { const k = a < b ? a * pts.length + b : b * pts.length + a; edges.set(k, (edges.get(k) || 0) + 1); };
+  let min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < pts.length; i += 3) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], pts[i + k]); max[k] = Math.max(max[k], pts[i + k]); }
+  const size = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+  const cosLimit = -Math.cos((minOverhang * Math.PI) / 180); // a face whose normal points down further than this overhangs
+  let area = 0, hang = 0, vol = 0;
+  for (let t = 0; t < n; t++) {
+    const a = idx[t * 3] * 3, b = idx[t * 3 + 1] * 3, c = idx[t * 3 + 2] * 3;
+    if (idx[t * 3] !== idx[t * 3 + 1] && idx[t * 3 + 1] !== idx[t * 3 + 2] && idx[t * 3] !== idx[t * 3 + 2]) { bump(idx[t * 3], idx[t * 3 + 1]); bump(idx[t * 3 + 1], idx[t * 3 + 2]); bump(idx[t * 3 + 2], idx[t * 3]); }
+    const ux = pts[b] - pts[a], uy = pts[b + 1] - pts[a + 1], uz = pts[b + 2] - pts[a + 2];
+    const vx = pts[c] - pts[a], vy = pts[c + 1] - pts[a + 1], vz = pts[c + 2] - pts[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    if (!l) continue;
+    area += l / 2;
+    const onBed = Math.max(pts[a + 2], pts[b + 2], pts[c + 2]) - min[2] < size[2] * 0.004 + 1e-6;
+    if (nz / l < cosLimit && !onBed) hang += l / 2;
+    vol += (pts[a] * (pts[b + 1] * pts[c + 2] - pts[b + 2] * pts[c + 1]) - pts[a + 1] * (pts[b] * pts[c + 2] - pts[b + 2] * pts[c]) + pts[a + 2] * (pts[b] * pts[c + 1] - pts[b + 1] * pts[c])) / 6;
+  }
+  let open = 0, bad = 0;
+  for (const c of edges.values()) { if (c === 1) open++; else if (c > 2) bad++; }
+  const closed = open === 0 && bad === 0;
+  const overhangPct = area ? Math.round((hang / area) * 100) : 0;
+  const notes = [];
+  notes.push(closed ? 'The skin is closed, so a slicer can fill it.' : `The skin has ${open + bad} open or doubled ${open + bad === 1 ? 'edge' : 'edges'}: a slicer may fail or leave holes. Repair it in the slicer (most have a button for that).`);
+  notes.push(overhangPct < 5 ? 'Almost nothing hangs over empty space.' : overhangPct < 20 ? `${overhangPct}% of the surface overhangs: a few supports.` : `${overhangPct}% of the surface overhangs: it needs supports, or turn it to a flatter side.`);
+  return { sizeMm: size.map((v) => +v.toFixed(1)), triangles: n, closed, openEdges: open, doubledEdges: bad, overhangPct, volumeCm3: closed ? +(Math.abs(vol) / 1000).toFixed(2) : null, notes };
+}
