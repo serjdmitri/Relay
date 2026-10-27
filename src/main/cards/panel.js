@@ -77,6 +77,7 @@ class CardPanel {
   }
 
   open(url) {
+    if (typeof url === 'string' && url.startsWith('holo:')) { this.onHolo?.(url.slice(5)); return; } // a hologram from the library: brought back
     if (typeof url === 'string' && url.startsWith('file:')) { this.onFile?.(url.slice(5)); return; } // a result of a file search: opened or shown in Finder
     const u = safeUrl(url);
     if (u) shell.openExternal(u);

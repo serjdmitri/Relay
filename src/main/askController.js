@@ -1482,6 +1482,53 @@ class AskController {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
   }
 
+  // Library and scenes of holograms, by voice. Returns the reply, or null to leave it to the model (nothing to bring back by that name).
+  async holoLibraryCommand(cmd) {
+    const lib = this.holos.library;
+    const ago = (t) => { const d = Math.max(0, Date.now() - t); const m = Math.round(d / 60000); return m < 2 ? 'just now' : m < 90 ? `${m} min ago` : d < 36 * 3600000 ? `${Math.round(d / 3600000)} h ago` : `${Math.round(d / 86400000)} days ago`; };
+    const showCard = async (title, list) => {
+      await this.cardPanel?.show({ kind: 'list', title, subtitle: 'Click one to bring it back', summary: '', facts: [], links: [], image: null, credit: '',
+        items: list.map((e) => ({ title: e.title, subtitle: `${e.saved.items.length} ${e.saved.items.length === 1 ? 'model' : 'models'}${e.saved.pinned ? ' · pinned' : ''}`, note: ago(e.updatedAt), image: e.thumb || null, url: `holo:${e.id}` })) });
+    };
+    switch (cmd.type) {
+      case 'holo-library': {
+        const list = lib.recent(8);
+        if (!list.length) return 'You have not made any holograms yet. Ask me to show you something in 3D.';
+        await showCard('Your holograms', list);
+        return `Showing your ${list.length} most recent ${list.length === 1 ? 'hologram' : 'holograms'} (${lib.entries.length} in all). Click one to bring it back.`;
+      }
+      case 'holo-find': {
+        const list = lib.search(cmd.query, 8);
+        if (!list.length) return `I do not have a hologram matching “${cmd.query}”.`;
+        await showCard(`Holograms matching “${cmd.query.slice(0, 30)}”`, list);
+        return `Found ${list.length} matching “${cmd.query}”. Click one to bring it back.`;
+      }
+      case 'holo-open': {
+        const best = lib.search(cmd.query, 3)[0];
+        if (!best) return null; // not one of yours: the model may make it
+        const id = await this.holos.openFromLibrary(best.id);
+        return id ? `Brought back ${best.title}.` : `I could not bring back ${best.title}: its model is no longer stored.`;
+      }
+      case 'scene-save': {
+        const r = this.holos.saveScene(cmd.name);
+        return r.ok ? `${r.replaced ? 'Updated' : 'Saved'} the ${cmd.name} scene: ${r.count} ${r.count === 1 ? 'hologram' : 'holograms'}${r.skipped ? ` (${r.skipped} could not be kept)` : ''}.` : r.reason;
+      }
+      case 'scene-open': {
+        const r = await this.holos.openScene(cmd.name);
+        return r.ok ? `The ${r.name} scene is up: ${r.shown} ${r.shown === 1 ? 'hologram' : 'holograms'}${r.shown < r.total ? ` (${r.total - r.shown} could not be loaded)` : ''}.` : r.reason;
+      }
+      case 'scene-list': {
+        const s = lib.scenes;
+        return s.length ? `You have ${s.length} ${s.length === 1 ? 'scene' : 'scenes'}: ${s.map((x) => `${x.name} (${x.holos.length})`).join(', ')}.` : 'You have no saved scenes. Put some holograms where you want them and say “save this scene as engine bay”.';
+      }
+      case 'scene-delete': {
+        const gone = lib.deleteScene(cmd.name);
+        return gone ? `Deleted the ${gone.name} scene.` : `I do not have a scene called ${cmd.name}.`;
+      }
+      default: return null;
+    }
+  }
+
   layouts() {
     return this._layouts || (this._layouts = new Layouts({ store: this.store, mac: this.mac, displays: () => this.displayAreas() }));
   }
@@ -1532,6 +1579,7 @@ class AskController {
       prevApp: this.prevApp,
       runningApps: this.lastApps,
       layouts: this.layouts(),
+      holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),
       ocr: (cmd) => this.readScreenText(cmd),
       downloads: this.drive ? {

@@ -72,6 +72,8 @@ const DEFAULTS = {
     },
     firefox: { enabled: false, port: 47831 }
   },
+  holoLibrary: [], // every hologram that has been on screen, with a small picture (see holo/library.js)
+  holoScenes: [], // saved sets of holograms: where each is and how big
   history: [], // {id, text, status, reply, ts, actions}
   dictations: [], // {id, text, ts}
   actions: [], // {id, requestId, tool, input, result, ok, ts}
