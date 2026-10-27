@@ -212,8 +212,10 @@ const PAGES = {
       };
       drawDict();
     } else {
-      c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Use this to see what happened when a request did not work.</div>'));
-      c.append(h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span></div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`));
+      c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Where an action can be put back (a moved file, a window, the volume, a timer, a note…), it has an Undo button until Relay quits. Use this to see what happened when a request did not work.</div>'));
+      const actCard = h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span>${a.undoable ? `<button class="btn" data-undo="${esc(a.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`);
+      actCard.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
+      c.append(actCard);
     }
   },
 

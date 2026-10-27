@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Undo in the activity log.** History > Actions now has an Undo button on each action that can be put back: a timer, an alarm, a note, a reminder, a window move, the volume or brightness, dark mode, an app opened, files moved or made by the Drive tools (the made file goes to the Trash). It lasts until Relay quits, works once, and the undo is logged too.
 - **Phone quick actions.** A row of buttons under the reactor on the phone page: Lock my Mac, What's playing, Pause, Play, Next song, Previous, Quieter, Louder, Mute, Focus 25 min, End focus, Screen off. Each is one instant command (no model). "What's playing" is also a new spoken command. `/?say=lock%20my%20mac` on the phone page sends that phrase on opening (for bookmarks and Shortcuts). Checked in a browser with a stand-in server.
 - **Messages to your phone when a long job finishes (opt-in).** Settings > Remote. By ntfy (a free app and service; the topic Relay makes is the secret) or by iMessage from the Mac to your own number. Sent when a request takes over 30 seconds or a background agent finishes, never for requests made from the phone. Only "Done: ..." and the first words of the request are sent unless you ask for the answer too.
 - **Push to talk from the lock screen** is the "Hey Siri, Relay" Shortcut on the lock screen widget, Action Button, Control Center control or Back Tap: steps in docs/phone.md.

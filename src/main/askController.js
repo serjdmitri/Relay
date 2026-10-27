@@ -44,6 +44,7 @@ const { BargeIn } = require('./barge');
 const { shouldFollowUp } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
+const { UndoRegistry } = require('./activity');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
@@ -134,6 +135,7 @@ class AskController {
     this.holos = null; // set by the app: the holograms
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
+    this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
     this.unattended = false; // the request that is running was scheduled, so nobody may be there to answer questions
@@ -1551,6 +1553,14 @@ class AskController {
     return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
   }
 
+  // The activity log's Undo button: reverses one action, once, and records that it did.
+  async undoAction(id) {
+    const r = await this.undos.run(String(id));
+    if (r.ok) this.store.addAction({ id: crypto.randomUUID(), requestId: '', tool: 'undo', input: { action: String(id).slice(0, 8) }, result: r.message, ok: true, ts: Date.now() });
+    this.onChange();
+    return r;
+  }
+
   // Library and scenes of holograms, by voice. Returns the reply, or null to leave it to the model (nothing to bring back by that name).
   async holoLibraryCommand(cmd) {
     const lib = this.holos.library;
@@ -1674,7 +1684,9 @@ class AskController {
     try {
       const r = await runQuick(q, this.mac, this.quickContext());
       if (!r) return null;
-      this.store.addAction({ id: crypto.randomUUID(), requestId, tool: r.tool, input: r.input, result: r.reply, ok: true, ts: Date.now() });
+      const actionId = crypto.randomUUID();
+      this.store.addAction({ id: actionId, requestId, tool: r.tool, input: r.input, result: r.reply, ok: true, ts: Date.now() });
+      if (r.undo) this.undos?.register(actionId, r.undo);
       this.onChange();
       return r;
     } catch {
@@ -1831,7 +1843,10 @@ class AskController {
       if (e.type === 'tool-start') this.push({ label: e.label || e.name.replace(/_/g, ' '), stream: '' });
       if (e.type === 'text-delta') this.streamText(e.text);
       if (e.type === 'tool') {
-        this.store.addAction({ id: crypto.randomUUID(), requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
+        const actionId = crypto.randomUUID();
+        this.store.addAction({ id: actionId, requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
+        // what can be put back: moved files, files Relay made (the new file goes to the Trash)
+        if (e.ok && (e.name === 'drive_apply' || e.name === 'drive_make') && this.drive?.lastLogId) { const logId = this.drive.lastLogId; this.undos.register(actionId, () => this.drive.undo(logId)); }
         this.onChange();
       }
     };
