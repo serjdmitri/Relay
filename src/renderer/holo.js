@@ -316,7 +316,7 @@ function collectParts() {
         parent.remove(meshes[0]);
         sp.meshes.forEach((m) => parent.add(m));
         pieces = sp.meshes;
-        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : '';
+        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : sp.kind === 'surface' ? 'one solid piece, cut along its creases and colours' : '';
       }
     }
     if (ud.edges) ud.edges.visible = false;
