@@ -17,6 +17,7 @@ const DEFAULTS = {
     wake: { enabled: false, phrase: 'hey jarvis', apps: [] }, // listen for a wake phrase while Relay is idle (on-device). apps: only while one of these is in front; empty means always
     followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
     bargeIn: { enabled: true, mode: 'talk' }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones
+    downloadsTidy: { enabled: true, hour: 21, minute: 0, lastRun: '' }, // each evening: work out where new downloads belong and SHOW it (nothing moves until you say yes; nothing is ever deleted)
     voices: { quiet: { volume: 0.55 }, reading: {} }, // how confirmations and long answers sound (see voiceProfile.js)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
     hfTokenEnc: '', // an optional free Hugging Face token: more free GPU time for the better 3D generators (TRELLIS)

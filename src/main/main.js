@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { nightlyDue, dayKey } = require('./drive/nightly');
 const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
@@ -772,6 +773,14 @@ app.whenReady().then(() => {
     for (const s of missed) if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: `"${s.text}" was due while the Mac was asleep or Relay was closed. It will run next time.` }).show();
     for (const s of due) ask.runScheduled(s);
     if (due.length || missed.length) broadcast();
+    // Each evening: look at Downloads and show where the new files would go. Only when Relay is free; it moves nothing without a yes.
+    const dt = store.get('settings.downloadsTidy');
+    if (nightlyDue(dt) && ask.canRunScheduled()) {
+      store.set('settings.downloadsTidy.lastRun', dayKey(new Date()));
+      ask.drive.proposeDownloads().then((r) => {
+        if (r.moves && Notification.isSupported()) new Notification({ title: 'Downloads tidy-up', body: `${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads could be sorted. The plan is on screen: say “apply the plan” or “skip the plan”.`, silent: true }).show();
+      }).catch(() => {});
+    }
   }, 15000);
   ask.onLearn = (from, to) => { // a word you keep fixing by hand becomes a word fix
     const list = (store.data.replacements || []).filter((r) => r.from.toLowerCase() !== from.toLowerCase());

@@ -1483,7 +1483,12 @@ class AskController {
       timers: this.timers,
       brightness: { get: () => this.speech.brightness(), set: (v) => this.speech.brightness(v) },
       prevApp: this.prevApp,
-      runningApps: this.lastApps
+      runningApps: this.lastApps,
+      downloads: this.drive ? {
+        plan: async () => { const r = await this.drive.proposeDownloads({ nightly: false }); return r.moves ? `Here is where ${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads would go. Say “apply the plan” to do it, or “skip the plan”.` : 'Nothing in Downloads needs tidying right now.'; },
+        apply: () => this.drive.applyDownloads(),
+        skip: () => this.drive.skipDownloads()
+      } : null
     };
   }
 
