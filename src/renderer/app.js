@@ -1002,6 +1002,38 @@ const PAGES = {
       ex.append(row);
     }
     if (ex.children.length) c.append(ex, h('<div class="d" style="margin:4px 4px 14px">New features start off. Turn one on to try it; turn it off again any time.</div>'));
+    if (S.settings.flags?.plugins) {
+      c.append(h('<div class="section-title">Plugins</div>'));
+      const pl = S.pluginList || [];
+      const box = h('<div class="card"></div>');
+      if (!pl.length) box.append(h('<div class="row"><div class="grow"><div class="d">No plugins installed. Paste a GitHub link or a folder path below to look at one.</div></div></div>'));
+      for (const p of pl) {
+        const row = h(`<div class="row" style="align-items:flex-start"><div class="grow"><div class="t">${esc(p.name)} <span class="d" style="display:inline">${esc(p.version)}${p.running ? ' · running' : ''}</span></div><div class="d">${esc(p.description || '')}</div>${p.ok ? p.permissions.map((l) => `<div class="d${l.warn ? ' warn' : ''}">${esc(l.text)}</div>`).join('') : `<div class="d warn">${esc(p.error)}</div>`}${p.changed ? '<div class="d warn">Changed since you approved it, so it is not used. Install it again to approve the change.</div>' : ''}<div class="d" id="pu-${esc(p.name)}"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="btn" data-pu="${esc(p.name)}">Check for update</button><button class="btn" data-pr="${esc(p.name)}">Remove</button><div class="toggle ${p.enabled ? 'on' : ''}" data-pe="${esc(p.name)}"></div></div></div>`);
+        row.onclick = async (e) => {
+          const t = e.target.dataset;
+          if (t.pe) relay.pluginEnable(t.pe, !p.enabled);
+          else if (t.pr) { if (confirm(`Remove the ${t.pr} plugin and its files?`)) relay.pluginRemove(t.pr); }
+          else if (t.pu) { const r = await relay.pluginUpdateCheck(t.pu); $(`[id="pu-${t.pu}"]`, row).textContent = r.available ? `A newer version exists (${String(r.sha).slice(0, 7)}). Paste its link below to look at what changed.` : 'Up to date.'; }
+        };
+        box.append(row);
+      }
+      c.append(box);
+      const add = h('<div class="field-row" style="margin:12px 0"><input class="field" id="pin" placeholder="github.com/owner/repo, owner/repo or a folder path"><button class="btn primary" id="pgo">Look at it</button></div>');
+      const out = h('<div class="card" hidden></div>');
+      $('#pgo', add).onclick = async () => {
+        const v = $('#pin', add).value.trim();
+        if (!v) return;
+        out.hidden = false; out.innerHTML = '<div class="row"><div class="d">Looking…</div></div>';
+        const r = await relay.pluginInspect(v);
+        if (!r.ok) { out.innerHTML = ''; out.append(h(`<div class="row"><div class="d warn">${esc(r.error)}</div></div>`)); return; }
+        out.innerHTML = '';
+        out.append(h(`<div class="row" style="align-items:flex-start"><div class="grow"><div class="t">${esc(r.name)} ${esc(r.version)}${r.update ? ` <span class="d" style="display:inline">(you have ${esc(r.installedVersion)})</span>` : ''}</div><div class="d">${esc(r.description)}</div><div class="d">Tools: ${esc(r.tools.join(', '))}. ${r.files} files, ${Math.round(r.bytes / 1024)} KB.${r.sha ? ` Exact version: ${esc(r.sha.slice(0, 12))}.` : ''}</div>${r.permissions.map((l) => `<div class="d${l.warn ? ' warn' : ''}">${esc(l.text)}</div>`).join('')}${r.changes.length ? `<div class="t" style="margin-top:8px">What changed</div>${r.changes.map((x) => `<div class="d">${esc(x)}</div>`).join('')}` : ''}</div><div style="display:flex;gap:8px"><button class="btn" id="pno">Cancel</button><button class="btn primary" id="pyes">${r.update ? 'Approve update' : 'Approve and install'}</button></div></div>`));
+        $('#pno', out).onclick = () => { relay.pluginCancel(r.token); out.hidden = true; };
+        $('#pyes', out).onclick = async () => { const res = await relay.pluginInstall(r.token); if (res.ok) { out.hidden = true; $('#pin', add).value = ''; } else out.append(h(`<div class="row"><div class="d warn">${esc(res.error)}</div></div>`)); };
+      };
+      c.append(add, out);
+      c.append(h('<div class="d" style="margin:4px 4px 14px">A plugin runs as its own program with only what you approve here. Anything it returns is treated as data, never as instructions, and after a plugin has answered, sending, deleting and running commands always ask you first.</div>'));
+    }
     if (S.settings.flags?.imessage) {
       c.append(h('<div class="section-title">Command Relay by text</div>'));
       const ib = S.inboundInfo || {};

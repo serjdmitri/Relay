@@ -14,6 +14,7 @@ const { ClipboardHistory } = require('./clipboardHistory');
 const doctor = require('./doctor');
 const flagsMod = require('./flags');
 const { InboundService } = require('./inbound');
+const { PluginManager } = require('./plugins');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -52,7 +53,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -153,6 +154,7 @@ function publicState() {
     hotkeysError: hotkeys.error,
     version: app.getVersion(),
     flagList: flagsMod.offered(),
+    pluginList: pluginMgr?.list() || [],
     inboundInfo: inbound?.status() || { running: false, paired: false },
     extensionPath: extensionPath()
   };
@@ -463,6 +465,16 @@ function registerIpc() {
   ipcMain.handle('inbound:code', () => { syncInbound(); return { code: inbound?.newCode() || null }; });
   ipcMain.handle('inbound:unpair', () => { inbound?.unpair(); broadcast(); return { ok: true }; });
 
+
+  // ----- Plugins -----
+  ipcMain.handle('plugins:list', () => pluginMgr?.list() || []);
+  ipcMain.handle('plugins:inspect', async (_e, input) => { try { return { ok: true, ...(await pluginMgr.inspect(String(input || ''))) }; } catch (e) { return { ok: false, error: e.message }; } });
+  ipcMain.handle('plugins:install', async (_e, token) => { try { await pluginMgr.install(String(token)); broadcast(); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
+  ipcMain.handle('plugins:cancel', (_e, token) => { pluginMgr?.cancel(String(token)); return { ok: true }; });
+  ipcMain.handle('plugins:enable', (_e, name, on) => { pluginMgr?.setEnabled(String(name), !!on); broadcast(); return { ok: true }; });
+  ipcMain.handle('plugins:remove', (_e, name) => { pluginMgr?.remove(String(name)); broadcast(); return { ok: true }; });
+  ipcMain.handle('plugins:update-check', async (_e, name) => { try { return await pluginMgr.checkUpdate(String(name)); } catch { return { available: false }; } });
+
   // ----- Relay Doctor and experimental switches -----
   let doctorFixes = new Map(); // fix id -> fix, from the last run
   const codesign = () => new Promise((resolve) => {
@@ -482,6 +494,7 @@ function registerIpc() {
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
+      plugins: () => ({ on: flagsMod.isOn(store.get('settings'), 'plugins'), list: pluginMgr?.list() || [], sandbox: !!pluginMgr?.sandbox }),
       imessage: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), fullDisk: fullDisk(), ...(inbound?.status() || {}) }),
       _signing: st
     };
@@ -936,6 +949,10 @@ app.whenReady().then(() => {
   remote.sync().then(broadcast);
   inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
   ask.inbound = inbound;
+  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, sandbox: false });
+  ask.plugins = pluginMgr;
+  // The macOS sandbox is used only if a trivial profile really starts on this Mac.
+  execFile('/usr/bin/sandbox-exec', ['-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true'], { timeout: 3000 }, (err) => { pluginMgr.sandbox = !err; });
   syncInbound();
   ask.onOpenRecap = () => openMain('recap');
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };

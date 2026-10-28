@@ -67,6 +67,7 @@ const { parseDoctorCommand } = require('./doctor');
 const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
 const { ConfirmHub } = require('./confirmHub');
+const RISKY_AFTER_PLUGIN = new Set(['messages_send', 'trash_path', 'run_shell', 'run_applescript', 'drive_apply']); // send, delete, run code: always ask once a plugin's output was read
 const flagsMod = require('./flags');
 const phish = require('./phish');
 const workshop = require('./workshop');
@@ -171,6 +172,8 @@ class AskController {
     this.codexInfo = null;
     this.resultListeners = new Set();
     this.hub = new ConfirmHub({ unanswered: () => this.store.get('settings.inbound.unanswered') || 'expire' }); // a question that may be asked on the Mac and the phone
+    this.plugins = null; // the PluginManager, set by the app
+    this.tainted = false;
     this.inbound = null; // set by the app when "Command Relay by text" is on
     this.currentRemote = null;
     this.prevExchange = null; // the last finished request and its answer, so "that's wrong" has something to refer to
@@ -1145,13 +1148,20 @@ class AskController {
   // forModel: these tools go to Claude or Codex over the tool server, so (with "Fewer tools per request" on) rarely used groups are left out of the list and reached through load_more_tools.
   makeTools(vision = true, { forModel = false, request = '' } = {}) {
     const base = guardTools(this.baseTools(vision), { home: os.homedir(), enabled: () => this.store.get('settings.homeOnly') !== false });
-    const tools = [...base, ...this.connectorTools()];
+    const tools = [...base, ...this.connectorTools(), ...this.pluginTools()];
+    // Text from a plugin is data, not instructions: once one was read in this request, anything that sends, deletes or runs code asks first.
+    for (const t of tools) if (RISKY_AFTER_PLUGIN.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.tainted ? `This request read output from a plugin. Allow "${t.name}"?` : null); }
     if (forModel && flagsMod.isOn(this.store.get('settings'), 'toolCategories')) tools.exposed = toolCategories.exposure(tools, { request });
     return tools;
   }
 
   baseTools(vision) {
     return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+  }
+
+  // Tools from the plugins you approved (Settings > Doctor > Plugins), only while that switch is on.
+  pluginTools() {
+    return this.plugins && flagsMod.isOn(this.store.get('settings'), 'plugins') ? this.plugins.tools() : [];
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1555,6 +1565,7 @@ class AskController {
     if (!opts.drain && !opts.scheduled && flagsMod.isOn(this.store.get('settings'), 'memoryV2') && this.prevExchange && lessons.looksLikeCorrection(text)) this.learnLesson(this.prevExchange, text);
     this.currentRequest = text;
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
+    this.tainted = false; // no plugin output read yet in this request
     this.currentRemote = opts.remote || null; // where this request came from, so a risky question can be asked there too
     if (!opts.drain) { this.queue = []; this.tasks = []; }
     if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
