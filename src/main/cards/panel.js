@@ -9,8 +9,9 @@ const WIDTH = 468; // the window; the card inside is 420 wide, the rest is room 
 const SHOW_MS = 30000;
 
 class CardPanel {
-  constructor({ preload }) {
+  constructor({ preload, getHold = () => false }) {
     this.preload = preload;
+    this.getHold = getHold; // true: a card stays until you close it (Esc, "ok" or the next request), with a ten minute limit
     this.win = null;
     this.card = null;
     this.timer = null;
@@ -65,7 +66,7 @@ class CardPanel {
   arm() {
     clearTimeout(this.timer);
     if (this.card?.hold) return; // a plan waiting for a yes stays until it is answered
-    this.timer = setTimeout(() => this.hide(), SHOW_MS);
+    this.timer = setTimeout(() => this.hide(), this.getHold() ? 10 * 60 * 1000 : SHOW_MS);
   }
 
   hide() {

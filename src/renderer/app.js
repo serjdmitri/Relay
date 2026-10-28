@@ -622,6 +622,7 @@ const PAGES = {
     look.onclick = (e) => e.target.dataset.v && relay.set('settings.look', e.target.dataset.v);
     ask.append(
       look,
+      toggleRow('Keep answers on screen until I dismiss them', 'An answer stays up until you say “ok” (or “thanks”, “got it”, “close”), press Esc, or ask the next thing. Short replies like “Paused” still go by themselves. An answer you walked away from goes after ten minutes. Off: answers go after a few seconds.', 'settings.answerStays'),
       toggleRow('Let Relay do things for you', 'Off: it only types what you say.', 'settings.actEnabled'),
       toggleRow('Ask before leaving my home folder', 'On: Relay asks first whenever a tool reads, opens, moves or runs something outside your home folder (an external drive, Applications, system folders). Background agents are refused instead of asking. Programs in /usr/bin and temporary files are not counted.', 'settings.homeOnly'),
       toggleRow('Relay cursor', "Shows Relay's own pointer, drawings and step-by-step guides on your screen.", 'settings.cursor'),
