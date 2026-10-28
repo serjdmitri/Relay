@@ -126,10 +126,11 @@
   };
 
   // The keyboard: a full-screen hologram keyboard instead of the phone's own. What you type shows at the top; Enter sends it and the keyboard goes away.
-  const kb = window.HoloKeyboard({ onSend: (t) => { $('kbd').setAttribute('aria-pressed', 'false'); ask(t); }, onClose: () => $('kbd').setAttribute('aria-pressed', 'false') });
+  const kbState = (on) => { $('kbd').setAttribute('aria-pressed', String(on)); document.body.classList.toggle('kbopen', on); };
+  const kb = window.HoloKeyboard({ onSend: (t) => { kbState(false); ask(t); }, onClose: () => kbState(false) });
   function showTyping(on) {
     if (on) kb.open(); else kb.close();
-    $('kbd').setAttribute('aria-pressed', String(on));
+    kbState(on);
   }
   $('kbd').onclick = () => showTyping(!kb.isOpen);
 
