@@ -51,6 +51,8 @@ const devices = require('./devices');
 const driveInspect = require('./driveInspect');
 const robotics = require('./robotics');
 const recap = require('./recap');
+const { Failover } = require('./failover');
+const codexCli = require('./agent/codexCli');
 const assist = require('./assist');
 const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
@@ -153,6 +155,10 @@ class AskController {
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.onLanguage = null; // set by the app: the microphone's language changed (a locale id)
     this.hw = createHardware();
+    // Claude first; when Claude is out of usage, Codex (signed in with ChatGPT) takes over without a word, and Claude is tried again once its limit has reset.
+    this.failover = new Failover({ load: () => this.store.get('settings.failover.until'), save: (v) => this.store.set('settings.failover.until', v) });
+    this.codexHost = null;
+    this.codexInfo = null;
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -1116,7 +1122,7 @@ class AskController {
   // Starts Claude while you are still talking or typing. Its first answer then starts with the request,
   // not with a second of start-up.
   async warmUp() {
-    if (this.store.get('settings.model.provider') !== 'claude' || this.warm?.alive || this.warming) return;
+    if (this.store.get('settings.model.provider') !== 'claude' || this.warm?.alive || this.warming || this.failover.active) return;
     this.warming = true;
     try {
       const claudePath = await findClaude();
@@ -2422,6 +2428,8 @@ class AskController {
       }
     };
     if (signedIn) {
+      // Claude is out of usage and Codex is signed in: carry on with Codex, the same way, without saying so.
+      if (this.failover.active && (await this.codexReady())) return this.executeCodex(text, runningApps, { confirm, signal, onEvent });
       // Take the Claude process that was started while you were talking, or start one now.
       let session = this.warm?.alive ? this.warm : null;
       this.warm = null;
@@ -2438,8 +2446,17 @@ class AskController {
         this.forceTier = null;
         session.onRate = (r) => { this.rate = r; };
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : '' }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = this.requestContext(runningApps, fresh);
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
+        // Stopped by the usage limit: note when it resets and finish this same request with Codex, so nothing has to be asked again.
+        if (this.failover.isLimit(result, this.rate && Date.now() - this.rate.ts < 120000 ? this.rate : null)) {
+          this.failover.trip({ resetsAt: this.rate?.resetsAt, text: result.reply });
+          if (await this.codexReady()) {
+            try { session.close(); } catch { /* already gone */ }
+            session = null;
+            return await this.executeCodex(text, runningApps, { confirm, signal, onEvent });
+          }
+        }
         return result;
       } catch (e) {
         if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: 0 };
@@ -2463,6 +2480,35 @@ class AskController {
       if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: 0 };
       return { status: 'failed', reply: e.message, actions: 0 };
     }
+  }
+
+  // What goes with every request: the front app, running apps, marked area, files, memory, language, and (for a fresh process) the last exchanges.
+  requestContext(runningApps, fresh = true) {
+    return [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : '' }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+  }
+
+  // Is Codex there, and signed in with a ChatGPT plan (not a key)? Checked at most once a minute. Returns its path, or null.
+  async codexReady(force = false) {
+    if (this.store.get('settings.failover.codex') === false) return null;
+    const now = Date.now();
+    if (!force && this.codexInfo && now - this.codexInfo.at < 60000) return this.codexInfo.usable ? this.codexInfo.path : null;
+    const path = await codexCli.findCodex();
+    this.codexInfo = { ...(await codexCli.codexStatus(path)), path, at: now };
+    return this.codexInfo.usable ? path : null;
+  }
+
+  // The same request, done by Codex: it gets the same tools through its own tool server, and the same confirmations apply.
+  async executeCodex(text, runningApps, { confirm, signal, onEvent }) {
+    const codexPath = await this.codexReady();
+    if (!codexPath) return { status: 'failed', reply: 'Claude is out of usage and Codex is not signed in.', actions: 0 };
+    if (!this.codexHost) this.codexHost = new McpHost();
+    await this.codexHost.start();
+    const r = await codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(), confirm, onEvent, signal });
+    if (r.status === 'failed' && r.limit) {
+      const when = new Date(this.failover.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return { ...r, reply: `Claude and Codex are both out of usage right now. Claude should be back around ${when}.` };
+    }
+    return { ...r, model: 'codex' };
   }
 
   askConfirm(q) {

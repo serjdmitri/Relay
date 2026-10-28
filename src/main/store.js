@@ -12,6 +12,7 @@ const DEFAULTS = {
     playSounds: true,
     duckAudio: true, // lower other audio while listening
     meeting: { hidden: true, nameOnly: false, names: '', input: '' }, // private answers in meetings: hide the window from screen sharing, answer only when your name is said, the names, the audio source ("" = the microphone setting)
+    failover: { codex: true, until: 0 }, // when Claude is out of usage, carry on with Codex (signed in with ChatGPT) without a word; `until` is when Claude is tried again
     recap: { enabled: true, hour: 20, minute: 30, lastRun: '' }, // each evening: a notification with what Relay did today, and what can be undone
     robotics: { lists: {}, sheetId: '' }, // checklists you edited (the standard ones are built in), and the Google Sheet that "log this" adds a line to
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead

@@ -11,6 +11,7 @@ const os = require('os');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
 const { callTool } = require('./loop');
+const { isLimitText } = require('../failover');
 
 const HOME = os.homedir();
 const CANDIDATES = [
@@ -377,7 +378,7 @@ class ClaudeSession {
       }
     } else if (ev.type === 'rate_limit_event') {
       const r = ev.rate_limit_info || {};
-      this.rate = { type: r.rateLimitType, util: r.utilization, resetsAt: r.resetsAt, ts: Date.now() };
+      this.rate = { type: r.rateLimitType, util: r.utilization, resetsAt: r.resetsAt, status: r.status, ts: Date.now() };
       this.onRate?.(this.rate);
     } else if (ev.type === 'assistant' && t && !t.interrupted) {
       const u = ev.message?.usage;
@@ -443,6 +444,7 @@ const GIVE_UP = /\b(can't|cannot|can not|couldn't|could not|unable to|not able t
 function escalationReason(r) {
   if (!r || r.status === 'stopped' || r.fatal) return null;
   if (r.interrupted) return 'it was going in circles';
+  if (r.status === 'failed' && isLimitText(r.reply)) return null; // out of usage: a stronger model would be out too
   if (r.status === 'failed') return r.reply || 'it hit an error';
   if (r.toolErrors >= 2) return 'its tool calls kept failing';
   if (r.status === 'done' && GIVE_UP.test(r.reply || '') && (r.toolErrors > 0 || r.actions === 0)) return `it said: "${r.reply}"`;

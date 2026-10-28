@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Codex as the backup when Claude runs out of usage.** Account > "Backup when Claude runs out": sign in to Codex with your ChatGPT account (the button runs Codex's own `codex login`, so your plan is used and no API key is; Relay never sees or stores the login, and a Codex that is signed in with a key does not count). When a request comes back from Claude stopped by its usage limit, Relay notes when the limit resets and finishes that same request with Codex, with no message, no sound and no question: you just get the answer. Later requests go straight to Codex until the reset time, then Claude is tried again by the next request; if it is still limited, that request is finished by Codex and the wait starts over. The reset time is kept across restarts.
+  - Codex gets Relay's own tools through the same local tool server Claude uses (so confirmations, the home-folder switch and the never-delete rules apply the same way), plus Relay's usual context. Its own tools are held to a read-only sandbox with no saved session and without your Codex config, and a run that tries to change files is stopped.
+  - If Codex is out of usage too, one sentence says so and when Claude should be back. If Codex is not installed or signed in, Relay behaves as before and shows Claude's own message. Switch: Account > "Switch to Codex when Claude runs out" (on).
+  - The usage line under an answer (if you have it on) says "codex" for those answers, and History keeps which model answered. Claude's limit no longer triggers a pointless retry on a stronger Claude model first.
+  - Tested with a fake `codex` program and a fake Claude (583 tests). **Not run against a real Codex sign-in**: I could not sign in here, so how Codex handles Relay's tools (its MCP connection, whether it asks to approve each one in this mode) is the part most likely to need a fix on your Mac. Install with `npm install -g @openai/codex`, sign in on the Account page, then ask for something while Claude is rate limited, or test it by turning off Claude's access.
+
 ## 0.31.0
 
 - **Phone page sideways, fixed.** The reactor is back in the exact middle of the screen. The question and answer are a column on the left, with the shortcut buttons wrapped under them so none is cut off (the answer column scrolls if it is long), the lock is on the right edge, and the music and keyboard buttons are bottom right. Checked at 667, 844 and 932 pixels wide with a headless browser: nothing outside the screen and no overlaps.

@@ -2,6 +2,7 @@
 let S = null; // latest state from main
 let page = new URLSearchParams(location.search).get('page') || 'home';
 let historyTab = 'requests';
+let cxBusy = false;
 if (page === 'recap') { page = 'history'; historyTab = 'actions'; }
 let dictQuery = '';
 let range = 'all';
@@ -984,6 +985,31 @@ const PAGES = {
     c.append(card);
 
     if (m.provider === 'claude') {
+      // The backup: Codex, signed in with ChatGPT. It takes over without a word when Claude is out of usage, and Claude comes back when its limit resets.
+      const cx = S.codex || {};
+      c.append(h('<div class="section-title">Backup when Claude runs out</div>'));
+      const bc = h('<div class="card"></div>');
+      if (!cx.checked) bc.append(h('<div class="row"><div class="grow"><div class="t">Codex</div><div class="d">Checking…</div></div></div>'));
+      else if (!cx.installed) {
+        bc.append(h(`<div class="who" style="align-items:flex-start"><div style="flex:1"><div class="nm">Codex isn't installed</div><div class="em">When Claude runs out of usage, Relay can carry on with Codex using your ChatGPT plan (no API key). Install OpenAI's Codex once in Terminal, then check again.</div>
+          <div class="code" style="margin-top:10px">npm install -g @openai/codex</div>
+          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="cxcp">${icon('copy')}Copy</button><button class="btn primary" id="cxchk">Check Again</button></div></div></div>`));
+        $('#cxcp', bc).onclick = () => navigator.clipboard?.writeText('npm install -g @openai/codex');
+        $('#cxchk', bc).onclick = () => relay.codexStatus();
+      } else if (cx.usable) {
+        bc.append(h(`<div class="who"><div style="flex:1;min-width:0"><div class="nm">Signed in to Codex with ChatGPT</div><div class="em">${cx.using ? 'Claude is out of usage right now, so Codex is answering. Relay goes back to Claude after its limit resets.' : 'Ready. Relay uses it only when Claude is out of usage.'}</div></div><button class="btn" id="cxout">Sign Out</button></div>`));
+        $('#cxout', bc).onclick = async () => { if (confirm('Sign out of Codex? This also signs out Codex on this Mac.')) await relay.codexLogout(); };
+      } else {
+        bc.append(h(`<div class="who" style="align-items:flex-start"><div style="flex:1"><div class="nm">${cx.signedIn ? 'Codex is signed in with an API key' : 'Codex is not signed in'}</div><div class="em">${cx.signedIn ? 'Relay only uses the ChatGPT sign-in (your plan), not a key. Sign in with ChatGPT to use it.' : 'Sign in with your ChatGPT account. No API key needed.'}</div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn primary" id="cxin" style="height:30px;padding:0 16px">${cxBusy ? 'Waiting for your browser…' : 'Sign in with ChatGPT'}</button>${cxBusy ? '<button class="btn" id="cxcancel">Cancel</button>' : ''}</div></div></div>`));
+        $('#cxin', bc).onclick = async () => { cxBusy = true; render(); const r = await relay.codexLogin(); cxBusy = false; render(); if (!r.ok && r.error) alert(r.error); };
+        $('#cxcancel', bc) && ($('#cxcancel', bc).onclick = () => relay.codexCancelLogin());
+      }
+      bc.append(toggleRow('Switch to Codex when Claude runs out', 'Silent: Relay finishes the same request with Codex and does not mention it, then goes back to Claude once its usage limit has reset. Needs Codex signed in with ChatGPT. Codex can only use Relay\'s own tools, and has the same confirmations as Claude.', 'settings.failover.codex'));
+      c.append(bc);
+    }
+
+    if (m.provider === 'claude') {
       c.append(h('<div class="section-title">Model</div>'));
       const mc = h(`<div class="card"><div class="row"><div class="grow"><div class="t">Claude model</div><div class="d">Auto answers simple requests with Haiku and moves up to Sonnet when a request is harder. Haiku is fastest, Opus thinks the longest. You can also say “use the fast model” or “use the smarter model”, and “try again” runs the last request on the next model up.</div></div><div class="seg sm">${[['auto', 'Auto'], ['haiku', 'Haiku'], ['sonnet', 'Sonnet'], ['opus', 'Opus']].map(([v, l]) => `<button data-v="${v}" class="${m.claudeModel === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="row"><div class="grow"><div class="t">Test connection</div><div class="d" id="tres">${modelTest}</div></div><button class="btn" id="test">Test</button></div></div>`);
@@ -1147,6 +1173,7 @@ window.addEventListener('keyup', (e) => {
   try { saved = localStorage.getItem('sidebar'); } catch {}
   setSidebar(saved === 'collapsed');
   relay.claudeStatus();
+  relay.codexStatus();
   relay.appIcons().then((i) => { appIcons = i; if (page === 'permissions') render(); });
   setInterval(async () => {
     const p = await relay.permissions();
