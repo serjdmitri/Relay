@@ -125,14 +125,25 @@
     ask('lock my mac');
   };
 
-  // The keyboard: a full-screen hologram keyboard instead of the phone's own. What you type shows at the top; Enter sends it and the keyboard goes away.
-  const kbState = (on) => { $('kbd').setAttribute('aria-pressed', String(on)); document.body.classList.toggle('kbopen', on); };
+  // The keyboard button: held upright, the phone's own keyboard (a bar at the bottom); turned sideways, the full-screen hologram keyboard. Both show what you typed at the top.
+  const landscape = () => window.matchMedia('(orientation: landscape)').matches;
+  const kbState = (on) => { $('kbd').setAttribute('aria-pressed', String(on)); document.body.classList.toggle('kbopen', on && kb.isOpen); };
   const kb = window.HoloKeyboard({ onSend: (t) => { kbState(false); ask(t); }, onClose: () => kbState(false) });
+  const typing = () => kb.isOpen || !$('bar').hidden;
   function showTyping(on) {
-    if (on) kb.open(); else kb.close();
+    if (landscape()) {
+      $('bar').hidden = true; $('quick').hidden = false;
+      if (on) kb.open(); else kb.close();
+    } else {
+      kb.close();
+      $('bar').hidden = !on; $('quick').hidden = on;
+      if (on) setTimeout(() => $('text').focus(), 50); else $('text').blur();
+    }
     kbState(on);
   }
-  $('kbd').onclick = () => showTyping(!kb.isOpen);
+  $('kbd').onclick = () => showTyping(!typing());
+  window.matchMedia('(orientation: landscape)').addEventListener('change', () => showTyping(false)); // turning the phone closes whichever keyboard was open
+  $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value.trim(); $('text').value = ''; showTyping(false); if (v) ask(v); };
 
   // What was asked stays at the top while the answer comes, and above the answer after it.
   function showAsked(t) { const a = $('asked'); a.textContent = t || ''; a.hidden = !t; }
