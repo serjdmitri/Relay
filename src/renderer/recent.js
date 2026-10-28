@@ -37,9 +37,23 @@ function render(history) {
   });
 }
 
+// The glass is one shape: the panel plus a curved flare above and below its left side. The clip and the faint outline are drawn for its current size.
+const R = 22; // the flares
+const C = 28; // the panel's far corners
+const outpath = document.getElementById('outpath');
+function shape() {
+  const w = glass.offsetWidth; const t = glass.offsetHeight;
+  if (!w || !t) return;
+  const d = `M0 0A${R} ${R} 0 0 0 ${R} ${R}H${w - C}A${C} ${C} 0 0 1 ${w} ${R + C}V${t - R - C}A${C} ${C} 0 0 1 ${w - C} ${t - R}H${R}A${R} ${R} 0 0 0 0 ${t}`;
+  glass.style.clipPath = `path('${d}Z')`;
+  outpath.setAttribute('d', d); // open: no line along the screen edge
+}
+new ResizeObserver(shape).observe(glass);
+
 async function refresh() {
   try { render((await relay.getState()).history); } catch {}
-  relay.recentSize?.(glass.offsetHeight);
+  shape();
+  relay.recentSize?.(glass.offsetHeight - 2 * R); // the panel itself, without the flares
 }
 
 relay.onRecent((m) => {
