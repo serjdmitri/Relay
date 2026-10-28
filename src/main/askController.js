@@ -1236,8 +1236,12 @@ class AskController {
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
+  // "Faster answers" (General): no extended thinking, little re-checking. On unless you turn it off.
+  fastMode() { return this.store.get('settings.fastMode') !== false; }
+
   claudeSystem() {
     return buildSystemPrompt({
+      fast: this.fastMode(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'), firefoxConnected: this.bridge.isConnected(),
       screen: (this.disp || screen.getPrimaryDisplay()).size, visionCapable: true, withContext: false
     });
@@ -1253,7 +1257,7 @@ class AskController {
       if (!claudePath) return;
       await this.mcp.start();
       if (this.warm?.alive || !['listening', 'finishing', 'input'].includes(this.state)) return;
-      this.warm = new ClaudeSession({ claudePath, host: this.mcp, system: this.claudeSystem(), tools: this.makeTools(true, { forModel: true }), model: 'haiku' });
+      this.warm = new ClaudeSession({ claudePath, host: this.mcp, system: this.claudeSystem(), tools: this.makeTools(true, { forModel: true }), model: 'haiku', fast: this.fastMode() });
       clearTimeout(this.warmTimer);
       this.warmTimer = setTimeout(() => this.dropWarm(), 90000);
     } catch {
@@ -2637,7 +2641,7 @@ class AskController {
           const claudePath = await findClaude();
           if (!claudePath) return { status: 'failed', reply: 'Claude Code is not installed. Open Account in Relay for the one-line install.', actions: 0 };
           await this.mcp.start();
-          session = new ClaudeSession({ claudePath, host: this.mcp, system: this.claudeSystem(), tools: this.makeTools(true, { forModel: true }), model: 'haiku' });
+          session = new ClaudeSession({ claudePath, host: this.mcp, system: this.claudeSystem(), tools: this.makeTools(true, { forModel: true }), model: 'haiku', fast: this.fastMode() });
         }
         const route = this.forceTier ? { model: this.forceTier, escalate: false } : routeModel(text, model.claudeModel);
         this.forceTier = null;
@@ -2700,7 +2704,7 @@ class AskController {
     if (!codexPath) return { status: 'failed', reply: 'Claude is out of usage and Codex is not signed in.', actions: 0 };
     if (!this.codexHost) this.codexHost = new McpHost();
     await this.codexHost.start();
-    const r = await codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(true, { forModel: true, request: text }), confirm, onEvent, signal });
+    const r = await codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(true, { forModel: true, request: text }), confirm, onEvent, signal, fast: this.fastMode() });
     if (r.status === 'failed' && r.limit) {
       const when = new Date(this.failover.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       return { ...r, reply: `Claude and Codex are both out of usage right now. Claude should be back around ${when}.` };

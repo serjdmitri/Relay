@@ -92,3 +92,10 @@ test('a usage limit, a missing login, a crash, a file change, a timeout and a st
   setImmediate(() => ac.abort());
   assert.equal((await p).status, 'stopped');
 });
+
+test('fast mode asks Codex for little reasoning', () => {
+  const { buildArgs } = require('../src/main/agent/codexCli');
+  const base = { port: 1, outFile: '/o', cwd: '/c' };
+  assert.ok(buildArgs({ ...base, fast: true }).includes('model_reasoning_effort="low"'));
+  assert.ok(!buildArgs(base).join(' ').includes('model_reasoning_effort'));
+});
