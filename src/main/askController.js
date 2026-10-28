@@ -63,6 +63,7 @@ const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
 const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain');
+const { parseDoctorCommand } = require('./doctor');
 const phish = require('./phish');
 const workshop = require('./workshop');
 const { parseMeetingCommand, MeetingRecorder, meetingPrompt } = require('./meeting');
@@ -1596,6 +1597,7 @@ class AskController {
           if (ec) return this.explainError(ec, entry);
           const pc = phish.parsePhishCommand(effective);
           if (pc) return this.finish(entry, await this.securityCheck(pc));
+          if (this.doctorRun && parseDoctorCommand(effective)) return this.finish(entry, { status: 'done', reply: await this.doctorRun() });
           const hc = hw.parseHomeworkCommand(effective);
           if (hc) return this.homeworkCommand(hc, entry);
         }

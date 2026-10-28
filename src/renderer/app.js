@@ -19,15 +19,17 @@ function setCapturing(v) {
   capturing = v;
   if (was !== !!v) relay.setCapturing(!!v);
 }
+let doctorData = null;
+let doctorBusy = false;
 const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 
 const NAV = [
   [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors'], ['remote', 'Remote']],
-  [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions']],
+  [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions'], ['doctor', 'Doctor']],
   [['account', 'Account']]
 ];
 const TITLES = Object.fromEntries(NAV.flat());
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', account: 'account' };
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', doctor: 'permissions', account: 'account' };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -926,6 +928,51 @@ const PAGES = {
     $('#reset', c).onclick = () => relay.resetShortcuts();
   },
 
+  doctor(c) {
+    if (!doctorData && !doctorBusy) { doctorBusy = true; relay.doctorRun().then((d) => { doctorData = d; doctorBusy = false; if (page === 'doctor') render(); }); }
+    const d = doctorData;
+    c.append(h('<div class="section-title" style="margin-top:0">Relay Doctor</div>'));
+    const card = h('<div class="card"></div>');
+    if (!d) card.append(h('<div class="row"><div class="grow"><div class="t">Checking…</div></div></div>'));
+    for (const r of d?.results || []) {
+      const colour = { ok: '#30d158', warn: '#ff9f0a', fail: '#ff453a' }[r.status];
+      const word = { ok: 'OK', warn: 'Look', fail: 'Broken' }[r.status];
+      const auto = r.fix?.policy === 'auto';
+      const row = h(`<div class="row" style="align-items:flex-start"><span style="width:8px;height:8px;border-radius:50%;background:${colour};margin-top:7px;flex:none"></span><div class="grow"><div class="t">${esc(r.title)} <span class="d" style="display:inline">· ${word}</span></div><div class="d">${esc(r.cause || '')}</div></div>${r.fix && !auto ? '<button class="btn fix"></button>' : ''}${auto ? '<span class="d">Fixed automatically</span>' : ''}</div>`);
+      if (r.fix && !auto) {
+        const b = $('.fix', row);
+        b.textContent = r.fix.label;
+        b.onclick = async () => { b.disabled = true; const res = await relay.doctorFix(r.fix.id); b.textContent = res.copied ? 'Copied' : 'Done'; setTimeout(() => { doctorData = null; render(); }, 1200); };
+      }
+      card.append(row);
+    }
+    c.append(card);
+    const bar = h('<div class="row" style="gap:10px;justify-content:flex-start;flex-wrap:wrap"><button class="btn" id="dragain">Check again</button><button class="btn" id="dcopy">Copy report</button><button class="btn" id="dbug">Report a bug</button><button class="btn" id="dfeat">Request a feature</button></div>');
+    $('#dragain', bar).onclick = () => { doctorData = null; render(); };
+    $('#dcopy', bar).onclick = async (e) => { await relay.doctorReport(); e.target.textContent = 'Copied'; };
+    $('#dbug', bar).onclick = () => relay.doctorIssue('bug');
+    $('#dfeat', bar).onclick = () => relay.doctorIssue('feature');
+    c.append(bar);
+    c.append(h('<div class="d" style="margin:4px 4px 14px">The report has your home folder, emails, keys and network addresses removed. Report a bug and Request a feature copy it, then open GitHub in your browser; nothing is sent until you press submit there.</div>'));
+
+    const mode = S.settings.doctor?.fix || 'ask';
+    const fm = h(`<div class="card"><div class="row"><div class="grow"><div class="t">When Doctor can fix something</div><div class="d">Small fixes (restarting Relay's own phone server) can run by themselves. Permissions and signing always ask you.</div></div><div class="select"><span id="dfn"></span><select><option value="ask">Ask first</option><option value="small">Fix small things</option><option value="never">Only tell me</option></select></div></div></div>`);
+    const sel = $('select', fm);
+    sel.value = mode;
+    $('#dfn', fm).textContent = sel.options[sel.selectedIndex].text;
+    sel.onchange = () => relay.set('settings.doctor.fix', sel.value);
+    c.append(fm);
+
+    if (Object.keys(S.flagList || {}).length) c.append(h('<div class="section-title">Experimental</div>'));
+    const ex = h('<div class="card"></div>');
+    for (const [name, f] of Object.entries(S.flagList || {})) {
+      const on = !!S.settings.flags?.[name];
+      const row = h(`<div class="row"><div class="grow"><div class="t">${esc(f.label)}</div><div class="d">${esc(f.desc)}</div><div class="d warn" hidden></div></div><div class="toggle ${on ? 'on' : ''}"></div></div>`);
+      row.onclick = async () => { const res = await relay.setFlag(name, !on); if (res && res.ok === false) { const w = $('.warn', row); w.textContent = res.why; w.hidden = false; } };
+      ex.append(row);
+    }
+    if (ex.children.length) c.append(ex, h('<div class="d" style="margin:4px 4px 14px">New features start off. Turn one on to try it; turn it off again any time.</div>'));
+  },
   permissions(c) {
     c.append(h('<div class="section-title" style="margin-top:0">On this Mac</div>'));
     const card = h('<div class="card"></div>');

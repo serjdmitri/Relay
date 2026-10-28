@@ -49,7 +49,7 @@ const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="rl-bg" x1="7"
 // Every page has its own colour pair: it tints the tile, the selected item, buttons, toggles and the glow behind the page.
 const THEME = {
   home: ['#1c8fd6', '#4cc2ff'], history: ['#2a9ee0', '#5fb4ff'], routines: ['#1f86cf', '#3fb6e8'], vocab: ['#2aa5d8', '#58cdf0'], memory: ['#2490d4', '#58cdf0'], connectors: ['#2a9ee0', '#4cc2ff'], remote: ['#2490d4', '#4cc2ff'],
-  general: ['#2490d4', '#4cc2ff'], speech: ['#2aa5d8', '#4cc2ff'], shortcuts: ['#1f86cf', '#4cc2ff'], permissions: ['#2a9ee0', '#4cc2ff'], account: ['#1c8fd6', '#5fb4ff']
+  general: ['#2490d4', '#4cc2ff'], doctor: ['#2490d4', '#4cc2ff'], speech: ['#2aa5d8', '#4cc2ff'], shortcuts: ['#1f86cf', '#4cc2ff'], permissions: ['#2a9ee0', '#4cc2ff'], account: ['#1c8fd6', '#5fb4ff']
 };
 const COLORS = Object.fromEntries(Object.entries(THEME).map(([id, [a]]) => [id, a]));
 const GRAD = Object.fromEntries(Object.entries(THEME).map(([id, [a, b]]) => [id, `linear-gradient(135deg, ${a}, ${b})`]));
