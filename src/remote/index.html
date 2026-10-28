@@ -26,35 +26,47 @@
 <main id="home" hidden>
   <header>
     <span id="conn" class="dot"></span><span id="devtitle">Relay</span>
+    <button id="kbd" aria-label="Show the typing bar" aria-pressed="false"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 14h.01M18 14h.01M9 14.2h6"/></svg></button>
     <a id="holobtn" href="/holo.html" aria-label="Holograms">&#9674;</a>
     <button id="gear" aria-label="Settings">&#9881;</button>
   </header>
-  <section id="stage">
-    <div id="reactor"><canvas id="cv"></canvas><div id="hint">Hold to talk</div></div>
-    <div id="status">IDLE</div>
-    <div id="line"></div>
-  </section>
-  <ul id="tasks"></ul>
-  <div id="agents"></div>
-  <div id="reply"></div>
-  <div id="quick" aria-label="Quick actions">
-    <button data-say="lock my mac">Lock my Mac</button>
-    <button data-say="what's playing">What's playing</button>
-    <button data-say="pause">Pause</button>
-    <button data-say="play">Play</button>
-    <button data-say="next song">Next song</button>
-    <button data-say="previous song">Previous</button>
-    <button data-say="volume down">Quieter</button>
-    <button data-say="volume up">Louder</button>
-    <button data-say="mute">Mute</button>
-    <button data-say="focus mode for 25 minutes">Focus 25 min</button>
-    <button data-say="end focus mode">End focus</button>
-    <button data-say="screen off">Screen off</button>
+  <div id="top">
+    <ul id="tasks"></ul>
+    <div id="agents"></div>
+    <div id="reply"></div>
   </div>
-  <form id="bar" autocomplete="off">
-    <input id="text" type="text" enterkeyhint="send" placeholder="Ask Relay" autocapitalize="sentences">
-    <button id="send" type="submit" aria-label="Send">&#8593;</button>
-  </form>
+  <section id="stage">
+    <div id="reactor"><canvas id="cv"></canvas><div id="hint">Hold to talk</div>
+      <div id="under"><div id="status">IDLE</div><div id="line"></div></div>
+    </div>
+  </section>
+  <div id="bottom">
+    <div id="quick" aria-label="Quick actions">
+      <button data-say="what's playing">What's playing</button>
+      <button data-say="pause">Pause</button>
+      <button data-say="play">Play</button>
+      <button data-say="next song">Next song</button>
+      <button data-say="previous song">Previous</button>
+      <button data-say="volume down">Quieter</button>
+      <button data-say="volume up">Louder</button>
+      <button data-say="mute">Mute</button>
+      <button data-say="focus mode for 25 minutes">Focus 25 min</button>
+      <button data-say="end focus mode">End focus</button>
+      <button data-say="screen off">Screen off</button>
+    </div>
+    <form id="bar" autocomplete="off" hidden>
+      <input id="text" type="text" enterkeyhint="send" placeholder="Ask Relay" autocapitalize="sentences">
+      <button id="send" type="submit" aria-label="Send">&#8593;</button>
+    </form>
+    <button id="lock" class="open" type="button" aria-label="Lock my Mac">
+      <svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="10" y="21" width="28" height="21" rx="5" fill="currentColor" fill-opacity=".16"/>
+        <path id="shackle" d="M16 21v-6a8 8 0 0 1 16 0v6"/>
+        <circle cx="24" cy="31" r="2.6" fill="currentColor" stroke="none"/>
+      </svg>
+      <span id="locklbl">Lock my Mac</span>
+    </button>
+  </div>
   <aside id="menu" hidden>
     <label><input type="checkbox" id="speak"> Speak replies</label>
     <button id="stop">Stop what Relay is doing</button>
