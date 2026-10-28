@@ -5,7 +5,8 @@ const PANES = {
   screen: 'Privacy_ScreenCapture',
   input: 'Privacy_ListenEvent',
   mic: 'Privacy_Microphone',
-  automation: 'Privacy_Automation'
+  automation: 'Privacy_Automation',
+  fulldisk: 'Privacy_AllFiles'
 };
 const SOUND_PANE = 'x-apple.systempreferences:com.apple.Sound-Settings.extension';
 

@@ -18,6 +18,7 @@ const DEFAULTS = {
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead
     homework: { full: true, explain: true, format: 'docx', voiceSample: '', voiceStyle: '' }, // the homework helper: allow whole solutions, add a "How it works" section, Word | PDF | text, a sample of your writing and how you describe your voice
     flags: {}, // experimental features you turned on (see flags.js); each is off by default
+    inbound: { unanswered: 'expire' }, // a question nobody answers (on the Mac or by text): expire after 30 minutes | reask (hourly, 3 times) | forever
     doctor: { fix: 'ask' }, // when Relay Doctor finds something fixable: ask | small (small fixes run themselves) | never
     answerStays: true, // an answer (and its card) stays on screen until you say ok, press Esc or ask the next thing
     actEnabled: true, // off: Relay only types what you say into the previous app
@@ -99,6 +100,8 @@ const DEFAULTS = {
   replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
   memories: [], // {id, text, ts}: what you told Relay to remember
+  inboundState: { paired: false, last: 0 }, // Command Relay by text: paired with your own thread, the last message read
+  queue: [], // texts waiting to run (see queue.js)
   lessons: [], // {id, trigger, fix, conf, ts, lastUsed, uses}: learned from your corrections (Smarter memory, lessons.js)
   inferred: [], // {id, text, status: pending | approved, conf, ts}: things Relay noticed about you; unused until you approve
   holograms: [], // pinned holograms: where they are and links to their models (never the model files)

@@ -13,6 +13,7 @@ const { Speaker } = require('./voice');
 const { ClipboardHistory } = require('./clipboardHistory');
 const doctor = require('./doctor');
 const flagsMod = require('./flags');
+const { InboundService } = require('./inbound');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -51,7 +52,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -152,6 +153,7 @@ function publicState() {
     hotkeysError: hotkeys.error,
     version: app.getVersion(),
     flagList: flagsMod.offered(),
+    inboundInfo: inbound?.status() || { running: false, paired: false },
     extensionPath: extensionPath()
   };
 }
@@ -451,6 +453,16 @@ function registerIpc() {
   });
 
 
+
+  // ----- Command Relay by text -----
+  const syncInbound = () => {
+    if (!inbound) return;
+    if (flagsMod.isOn(store.get('settings'), 'imessage')) inbound.start(); else inbound.stop();
+  };
+  ipcMain.handle('inbound:status', () => ({ ...(inbound?.status() || {}), fullDisk: fullDisk(), on: flagsMod.isOn(store.get('settings'), 'imessage') }));
+  ipcMain.handle('inbound:code', () => { syncInbound(); return { code: inbound?.newCode() || null }; });
+  ipcMain.handle('inbound:unpair', () => { inbound?.unpair(); broadcast(); return { ok: true }; });
+
   // ----- Relay Doctor and experimental switches -----
   let doctorFixes = new Map(); // fix id -> fix, from the last run
   const codesign = () => new Promise((resolve) => {
@@ -470,6 +482,7 @@ function registerIpc() {
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
+      imessage: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), fullDisk: fullDisk(), ...(inbound?.status() || {}) }),
       _signing: st
     };
   };
@@ -487,7 +500,7 @@ function registerIpc() {
   };
   const applyFix = async (fix) => {
     const a = fix.action;
-    if (a.type === 'pane') perms.openPane(a.name === 'fulldisk' ? 'accessibility' : a.name);
+    if (a.type === 'pane') perms.openPane(a.name);
     else if (a.type === 'copy') clipboard.writeText(a.text);
     else if (a.type === 'restart-remote') { remote.stop(); await remote.sync(); }
     else if (a.type === 'login') { if (a.who === 'claude') { const p = await claudeCli.findClaude(); claudeCli.login(p).then(refreshClaude).then(broadcast); } else { const cx = require('./agent/codexCli'); cx.codexLogin(await cx.findCodex()).then(() => ask.codexReady(true)).then(broadcast); } }
@@ -509,6 +522,7 @@ function registerIpc() {
     if (!flagsMod.FLAGS[name]) return { ok: false, why: 'Unknown setting.' };
     if (on) { const c = flagsMod.canEnable(name, { fulldisk: fullDisk() === true }); if (!c.ok) return c; }
     store.set(`settings.flags.${name}`, !!on);
+    syncInbound();
     broadcast();
     return { ok: true };
   });
@@ -920,6 +934,9 @@ app.whenReady().then(() => {
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
+  inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
+  ask.inbound = inbound;
+  syncInbound();
   ask.onOpenRecap = () => openMain('recap');
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {

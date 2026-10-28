@@ -66,6 +66,7 @@ const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain'
 const { parseDoctorCommand } = require('./doctor');
 const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
+const { ConfirmHub } = require('./confirmHub');
 const flagsMod = require('./flags');
 const phish = require('./phish');
 const workshop = require('./workshop');
@@ -168,6 +169,10 @@ class AskController {
     this.failover = new Failover({ load: () => this.store.get('settings.failover.until'), save: (v) => this.store.set('settings.failover.until', v) });
     this.codexHost = null;
     this.codexInfo = null;
+    this.resultListeners = new Set();
+    this.hub = new ConfirmHub({ unanswered: () => this.store.get('settings.inbound.unanswered') || 'expire' }); // a question that may be asked on the Mac and the phone
+    this.inbound = null; // set by the app when "Command Relay by text" is on
+    this.currentRemote = null;
     this.prevExchange = null; // the last finished request and its answer, so "that's wrong" has something to refer to
     this.currentRequest = '';
     this.noticeCount = 0;
@@ -627,6 +632,14 @@ class AskController {
 
   // A request from the phone goes the same way as one from the Mac's own shortcut: it joins the list if something is running, and
   // waits a moment if you are in the middle of talking or typing here. Returns its id at once; the answer comes back as an event.
+  // Listeners for finished requests (the phone page and texts use the same event). Returns a function that removes the listener.
+  addResultListener(fn) { (this.resultListeners ||= new Set()).add(fn); return () => this.resultListeners.delete(fn); }
+
+  emitResult(r) {
+    this.onResult?.(r);
+    for (const fn of [...(this.resultListeners || [])]) { try { fn(r); } catch { /* a listener must not stop the others */ } }
+  }
+
   async remoteAsk(text, device, given) {
     const id = given || crypto.randomUUID();
     const go = (tries = 0) => {
@@ -638,7 +651,7 @@ class AskController {
         return;
       }
       if (tries < 40) setTimeout(() => go(tries + 1), 1500); // you are talking or typing on the Mac: wait for it
-      else this.onResult?.({ id, reply: 'Relay was busy with you for too long.', status: 'failed' });
+      else this.emitResult({ id, reply: 'Relay was busy with you for too long.', status: 'failed' });
     };
     go();
     return id;
@@ -1542,6 +1555,7 @@ class AskController {
     if (!opts.drain && !opts.scheduled && flagsMod.isOn(this.store.get('settings'), 'memoryV2') && this.prevExchange && lessons.looksLikeCorrection(text)) this.learnLesson(this.prevExchange, text);
     this.currentRequest = text;
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
+    this.currentRemote = opts.remote || null; // where this request came from, so a risky question can be asked there too
     if (!opts.drain) { this.queue = []; this.tasks = []; }
     if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
     if (!opts.shown) {
@@ -2649,7 +2663,15 @@ class AskController {
     return new Promise((resolve) => {
       this.state = 'confirm';
       this.win.setFocusable(true);
+      // A request that came by text asks on the phone as well; whichever answers first decides, and the other is told.
+      let hubId = null;
+      if (this.inbound?.owns(this.currentRemote) && this.hub) {
+        const opened = this.inbound.askPhone(q.question);
+        hubId = opened.id;
+        opened.answer.then(({ yes, by }) => { if (by !== 'mac' && this.pendingConfirm) this.pendingConfirm(yes); });
+      }
       this.pendingConfirm = (yes) => {
+        if (hubId) this.hub.answer(hubId, yes, 'mac');
         this.pendingConfirm = null;
         this.state = 'working';
         this.win.setFocusable(false);
@@ -2673,7 +2695,7 @@ class AskController {
     if (used) this.lastTier = ['haiku', 'sonnet', 'opus'].find((t) => String(used.model).toLowerCase().includes(t)) || this.lastTier;
     const usageText = used ? usage.usageLine({ ...used, limit: this.freshRate() }) : '';
     this.lastUsage = used ? { id: entry.id, used } : null;
-    this.onResult?.({ id: entry.remote || null, reply, status: res.status });
+    this.emitResult({ id: entry.remote || null, reply, status: res.status });
     this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
     this.store.set('lastReply', reply);
     if (res.status === 'done' && reply && entry.text) {

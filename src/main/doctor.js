@@ -69,6 +69,17 @@ const CHECKS = [
     }
   },
   {
+    id: 'imessage', title: 'Command Relay by text', run: (env) => {
+      const m = env.imessage?.();
+      if (!m || !m.on) return ok('Off.');
+      if (m.fullDisk === false) return fail('Full Disk Access is off, so Relay cannot read your messages. macOS asks for it again after an update if Relay is ad-hoc signed.', pane('fulldisk'));
+      if (m.error) return warn(`Last read failed: ${m.error}`);
+      if (!m.paired) return warn('Not paired yet. Open Settings > Doctor and show a pairing code, then text it to yourself.');
+      if (m.unreadable > 0) return warn(`${m.unreadable} of your texts had no readable words and were skipped.`);
+      return ok('Paired and reading your own thread.');
+    }
+  },
+  {
     id: 'hotkeys', title: 'Shortcuts', run: (env) => {
       const h = env.hotkeys?.() || {};
       if (h.error) return fail(`The global shortcuts are not working: ${h.error}`, pane('input'));
