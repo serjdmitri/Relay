@@ -73,3 +73,10 @@ test('every result in a list opens something: its own link, else Wikipedia, else
   assert.equal(wiki.items[0].url, 'https://en.wikipedia.org/wiki/Eiffel_Tower');
   assert.ok(c.items.every((i) => /^https:/.test(i.url)));
 });
+
+test('list items keep a picture that was already fetched, and drop anything that is not an image data URL', async () => {
+  const { normalizeCard } = require('../src/main/cards/card');
+  const c = normalizeCard({ title: 't', items: [{ title: 'a', image_data: 'data:image/jpeg;base64,AAAA' }, { title: 'b', image_data: 'https://evil.example/x.png' }] });
+  assert.equal(c.items[0].image, 'data:image/jpeg;base64,AAAA');
+  assert.equal(c.items[1].image, null);
+});

@@ -19,7 +19,8 @@ const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
 const usage = require('./usage');
-const { buildCard } = require('./cards/card');
+const { buildCard, searchUrl } = require('./cards/card');
+const { imageData } = require('./cards/lookup');
 const { findStls, downloadStl } = require('./models/lookup');
 const { findPhotos, fetchPhoto, safePhotoUrl } = require('./models/photos');
 const { CLOSE_HOLOS } = require('./holo/closeWords');
@@ -753,13 +754,18 @@ class AskController {
     // a ready-made model goes first only when its title clearly is the thing: most of the words, or half of them in a short title ("Eiffel")
     const strong = stls.filter((m) => m.match >= 0.6 || (m.match >= 0.5 && m.titleWords <= 2)).slice(0, 1);
     // the clearest photo first; with the person's Hugging Face token it is also made with the fast generator, to compare the two side by side
-    const photoOptions = photos.flatMap((p, i) => {
+    // A single photo turned into 3D is a guess at every hidden side, and the fast generator's guesses are rough. Unless the person turned
+    // approximations on, only the sharp generators (they need the Hugging Face token) and real ready-made models are shown; otherwise
+    // the answer is the most popular pictures and video links, which are never wrong about what the thing looks like.
+    const approx = this.store.get('settings.models3dApprox') === true;
+    const sharp = !!this.hfToken();
+    const photoOptions = (approx || sharp ? photos : []).flatMap((p, i) => {
       const base = { kind: 'photo', title: p.title, url: p.url, credit: p.credit, bytes: p.bytes, type: p.type };
-      return i === 0 && this.hfToken() ? [base, { ...base, engine: 'sf3d' }] : [base];
+      return approx && i === 0 && sharp ? [base, { ...base, engine: 'sf3d' }] : [base];
     });
     const options = [...strong.map(stl), ...photoOptions, ...stls.filter((m) => !strong.includes(m)).map(stl)];
-    if (parts.length) options.push({ kind: 'shapes', title, parts, credit: 'Built by Relay from simple shapes' });
-    if (!options.length) return 'No real 3D model or photo of that was found. Call show_3d again with a better query (the exact product or place name), a photo_url from your research, or parts to build a simple one from shapes; or tell the user there is none.';
+    if (parts.length && approx) options.push({ kind: 'shapes', title, parts, credit: 'Built by Relay from simple shapes' });
+    if (!options.length) return approx ? 'No real 3D model or photo of that was found. Call show_3d again with a better query (the exact product or place name), a photo_url from your research, or parts to build a simple one from shapes; or tell the user there is none.' : this.picturesAndVideos(title, photos, raw.query || title);
     let item = null;
     let first = 0;
     let problem = '';
@@ -769,10 +775,11 @@ class AskController {
         item = c.kind === 'stl' ? { kind: 'stl', title: c.title, credit: c.credit, url: c.url, bytes: await downloadStl(c.url) }
           : c.kind === 'photo' ? (c.item = await this.generatePhotoModel(c))
             : { kind: 'shapes', title: c.title, credit: c.credit, parts: c.parts };
+        if (!approx && item.kind === 'glb' && item.engine === 'sf3d') { item = null; continue; } // too rough to show as the answer
         break;
       } catch (e) { item = null; if (/free 3D service/.test(e.message || '')) problem = e.message; }
     }
-    if (!item) return `${problem || 'The 3D models found could not be loaded.'} Tell the user, or call show_3d again with parts to build a simple one from shapes.`;
+    if (!item) return approx ? `${problem || 'The 3D models found could not be loaded.'} Tell the user, or call show_3d again with parts to build a simple one from shapes.` : this.picturesAndVideos(title, photos, raw.query || title);
     const stand = item.kind === 'shapes';
     const into = raw.combine ? this.holos.latest() : null;
     if (into && (await this.holos.add(into.id, item, String(raw.attach || '')))) {
@@ -785,6 +792,19 @@ class AskController {
     const tip = item.kind === 'glb' && !this.hfToken() ? ' If they want sharper models they can add a free Hugging Face token in Settings > General (it unlocks the TRELLIS generators); mention it once, briefly.' : '';
     const caution = stand ? 'say it is a simple stand-in' : item.kind === 'glb' ? `say it was generated from one photo (the clearest of the photos found), so hidden sides and fine details are guessed.${tip}` : 'say so if it looks like a different thing than they asked for';
     return `Showing a hologram of ${what}.${more} They can drag the glowing base to move it anywhere on the screen, drag the model to turn it, scroll to resize, pin it to keep it, and drop it on another hologram to combine them. Answer in one short sentence, and ${caution}.`;
+  }
+
+  // When there is no good 3D model: a card with the clearest real pictures found and links to videos on YouTube. The searches are the
+  // dependable part (the pictures depend on what Wikimedia has); the model is told so it can add real video links it found itself.
+  async picturesAndVideos(title, photos, query) {
+    const q = String(query || title).slice(0, 80);
+    const yt = (extra) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} ${extra}`)}`;
+    const pics = (await Promise.all((photos || []).slice(0, 3).map(async (p) => ({ title: p.title, subtitle: p.credit, url: safePhotoUrl(p.page) || p.url, image_data: await imageData(p.url).catch(() => null), image_query: '' })))).filter((x) => x.image_data);
+    const videos = [['Overview', 'overview'], ['Reviews', 'review'], ['Close-up / teardown', 'teardown walkthrough']].map(([t, extra]) => ({ title: `${t}: ${q}`, subtitle: 'YouTube', url: yt(extra), image_query: '' }));
+    const card = await buildCard({ kind: 'list', title: `${title}: pictures and videos`, subtitle: 'No accurate 3D model was available', summary: 'Relay does not show rough 3D guesses. These are real pictures and video searches instead.', items: [...pics, ...videos], links: [{ label: 'More pictures', url: `${searchUrl(q)}&iax=images&ia=images` }, { label: 'All videos', url: yt('') }] });
+    if (!card || !this.cardPanel) return 'No accurate 3D model of that was available. Tell the user, and point them to a web search for pictures and videos.';
+    await this.cardPanel.show(card);
+    return `No accurate 3D model of that exists (a model made from one photo would be a rough guess, so none is shown). A card is showing ${pics.length ? `${pics.length} real picture${pics.length === 1 ? '' : 's'} and ` : ''}YouTube searches for overviews, reviews and close-ups. If your research found specific YouTube video links, call show_card with them. Answer in one short sentence saying that.`;
   }
 
   // ----- answer cards -----
