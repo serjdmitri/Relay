@@ -141,6 +141,7 @@ function publicState() {
     stats: store.stats(),
     labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
     claude: claudeState,
+    codex: ask?.codexInfo ? { installed: ask.codexInfo.installed, signedIn: ask.codexInfo.signedIn, method: ask.codexInfo.method, usable: ask.codexInfo.usable, checked: true, using: !!ask.failover?.active } : { checked: false },
     speech: { available: speech.available, ...speechInfo },
     dictations: d.dictations.slice(0, 200),
     firefoxConnected: bridge.isConnected(),
@@ -356,6 +357,23 @@ function registerIpc() {
     const claudePath = await claudeCli.findClaude();
     if (claudePath) await claudeCli.logout(claudePath);
     await refreshClaude();
+    broadcast();
+  });
+  // Codex, the backup for when Claude is out of usage: its own sign-in with ChatGPT (Relay never sees it).
+  ipcMain.handle('codex:status', async () => { await ask.codexReady(true); broadcast(); return ask.codexInfo; });
+  ipcMain.handle('codex:login', async () => {
+    const codexPath = await require('./agent/codexCli').findCodex();
+    if (!codexPath) return { ok: false, error: 'Codex is not installed.' };
+    const r = await require('./agent/codexCli').codexLogin(codexPath);
+    await ask.codexReady(true);
+    broadcast();
+    return { ...r, ok: r.ok && !!ask.codexInfo?.usable };
+  });
+  ipcMain.handle('codex:cancel-login', () => require('./agent/codexCli').codexLogin.current?.kill());
+  ipcMain.handle('codex:logout', async () => {
+    const codexPath = await require('./agent/codexCli').findCodex();
+    if (codexPath) await require('./agent/codexCli').codexLogout(codexPath);
+    await ask.codexReady(true);
     broadcast();
   });
   ipcMain.handle('speech:request-mic', async () => {
