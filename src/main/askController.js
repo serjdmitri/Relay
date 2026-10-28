@@ -1502,16 +1502,16 @@ class AskController {
           return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
         }
         if (!opts.shown && !opts.scheduled) {
+          const wc = workshop.parseWorkshopCommand(effective);
+          if (wc) return this.finish(entry, await this.workshopCommand(wc));
+        }
+        if (!opts.shown && !opts.scheduled) {
           const sc = parseStudyCommand(effective);
           if (sc) return this.studyStart(sc, effective, entry);
         }
         if (!opts.shown && !opts.scheduled) {
           const mc = parseMeetingCommand(effective);
           if (mc) return this.meetingCommand(mc, entry);
-        }
-        if (!opts.shown && !opts.scheduled) {
-          const wc = workshop.parseWorkshopCommand(effective);
-          if (wc) return this.finish(entry, await this.workshopCommand(wc));
         }
         if (!opts.shown && !opts.scheduled) {
           const ec = parseExplainCommand(effective);
@@ -1886,12 +1886,48 @@ class AskController {
       this.onChange();
       return { status: 'done', reply: was ? 'Workshop mode is off.' : 'Workshop mode was not on.', actions: 1 };
     }
+    if (cmd.type === 'workshop-quiz' || cmd.type === 'workshop-handout') return this.workshopKitCommand(cmd);
     if (cmd.type === 'workshop-demos') return { status: 'done', reply: `I can show holograms of: ${Object.values(workshop.DEMOS).map((d) => d.title.replace(/^How (?:an? )?/, '').replace(/ works$/, '').replace(/^passwords are stored \(hashing\)$/, 'password hashing')).join(', ')}. Say “show me how phishing works”.`, actions: 0 };
     const d = workshop.buildDemo(cmd.key);
     if (!d || !this.holos) return { status: 'failed', reply: 'I cannot show holograms right now.', actions: 0 };
     this.holos.hideUnpinned();
     await this.holos.show({ title: d.title, items: [{ kind: 'shapes', title: d.title, credit: 'Relay workshop demo', parts: d.parts }], scale: 1.5 });
-    return { status: 'done', reply: d.explain, actions: 1 };
+    this.lastDemo = d.key;
+    return { status: 'done', reply: `${d.explain} Say “quiz the class” for questions, or “print the handout”.`, actions: 1 };
+  }
+
+  // STEMINA kit: the quiz and the one-page handout for a demo (the one named, else the last one shown).
+  async workshopKitCommand(cmd) {
+    const key = cmd.key || this.lastDemo;
+    if (!key || !workshop.KIT[key]) return { status: 'failed', reply: 'Show a demo first, for example “show me how phishing works”, then ask for the quiz or the handout.', actions: 0 };
+    const d = workshop.buildDemo(key);
+    if (cmd.type === 'workshop-quiz') {
+      this.startQuiz({ cards: workshop.quizCards(key) });
+      this.quizFresh = false;
+      return { status: 'done', reply: `Quiz time: ${d.title.replace(/^How (?:an? )?/, 'how ').replace(/^how /, '')}. Answer out loud, or say “show the answer”. ${this.quiz.ask()}`, actions: 1 };
+    }
+    const html = workshop.handoutHtml(key, { title: d.title, explain: d.explain, date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) });
+    const dir = this.handoutsDir || path.join(os.homedir(), 'Documents', 'Relay Handouts');
+    const base = path.join(dir, d.title.replace(/[^A-Za-z0-9 ()-]+/g, '').trim());
+    try {
+      require('fs').mkdirSync(dir, { recursive: true });
+      require('fs').writeFileSync(`${base}.html`, html);
+      let file = `${base}.html`;
+      try { await (this.renderPdf || this.renderPdfWindow).call(this, html, `${base}.pdf`); file = `${base}.pdf`; } catch { /* the web page version still prints */ }
+      await this.mac.openPath(file);
+      return { status: 'done', reply: `The handout for ${d.title.toLowerCase()} is open${file.endsWith('.pdf') ? '' : ' in your browser; use Print there'}. It is saved in ${dir.replace(os.homedir(), '~')}.`, actions: 1 };
+    } catch (e) {
+      return { status: 'failed', reply: `I could not make the handout: ${e.message}`, actions: 0 };
+    }
+  }
+
+  // A hidden window prints the page to a PDF, letter size.
+  async renderPdfWindow(html, out) {
+    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+    try {
+      await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      require('fs').writeFileSync(out, await win.webContents.printToPDF({ pageSize: 'Letter', printBackground: true }));
+    } finally { win.destroy(); }
   }
 
   // ---- study mode ----

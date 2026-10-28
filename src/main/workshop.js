@@ -94,6 +94,17 @@ function parseWorkshopCommand(text) {
   if (/^(?:stop|end|turn off|disable|exit|leave|finish|switch off)(?: the)? (?:workshop|teaching|teach|classroom|class) mode$|^(?:workshop|teaching|teach|classroom) mode off$/.test(n)) return { type: 'workshop-off' };
   if (/^(?:start|turn on|enable|begin|enter|switch to|switch on|go into|activate)? ?(?:the )?(?:workshop|teaching|teach|classroom|class) mode(?: on)?$/.test(n)) return { type: 'workshop-on' };
   if (/^(?:what|which|list|show)(?: me)?(?: are)?(?: the| all)?(?: workshop)? (?:demos?|demonstrations?)(?: do you (?:have|know)| can you (?:show|do))?$|^what can you (?:show|demonstrate) (?:me )?(?:about|for) (?:security|cybersecurity|hacking)$/.test(n)) return { type: 'workshop-demos' };
+  // The STEMINA kit: a quiz on a demo, and its printable handout. "the demo I just showed" / "this demo" means the last one shown (key null).
+  const named = (t) => { const x = clean(t).replace(/^(?:the |that |this )?(?:demo|demonstration)(?: (?:of|for|on|about))? ?/, '').replace(/^how /, '').replace(/ works?$/, '').trim(); return x ? demoKey(x) : null; };
+  let k;
+  if (/^(?:run|start|give|do|make|begin)? ?(?:me |us )?(?:a |the )?(?:quick )?(?:quiz|test)(?: (?:on|about|for))? (?:the |that |this )?(?:demo|demonstration)(?: (?:i|we) (?:just )?(?:showed|saw|did|ran|watched|looked at))?$/.test(n) || /^(?:quiz|test) (?:the )?(?:class|students|kids|everyone|them)$/.test(n)) return { type: 'workshop-quiz', key: null };
+  if ((k = n.match(/^(?:quiz|test) (?:the class|the students|the kids|everyone|them|us|me) (?:on|about) (.+)$/)) && demoKey(k[1].replace(/^how /, '').replace(/ works?$/, '')) ) return { type: 'workshop-quiz', key: demoKey(k[1].replace(/^how /, '').replace(/ works?$/, '')) };
+  if ((k = n.match(/^(?:run |give |start )?(?:a |the )?(?:quick )?quiz (?:on|about|for) (.+)$/)) && named(k[1])) return { type: 'workshop-quiz', key: named(k[1]) };
+  if ((k = n.match(/^(?:print|make|create|get|generate|give)(?: me| us)?(?: a| the| one)?(?: printable| one page)? (?:handout|worksheet|cheat sheet|one pager|one page|printout)(?: (?:for|of|on|about))?(?: (.+))?$/)) || (k = n.match(/^print (?:this|the|that) (?:demo|handout|worksheet)()$/))) {
+    const key = k[1] ? named(k[1]) : null;
+    const generic = !k[1] || /^(?:the |that |this )?(?:demo|demonstration)$/.test(clean(k[1])); // "for this demo" means the last one shown
+    if (key || generic) return { type: 'workshop-handout', key };
+  }
   let m;
   if ((m = n.match(/^(?:show|play|run|give|make|build|draw|animate|demo|demonstrate)(?: me| us)?(?: an?| the)?(?: hologram| demo| demonstration| model| diagram| animation| picture)?(?: of| for| on)?(?: how)? (.+?)(?: works?| happens| happen| is done| are stored)?$/)) || (m = n.match(/^(?:how (?:does|do|is|are)) (.+?)(?: work| works| done| stored)?(?: hologram| demo)?$/)) || (m = n.match(/^(?:demo|demonstrate|explain)(?: with a hologram)? (.+)$/))) {
     const key = demoKey(m[1]);
@@ -104,4 +115,4 @@ function parseWorkshopCommand(text) {
 
 const WORKSHOP_STYLE = 'Teaching mode: the listener is a student about 10 to 13 years old in a workshop. Use short sentences, everyday words and one idea at a time. Explain any technical word the first time with a simple real-world comparison. Keep it to two or three sentences, calm and friendly, and when it fits end with one short question that checks they understood. Never give instructions for attacking real people or systems: teach how it works and how to defend against it.';
 
-module.exports = { parseWorkshopCommand, buildDemo, demoKey, DEMOS, WORKSHOP_STYLE };
+module.exports = { parseWorkshopCommand, buildDemo, demoKey, DEMOS, WORKSHOP_STYLE, ...require('./workshopKit') };
