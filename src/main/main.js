@@ -714,7 +714,7 @@ app.whenReady().then(() => {
   overlay.watchDisplays();
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
   recent.start();
-  cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js') });
+  cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false });
   assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
   holos = new HoloManager({
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),

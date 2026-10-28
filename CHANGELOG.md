@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Answers stay on screen until you dismiss them.** Settings > General > "Keep answers on screen until I dismiss them" (on). An answer, and the picture card that comes with it, now stays up until you say "ok" (also "okay", "thanks", "got it", "close", "that's all"), press Esc, or ask the next thing. Before, the answer went after a few seconds and the card after 30. When an answer is up and you asked it by voice, Relay keeps listening for up to 25 seconds so "ok" can be heard (after that, "Hey Jarvis, ok" or Esc still work). Saying "ok" closes it silently: no reply, no sound. Short replies to quick commands ("Paused", "Volume 40%") still go by themselves, answers asked from the phone or by a schedule are not held, and an answer you walked away from closes after ten minutes. While a quiz or a checklist is running, "ok" and "got it" keep their normal meaning there.
+
 ## 0.32.0
 
 - **Codex as the backup when Claude runs out of usage.** Account > "Backup when Claude runs out": sign in to Codex with your ChatGPT account (the button runs Codex's own `codex login`, so your plan is used and no API key is; Relay never sees or stores the login, and a Codex that is signed in with a key does not count). When a request comes back from Claude stopped by its usage limit, Relay notes when the limit resets and finishes that same request with Codex, with no message, no sound and no question: you just get the answer. Later requests go straight to Codex until the reset time, then Claude is tried again by the next request; if it is still limited, that request is finished by Codex and the wait starts over. The reset time is kept across restarts.
