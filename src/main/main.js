@@ -495,6 +495,7 @@ function registerIpc() {
     return { ok: true, copied: a.type === 'copy' };
   };
   ask.doctorRun = async () => doctor.summarize((await runDoctor()).results);
+  ipcMain.handle('memory2:act', (_e, action, id, payload) => ask.memoryV2Act(String(action), String(id), payload || {}));
   ipcMain.handle('doctor:run', () => runDoctor());
   ipcMain.handle('doctor:fix', async (_e, id) => { const fix = doctorFixes.get(String(id)); return fix ? applyFix(fix) : { ok: false, error: 'Run the checks again first.' }; });
   ipcMain.handle('doctor:report', async () => { const r = await runDoctor(); clipboard.writeText(r.report); return { ok: true }; });
