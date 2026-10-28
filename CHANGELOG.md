@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.32.0
 
 - **Codex as the backup when Claude runs out of usage.** Account > "Backup when Claude runs out": sign in to Codex with your ChatGPT account (the button runs Codex's own `codex login`, so your plan is used and no API key is; Relay never sees or stores the login, and a Codex that is signed in with a key does not count). When a request comes back from Claude stopped by its usage limit, Relay notes when the limit resets and finishes that same request with Codex, with no message, no sound and no question: you just get the answer. Later requests go straight to Codex until the reset time, then Claude is tried again by the next request; if it is still limited, that request is finished by Codex and the wait starts over. The reset time is kept across restarts.
   - Codex gets Relay's own tools through the same local tool server Claude uses (so confirmations, the home-folder switch and the never-delete rules apply the same way), plus Relay's usual context. Its own tools are held to a read-only sandbox with no saved session and without your Codex config, and a run that tries to change files is stopped.
