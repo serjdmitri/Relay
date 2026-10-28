@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification, nativeTheme, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -10,6 +10,7 @@ const { Overlay } = require('./overlay');
 const { AskController, encryptKey, decryptKey, compatProvider } = require('./askController');
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
+const { ClipboardHistory } = require('./clipboardHistory');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -17,6 +18,9 @@ const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
 const { nightlyDue, dayKey } = require('./drive/nightly');
+const uiText = require('../renderer/ui-es');
+const { AssistPanel } = require('./assistPanel');
+const { LockWatch } = require('./lockState');
 const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
@@ -45,7 +49,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, holos, remote, hands;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -133,6 +137,7 @@ function publicState() {
     presetInfo: PRESETS,
     history: d.history.slice(0, 200),
     actions: (() => { const can = ask?.undos?.ids(); return d.actions.slice(0, 300).map((a) => (can && can.has(a.id) ? { ...a, undoable: true } : a)); })(),
+    recap: ask?.recapData?.() || null,
     stats: store.stats(),
     labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
     claude: claudeState,
@@ -199,7 +204,7 @@ function rebuildTray() {
   if (!tray) return;
   const askLabel = label(store.get('settings.shortcuts.ask'));
   const last = store.get('lastReply');
-  tray.setContextMenu(Menu.buildFromTemplate([
+  tray.setContextMenu(Menu.buildFromTemplate(uiText.localizeMenu([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
     { label: 'Type a Request…', click: () => ask.open() },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
@@ -210,6 +215,8 @@ function rebuildTray() {
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
+    { label: 'Private Meeting Answers', type: 'checkbox', checked: !!ask.assistOn, click: (item) => { (item.checked ? ask.startMeeting({ assist: true }).then((r) => ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done')) : Promise.resolve(ask.assistStop())).finally(() => rebuildTray()); } },
+    { label: 'Take Meeting Notes', type: 'checkbox', checked: !!ask.meeting?.active, click: (item) => { (item.checked ? ask.startMeeting().then((r) => ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done')) : ask.stopMeeting().then((r) => r && ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done'))).finally(() => rebuildTray()); } },
     { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
     { label: 'Recent asks on the left edge', type: 'checkbox', checked: store.get('settings.recent') !== false, click: (item) => { store.set('settings.recent', item.checked); broadcast(); rebuildTray(); } },
     ...(store.get('settings.model.provider') === 'claude' ? [{ label: 'Model Speed', submenu: [['auto', 'Auto'], ['haiku', 'Fast (Haiku)'], ['sonnet', 'Smart (Sonnet)'], ['opus', 'Deep (Opus)']].map(([v, l]) => ({ label: l, type: 'radio', checked: store.get('settings.model.claudeModel') === v, click: () => { store.set('settings.model.claudeModel', v); broadcast(); } })) }] : []),
@@ -222,7 +229,7 @@ function rebuildTray() {
     { label: 'About Relay', click: () => app.showAboutPanel() },
     { type: 'separator' },
     { label: 'Quit Relay', accelerator: 'Cmd+Q', click: () => { quitting = true; app.quit(); } }
-  ]));
+  ], store.get('settings.language.ui'))));
 }
 
 function applyDockAndLogin() {
@@ -291,6 +298,8 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.language.ui') rebuildTray();
+    if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
@@ -688,6 +697,7 @@ app.whenReady().then(() => {
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
   recent.start();
   cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js') });
+  assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
   holos = new HoloManager({
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
     cursor: () => hands?.virtualCursor() || holoWin.cursor(), getUi: () => store.get('settings.holoUi'), area: holoWin.area, displayFor: holoWin.displayFor, download: (u) => downloadStl(u),
@@ -725,11 +735,26 @@ app.whenReady().then(() => {
   });
   glass = new Glass({ binPath: glassBinPath() });
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
+  ask.onLanguage = () => { ask.wake.disarm(); ask.ducker.recover(); prepareSpeech().finally(() => ask.wake.refresh()); broadcast(); }; // "speak Spanish" said out loud
+  // What you copied (text only, in memory, a day by default; never anything a password manager marks or that looks like a key or password).
+  ask.clipHistory = new ClipboardHistory({
+    read: () => { let formats = []; try { formats = clipboard.availableFormats(); for (const f of ['org.nspasteboard.ConcealedType', 'org.nspasteboard.TransientType', 'org.nspasteboard.AutoGeneratedType']) if (clipboard.has(f)) formats.push(f); } catch { /* formats are a hint */ } return { text: clipboard.readText(), formats }; },
+    getConfig: () => store.get('settings.clipboardHistory')
+  });
+  setInterval(() => ask.clipHistory.tick(), 1000).unref?.();
   ask.inboxDir = path.join(app.getPath('userData'), 'inbox'); // photos and PDFs shared from the phone wait here
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
+  ask.assistPanel = assistPanel;
+  // Is the Mac locked: the phone page shows it as a padlock. macOS tells us when it locks and unlocks; a slow check catches the rest.
+  const lockWatch = new LockWatch({ exec: (cmd, args) => new Promise((resolve, reject) => require('child_process').execFile(cmd, args, { timeout: 4000 }, (e, out) => (e ? reject(e) : resolve(String(out))))), onChange: () => ask.statusChanged() });
+  ask.lockWatch = lockWatch;
+  powerMonitor.on('lock-screen', () => lockWatch.set(true));
+  powerMonitor.on('unlock-screen', () => lockWatch.set(false));
+  lockWatch.refresh();
+  setInterval(() => { if (store.get('settings.remote.enabled')) lockWatch.refresh(); }, 8000);
   ask.holos = holos;
   ask.stickies = new Stickies({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } });
   stickyPanel = new StickyPanel({ stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });
@@ -811,12 +836,24 @@ app.whenReady().then(() => {
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
+  ask.onOpenRecap = () => openMain('recap');
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
     for (const s of missed) if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: `"${s.text}" was due while the Mac was asleep or Relay was closed. It will run next time.` }).show();
     for (const s of due) ask.runScheduled(s);
     if (due.length || missed.length) broadcast();
+    // Each evening: say what Relay did today and what can be undone. Only when something changed or failed; a click opens the list.
+    const rc = store.get('settings.recap');
+    if (nightlyDue(rc)) {
+      store.set('settings.recap.lastRun', dayKey(new Date()));
+      const r = ask.recapData();
+      if (!r.empty && (r.changed || r.failed) && Notification.isSupported()) {
+        const n = new Notification({ title: 'Relay today', body: r.spoken.replace(/ The list is in History, under Actions\.$/, '') });
+        n.on('click', () => openMain('recap'));
+        n.show();
+      }
+    }
     // Each evening: look at Downloads and show where the new files would go. Only when Relay is free; it moves nothing without a yes.
     const dt = store.get('settings.downloadsTidy');
     if (nightlyDue(dt) && ask.canRunScheduled()) {
@@ -903,6 +940,7 @@ app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the m
 app.on('before-quit', () => {
   try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
   quitting = true;
+  try { ask.assistStop(); assistPanel?.destroy(); } catch {}
   recent?.stop();
   remote?.stop();
   holos?.persist?.();

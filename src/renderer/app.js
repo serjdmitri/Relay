@@ -2,6 +2,7 @@
 let S = null; // latest state from main
 let page = new URLSearchParams(location.search).get('page') || 'home';
 let historyTab = 'requests';
+if (page === 'recap') { page = 'history'; historyTab = 'actions'; }
 let dictQuery = '';
 let range = 'all';
 let perms = { accessibility: false, screen: false, mic: false, micStatus: 'unknown' };
@@ -81,12 +82,19 @@ function applyTheme() {
   document.documentElement.style.setProperty('--pc2', b);
 }
 
+// Menus and settings in Spanish when chosen (Settings > Speech > Menus and settings in): exact text is swapped after each draw.
+function localize() {
+  const lang = S && S.settings && S.settings.language && S.settings.language.ui;
+  if (lang && lang !== 'en' && window.RelayUI) window.RelayUI.translateTree(document.body, lang);
+}
+
 function render() {
   if (!S) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && $('#content').contains(ae)) {
     applyTheme();
     renderSidebar();
+    localize();
     return; // do not clobber a field the user is typing in
   }
   applyTheme();
@@ -98,6 +106,7 @@ function render() {
   c.innerHTML = '';
   PAGES[page](c);
   c.scrollTop = top;
+  localize();
 }
 
 const KOKORO_VOICES = [['af_heart', 'Heart (US, warm)'], ['af_bella', 'Bella (US)'], ['af_nicole', 'Nicole (US, calm)'], ['af_sarah', 'Sarah (US)'], ['af_sky', 'Sky (US)'], ['af_nova', 'Nova (US)'], ['am_michael', 'Michael (US)'], ['am_adam', 'Adam (US)'], ['am_eric', 'Eric (US)'], ['bf_emma', 'Emma (UK)'], ['bf_isabella', 'Isabella (UK)'], ['bm_george', 'George (UK)']];
@@ -212,6 +221,12 @@ const PAGES = {
       };
       drawDict();
     } else {
+      const rc = S.recap;
+      if (rc && !rc.empty) {
+        const card = h(`<div class="card" style="margin-bottom:16px"><div class="t" style="padding:10px 14px 2px;font-weight:600">Today</div><div class="note" style="padding:0 14px 8px;line-height:1.5">${esc(rc.spoken.replace(/ The list is in History, under Actions\.$/, ''))}</div>${rc.items.length ? rc.items.map((x) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${x.risk >= 2 ? '#ff9f0a' : '#4cc2ff'}"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(x.text)}</div></div><span class="note">${esc(x.when)}</span>${x.undoable ? `<button class="btn" data-undo="${esc(x.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : ''}</div>`);
+        card.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
+        c.append(card);
+      }
       c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Where an action can be put back (a moved file, a window, the volume, a timer, a note…), it has an Undo button until Relay quits. Use this to see what happened when a request did not work.</div>'));
       const actCard = h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span>${a.undoable ? `<button class="btn" data-undo="${esc(a.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`);
       actCard.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
@@ -469,14 +484,14 @@ const PAGES = {
     c.append(n);
 
     // Google
-    c.append(h('<div class="section-title">Gmail and Google Calendar</div>'));
+    c.append(h('<div class="section-title">Gmail, Google Calendar, Drive and Sheets</div>'));
     const g = h('<div class="card" style="padding:14px"></div>');
-    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay signs in to Google with your own app, so nothing goes through anyone else. One time: in console.cloud.google.com make a project, turn on the Gmail API and the Google Calendar API, set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
+    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay signs in to Google with your own app, so nothing goes through anyone else. One time: in console.cloud.google.com make a project, turn on the Gmail, Google Calendar, Google Drive and Google Sheets APIs (accounts connected before Drive and Sheets were added need to be removed and connected again), set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
     const cr = h(`<div class="field-row" style="margin-bottom:10px"><input class="field" id="gid" placeholder="Client ID" value="${esc(C.google.clientId || '')}"><input class="field" id="gsec" type="password" placeholder="${C.google.hasSecret ? 'Client secret saved (paste to replace)' : 'Client secret'}"><button class="btn" id="gsave" style="height:28px">Save</button></div>`);
     $('#gsave', cr).onclick = () => relay.setGoogleClient($('#gid', cr).value, $('#gsec', cr).value).then(() => { $('#gsec', cr).value = ''; });
     g.append(cr);
     for (const email of C.google.accounts) {
-      const row = h(`<div class="row" style="padding:6px 0;min-height:36px"><div class="grow"><div class="t">${esc(email)}</div><div class="d">Gmail and Calendar connected</div></div><button class="btn" data-rm="${esc(email)}">Remove</button></div>`);
+      const row = h(`<div class="row" style="padding:6px 0;min-height:36px"><div class="grow"><div class="t">${esc(email)}</div><div class="d">Gmail, Calendar, Drive and Sheets connected</div></div><button class="btn" data-rm="${esc(email)}">Remove</button></div>`);
       row.onclick = (e) => e.target.dataset.rm && confirm(`Remove ${email}?`) && relay.removeGoogle(email);
       g.append(row);
     }
@@ -607,6 +622,7 @@ const PAGES = {
     ask.append(
       look,
       toggleRow('Let Relay do things for you', 'Off: it only types what you say.', 'settings.actEnabled'),
+      toggleRow('Ask before leaving my home folder', 'On: Relay asks first whenever a tool reads, opens, moves or runs something outside your home folder (an external drive, Applications, system folders). Background agents are refused instead of asking. Programs in /usr/bin and temporary files are not counted.', 'settings.homeOnly'),
       toggleRow('Relay cursor', "Shows Relay's own pointer, drawings and step-by-step guides on your screen.", 'settings.cursor'),
       toggleRow('Cursor buddy', 'A small arrow follows your pointer, like a second cursor, and flies to what Relay points at. Off: it is put away.', 'settings.buddy'),
       (() => {
@@ -646,6 +662,41 @@ const PAGES = {
         row.onclick = (e) => e.target.dataset.v && relay.set('settings.presence.awayAfter', Number(e.target.dataset.v));
         return row;
       })(),
+      (() => {
+        const b = S.settings.briefing || {};
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Morning briefing</div><div class="d">Say “good morning” or “brief me”: the weather, today's calendar (this Mac's and Google's), what is due, and important unread email. To hear it every day, say “every weekday at 7 brief me”. Your city is only used to look up the weather.</div></div><input class="field" id="bcity" style="width:170px" placeholder="City, e.g. Hollywood, Florida" value="${esc(b.city || '')}"><input class="field" id="bname" style="width:110px;margin-left:8px" placeholder="Your name" value="${esc(b.name || '')}"></div>`);
+        $('#bcity', row).onchange = (e) => relay.set('settings.briefing.city', e.target.value.trim().slice(0, 80));
+        $('#bname', row).onchange = (e) => relay.set('settings.briefing.name', e.target.value.trim().slice(0, 30));
+        return row;
+      })(),
+      (() => {
+        const r = (S.settings.robotics || {});
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Robotics log sheet</div><div class="d">Say “log this, drifted left on the ramp” and Relay adds a line (time, note) to this Google Sheet. Paste the sheet's link. Needs a connected Google account. Also: “what devices are connected”, “what's on my SD card”, and “start the match day checklist”.</div></div><input class="field" id="rsheet" style="width:230px" placeholder="Google Sheet link" value="${r.sheetId ? 'Sheet set (ends ' + esc(r.sheetId.slice(-6)) + ')' : ''}"></div>`);
+        $('#rsheet', row).onchange = (e) => { const m = e.target.value.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/); relay.set('settings.robotics.sheetId', m ? m[1] : ''); };
+        return row;
+      })(),
+      (() => {
+        const m = S.settings.meeting || {};
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Private meeting answers</div><div class="d">Say “meeting assistant” (or use the menu bar) and Relay listens for questions in your meeting, then shows a short answer top right within a second or two, and checks it online. The window is kept out of screen sharing and recordings, takes no clicks, and Relay never speaks while it is on. It hears what this Mac's microphone hears: on headphones that is only you, so pick a loopback audio source (such as BlackHole) below to hear the call. Tell people if you record. Use it only where AI help is allowed: not in tests, graded work or interviews that forbid it.</div></div><input class="field" id="mnames" style="width:230px" placeholder="Names to answer to, e.g. Sergey, Serge" value="${esc(m.names || '')}"><div style="flex-basis:100%;display:flex;gap:8px;margin-top:8px"><div class="select" style="margin:0;max-width:300px"><span id="msrc" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="msrcsel"></select></div><button class="btn" id="mtest">Test the private window</button></div></div>`);
+        $('#mnames', row).onchange = (e) => relay.set('settings.meeting.names', e.target.value.trim().slice(0, 120));
+        $('#mtest', row).onclick = () => relay.ask.open('test the private window');
+        const sel = $('#msrcsel', row);
+        const fill = (info) => {
+          const opts = [['', 'Same as the microphone setting'], ...(info?.list || []).map((d) => [d.uid, d.name])];
+          sel.innerHTML = opts.map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
+          sel.value = opts.some(([v]) => v === (m.input || '')) ? (m.input || '') : '';
+          $('#msrc', row).textContent = sel.options[sel.selectedIndex]?.text || '';
+        };
+        fill(null);
+        relay.inputDevices().then((info) => { if (page === 'general') fill(info); });
+        sel.onchange = () => { relay.set('settings.meeting.input', sel.value); $('#msrc', row).textContent = sel.options[sel.selectedIndex].text; };
+        return row;
+      })(),
+      toggleRow('Hide the answer window from screen sharing', 'On: the private window is excluded from screen shares and recordings. It is not guaranteed with every capture tool, so use “Test the private window” with the app you share with. Off: it shows like any window.', 'settings.meeting.hidden'),
+      toggleRow('Only answer when my name is said', 'Off: any question in the meeting gets an answer. On: only a question with one of your names right before or after it.', 'settings.meeting.nameOnly'),
+      toggleRow('Evening recap', 'Around 8:30 PM Relay shows a notification with what it did today: what it changed, anything worth a second look (sent, moved to the Trash, ran a command), and what you can undo with one tap in History > Actions. Say “daily recap” or “what did you do today” any time. Only shown on days when something changed.', 'settings.recap.enabled'),
+      toggleRow('Clipboard history', 'Remembers the text you copy, so you can ask “what did I copy earlier?”. Kept only in memory (never saved to disk, gone when Relay quits), for a day. Never kept: anything a password manager marks as secret, or that looks like a password, key, card or social security number. Say “clear my clipboard history” any time.', 'settings.clipboardHistory.enabled'),
+      toggleRow('Workshop mode', 'For teaching younger students: Relay speaks slowly and calmly, keeps answers short and simple, and can show holograms of how attacks and defences work (“show me how phishing works”: phishing, man in the middle, DDoS, SQL injection, password hashing, encryption, firewalls). Say “workshop mode” to turn it on, “end workshop mode” to turn it off.', 'settings.workshop.enabled'),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
       toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')
@@ -686,6 +737,24 @@ const PAGES = {
     if (!locales) relay.speechLocales().then((l) => { locales = l; if (page === 'speech') fill(l); });
     sel.onchange = () => { relay.setSpeechLocale(sel.value); $('#lname', lang).textContent = sel.options[sel.selectedIndex].text; };
     card.append(lang);
+    card.append(h('<div class="row"><div class="grow"><div class="d">You can also change it by voice: say “speak Spanish”, “habla español” or “parle français”. Relay understands and answers in any language; the microphone listens in one at a time, and answers are read in the language they are written in.</div></div></div>'));
+    {
+      const replyNow = (S.settings.language && S.settings.language.reply) || 'auto';
+      const names = [['auto', 'The language I asked in'], ['en', 'English'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['it', 'Italian'], ['pt', 'Portuguese'], ['nl', 'Dutch'], ['ja', 'Japanese'], ['zh', 'Chinese'], ['ko', 'Korean'], ['ru', 'Russian'], ['ar', 'Arabic'], ['hi', 'Hindi'], ['tr', 'Turkish'], ['pl', 'Polish']];
+      const row = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Answers in</div><div class="d">Auto: the language you spoke or typed. Or always one language.</div></div><div class="select" style="margin:0"><span id="rlname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="rlsel">${names.map(([v, n]) => `<option value="${v}" ${v === replyNow ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>`);
+      const rs = $('#rlsel', row);
+      $('#rlname', row).textContent = rs.options[rs.selectedIndex].text;
+      rs.onchange = () => { relay.set('settings.language.reply', rs.value); $('#rlname', row).textContent = rs.options[rs.selectedIndex].text; };
+      card.append(row);
+    }
+    {
+      const uiNow = (S.settings.language && S.settings.language.ui) || 'en';
+      const row = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Menus and settings in</div><div class="d">Relay's menu bar, sidebar, page titles and setting names. The longer explanations stay in English for now.</div></div><div class="select" style="margin:0"><span id="uiname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="uisel"><option value="en" ${uiNow === 'en' ? 'selected' : ''}>English</option><option value="es" ${uiNow === 'es' ? 'selected' : ''}>Español</option></select></div></div>`);
+      const us = $('#uisel', row);
+      $('#uiname', row).textContent = us.options[us.selectedIndex].text;
+      us.onchange = () => { relay.set('settings.language.ui', us.value); };
+      card.append(row);
+    }
     const mic = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Microphone</div><div class="d" id="mdesc"></div></div><div class="select" style="margin:0;max-width:260px"><span id="mname" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="msel"></select></div></div>');
     const msel = $('#msel', mic);
     const curIn = S.settings.speech.input || 'auto';
@@ -1058,7 +1127,7 @@ window.addEventListener('keyup', (e) => {
   S = await relay.getState();
   perms = await relay.permissions();
   render();
-  relay.onNavigate((p) => PAGES[p] && go(p));
+  relay.onNavigate((p) => { if (p === 'recap') { historyTab = 'actions'; go('history'); } else if (PAGES[p]) go(p); });
   relay.onStateChanged(async () => {
     S = await relay.getState();
     perms = await relay.permissions();
