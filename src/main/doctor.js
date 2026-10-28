@@ -80,6 +80,17 @@ const CHECKS = [
     }
   },
   {
+    id: 'notes', title: 'Ask my notes', run: (env) => {
+      const m = env.notes?.();
+      if (!m || !m.on) return ok('Off.');
+      if (!m.folders.length) return warn('No folders added yet. Add one in Settings > Doctor > Ask my notes.');
+      if (m.noEmbed) return warn('The on-device search helper is not available, so notes are searched by matching words, not meaning. Rebuild Relay with "npm run speech" on your Mac to add it.');
+      const big = m.folders.filter((f) => f.truncated);
+      if (big.length) return warn(`${big.map((f) => f.path.split('/').pop()).join(', ')} is too big to index fully; only the first part is searchable.`);
+      return ok(`${m.folders.length} folder${m.folders.length === 1 ? '' : 's'}, searching by meaning.`);
+    }
+  },
+  {
     id: 'plugins', title: 'Plugins', run: (env) => {
       const m = env.plugins?.();
       if (!m || !m.on) return ok('Off.');

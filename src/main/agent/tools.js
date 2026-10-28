@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, models = null, drive = null, stickies = null, study = null, homework = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, homework = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -475,6 +475,16 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       }, ['title']),
       describe: (i) => `Showing ${i.title}`,
       run: async (i) => cards.show(i)
+    });
+  }
+
+  if (notes) {
+    tools.push({
+      name: 'ask_notes',
+      description: 'Look through the folders of notes, documents and PDFs the user chose for "ask my notes" and get the passages that answer a question, with file names. Use it for "what did I write about…", "find in my notes…", "what does my … say about…". Answer only from what it returns and name the file; if nothing matched, say you did not find it in their notes.',
+      input_schema: obj({ question: str('What to look for, in the user\'s words'), folder: str('Optional: one of their set-up folders, by name') }, ['question']),
+      describe: () => 'Looking through your notes',
+      run: async (i) => notes.ask(String(i.question || ''), i.folder ? String(i.folder) : '')
     });
   }
 

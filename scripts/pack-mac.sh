@@ -29,6 +29,7 @@ fi
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-speech"
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-glass"
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-ax"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-embed"
 codesign --force --deep --sign "$SIGN" "$APP"
 
 echo
