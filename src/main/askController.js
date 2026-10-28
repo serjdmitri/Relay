@@ -46,10 +46,14 @@ const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
 const { guardTools, agentSafe } = require('./homeGuard');
+const { createHardware } = require('./agent/hardware');
+const devices = require('./devices');
+const driveInspect = require('./driveInspect');
+const robotics = require('./robotics');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
-const { parseExplainCommand, explainPrompt } = require('./explain');
+const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain');
 const phish = require('./phish');
 const workshop = require('./workshop');
 const { parseMeetingCommand, MeetingRecorder, meetingPrompt } = require('./meeting');
@@ -145,6 +149,7 @@ class AskController {
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.onLanguage = null; // set by the app: the microphone's language changed (a locale id)
+    this.hw = createHardware();
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -1172,10 +1177,10 @@ class AskController {
     clearTimeout(this.followTimer);
     this.followTimer = setTimeout(() => {
       const cfg = this.store.get('settings.followUp') || {};
-      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz ? 0 : this.followChain });
+      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz || this.checklist ? 0 : this.followChain });
       if (!ok) return;
       this.followFor = null;
-      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
     }, delay);
   }
 
@@ -1455,6 +1460,11 @@ class AskController {
       if (Date.now() - this.quizAt > 2 * 3600000) this.quiz = null;
       else { const qc = parseStudyCommand(text, { quizActive: true }); if (qc) return this.finish(entry, { status: 'done', reply: await this.quizCommand(qc), actions: 0 }); }
     }
+    // While a checklist runs, "done", "skip", "not yet" are for it; anything else goes on as normal.
+    if (this.checklist && !opts.shown && !opts.scheduled) {
+      if (Date.now() - this.checklistAt > 3 * 3600000) this.checklist = null;
+      else { const cc = robotics.parseChecklistCommand(text, { names: Object.keys(this.checklistLists()), active: true }); if (cc?.type === 'cl-control') return this.finish(entry, { status: 'done', reply: this.checklistControl(cc), actions: 0 }); }
+    }
     const gc = this.guide.command(text);
     if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
     switch (cmd.type) {
@@ -1500,6 +1510,16 @@ class AskController {
           const text = await this.briefingText();
           // in another language the same facts are said by the model, which answers in the language it was asked in
           return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const dc = devices.parseDeviceCommand(effective);
+          if (dc) return this.finish(entry, await this.devicesCommand(dc));
+          const vc = driveInspect.parseDriveCommand(effective);
+          if (vc) return this.finish(entry, await this.driveCommand(vc));
+          const lc2 = robotics.parseLogCommand(effective);
+          if (lc2) return this.finish(entry, await this.logCommand(lc2));
+          const kc = robotics.parseChecklistCommand(effective, { names: Object.keys(this.checklistLists()) });
+          if (kc) return this.finish(entry, this.checklistCommand(kc));
         }
         if (!opts.shown && !opts.scheduled) {
           const wc = workshop.parseWorkshopCommand(effective);
@@ -1656,6 +1676,118 @@ class AskController {
     return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
   }
 
+  // ---- robotics helper ----
+  // "What's plugged in?" / "is my Arduino connected?" / "what serial ports are there?"
+  async devicesCommand(cmd) {
+    const [usb, ports] = await Promise.all([this.hw.usb(), Promise.resolve(this.hw.ports())]);
+    const r = devices.describeDevices({ usb, ports }, { filter: cmd.filter, portsOnly: !!cmd.ports && cmd.filter === 'ports' });
+    if (r.groups.length > 1 || (r.groups[0]?.items.length || 0) > 2) {
+      await this.cardPanel?.show({ kind: 'list', title: 'Connected devices', subtitle: `${usb.length} on USB${ports.length ? `, ${ports.length} serial` : ''}`, summary: '', facts: [], links: [], image: null, credit: '',
+        items: r.groups.flatMap((g) => g.items.map((i) => ({ title: i.name, subtitle: g.title, note: i.label && i.label !== i.name ? i.label : i.vendor, image: null, url: '' }))) });
+    }
+    return { status: 'done', reply: r.reply, actions: 0 };
+  }
+
+  // "What's on my SD card?" / "how full is my SSD?": the kind of drive, how full, and what is on it. Read only.
+  async driveCommand(cmd) {
+    const vols = (await this.hw.volumes()).filter((v) => v.info.mounted !== false);
+    const list = vols.filter((v) => !v.info.internal || cmd.name);
+    const label = (v) => `${v.info.name} (${driveInspect.driveKind(v.info)}, ${driveInspect.bytesText(v.info.total)})`;
+    if (cmd.type === 'drives') return { status: 'done', reply: list.length ? `${list.length === 1 ? 'One drive' : `${list.length} drives`}: ${list.map(label).join('; ')}.` : 'No external drives are plugged in.', actions: 0 };
+    const clean = (x) => String(x).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    let pick = cmd.name ? list.filter((v) => clean(v.info.name).includes(clean(cmd.name)) || clean(cmd.name).includes(clean(v.info.name))) : list;
+    let note = '';
+    if (!cmd.name && cmd.want && pick.length > 1) {
+      const same = pick.filter((v) => driveInspect.driveKind(v.info) === cmd.want || (cmd.want === 'USB flash drive' && driveInspect.driveKind(v.info) === 'USB drive'));
+      if (same.length) pick = same;
+    } else if (!cmd.name && cmd.want && pick.length === 1 && driveInspect.driveKind(pick[0].info) !== cmd.want && !(cmd.want === 'USB flash drive' && driveInspect.driveKind(pick[0].info) === 'USB drive')) {
+      const art = (w) => (/^(?:[aeiou]|ssd|sd|hdd)/i.test(w) ? 'an' : 'a');
+      const have = driveInspect.driveKind(pick[0].info);
+      note = `I do not see ${art(cmd.want)} ${cmd.want}, but there is ${art(have)} ${have}. `;
+    }
+    if (!pick.length) return { status: 'failed', reply: cmd.name ? `I do not see a drive called ${cmd.name}.${list.length ? ` I see: ${list.map(label).join('; ')}.` : ''}` : `I do not see any external drive. Plug it in, give it a few seconds to show up in Finder, then ask again.`, actions: 0 };
+    if (pick.length > 1) return { status: 'done', reply: `I see ${pick.length} drives: ${pick.map(label).join('; ')}. Say “what is on my drive called ${pick[0].info.name}” for one.`, actions: 0 };
+    const v = pick[0];
+    this.push?.({ label: `Looking at ${v.info.name}`, text: 'Counting what is on it' });
+    const scan = await this.hw.scan(v.path);
+    const d = driveInspect.describeDrive({ name: v.name, path: v.path, info: v.info, scan });
+    if (d.items.length) await this.cardPanel?.show({ kind: 'list', title: `${v.info.name} (${d.kind})`, subtitle: d.reply.split('. ').slice(0, 2).join('. '), summary: '', facts: [], links: [], image: null, credit: '', items: d.items.map((i) => ({ ...i, image: null, url: '' })) });
+    return { status: 'done', reply: note + d.reply, actions: 1 };
+  }
+
+  checklistLists() {
+    return { ...robotics.DEFAULT_LISTS, ...(this.store.get('settings.robotics.lists') || {}) };
+  }
+
+  checklistCommand(cmd) {
+    const lists = this.checklistLists();
+    const done = (reply) => ({ status: 'done', reply, actions: 0 });
+    if (cmd.type === 'cl-list') return done(`You have ${Object.keys(lists).length} checklists: ${Object.entries(lists).map(([n, l]) => `${n} (${l.length} items)`).join('; ')}. Say “start the match day checklist”.`);
+    if (cmd.type === 'cl-show') return done(`${cmd.name}: ${lists[cmd.name].map((t, i) => `${i + 1}, ${t.replace(/[.?!]+$/, '')}`).join('. ')}.`);
+    if (cmd.type === 'cl-add' || cmd.type === 'cl-remove') {
+      const items = [...lists[cmd.name]];
+      if (cmd.type === 'cl-add') {
+        const item = cmd.item.charAt(0).toUpperCase() + cmd.item.slice(1);
+        items.push(item);
+        this.store.set(`settings.robotics.lists`, { ...(this.store.get('settings.robotics.lists') || {}), [cmd.name]: items });
+        return done(`Added “${item}” to the ${cmd.name} checklist. It has ${items.length} items.`);
+      }
+      const w = cmd.item.toLowerCase();
+      const at = items.findIndex((t) => t.toLowerCase().includes(w));
+      if (at < 0) return done(`Nothing on the ${cmd.name} checklist matches “${cmd.item}”.`);
+      const [gone] = items.splice(at, 1);
+      this.store.set('settings.robotics.lists', { ...(this.store.get('settings.robotics.lists') || {}), [cmd.name]: items });
+      return done(`Took “${gone.replace(/[.?!]+$/, '')}” off the ${cmd.name} checklist.`);
+    }
+    this.checklist = new robotics.Checklist(cmd.name, lists[cmd.name]);
+    this.checklistAt = Date.now();
+    return done(`${cmd.name.charAt(0).toUpperCase() + cmd.name.slice(1)} checklist, ${this.checklist.total} items. Say “done”, “skip” or “not yet” for each. ${this.checklist.ask()}`);
+  }
+
+  checklistControl(cmd) {
+    const c = this.checklist;
+    this.checklistAt = Date.now();
+    let reply;
+    if (cmd.op === 'done') reply = c.mark('done');
+    else if (cmd.op === 'skip') reply = c.mark('skipped');
+    else if (cmd.op === 'later') reply = c.later();
+    else if (cmd.op === 'back') reply = c.back();
+    else if (cmd.op === 'repeat') reply = c.ask();
+    else if (cmd.op === 'status') reply = c.status();
+    else { reply = c.summary(); c.done = true; }
+    if (c.done) { this.lastChecklist = { line: c.logLine(), at: Date.now() }; this.checklist = null; reply += ' Say “log this” to put it in your log sheet.'; }
+    return reply;
+  }
+
+  // "Log this: …": one line (time, note, who) added to the Google Sheet you chose. Bare "log this" logs the checklist you just finished, else what you selected.
+  async logCommand(cmd) {
+    const robo = () => this.store.get('settings.robotics') || {};
+    const fail = (reply) => ({ status: 'failed', reply, actions: 0 });
+    if (cmd.type === 'log-where') return { status: 'done', reply: robo().sheetId ? `Your log sheet is set (the one ending ${robo().sheetId.slice(-6)}). “Log this” adds a line to it.` : 'No log sheet is set. Copy the link of a Google Sheet and say “set my log sheet to what I copied”.', actions: 0 };
+    if (cmd.type === 'log-sheet') {
+      let id = cmd.id;
+      if (!id) { try { id = robotics.sheetIdFrom(await this.mac.clipboardRead()); } catch { /* handled below */ } }
+      if (!id) return fail('I could not find a Google Sheet link. Open the sheet, copy its link from the address bar, then say “set my log sheet to what I copied”.');
+      this.store.set('settings.robotics.sheetId', id);
+      return { status: 'done', reply: 'Done. “Log this” now adds a line to that sheet.', actions: 0 };
+    }
+    const g = this.googleApiIfConnected();
+    if (!robo().sheetId) return fail('Which Google Sheet is your log? Copy its link, then say “set my log sheet to what I copied”.');
+    if (!g) return fail('Connect your Google account in Settings > Connectors first.');
+    let note = cmd.note;
+    if (!note && this.lastChecklist && Date.now() - this.lastChecklist.at < 15 * 60000) note = this.lastChecklist.line;
+    if (!note) { try { note = (await this.mac.selectedText()).trim(); } catch { note = ''; } }
+    if (!note) return fail('Say what to log after it: “log this, drifted left on the ramp”. Or select some text first.');
+    try {
+      await g.sheetAppend(null, robo().sheetId, 'A1', [[robotics.stamp(new Date()), note.slice(0, 500), 'Relay']]);
+    } catch (e) {
+      return fail(`I could not add it to the sheet: ${e.message}`);
+    }
+    this.store.addAction({ id: crypto.randomUUID(), requestId: '', tool: 'sheet_append', input: { note: note.slice(0, 80) }, result: 'Added a line to the log sheet', ok: true, ts: Date.now() });
+    this.onChange();
+    return { status: 'done', reply: `Logged: ${note.length > 80 ? `${note.slice(0, 80)}…` : note}`, actions: 1 };
+  }
+
   // The activity log's Undo button: reverses one action, once, and records that it did.
   async undoAction(id) {
     const r = await this.undos.run(String(id));
@@ -1802,7 +1934,14 @@ class AskController {
   // "Explain this error": the model gets the error text (or is told to look at the screen) and says what it means and how to fix it.
   async explainError(cmd, entry) {
     const { text, from } = await this.gatherText(['selection', 'screen', 'clipboard']);
-    return this.runRequest(explainPrompt({ material: text, from, fix: cmd.fix }), entry);
+    let devs = '';
+    if (needsDevices(text)) {
+      try {
+        const [usb, ports] = await Promise.race([Promise.all([this.hw.usb(), this.hw.ports()]), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 4000))]);
+        devs = devices.describeDevices({ usb, ports }).reply;
+      } catch { /* the error is explained without it */ }
+    }
+    return this.runRequest(explainPrompt({ material: text, from, fix: cmd.fix, devices: devs }), entry);
   }
 
   // "Is this phishing?" and "has my password been breached?": checked here, on this Mac. Nothing about the email is sent anywhere; for the password only

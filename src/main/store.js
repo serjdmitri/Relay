@@ -11,6 +11,7 @@ const DEFAULTS = {
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
     playSounds: true,
     duckAudio: true, // lower other audio while listening
+    robotics: { lists: {}, sheetId: '' }, // checklists you edited (the standard ones are built in), and the Google Sheet that "log this" adds a line to
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
