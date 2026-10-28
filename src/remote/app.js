@@ -248,26 +248,61 @@
   let rec = null;
   let heard = '';
   let blocked = false;
+  let holding = false;
+  let startedAt = 0;
+  let lastErr = '';
+  // What the browser's error code means for the person holding the phone. 'no-speech' and 'aborted' are ordinary (nothing said, or stopped).
+  const SPEECH_ERRORS = {
+    network: 'The speech service could not be reached. Check the phone has internet, and that Siri & Dictation is on.',
+    'audio-capture': 'No microphone audio. Another app may be using it: close it and try again.',
+    'language-not-supported': 'This phone has no speech recognition for its language. Type instead.',
+  };
   function startTalk() {
     if (!canTalk) { showTyping(true); return; }
+    // iOS keeps the audio session in "playing" mode for a moment after the phone speaks, and the microphone hears nothing until it is
+    // released: so when it was talking, give the session a beat before recognition starts (read before the silent unlock word below).
+    const wasTalking = !!speechSynthesis?.speaking;
     unlockSpeech();
     speechSynthesis?.cancel?.();
     heard = '';
-    rec = new SR();
-    rec.lang = navigator.language || 'en-US';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.onresult = (ev) => { heard = Array.from(ev.results).map((r) => r[0].transcript).join(' '); line(heard, true); level = 0.6; };
-    rec.onaudiostart = () => { level = 0.4; };
-    rec.onerror = (ev) => {
+    lastErr = '';
+    holding = true;
+    startedAt = 0;
+    const r = new SR();
+    rec = r;
+    r.lang = navigator.language || 'en-US';
+    r.interimResults = true;
+    r.continuous = true;
+    r.onresult = (ev) => { heard = Array.from(ev.results).map((x) => x[0].transcript).join(' '); line(heard, true); level = 0.6; };
+    r.onaudiostart = () => { level = 0.4; };
+    r.onerror = (ev) => {
+      lastErr = ev.error || '';
       if (['not-allowed', 'service-not-allowed'].includes(ev.error)) { blocked = true; line(window.isSecureContext ? 'Allow the microphone and Siri & Dictation for Safari, then try again.' : 'The microphone is blocked on this address. Use the Tailscale https link, or type.', true); }
     };
-    rec.onend = () => { rec = null; setMode('idle'); level = 0; const t = heard.trim(); heard = ''; if (t) ask(t); else if (!blocked) line('Did not catch that', true); blocked = false; };
+    r.onend = () => {
+      if (rec === r) rec = null;
+      setMode('idle'); level = 0;
+      const t = heard.trim(); heard = '';
+      if (t) ask(t);
+      else if (!blocked) line(SPEECH_ERRORS[lastErr] || (lastErr && !['no-speech', 'aborted'].includes(lastErr) ? `Microphone problem (${lastErr}).` : 'Did not catch that. Speak right after it says Listening.'), true);
+      blocked = false;
+    };
     setMode('listening');
     line('Listening…', true);
-    try { rec.start(); } catch { setMode('idle'); }
+    const go = () => {
+      if (!holding || rec !== r) { if (rec === r) rec = null; setMode('idle'); line(''); return; } // let go before it began
+      startedAt = Date.now();
+      try { r.start(); } catch { if (rec === r) rec = null; setMode('idle'); line('Could not start the microphone. Try again.', true); }
+    };
+    if (wasTalking) setTimeout(go, 300); else go();
   }
-  function endTalk() { if (rec) { try { rec.stop(); } catch {} } }
+  // Letting go straight away would stop it before it heard anything, so it always listens for at least 0.7 seconds.
+  function endTalk() {
+    holding = false;
+    const r = rec;
+    if (!r || !startedAt) return;
+    setTimeout(() => { try { r.stop(); } catch {} }, Math.max(0, 700 - (Date.now() - startedAt)));
+  }
   const reactor = $('reactor');
   reactor.addEventListener('pointerdown', (e) => { e.preventDefault(); reactor.setPointerCapture?.(e.pointerId); startTalk(); });
   for (const ev of ['pointerup', 'pointercancel']) reactor.addEventListener(ev, endTalk);
