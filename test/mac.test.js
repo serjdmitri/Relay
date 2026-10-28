@@ -206,3 +206,17 @@ test('if the helper is refused accessibility, the AppleScript way takes over', a
   assert.deepEqual(await mac.uiLocate('Notes', 'X'), { x: 5, y: 6, w: 7, h: 8, cx: 8.5, cy: 10 }, 'the same call falls back');
   assert.equal(n, 2);
 });
+
+test('locking uses the system lock call with no permission needed, and falls back to the shortcut only if that fails', async () => {
+  const calls = [];
+  const ok = createMac({ exec: async (cmd, args) => { calls.push([cmd, args.join(' ')]); return 'ok'; } });
+  assert.equal(await ok.lockScreen(), 'Locked the screen.');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][1], /-l JavaScript .*SACLockScreenImmediate/);
+  assert.doesNotMatch(calls[0][1], /System Events|keystroke/, 'nothing that would ask for Accessibility or Automation');
+  const seen = [];
+  const fb = createMac({ exec: async (cmd, args) => { seen.push(args.join(' ')); if (/JavaScript/.test(args.join(' '))) throw new Error('no such function'); return ''; } });
+  assert.equal(await fb.lockScreen(), 'Locked the screen.');
+  assert.equal(seen.length, 2);
+  assert.match(seen[1], /keystroke "q" using \{control down, command down\}/);
+});

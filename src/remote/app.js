@@ -125,6 +125,15 @@
     ask('lock my mac');
   };
 
+  // The music and shortcut buttons can be hidden (button at the bottom left); the choice is remembered.
+  function setQuick(show) {
+    document.body.classList.toggle('noquick', !show);
+    $('qtog').setAttribute('aria-pressed', String(show));
+    try { localStorage.setItem('relay-remote-quick', show ? '1' : '0'); } catch {}
+  }
+  $('qtog').onclick = () => setQuick(document.body.classList.contains('noquick'));
+  setQuick((() => { try { return localStorage.getItem('relay-remote-quick') !== '0'; } catch { return true; } })());
+
   // The keyboard button: held upright, the phone's own keyboard (a bar at the bottom); turned sideways, the full-screen hologram keyboard. Both show what you typed at the top.
   const landscape = () => window.matchMedia('(orientation: landscape)').matches;
   const kbState = (on) => { $('kbd').setAttribute('aria-pressed', String(on)); document.body.classList.toggle('kbopen', on && kb.isOpen); };

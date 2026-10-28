@@ -2,7 +2,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; background: var(--bg); color: var(--ink); font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; overscroll-behavior: none; }
 [hidden] { display: none !important; }
-main { height: 100%; display: flex; flex-direction: column; padding: env(safe-area-inset-top) 20px calc(env(safe-area-inset-bottom) + 12px); }
+main { height: 100%; height: 100dvh; display: flex; flex-direction: column; padding: env(safe-area-inset-top) 20px calc(env(safe-area-inset-bottom) + 6px); }
 #pair { justify-content: center; gap: 14px; text-align: center; }
 #pair h1 { font-size: 26px; font-weight: 600; }
 #pair p { color: var(--dim); }
@@ -17,7 +17,7 @@ header button { background: none; border: 0; color: var(--dim); font-size: 22px;
 #home { position: relative; }
 /* the reactor sits in the exact middle of the screen; everything else is placed around it */
 #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; }
-#reactor { position: relative; pointer-events: auto; width: min(72vw, 36vh); aspect-ratio: 1; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#reactor { position: relative; pointer-events: auto; width: min(80vw, 40vh); aspect-ratio: 1; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #cv { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 6px rgba(0, 212, 255, .8)) drop-shadow(0 0 22px rgba(0, 160, 230, .5)); }
 #hint { position: absolute; left: 0; right: 0; bottom: -2px; text-align: center; font-size: 12px; color: var(--dim); opacity: .8; pointer-events: none; }
 #under { position: absolute; top: calc(100% + 16px); left: 50%; transform: translateX(-50%); width: 86vw; text-align: center; pointer-events: none; }
@@ -29,17 +29,19 @@ header button { background: none; border: 0; color: var(--dim); font-size: 22px;
 #reply { max-height: 18vh; overflow-y: auto; font-size: 16px; font-weight: 300; padding: 6px 2px; color: #d8f8ff; text-align: center; }
 header, #top, #bottom { position: relative; z-index: 1; }
 #top { max-height: 27vh; overflow-y: auto; }
-#bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 #bottom > * { width: 100%; }
 #bar { display: flex; gap: 8px; padding-top: 4px; }
 #bar input { text-align: left; font-size: 17px; }
 #send { width: 52px; border-radius: 50%; border: 0; background: var(--acc); color: #00141c; font-size: 24px; font-weight: 700; }
 @media (orientation: portrait) { #kb { display: none !important; } } /* upright: the phone's own keyboard */
-#kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 18px); z-index: 3; width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+#qtog { position: fixed; left: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+body.noquick #quick { display: none; } /* the music and shortcut buttons, hidden with the button at the bottom left */
+#kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
 #kbd[aria-pressed=true] { color: #00141c; background: var(--acc); }
 /* the big lock: open while the Mac is open, closed when it is locked */
 #lock { width: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: var(--acc); padding: 2px 18px 0; transition: color .25s; }
-#lock svg { width: 76px; height: 76px; padding: 14px; border-radius: 50%; border: 1.5px solid currentColor; background: rgba(0, 30, 50, .6); box-shadow: 0 0 18px rgba(0, 212, 255, .3); transition: box-shadow .25s, background .25s; }
+#lock svg { width: 68px; height: 68px; padding: 13px; border-radius: 50%; border: 1.5px solid currentColor; background: rgba(0, 30, 50, .6); box-shadow: 0 0 18px rgba(0, 212, 255, .3); transition: box-shadow .25s, background .25s; }
 #lock #shackle { transform-box: fill-box; transform-origin: 100% 100%; transition: transform .3s cubic-bezier(.3, 1.4, .5, 1); }
 #lock.open #shackle { transform: translateY(-5px) rotate(24deg); }
 #lock.locked { color: var(--warn); } #lock.locked svg { background: rgba(60, 40, 0, .65); box-shadow: 0 0 22px rgba(255, 204, 0, .35); }
@@ -139,7 +141,8 @@ header, #top, #bottom { position: relative; z-index: 1; }
   #bottom { position: absolute; left: max(env(safe-area-inset-left), 20px); right: auto; bottom: calc(env(safe-area-inset-bottom) + 8px); width: 36vw; align-items: stretch; }
   #lock { position: fixed; right: max(env(safe-area-inset-right), 20px); top: 50%; transform: translateY(-50%); padding: 0; }
   #lock svg { width: 66px; height: 66px; padding: 12px; }
-  #kbd { width: 46px; height: 46px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  #kbd { width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  #qtog { left: auto; right: calc(max(env(safe-area-inset-right), 14px) + 54px); width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
   #kb { gap: 4px; padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: calc(env(safe-area-inset-bottom) + 6px); }
   .kbtext { font-size: 19px; min-height: 2.6em; max-height: 22vh; padding: 3px 4px; }
   .kbboard { flex: 1; height: auto; margin-top: 0; min-height: 0; transform: perspective(900px) rotateX(4deg); gap: 5px; }
