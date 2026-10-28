@@ -11,6 +11,8 @@ const { AskController, encryptKey, decryptKey, compatProvider } = require('./ask
 const { Speech } = require('./speech');
 const { Speaker } = require('./voice');
 const { ClipboardHistory } = require('./clipboardHistory');
+const doctor = require('./doctor');
+const flagsMod = require('./flags');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -149,6 +151,7 @@ function publicState() {
     hotkeysSeen: hotkeys.eventsSeen > 0,
     hotkeysError: hotkeys.error,
     version: app.getVersion(),
+    flagList: flagsMod.offered(),
     extensionPath: extensionPath()
   };
 }
@@ -445,6 +448,68 @@ function registerIpc() {
     ask.ducker.recover(); // a run that ended while the volume was lowered: put it back
   prepareSpeech().finally(() => ask.wake.refresh()); // a new language: "Hey Jarvis" listens in it once the model is ready
     broadcast();
+  });
+
+
+  // ----- Relay Doctor and experimental switches -----
+  let doctorFixes = new Map(); // fix id -> fix, from the last run
+  const codesign = () => new Promise((resolve) => {
+    if (!app.isPackaged) return resolve('dev');
+    execFile('/usr/bin/codesign', ['-dv', '--verbose=2', path.resolve(process.execPath, '../../..')], { timeout: 3000 }, (err, out, errOut) => resolve(doctor.parseSigning(`${out}\n${errOut}`)));
+  });
+  const fullDisk = () => { // Messages' database can only be opened with Full Disk Access
+    try { require('fs').closeSync(require('fs').openSync(path.join(app.getPath('home'), 'Library/Messages/chat.db'), 'r')); return true; } catch (e) { return e.code === 'ENOENT' ? null : false; }
+  };
+  const doctorEnv = async () => {
+    const st = await codesign();
+    const free = await new Promise((res) => execFile('/bin/df', ['-m', app.getPath('userData')], { timeout: 2000 }, (e, out) => res(e ? null : Number(String(out).trim().split('\n').pop().trim().split(/\s+/)[3]) || null)));
+    return {
+      claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
+      failoverOn: () => store.get('settings.failover.codex') !== false,
+      perms: () => perms.status(), signing: () => st, remote: () => remote?.info(),
+      hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
+      storeInfo: () => ({ freeMb: free }),
+      recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
+      _signing: st
+    };
+  };
+  const runDoctor = async () => {
+    const env = await doctorEnv();
+    const results = await doctor.runChecks(env);
+    doctorFixes = new Map(results.filter((r) => r.fix).map((r) => [r.fix.id, r.fix]));
+    const mode = store.get('settings.doctor.fix') || 'ask';
+    const out = results.map((r) => ({ ...r, ...(r.fix ? { fix: { ...r.fix, policy: doctor.fixPolicy(mode, r.fix) } } : {}) }));
+    for (const r of out) if (r.fix?.policy === 'auto') { // small things the person chose to let Relay fix without asking
+      await applyFix(r.fix).catch(() => {});
+    }
+    const meta = { version: app.getVersion(), os: process.getSystemVersion?.() || '', arch: process.arch, signing: env._signing, flags: Object.keys(flagsMod.FLAGS).filter((n) => flagsMod.isOn(store.get('settings'), n)), errors: env.recentErrors() };
+    return { results: out, worst: doctor.worst(results), meta, report: doctor.buildReport(results, meta, { home: app.getPath('home') }), fixMode: mode, fullDisk: fullDisk() };
+  };
+  const applyFix = async (fix) => {
+    const a = fix.action;
+    if (a.type === 'pane') perms.openPane(a.name === 'fulldisk' ? 'accessibility' : a.name);
+    else if (a.type === 'copy') clipboard.writeText(a.text);
+    else if (a.type === 'restart-remote') { remote.stop(); await remote.sync(); }
+    else if (a.type === 'login') { if (a.who === 'claude') { const p = await claudeCli.findClaude(); claudeCli.login(p).then(refreshClaude).then(broadcast); } else { const cx = require('./agent/codexCli'); cx.codexLogin(await cx.findCodex()).then(() => ask.codexReady(true)).then(broadcast); } }
+    broadcast();
+    return { ok: true, copied: a.type === 'copy' };
+  };
+  ask.doctorRun = async () => doctor.summarize((await runDoctor()).results);
+  ipcMain.handle('doctor:run', () => runDoctor());
+  ipcMain.handle('doctor:fix', async (_e, id) => { const fix = doctorFixes.get(String(id)); return fix ? applyFix(fix) : { ok: false, error: 'Run the checks again first.' }; });
+  ipcMain.handle('doctor:report', async () => { const r = await runDoctor(); clipboard.writeText(r.report); return { ok: true }; });
+  ipcMain.handle('doctor:issue', async (_e, kind) => {
+    const r = await runDoctor();
+    clipboard.writeText(r.report);
+    shell.openExternal(doctor.issueUrl(kind === 'feature' ? 'feature' : 'bug', { version: app.getVersion() }));
+    return { ok: true };
+  });
+  ipcMain.handle('flags:set', (_e, name, on) => {
+    if (!flagsMod.FLAGS[name]) return { ok: false, why: 'Unknown setting.' };
+    if (on) { const c = flagsMod.canEnable(name, { fulldisk: fullDisk() === true }); if (!c.ok) return c; }
+    store.set(`settings.flags.${name}`, !!on);
+    broadcast();
+    return { ok: true };
   });
 
   ipcMain.handle('perm:status', () => perms.status());
