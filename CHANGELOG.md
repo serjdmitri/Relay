@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Phone page sideways, fixed.** The reactor is back in the exact middle of the screen. The question and answer are a column on the left, with the shortcut buttons wrapped under them so none is cut off (the answer column scrolls if it is long), the lock is on the right edge, and the music and keyboard buttons are bottom right. Checked at 667, 844 and 932 pixels wide with a headless browser: nothing outside the screen and no overlaps.
 - **Lock without a permission prompt.** "Lock my Mac" (voice, the phone padlock, and the phone's other lock buttons) now uses macOS's own lock call instead of pressing the keyboard shortcut through System Events, so it no longer needs Accessibility or Automation permission. If a macOS version does not have that call, it falls back to the shortcut (which can ask). Not tried on a real Mac: if it still asks, tell me the macOS version.
 - **Phone page tidy-up.** A music button at the bottom left hides and shows the row of music and shortcut buttons (remembered). The reactor is bigger, the padlock is a little smaller, sits lower and is fully on screen with its label (the page now uses the visible height of the phone, not the full browser height).
 ## 0.30.0
