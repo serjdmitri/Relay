@@ -4,12 +4,15 @@
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 
-const DWELL_MS = 140; // rest the pointer on the edge this long to open it (quick: it should feel like it was waiting for you)
+const DWELL_MS = 140; // rest the pointer on the tab this long to open it (you can change it in Settings > General)
 const LEAVE_MS = 700; // away from the panel this long to close it
 const MARGIN = 28; // how far past the panel still counts as being on it
 const WIDTH = 344; // the window; the panel inside is 320 wide
-const HANDLE_W = 14; // the tab that sticks out of the edge, and how tall it is: resting the pointer on it opens the menu too
-const HANDLE_H = 120;
+const HANDLE_W = 7; // the tab that sticks out of the edge, and how tall it is: resting the pointer on it (and only on it) opens the menu
+const HANDLE_H = 360;
+
+// The tab's height on a display: the full 360 points, less on a short screen.
+const tabHeight = (d) => Math.max(120, Math.min(HANDLE_H, ((d.workArea || d.bounds).height) - 60));
 
 // Decides when to open and close from where the pointer is. Pure, so it can be tested.
 class EdgeHover {
@@ -27,8 +30,10 @@ class EdgeHover {
     const d = displays.find((s) => pointer.x >= s.bounds.x && pointer.x < s.bounds.x + s.bounds.width && pointer.y >= s.bounds.y && pointer.y < s.bounds.y + s.bounds.height);
     if (!panel) {
       this.away = null;
-      const midY = d ? d.bounds.y + d.bounds.height / 2 : 0;
-      const onEdge = d && (pointer.x <= d.bounds.x + 1 || (pointer.x <= d.bounds.x + HANDLE_W + 4 && Math.abs(pointer.y - midY) <= HANDLE_H / 2 + 12));
+      // only the tab opens it: not the rest of the screen edge
+      const wa = d && (d.workArea || d.bounds);
+      const midY = wa ? wa.y + wa.height / 2 : 0;
+      const onEdge = d && pointer.x <= d.bounds.x + HANDLE_W + 1 && Math.abs(pointer.y - midY) <= tabHeight(d) / 2;
       if (!onEdge) { this.since = null; return { action: null }; }
       if (this.since === null) this.since = now;
       if (now - this.since >= this.dwell) { this.since = null; return { action: 'open', display: d }; }
@@ -45,8 +50,9 @@ class EdgeHover {
 }
 
 class RecentPanel {
-  constructor({ getEnabled, preload }) {
+  constructor({ getEnabled, getDwell = () => DWELL_MS, preload }) {
     this.getEnabled = getEnabled;
+    this.getDwell = getDwell;
     this.preload = preload;
     this.win = null;
     this.rect = null; // where the open panel is
@@ -78,7 +84,8 @@ class RecentPanel {
     }
     for (const d of displays) {
       const wa = d.workArea;
-      const bounds = { x: d.bounds.x, y: wa.y + Math.round((wa.height - HANDLE_H) / 2), width: HANDLE_W, height: HANDLE_H };
+      const th = tabHeight(d);
+      const bounds = { x: d.bounds.x, y: wa.y + Math.round((wa.height - th) / 2), width: HANDLE_W, height: th };
       let w = this.handles.get(d.id);
       if (w && !w.isDestroyed()) { w.setBounds(bounds); continue; }
       w = new BrowserWindow({ ...bounds, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false, movable: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
@@ -106,6 +113,8 @@ class RecentPanel {
       if (this.rect) this.close();
       return;
     }
+    const dwell = Number(this.getDwell());
+    this.hover.dwell = Number.isFinite(dwell) ? Math.max(0, Math.min(3000, dwell)) : DWELL_MS;
     const r = this.hover.update(screen.getCursorScreenPoint(), screen.getAllDisplays(), this.rect, Date.now());
     if (r.action === 'open') this.open(r.display);
     else if (r.action === 'close') this.close();
@@ -151,7 +160,7 @@ class RecentPanel {
   place() {
     if (!this.strip) return;
     const h = Math.min(this.panelH, this.strip.height - 40);
-    this.rect = { x: this.strip.x + 8, y: this.strip.y + Math.round((this.strip.height - h) / 2), width: WIDTH - 24, height: h };
+    this.rect = { x: this.strip.x, y: this.strip.y + Math.round((this.strip.height - h) / 2), width: WIDTH - 24, height: h }; // flush with the screen edge, joined to it
   }
 
   setPanelHeight(h) {
@@ -178,4 +187,4 @@ class RecentPanel {
   }
 }
 
-module.exports = { RecentPanel, EdgeHover, WIDTH };
+module.exports = { RecentPanel, EdgeHover, WIDTH, HANDLE_W, HANDLE_H, tabHeight };
