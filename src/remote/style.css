@@ -32,7 +32,8 @@ header, #top, #bottom { position: relative; z-index: 1; }
 #bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 #bottom > * { width: 100%; }
 #bar { display: flex; gap: 8px; padding-top: 4px; }
-#kbd { background: none; border: 0; color: var(--dim); padding: 4px 8px; display: grid; place-items: center; } #kbd[aria-pressed=true] { color: var(--acc); }
+#kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 18px); z-index: 3; width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+#kbd[aria-pressed=true] { color: #00141c; background: var(--acc); }
 /* the big lock: open while the Mac is open, closed when it is locked */
 #lock { width: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: var(--acc); padding: 2px 18px 0; transition: color .25s; }
 #lock svg { width: 76px; height: 76px; padding: 14px; border-radius: 50%; border: 1.5px solid currentColor; background: rgba(0, 30, 50, .6); box-shadow: 0 0 18px rgba(0, 212, 255, .3); transition: box-shadow .25s, background .25s; }
