@@ -1002,6 +1002,18 @@ const PAGES = {
       ex.append(row);
     }
     if (ex.children.length) c.append(ex, h('<div class="d" style="margin:4px 4px 14px">New features start off. Turn one on to try it; turn it off again any time.</div>'));
+    if (S.settings.flags?.imessage) {
+      c.append(h('<div class="section-title">Command Relay by text</div>'));
+      const ib = S.inboundInfo || {};
+      const tx = h(`<div class="card"><div class="row"><div class="grow"><div class="t">${ib.paired ? 'Paired with your own message thread' : 'Not paired yet'}</div><div class="d">${ib.paired ? 'Text yourself a request and Relay runs it and texts the answer back. Texts from anyone else are never read.' : 'Press Show code, then text the six digits to yourself in Messages (your own number or Apple ID). The code works once, for 10 minutes.'}${ib.error ? ` <span class="warn">${esc(ib.error)}</span>` : ''}</div><div class="d" id="ibcode" style="font-size:22px;letter-spacing:4px"></div></div><button class="btn" id="ibbtn">${ib.paired ? 'Unpair' : 'Show code'}</button></div><div class="row"><div class="grow"><div class="t">When a question is not answered</div><div class="d">A risky request sent by text asks on the Mac and by text. The first answer wins.</div></div><div class="select"><span id="ibun"></span><select><option value="expire">Skip it after 30 minutes</option><option value="reask">Ask again every hour, 3 times</option><option value="forever">Wait until I answer</option></select></div></div></div>`);
+      $('#ibbtn', tx).onclick = async () => { if (ib.paired) { await relay.inboundUnpair(); return; } const r = await relay.inboundCode(); $('#ibcode', tx).textContent = r.code || ''; };
+      const isel = $('select', tx);
+      isel.value = S.settings.inbound?.unanswered || 'expire';
+      $('#ibun', tx).textContent = isel.options[isel.selectedIndex].text;
+      isel.onchange = () => relay.set('settings.inbound.unanswered', isel.value);
+      c.append(tx);
+      c.append(h('<div class="d" style="margin:4px 4px 14px">Needs Full Disk Access so Relay can read your own thread in Messages; Doctor checks it. Turn on “Queue while the Mac sleeps” above so texts sent while the Mac sleeps wait and a later text can cancel one.</div>'));
+    }
   },
   permissions(c) {
     c.append(h('<div class="section-title" style="margin-top:0">On this Mac</div>'));

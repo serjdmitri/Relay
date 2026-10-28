@@ -3,8 +3,8 @@
 const FLAGS = {
   memoryV2: { label: 'Smarter memory', desc: 'Learns from your corrections and offers things it noticed about you for approval. Nothing is used until you approve it.', needs: [], ready: false },
   toolCategories: { label: 'Fewer tools per request', desc: 'Shows the model only the tool groups a request needs. Faster; it can ask for more tools if it guessed wrong.', needs: [], ready: true },
-  queue: { label: 'Queue while the Mac sleeps', desc: 'Requests sent while the Mac is asleep wait and run when it wakes. A later message can cancel an earlier one.', needs: [], ready: false },
-  imessage: { label: 'Command Relay by text', desc: 'Text yourself to run things. Only your own message thread, after a one-time pairing code. Needs Full Disk Access.', needs: ['fulldisk'], ready: false },
+  queue: { label: 'Queue while the Mac sleeps', desc: 'Texts sent while the Mac sleeps wait and run when it wakes; a later text can cancel an earlier one ("cancel the email one"). Works with Command Relay by text.', needs: [], ready: true },
+  imessage: { label: 'Command Relay by text', desc: 'Text yourself to run things. Only your own message thread, after a one-time pairing code. Needs Full Disk Access.', needs: ['fulldisk'], ready: true },
   plugins: { label: 'Plugins', desc: 'Add abilities from a folder or a GitHub link. Each plugin shows what it wants to do and waits for your approval.', needs: [], ready: false },
   panels: { label: 'Live panels', desc: 'Small floating panels with live numbers: CPU, battery, a running job.', needs: [], ready: false },
   folderQa: { label: 'Ask my notes', desc: 'Answers questions from folders you choose, searched on this Mac.', needs: [], ready: false },
