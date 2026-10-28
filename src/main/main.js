@@ -18,6 +18,7 @@ const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
 const { nightlyDue, dayKey } = require('./drive/nightly');
+const uiText = require('../renderer/ui-es');
 const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
@@ -201,7 +202,7 @@ function rebuildTray() {
   if (!tray) return;
   const askLabel = label(store.get('settings.shortcuts.ask'));
   const last = store.get('lastReply');
-  tray.setContextMenu(Menu.buildFromTemplate([
+  tray.setContextMenu(Menu.buildFromTemplate(uiText.localizeMenu([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
     { label: 'Type a Request…', click: () => ask.open() },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
@@ -225,7 +226,7 @@ function rebuildTray() {
     { label: 'About Relay', click: () => app.showAboutPanel() },
     { type: 'separator' },
     { label: 'Quit Relay', accelerator: 'Cmd+Q', click: () => { quitting = true; app.quit(); } }
-  ]));
+  ], store.get('settings.language.ui'))));
 }
 
 function applyDockAndLogin() {
@@ -294,6 +295,7 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
+    if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }

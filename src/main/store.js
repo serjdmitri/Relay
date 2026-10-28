@@ -21,7 +21,7 @@ const DEFAULTS = {
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
     briefing: { city: '', name: '', units: 'f' }, // the morning briefing: where to get the weather for (a city name), what to call you, f or c
-    language: { reply: 'auto' }, // what language answers come in: auto (the one you asked in) or a code like 'es'
+    language: { reply: 'auto', ui: 'en' }, // what language answers come in: auto (the one you asked in) or a code like 'es'
     followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
     bargeIn: { enabled: true, mode: 'talk' }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones
     focus: { apps: ['Messages', 'Slack', 'Discord', 'Mail', 'Telegram', 'WhatsApp', 'Steam', 'Twitter', 'Instagram', 'Facebook', 'Reddit'], minutes: 25, shortcutOn: 'Relay Focus On', shortcutOff: 'Relay Focus Off', reopen: true }, // focus mode by voice: apps it closes, default length, and the two Shortcuts that switch Do Not Disturb

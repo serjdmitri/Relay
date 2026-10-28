@@ -82,12 +82,19 @@ function applyTheme() {
   document.documentElement.style.setProperty('--pc2', b);
 }
 
+// Menus and settings in Spanish when chosen (Settings > Speech > Menus and settings in): exact text is swapped after each draw.
+function localize() {
+  const lang = S && S.settings && S.settings.language && S.settings.language.ui;
+  if (lang && lang !== 'en' && window.RelayUI) window.RelayUI.translateTree(document.body, lang);
+}
+
 function render() {
   if (!S) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && $('#content').contains(ae)) {
     applyTheme();
     renderSidebar();
+    localize();
     return; // do not clobber a field the user is typing in
   }
   applyTheme();
@@ -99,6 +106,7 @@ function render() {
   c.innerHTML = '';
   PAGES[page](c);
   c.scrollTop = top;
+  localize();
 }
 
 const KOKORO_VOICES = [['af_heart', 'Heart (US, warm)'], ['af_bella', 'Bella (US)'], ['af_nicole', 'Nicole (US, calm)'], ['af_sarah', 'Sarah (US)'], ['af_sky', 'Sky (US)'], ['af_nova', 'Nova (US)'], ['am_michael', 'Michael (US)'], ['am_adam', 'Adam (US)'], ['am_eric', 'Eric (US)'], ['bf_emma', 'Emma (UK)'], ['bf_isabella', 'Isabella (UK)'], ['bm_george', 'George (UK)']];
@@ -718,6 +726,14 @@ const PAGES = {
       const rs = $('#rlsel', row);
       $('#rlname', row).textContent = rs.options[rs.selectedIndex].text;
       rs.onchange = () => { relay.set('settings.language.reply', rs.value); $('#rlname', row).textContent = rs.options[rs.selectedIndex].text; };
+      card.append(row);
+    }
+    {
+      const uiNow = (S.settings.language && S.settings.language.ui) || 'en';
+      const row = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Menus and settings in</div><div class="d">Relay's menu bar, sidebar, page titles and setting names. The longer explanations stay in English for now.</div></div><div class="select" style="margin:0"><span id="uiname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="uisel"><option value="en" ${uiNow === 'en' ? 'selected' : ''}>English</option><option value="es" ${uiNow === 'es' ? 'selected' : ''}>Español</option></select></div></div>`);
+      const us = $('#uisel', row);
+      $('#uiname', row).textContent = us.options[us.selectedIndex].text;
+      us.onchange = () => { relay.set('settings.language.ui', us.value); };
       card.append(row);
     }
     const mic = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Microphone</div><div class="d" id="mdesc"></div></div><div class="select" style="margin:0;max-width:260px"><span id="mname" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="msel"></select></div></div>');
