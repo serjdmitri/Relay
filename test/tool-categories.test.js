@@ -52,3 +52,10 @@ test('when every group is already shown the loader tools are not offered', async
   const t = tools(); t.exposed = new Set(t.map((x) => x.name));
   assert.ok(!(await list({ tools: t, exposed: t.exposed })).includes('use_tool'));
 });
+
+test('each time the model asks for a hidden group it is reported, so Doctor can show how often', async () => {
+  const r = run(''); const asked = []; r.onLoadMore = (g) => asked.push(g);
+  await call(r, 'load_more_tools', { group: 'firefox' });
+  await call(r, 'load_more_tools', { group: 'drive' });
+  assert.deepEqual(asked, ['firefox', 'drive']);
+});

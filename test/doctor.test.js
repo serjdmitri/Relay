@@ -125,3 +125,8 @@ test('the spoken summary names the worst problems first and counts the rest', ()
   assert.match(s, /^3 things need a look\. F: broken\. W: meh\./);
   assert.match(s, /1 more/);
 });
+
+test('every feature that is built is offered in Settings (a missed "ready" hides a feature)', () => {
+  const { FLAGS, offered } = require('../src/main/flags');
+  assert.deepEqual(Object.keys(offered()).sort(), Object.keys(FLAGS).sort());
+});

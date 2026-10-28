@@ -1081,6 +1081,12 @@ const PAGES = {
       $('#ibun', tx).textContent = isel.options[isel.selectedIndex].text;
       isel.onchange = () => relay.set('settings.inbound.unanswered', isel.value);
       c.append(tx);
+      const held = (S.queue || []).filter((i) => i.state === 'review');
+      if (held.length) {
+        const hb = h(`<div class="card">${held.map((i) => `<div class="row"><div class="grow"><div class="t">${esc(i.text)}</div><div class="d">Texted over a day ago, so Relay did not run it.</div></div><div style="display:flex;gap:8px"><button class="btn" data-qn="${esc(i.id)}">Run now</button><button class="btn" data-qd="${esc(i.id)}">Drop</button></div></div>`).join('')}</div>`);
+        hb.onclick = (e) => { const t = e.target.dataset; if (t.qn) relay.queueReview(t.qn, true); else if (t.qd) relay.queueReview(t.qd, false); };
+        c.append(hb);
+      }
       c.append(h('<div class="d" style="margin:4px 4px 14px">Needs Full Disk Access so Relay can read your own thread in Messages; Doctor checks it. Turn on “Queue while the Mac sleeps” above so texts sent while the Mac sleeps wait and a later text can cancel one.</div>'));
     }
   },

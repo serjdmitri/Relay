@@ -80,6 +80,15 @@ const CHECKS = [
     }
   },
   {
+    id: 'tools', title: 'Fewer tools per request', run: (env) => {
+      const m = env.toolMisses?.();
+      if (!m || !m.on) return ok('Off.');
+      if (!m.recent.length) return ok('No tool group had to be asked for in the last day.');
+      const by = {}; for (const x of m.recent) by[x.group] = (by[x.group] || 0) + 1;
+      return ok(`The model asked for a hidden tool group ${m.recent.length} time${m.recent.length === 1 ? '' : 's'} in the last day: ${Object.entries(by).map(([g, n]) => `${g} ${n}`).join(', ')}. If one keeps coming up, tell me and I will show that group by default.`);
+    }
+  },
+  {
     id: 'offline', title: 'Offline mode', run: (env) => {
       const m = env.offline?.();
       if (!m || !m.on) return ok('Off.');

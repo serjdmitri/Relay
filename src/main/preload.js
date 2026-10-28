@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('relay', {
   memoryAct: (action, id, payload) => invoke('memory2:act', action, id, payload),
   inboundStatus: () => invoke('inbound:status'),
   inboundCode: () => invoke('inbound:code'),
+  queueReview: (id, run) => invoke('queue:review', id, run),
   inboundUnpair: () => invoke('inbound:unpair'),
   pluginInspect: (input) => invoke('plugins:inspect', input),
   pluginInstall: (token) => invoke('plugins:install', token),
