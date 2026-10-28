@@ -309,6 +309,34 @@
   setInterval(() => { if (mode === 'listening') level = 0.3 + Math.random() * 0.5; }, 120);
 
   // ---------- menu ----------
+  // What Relay learned about you (Smarter memory on the Mac): approve, or delete from here. Editing stays on the Mac.
+  const memBox = $('mem');
+  async function loadMemory() {
+    let m;
+    try { m = await api('/api/memory'); } catch { return; }
+    const any = (m.lessons || []).length || (m.inferred || []).length;
+    $('memtog').hidden = !any;
+    if (!any) { memBox.hidden = true; return; }
+    memBox.replaceChildren();
+    const section = (title, items, render) => {
+      if (!items.length) return;
+      const h4 = document.createElement('h4'); h4.textContent = title; memBox.append(h4);
+      for (const it of items) memBox.append(render(it));
+    };
+    const row = (main, sub, buttons) => {
+      const d = document.createElement('div'); d.className = 'it';
+      const sp = document.createElement('span'); sp.textContent = main;
+      if (sub) { const sm = document.createElement('small'); sm.textContent = sub; sp.append(sm); }
+      const bx = document.createElement('div');
+      for (const [label, action, id] of buttons) { const b = document.createElement('button'); b.textContent = label; b.onclick = async () => { b.disabled = true; try { await api('/api/memory', { action, id }); } catch {} loadMemory(); }; bx.append(b); }
+      d.append(sp, bx); return d;
+    };
+    section('Noticed about you', m.inferred || [], (x) => row(x.text, x.status === 'approved' ? 'in use' : 'waiting for you', [...(x.status === 'pending' ? [['Approve', 'inferred-approve', x.id]] : []), ['Delete', 'inferred-delete', x.id]]));
+    section('Lessons from corrections', m.lessons || [], (l) => row(l.trigger, l.fix, [['Delete', 'lesson-delete', l.id]]));
+  }
+  $('memtog').onclick = () => { memBox.hidden = !memBox.hidden; };
+  $('gear').addEventListener('click', () => setTimeout(() => { if (!$('menu').hidden) loadMemory(); }, 0)); // after the click that opens the menu
+
   $('gear').onclick = () => { $('menu').hidden = !$('menu').hidden; };
   $('speak').checked = speakOn;
   $('speak').onchange = () => { speakOn = $('speak').checked; localStorage.setItem('relay-remote-speak', speakOn ? '1' : '0'); if (!speakOn) speechSynthesis?.cancel?.(); };

@@ -555,6 +555,36 @@ const PAGES = {
       card.onclick = (e) => e.target.dataset.del && relay.removeMemory(e.target.dataset.del);
       c.append(card);
     }
+    if (S.settings.flags?.memoryV2) {
+      const inf = S.inferred || [];
+      const pend = inf.filter((x) => x.status === 'pending');
+      c.append(h('<div class="section-title">Learned about you</div>'));
+      c.append(h('<div class="d" style="margin:-6px 4px 10px">Relay notices things from what you ask. Nothing here is used until you approve it, and unapproved ones disappear after 30 days.</div>'));
+      if (!inf.length) c.append(h('<div class="note" style="font-size:15px">Nothing yet.</div>'));
+      else {
+        const card = h(`<div class="card">${inf.map((m) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="t">${esc(m.text)}${m.status === 'approved' ? ' <span class="d" style="display:inline">· in use</span>' : ''}</div><div style="display:flex;gap:8px">${m.status === 'pending' ? `<button class="btn" data-ap="${esc(m.id)}">Approve</button>` : ''}<button class="btn" data-ed="${esc(m.id)}">Edit</button><button class="btn" data-xd="${esc(m.id)}">Delete</button></div></div>`).join('')}</div>`);
+        card.onclick = (e) => {
+          const t = e.target.dataset;
+          if (t.ap) relay.memoryAct('inferred-approve', t.ap);
+          else if (t.xd) relay.memoryAct('inferred-delete', t.xd);
+          else if (t.ed) { const cur = inf.find((x) => x.id === t.ed); const v = prompt('Edit', cur?.text || ''); if (v && v.trim()) relay.memoryAct('inferred-edit', t.ed, { text: v }); }
+        };
+        c.append(card);
+      }
+      const ls = S.lessons || [];
+      c.append(h(`<div class="section-title">Lessons from your corrections</div>`));
+      c.append(h('<div class="d" style="margin:-6px 4px 10px">When you say “that’s wrong, I meant…”, Relay keeps what it should do next time and uses the few that match each request.</div>'));
+      if (!ls.length) c.append(h('<div class="note" style="font-size:15px">Nothing yet.</div>'));
+      else {
+        const card = h(`<div class="card">${ls.map((l) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="grow"><div class="t">${esc(l.trigger)}</div><div class="d">${esc(l.fix)}</div></div><div style="display:flex;gap:8px"><button class="btn" data-le="${esc(l.id)}">Edit</button><button class="btn" data-ld="${esc(l.id)}">Delete</button></div></div>`).join('')}</div>`);
+        card.onclick = (e) => {
+          const t = e.target.dataset;
+          if (t.ld) relay.memoryAct('lesson-delete', t.ld);
+          else if (t.le) { const cur = ls.find((x) => x.id === t.le); const fix = prompt('What Relay should do', cur?.fix || ''); if (fix && fix.trim()) relay.memoryAct('lesson-edit', t.le, { fix }); }
+        };
+        c.append(card);
+      }
+    }
     const all = $('#mall', c);
     if (all) all.onclick = () => confirm('Forget everything Relay remembers about you?') && relay.clearMemory();
   },

@@ -64,6 +64,8 @@ const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
 const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain');
 const { parseDoctorCommand } = require('./doctor');
+const lessons = require('./lessons');
+const flagsMod = require('./flags');
 const phish = require('./phish');
 const workshop = require('./workshop');
 const { parseMeetingCommand, MeetingRecorder, meetingPrompt } = require('./meeting');
@@ -165,6 +167,9 @@ class AskController {
     this.failover = new Failover({ load: () => this.store.get('settings.failover.until'), save: (v) => this.store.set('settings.failover.until', v) });
     this.codexHost = null;
     this.codexInfo = null;
+    this.prevExchange = null; // the last finished request and its answer, so "that's wrong" has something to refer to
+    this.currentRequest = '';
+    this.noticeCount = 0;
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -946,7 +951,55 @@ class AskController {
 
   // ----- what Relay remembers about you -----
   memoryText() {
-    return this.store.get('settings.memory') === false ? '' : mem.memoryContext(this.store.get('memories') || []);
+    if (this.store.get('settings.memory') === false) return '';
+    const base = mem.memoryContext(this.store.get('memories') || []);
+    if (!flagsMod.isOn(this.store.get('settings'), 'memoryV2')) return base;
+    // Smarter memory: the few lessons that match this request, and the guesses about you that you approved
+    const all = this.store.get('lessons') || [];
+    const picked = lessons.pickLessons(all, this.currentRequest || '');
+    if (picked.length) this.store.set('lessons', lessons.markUsed(all, picked));
+    return [base, lessons.lessonContext(picked), lessons.inferredContext(this.store.get('inferred') || [])].filter(Boolean).join('\n\n');
+  }
+
+  // "That's wrong, I meant...": one small model call turns the correction into a lesson (only when the message looks like a correction).
+  async learnLesson(prev, correction) {
+    try {
+      const reply = await this.askOnce(lessons.lessonPrompt({ request: prev.request, reply: prev.reply, correction }), 'You turn corrections into lessons. Answer only with the JSON object asked for.');
+      const l = lessons.parseLesson(reply);
+      if (!l) return;
+      const { list, added, reinforced } = lessons.addLesson(this.store.get('lessons') || [], l, { id: crypto.randomUUID() });
+      if (added || reinforced) { this.store.set('lessons', list); this.onChange(); }
+    } catch { /* learning is a bonus; a failed call changes nothing */ }
+  }
+
+  // Every 20 requests: what the user's own requests suggest about them, offered for approval (never used until approved).
+  async noticeAboutUser() {
+    try {
+      const texts = (this.store.get('history') || []).filter((h) => h.status === 'done' && h.text).slice(0, 20).map((h) => h.text);
+      if (texts.length < 10) return;
+      const guesses = lessons.parseInferred(await this.askOnce(lessons.inferPrompt(texts), 'You notice stable facts about a user. Answer only with the JSON array asked for.'));
+      const next = lessons.expireInferred(lessons.proposeInferred(this.store.get('inferred') || [], guesses, this.store.get('memories') || [], { ids: () => crypto.randomUUID() }));
+      this.store.set('inferred', next);
+      this.onChange();
+    } catch { /* optional */ }
+  }
+
+  // Edit or remove what was learned (Settings > Memory and the phone page).
+  memoryV2Act(action, id, payload = {}) {
+    const lessonsList = this.store.get('lessons') || [];
+    const inferredList = this.store.get('inferred') || [];
+    if (action === 'lesson-delete') this.store.set('lessons', lessons.removeById(lessonsList, id));
+    else if (action === 'lesson-edit') this.store.set('lessons', lessonsList.map((l) => (l.id === id ? { ...l, trigger: String(payload.trigger || l.trigger).slice(0, 160), fix: String(payload.fix || l.fix).slice(0, 240) } : l)));
+    else if (action === 'inferred-approve') this.store.set('inferred', lessons.approveInferred(inferredList, id));
+    else if (action === 'inferred-edit') this.store.set('inferred', lessons.editInferred(inferredList, id, payload.text));
+    else if (action === 'inferred-delete') this.store.set('inferred', lessons.removeById(inferredList, id));
+    else return { ok: false };
+    this.onChange();
+    return { ok: true };
+  }
+
+  memoryV2List() {
+    return { lessons: this.store.get('lessons') || [], inferred: this.store.get('inferred') || [] };
   }
 
   rememberFact(fact) {
@@ -1482,6 +1535,8 @@ class AskController {
       this.close();
       return { status: 'done', reply: '', actions: 0, dismissed: true };
     }
+    if (!opts.drain && !opts.scheduled && flagsMod.isOn(this.store.get('settings'), 'memoryV2') && this.prevExchange && lessons.looksLikeCorrection(text)) this.learnLesson(this.prevExchange, text);
+    this.currentRequest = text;
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
     if (!opts.drain) { this.queue = []; this.tasks = []; }
     if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
@@ -2617,6 +2672,10 @@ class AskController {
     this.onResult?.({ id: entry.remote || null, reply, status: res.status });
     this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
     this.store.set('lastReply', reply);
+    if (res.status === 'done' && reply && entry.text) {
+      this.prevExchange = { request: entry.text, reply };
+      if (flagsMod.isOn(this.store.get('settings'), 'memoryV2') && ++this.noticeCount >= 20) { this.noticeCount = 0; this.noticeAboutUser(); }
+    }
     this.abort = null;
     if (this.runningTask) { this.runningTask.status = res.status === 'done' ? 'done' : 'failed'; this.runningTask = null; }
     this.onChange();

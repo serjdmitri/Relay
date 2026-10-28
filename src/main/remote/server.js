@@ -160,6 +160,13 @@ class RemoteServer {
       const id = await this.control.holoAsk?.(hc[1], text, device);
       return id ? this.json(res, 200, { id }) : this.json(res, 404, { error: 'That hologram is gone.' });
     }
+    if (p === '/api/memory' && req.method === 'GET') return this.json(res, 200, this.control.memory?.() || { lessons: [], inferred: [] });
+    if (p === '/api/memory' && req.method === 'POST') { // delete or approve what Relay learned (editing stays on the Mac)
+      const body = await this.body(req).catch(() => null) || {};
+      const action = String(body.action || '');
+      if (!['lesson-delete', 'inferred-approve', 'inferred-delete'].includes(action) || !body.id) return this.json(res, 400, { error: 'Not allowed.' });
+      return this.json(res, 200, this.control.memoryAct?.(action, String(body.id)) || { ok: false });
+    }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });

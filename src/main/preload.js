@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('relay', {
   setInput: (pref) => invoke('speech:set-input', pref),
   appIcons: () => invoke('app:icons'),
   permissions: () => invoke('perm:status'),
+  memoryAct: (action, id, payload) => invoke('memory2:act', action, id, payload),
   doctorRun: () => invoke('doctor:run'),
   doctorFix: (id) => invoke('doctor:fix', id),
   doctorReport: () => invoke('doctor:report'),

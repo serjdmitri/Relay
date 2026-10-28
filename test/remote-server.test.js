@@ -176,3 +176,29 @@ test('/api/send takes a photo or text from the share sheet (base64), only from a
   assert.ok((await quick.json()).id);
   s.stop();
 });
+
+test('the phone can list, approve and delete what Relay learned, but not edit it, and only when paired', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-remote-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<title>Relay</title>');
+  const acted = [];
+  const control = { snapshot: () => ({}), recent: () => [], memory: () => ({ lessons: [{ id: 'l1', trigger: 't', fix: 'f' }], inferred: [] }), memoryAct: (a, id) => { acted.push([a, id]); return { ok: true }; } };
+  let list = [];
+  const pairing = new Pairing({ code: () => '424242' });
+  const devices = new Devices({ list: () => list, save: (l) => { list = l; } });
+  const s = new RemoteServer({ control, pairing, devices, root, host: '127.0.0.1', port: 0 });
+  await s.start();
+  const base = `http://127.0.0.1:${s.port}`;
+  const post = (p, body, token) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-relay-remote': '1', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+  assert.equal((await fetch(base + '/api/memory')).status, 401);
+  assert.equal((await post('/api/memory', { action: 'lesson-delete', id: 'l1' })).status, 401);
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'iPhone' })).json();
+  const auth = { headers: { authorization: `Bearer ${token}` } };
+  assert.equal((await (await fetch(base + '/api/memory', auth)).json()).lessons[0].id, 'l1');
+  assert.equal((await post('/api/memory', { action: 'lesson-delete', id: 'l1' }, token)).status, 200);
+  assert.equal((await post('/api/memory', { action: 'inferred-approve', id: 'i1' }, token)).status, 200);
+  assert.equal((await post('/api/memory', { action: 'lesson-edit', id: 'l1' }, token)).status, 400, 'editing is Mac-only');
+  assert.equal((await post('/api/memory', { action: 'lesson-delete' }, token)).status, 400);
+  assert.deepEqual(acted, [['lesson-delete', 'l1'], ['inferred-approve', 'i1']]);
+  s.stop();
+});

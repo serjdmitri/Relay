@@ -99,6 +99,8 @@ const DEFAULTS = {
   replacements: [], // {id, from, to}: word fixes applied to dictation and requests
   vocabulary: [], // strings
   memories: [], // {id, text, ts}: what you told Relay to remember
+  lessons: [], // {id, trigger, fix, conf, ts, lastUsed, uses}: learned from your corrections (Smarter memory, lessons.js)
+  inferred: [], // {id, text, status: pending | approved, conf, ts}: things Relay noticed about you; unused until you approve
   holograms: [], // pinned holograms: where they are and links to their models (never the model files)
   remoteDevices: [], // paired phones: { id, name, hash, created, lastSeen } (only a hash of each token)
   schedules: [], // requests to run later or on repeat: see schedule.js
