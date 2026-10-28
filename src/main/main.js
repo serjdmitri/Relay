@@ -836,7 +836,7 @@ app.whenReady().then(() => {
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
   overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getLook: () => store.get('settings.look') || 'jarvis' });
   overlay.watchDisplays();
-  recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, preload: path.join(__dirname, 'preload.js') });
+  recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();
   cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false });
   assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
