@@ -134,6 +134,7 @@ function publicState() {
     presetInfo: PRESETS,
     history: d.history.slice(0, 200),
     actions: (() => { const can = ask?.undos?.ids(); return d.actions.slice(0, 300).map((a) => (can && can.has(a.id) ? { ...a, undoable: true } : a)); })(),
+    recap: ask?.recapData?.() || null,
     stats: store.stats(),
     labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
     claude: claudeState,
@@ -820,12 +821,24 @@ app.whenReady().then(() => {
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
+  ask.onOpenRecap = () => openMain('recap');
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
     for (const s of missed) if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: `"${s.text}" was due while the Mac was asleep or Relay was closed. It will run next time.` }).show();
     for (const s of due) ask.runScheduled(s);
     if (due.length || missed.length) broadcast();
+    // Each evening: say what Relay did today and what can be undone. Only when something changed or failed; a click opens the list.
+    const rc = store.get('settings.recap');
+    if (nightlyDue(rc)) {
+      store.set('settings.recap.lastRun', dayKey(new Date()));
+      const r = ask.recapData();
+      if (!r.empty && (r.changed || r.failed) && Notification.isSupported()) {
+        const n = new Notification({ title: 'Relay today', body: r.spoken.replace(/ The list is in History, under Actions\.$/, '') });
+        n.on('click', () => openMain('recap'));
+        n.show();
+      }
+    }
     // Each evening: look at Downloads and show where the new files would go. Only when Relay is free; it moves nothing without a yes.
     const dt = store.get('settings.downloadsTidy');
     if (nightlyDue(dt) && ask.canRunScheduled()) {

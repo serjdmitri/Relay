@@ -50,6 +50,7 @@ const { createHardware } = require('./agent/hardware');
 const devices = require('./devices');
 const driveInspect = require('./driveInspect');
 const robotics = require('./robotics');
+const recap = require('./recap');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
@@ -1516,6 +1517,7 @@ class AskController {
           if (dc) return this.finish(entry, await this.devicesCommand(dc));
           const vc = driveInspect.parseDriveCommand(effective);
           if (vc) return this.finish(entry, await this.driveCommand(vc));
+          if (recap.parseRecapCommand(effective)) return this.finish(entry, this.recapCommand());
           const lc2 = robotics.parseLogCommand(effective);
           if (lc2) return this.finish(entry, await this.logCommand(lc2));
           const kc = robotics.parseChecklistCommand(effective, { names: Object.keys(this.checklistLists()) });
@@ -1674,6 +1676,18 @@ class AskController {
     const r = await this.holos.requestRealSize(h, mm);
     if (r.ok) return `Life size: ${r.mm} mm long, as it would be on your desk. Calibrate your screen in Settings if it looks off.`;
     return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
+  }
+
+  // ---- daily recap ----
+  recapData() {
+    return recap.buildRecap({ actions: this.store.data.actions, history: this.store.data.history, undoable: this.undos.ids() });
+  }
+
+  // "What did you do today?": said aloud, and the list (with Undo buttons) is opened when there is something to look at.
+  recapCommand() {
+    const r = this.recapData();
+    if (!r.empty && (r.items.length || r.failed)) this.onOpenRecap?.();
+    return { status: 'done', reply: r.spoken, actions: 0 };
   }
 
   // ---- robotics helper ----
