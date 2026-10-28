@@ -622,6 +622,22 @@ const PAGES = {
     look.onclick = (e) => e.target.dataset.v && relay.set('settings.look', e.target.dataset.v);
     ask.append(
       look,
+      (() => {
+        const hwc = S.settings.homework || {};
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Homework helper</div><div class="d">Select an assignment (or open it on screen) and say “outline this essay”, “walk me through this problem”, “give me a template for this assignment”, “check my answer”, “give me feedback on my essay” or “do this assignment”. Results are saved in Documents/Relay Homework as a Word file or PDF, and code as a folder. Use it only where your teacher allows AI help, and use what it makes to learn, not just to hand in. Say “use this as my writing sample” with some of your own writing selected so drafts sound like you.</div></div>
+          <div style="flex-basis:100%;display:flex;gap:8px;margin-top:8px;align-items:center"><span class="d" style="margin:0">Save as</span><div class="select" style="margin:0"><span id="hwfname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="hwfmt"><option value="docx">Word</option><option value="pdf">PDF</option><option value="md">Plain text</option></select></div></div>
+          <input class="field" id="hwstyle" style="flex-basis:100%;margin-top:8px" placeholder="How you would describe your writing voice (optional)" value="${esc(hwc.voiceStyle || '')}">
+          <textarea class="field" id="hwsample" rows="4" style="flex-basis:100%;margin-top:8px;resize:vertical" placeholder="A sample of your own writing (optional)">${esc(hwc.voiceSample || '')}</textarea></div>`);
+        const sel = $('#hwfmt', row);
+        sel.value = ['docx', 'pdf', 'md'].includes(hwc.format) ? hwc.format : 'docx';
+        $('#hwfname', row).textContent = sel.options[sel.selectedIndex].text;
+        sel.onchange = () => { relay.set('settings.homework.format', sel.value); $('#hwfname', row).textContent = sel.options[sel.selectedIndex].text; };
+        $('#hwstyle', row).onchange = (e) => relay.set('settings.homework.voiceStyle', e.target.value.trim().slice(0, 400));
+        $('#hwsample', row).onchange = (e) => relay.set('settings.homework.voiceSample', e.target.value.trim().slice(0, 4000));
+        return row;
+      })(),
+      toggleRow('Allow whole solutions (complete the assignment)', 'On: “do this assignment” makes the complete solution (a full draft, a working project, every step of a problem). Off: it makes a template or outline to fill in instead.', 'settings.homework.full'),
+      toggleRow('Explain what it made', 'Adds a short “How it works” section to a full solution so you can explain it in your own words.', 'settings.homework.explain'),
       toggleRow('Let Relay do things for you', 'Off: it only types what you say.', 'settings.actEnabled'),
       toggleRow('Ask before leaving my home folder', 'On: Relay asks first whenever a tool reads, opens, moves or runs something outside your home folder (an external drive, Applications, system folders). Background agents are refused instead of asking. Programs in /usr/bin and temporary files are not counted.', 'settings.homeOnly'),
       toggleRow('Relay cursor', "Shows Relay's own pointer, drawings and step-by-step guides on your screen.", 'settings.cursor'),

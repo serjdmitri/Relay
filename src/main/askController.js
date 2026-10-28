@@ -52,6 +52,8 @@ const driveInspect = require('./driveInspect');
 const robotics = require('./robotics');
 const recap = require('./recap');
 const { Failover } = require('./failover');
+const hw = require('./homework');
+const { HomeworkDocs } = require('./homeworkFiles');
 const codexCli = require('./agent/codexCli');
 const assist = require('./assist');
 const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
@@ -1056,7 +1058,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1562,6 +1564,8 @@ class AskController {
           if (ec) return this.explainError(ec, entry);
           const pc = phish.parsePhishCommand(effective);
           if (pc) return this.finish(entry, await this.securityCheck(pc));
+          const hc = hw.parseHomeworkCommand(effective);
+          if (hc) return this.homeworkCommand(hc, entry);
         }
         if (!opts.shown) {
           const lc = parseLanguageCommand(effective);
@@ -1757,6 +1761,43 @@ class AskController {
     if (!this.assistPanel) return { status: 'failed', reply: 'The private window is not available.', actions: 0 };
     await this.assistPanel.test();
     return { status: 'done', reply: this.store.get('settings.meeting.hidden') === false ? 'The test box is showing top right. Hiding is switched off in Settings, so it will show on screen shares.' : 'The test box is showing top right. Start a screen share or a recording and check that you cannot see it there. If you can, tell me which app you share with.', actions: 0 };
+  }
+
+  // ---- homework helper ----
+  homeworkDocs() {
+    if (!this.homeworkFiles) {
+      this.homeworkFiles = new HomeworkDocs({
+        exec: (cmd, args) => new Promise((resolve, reject) => require('child_process').execFile(cmd, args, { timeout: 30000 }, (e, out, err) => (e ? reject(new Error(String(err || e.message).trim())) : resolve(out)))),
+        renderPdf: (html, out) => (this.renderPdf || this.renderPdfWindow).call(this, html, out),
+        openPath: (p) => this.mac.openPath(p), revealPath: (p) => this.mac.revealPath(p)
+      });
+    }
+    return this.homeworkFiles;
+  }
+
+  // "Outline this essay", "walk me through this problem", "give me a template for this assignment", "do this assignment": read the assignment from the selection or the screen,
+  // then the model makes it (a stronger model than usual, since it is long work) and saves it as a document or a code folder.
+  async homeworkCommand(cmd, entry) {
+    const fail = (reply) => this.finish(entry, { status: 'failed', reply, actions: 0 });
+    if (cmd.type === 'homework-voice') {
+      const { text } = await this.gatherText(['selection', 'clipboard'], 80);
+      if (!text) return fail('Select a piece of your own writing (or copy it), at least a few sentences, then say “use this as my writing sample”.');
+      this.store.set('settings.homework.voiceSample', text.slice(0, 4000));
+      return this.finish(entry, { status: 'done', reply: `Saved your writing sample (${text.split(/\s+/).length} words). Drafts will follow that voice.`, actions: 0 });
+    }
+    const cfg = this.store.get('settings.homework') || {};
+    let material = '';
+    if (hw.needsText(cmd) || cmd.mode === 'check') {
+      const got = await this.gatherText(['selection', 'screen', 'clipboard'], 20);
+      material = got.text;
+      if (!material && hw.needsText(cmd)) return fail('I could not read the assignment. Select its text (or open it on screen), then ask again, or say what it is about, like “outline an essay about the Great Gatsby”.');
+    }
+    const prompt = hw.homeworkPrompt({
+      mode: cmd.mode, material, topic: cmd.topic, voice: cmd.voice, voiceSample: cfg.voiceSample || '', voiceStyle: cfg.voiceStyle || hw.DEFAULT_VOICE,
+      format: ['docx', 'pdf', 'md'].includes(cfg.format) ? cfg.format : 'docx', allowFull: cfg.full !== false, explain: cfg.explain !== false
+    });
+    if (cmd.mode !== 'check') this.forceTier = 'sonnet'; // long, careful work
+    return this.runRequest(prompt, entry);
   }
 
   // ---- daily recap ----
