@@ -125,6 +125,11 @@
     ask('lock my mac');
   };
 
+  // Sideways, the answer column gets the height the shortcut buttons leave (the CSS reads --quickh).
+  const measureQuick = () => document.documentElement.style.setProperty('--quickh', `${$('quick').offsetHeight}px`);
+  if (window.ResizeObserver) new ResizeObserver(measureQuick).observe($('quick'));
+  addEventListener('resize', measureQuick);
+
   // The music and shortcut buttons can be hidden (button at the bottom left); the choice is remembered.
   function setQuick(show) {
     document.body.classList.toggle('noquick', !show);

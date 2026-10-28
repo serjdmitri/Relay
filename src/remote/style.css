@@ -129,16 +129,18 @@ body.noquick #quick { display: none; } /* the music and shortcut buttons, hidden
 @media (orientation: landscape) {
   main { padding-left: max(env(safe-area-inset-left), 20px); padding-right: max(env(safe-area-inset-right), 20px); }
   header { padding-top: 4px; }
-  /* sideways: no reactor, just what Relay says and its status */
-  #cv, #hint { display: none; }
-  #reactor { width: auto; aspect-ratio: auto; position: static; }
-  #stage { align-items: flex-end; padding-bottom: 92px; }
-  #under { position: static; transform: none; width: 54vw; }
-  #top { position: absolute; left: max(env(safe-area-inset-left), 20px); top: 44px; width: 62vw; max-height: 56vh; z-index: 1; }
-  #asked { margin-left: 0; text-align: left; font-size: 14px; }
-  #reply { text-align: left; font-size: 17px; max-height: 44vh; }
+  /* sideways: the reactor stays in the exact middle; what you asked, the answer and the shortcut buttons (wrapped, never cut off) are a column on the left; the lock is on the right */
+  #reactor { width: min(32vw, 56vh); }
+  #hint { display: none; }
+  #under { width: 28vw; }
+  #line { font-size: 15px; min-height: 0; }
+  #top { position: absolute; left: max(env(safe-area-inset-left), 20px); top: 44px; width: calc(50vw - min(32vw, 56vh) / 2 - max(env(safe-area-inset-left), 20px) - 18px); max-height: max(70px, calc(100vh - 60px - var(--quickh, 150px))); z-index: 1; }
+  #asked { margin-left: 0; text-align: left; font-size: 14px; max-width: 100%; }
+  #reply { text-align: left; font-size: 15px; max-height: none; }
   #bar { display: none; }
-  #bottom { position: absolute; left: max(env(safe-area-inset-left), 20px); right: auto; bottom: calc(env(safe-area-inset-bottom) + 8px); width: 36vw; align-items: stretch; }
+  #bottom { position: absolute; left: max(env(safe-area-inset-left), 20px); right: auto; bottom: calc(env(safe-area-inset-bottom) + 8px); width: calc(50vw - min(32vw, 56vh) / 2 - max(env(safe-area-inset-left), 20px) - 18px); align-items: stretch; }
+  #quick { flex-wrap: wrap; overflow: visible; padding: 0; gap: 5px; }
+  #quick button { height: 30px; padding: 0 10px; font-size: 12.5px; }
   #lock { position: fixed; right: max(env(safe-area-inset-right), 20px); top: 50%; transform: translateY(-50%); padding: 0; }
   #lock svg { width: 66px; height: 66px; padding: 12px; }
   #kbd { width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
