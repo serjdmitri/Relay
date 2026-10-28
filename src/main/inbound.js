@@ -122,6 +122,19 @@ class InboundService {
     }
   }
 
+  // An old request that was held for your OK (on the Mac): run it now, or drop it.
+  async releaseReview(id, run) {
+    const list = this.store.get('queue') || [];
+    const item = list.find((i) => i.id === id && i.state === 'review');
+    if (!item) return { ok: false };
+    if (!run) { this.store.set('queue', q.mark(list, id, 'cancelled')); return { ok: true }; }
+    this.store.set('queue', q.mark(list, id, 'running'));
+    const result = await this.runOne(item);
+    this.store.set('queue', q.mark(this.store.get('queue') || [], id, result.status === 'done' ? 'done' : 'cancelled'));
+    await this.reply(String(result.reply || 'Done.').slice(0, 900));
+    return { ok: true };
+  }
+
   runOne(item) {
     return new Promise((resolve) => {
       this.mine.add(item.id);

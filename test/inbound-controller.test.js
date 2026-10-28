@@ -75,3 +75,15 @@ test('answering on the Mac first tells the phone, and a request that did not com
   assert.equal(await p2, true);
   assert.equal(sent.length, before);
 });
+
+test('an old request held for review can be run or dropped from the Mac', async () => {
+  const { svc, sent, asked, data } = service();
+  data.queue = [{ id: 'a', text: 'lock my mac', ts: 1, state: 'review' }, { id: 'b', text: 'email Dana', ts: 2, state: 'review' }];
+  assert.deepEqual(await svc.releaseReview('b', false), { ok: true });
+  assert.equal(data.queue.find((i) => i.id === 'b').state, 'cancelled');
+  assert.deepEqual(await svc.releaseReview('a', true), { ok: true });
+  assert.deepEqual(asked, ['lock my mac']);
+  assert.equal(data.queue.find((i) => i.id === 'a').state, 'done');
+  assert.ok(sent.some((s) => s[1] === 'did lock my mac'));
+  assert.deepEqual(await svc.releaseReview('zzz', true), { ok: false });
+});

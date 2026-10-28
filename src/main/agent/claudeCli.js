@@ -112,7 +112,7 @@ async function handleRpc(msg, run) {
     case 'tools/call': {
       if (!run) return err(-32000, 'No request is running.');
       let { name, arguments: args } = msg.params || {};
-      if (run.exposed && name === 'load_more_tools') return ok({ content: [{ type: 'text', text: categories.loadMore(run, args?.group) }] });
+      if (run.exposed && name === 'load_more_tools') { run.onLoadMore?.(String(args?.group || '')); return ok({ content: [{ type: 'text', text: categories.loadMore(run, args?.group) }] }); }
       if (run.exposed && name === 'use_tool') { name = String(args?.name || ''); args = args?.input || {}; } // the real tool runs, with its own confirmation
       const tool = run.tools.find((t) => t.name === name);
       const out = await callTool({ tool, name, input: args || {}, confirm: run.confirm, onEvent: run.onEvent, signal: run.signal });
@@ -226,7 +226,7 @@ class ClaudeSession {
     this.host = host;
     this.model = model;
     this.timeoutMs = timeoutMs;
-    this.run = { tools, exposed: tools.exposed || null, confirm: async () => false, onEvent: () => {}, signal: undefined, counter: { actions: 0 } };
+    this.run = { tools, exposed: tools.exposed || null, onLoadMore: tools.onLoadMore, confirm: async () => false, onEvent: () => {}, signal: undefined, counter: { actions: 0 } };
     host.run = this.run;
     this.turn = null;
     this.turns = 0; // requests answered so far: a session with turns remembers the conversation

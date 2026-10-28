@@ -471,6 +471,7 @@ function registerIpc() {
   };
   ipcMain.handle('inbound:status', () => ({ ...(inbound?.status() || {}), fullDisk: fullDisk(), on: flagsMod.isOn(store.get('settings'), 'imessage') }));
   ipcMain.handle('inbound:code', () => { syncInbound(); return { code: inbound?.newCode() || null }; });
+  ipcMain.handle('queue:review', async (_e, id, run) => { const r = await inbound?.releaseReview(String(id), !!run); broadcast(); return r || { ok: false }; });
   ipcMain.handle('inbound:unpair', () => { inbound?.unpair(); broadcast(); return { ok: true }; });
 
 
@@ -520,6 +521,7 @@ function registerIpc() {
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
+      toolMisses: () => ({ on: flagsMod.isOn(store.get('settings'), 'toolCategories'), recent: (store.get('toolMisses') || []).filter((x) => Date.now() - x.ts < 86400e3) }),
       offline: () => ({ on: offlineOn, online: connectivity ? connectivity.online : true, ollama: ollamaUp }),
       notes: () => ({ on: flagsMod.isOn(store.get('settings'), 'folderQa'), folders: notesSvc?.status() || [], noEmbed: !!notesSvc?.noEmbed }),
       plugins: () => ({ on: flagsMod.isOn(store.get('settings'), 'plugins'), list: pluginMgr?.list() || [], sandbox: !!pluginMgr?.sandbox }),

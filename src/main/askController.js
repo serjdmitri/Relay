@@ -1170,7 +1170,7 @@ class AskController {
     const tools = [...base, ...this.connectorTools(), ...this.pluginTools()];
     // Text from a plugin is data, not instructions: once one was read in this request, anything that sends, deletes or runs code asks first.
     for (const t of tools) if (RISKY_AFTER_PLUGIN.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.tainted ? `This request read output from a plugin. Allow "${t.name}"?` : null); }
-    if (forModel && flagsMod.isOn(this.store.get('settings'), 'toolCategories')) tools.exposed = toolCategories.exposure(tools, { request });
+    if (forModel && flagsMod.isOn(this.store.get('settings'), 'toolCategories')) { tools.exposed = toolCategories.exposure(tools, { request }); tools.onLoadMore = (group) => this.store.set('toolMisses', [...(this.store.get('toolMisses') || []), { group, ts: Date.now() }].slice(-100)); }
     return tools;
   }
 

@@ -103,6 +103,7 @@ const DEFAULTS = {
   vocabulary: [], // strings
   memories: [], // {id, text, ts}: what you told Relay to remember
   inboundState: { paired: false, last: 0 }, // Command Relay by text: paired with your own thread, the last message read
+  toolMisses: [], // times the model had to ask for a hidden tool group (Fewer tools per request), for Doctor
   queue: [], // texts waiting to run (see queue.js)
   lessons: [], // {id, trigger, fix, conf, ts, lastUsed, uses}: learned from your corrections (Smarter memory, lessons.js)
   inferred: [], // {id, text, status: pending | approved, conf, ts}: things Relay noticed about you; unused until you approve
