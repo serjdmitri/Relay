@@ -31,6 +31,10 @@ header, #top, #bottom { position: relative; z-index: 1; }
 #top { max-height: 27vh; overflow-y: auto; }
 #bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 #bottom > * { width: 100%; }
+#bar { display: flex; gap: 8px; padding-top: 4px; }
+#bar input { text-align: left; font-size: 17px; }
+#send { width: 52px; border-radius: 50%; border: 0; background: var(--acc); color: #00141c; font-size: 24px; font-weight: 700; }
+@media (orientation: portrait) { #kb { display: none !important; } } /* upright: the phone's own keyboard */
 #kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 18px); z-index: 3; width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
 #kbd[aria-pressed=true] { color: #00141c; background: var(--acc); }
 /* the big lock: open while the Mac is open, closed when it is locked */
@@ -123,12 +127,15 @@ header, #top, #bottom { position: relative; z-index: 1; }
 @media (orientation: landscape) {
   main { padding-left: max(env(safe-area-inset-left), 20px); padding-right: max(env(safe-area-inset-right), 20px); }
   header { padding-top: 4px; }
-  #reactor { width: min(34vw, 56vh); }
-  #under { width: 50vw; }
-  #hint { display: none; }
-  #top { position: absolute; left: max(env(safe-area-inset-left), 20px); top: 44px; width: 27vw; max-height: 62vh; z-index: 1; }
+  /* sideways: no reactor, just what Relay says and its status */
+  #cv, #hint { display: none; }
+  #reactor { width: auto; aspect-ratio: auto; position: static; }
+  #stage { align-items: flex-end; padding-bottom: 92px; }
+  #under { position: static; transform: none; width: 54vw; }
+  #top { position: absolute; left: max(env(safe-area-inset-left), 20px); top: 44px; width: 62vw; max-height: 56vh; z-index: 1; }
   #asked { margin-left: 0; text-align: left; font-size: 14px; }
-  #reply { text-align: left; font-size: 15px; max-height: 40vh; }
+  #reply { text-align: left; font-size: 17px; max-height: 44vh; }
+  #bar { display: none; }
   #bottom { position: absolute; left: max(env(safe-area-inset-left), 20px); right: auto; bottom: calc(env(safe-area-inset-bottom) + 8px); width: 36vw; align-items: stretch; }
   #lock { position: fixed; right: max(env(safe-area-inset-right), 20px); top: 50%; transform: translateY(-50%); padding: 0; }
   #lock svg { width: 66px; height: 66px; padding: 12px; }
