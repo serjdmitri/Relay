@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.33.1
+
+- **Phone hold-to-talk, hardened.** Speech errors are now shown in plain words (for example "The speech service could not be reached. Check the phone has internet, and that Siri & Dictation is on.") instead of only "Did not catch that". Letting go early no longer kills the mic: it always listens for at least 0.7 seconds. If the phone was just speaking, recognition waits 0.3 seconds first (iOS Safari often leaves the audio session in playback mode after speech, so the mic hears nothing). The very first tap's silent unlock word is no longer counted as "the phone was talking".
+- I could not reproduce the original problem (no iPhone here), so the real cause is not confirmed: if it still fails, hold the reactor and tell me what the screen says. The phone page is served by the Mac app, so this build has to be on the Mac for the fix to reach the phone. Checked with a fake speech engine in headless Chromium only.
+
 ## 0.33.0
 
 - **No more rough 3D guesses.** A model made from one photo is a guess at every hidden side, so it is no longer shown by default. A real ready-made model still opens as a hologram, and so do the sharp generators when a Hugging Face token is set. Otherwise "show me ... in 3D" shows a card with the clearest real pictures it found and YouTube searches for an overview, reviews and a close-up/teardown (plus links for more pictures and all videos). If the model finds specific video links while researching it adds them with a second card. The old behavior (photo models from the fast generator, shapes stand-ins) comes back with `settings.models3dApprox: true`. The YouTube links are searches, not hand-picked videos, and the pictures depend on what Wikimedia has: untested against the live services from the cloud.
