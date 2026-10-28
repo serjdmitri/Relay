@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -15,6 +15,9 @@ const doctor = require('./doctor');
 const flagsMod = require('./flags');
 const { InboundService } = require('./inbound');
 const { PluginManager } = require('./plugins');
+const { PanelHub, approvalText } = require('./panels/hub');
+const { Sampler } = require('./panels/sources');
+const { PanelWindows } = require('./panelWindow');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -53,7 +56,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -536,6 +539,7 @@ function registerIpc() {
     if (on) { const c = flagsMod.canEnable(name, { fulldisk: fullDisk() === true }); if (!c.ok) return c; }
     store.set(`settings.flags.${name}`, !!on);
     syncInbound();
+    if (!flagsMod.isOn(store.get('settings'), 'panels')) panelHub?.closeAll();
     broadcast();
     return { ok: true };
   });
@@ -951,6 +955,18 @@ app.whenReady().then(() => {
   ask.inbound = inbound;
   pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, sandbox: false });
   ask.plugins = pluginMgr;
+  // Live panels
+  panelWins = new PanelWindows({ preload: path.join(__dirname, 'preload.js') });
+  let batteryNow = { present: false };
+  const panelSampler = new Sampler({ os: require('os'), exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 3000, maxBuffer: 4e6 }, (e, out) => (e ? rej(e) : res(String(out))))), jobs: () => (ask.tasks || []).map((t) => ({ text: t.text, status: t.status })) });
+  panelHub = new PanelHub({
+    sampler: panelSampler, callPlugin: (name, tool) => pluginMgr.call(name, tool, {}), getPlugins: () => pluginMgr.list(),
+    openWindow: (p) => panelWins.open(p), approved: (h) => (store.get('panelsApproved') || []).includes(h), remember: (h) => store.set('panelsApproved', [...(store.get('panelsApproved') || []), h].slice(-100)),
+    ask: async (text, spec) => (await dialog.showMessageBox({ type: 'question', buttons: ['Show the panel', 'Cancel'], defaultId: 1, cancelId: 1, message: `Show the panel "${spec.title}"?`, detail: text })).response === 0,
+    lowPower: () => batteryNow.present && batteryNow.onBattery && batteryNow.percent < 20
+  });
+  setInterval(async () => { if (panelHub.panels.size) batteryNow = await panelSampler.sample('battery').catch(() => batteryNow); }, 60000);
+  ask.panelHub = panelHub;
   // The macOS sandbox is used only if a trivial profile really starts on this Mac.
   execFile('/usr/bin/sandbox-exec', ['-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true'], { timeout: 3000 }, (err) => { pluginMgr.sandbox = !err; });
   syncInbound();

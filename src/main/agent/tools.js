@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, stickies = null, study = null, homework = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, models = null, drive = null, stickies = null, study = null, homework = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -476,6 +476,17 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       describe: (i) => `Showing ${i.title}`,
       run: async (i) => cards.show(i)
     });
+  }
+
+  if (panels) {
+    tools.push({
+      name: 'show_panel',
+      description: 'Show a small live panel on screen that keeps updating. Use sources for Relay\'s own numbers (cpu, memory, battery, network, disk, jobs). Only if the user wants something else (their own layout, other data), also pass html: one small self-contained page (no external scripts) that draws the numbers it receives through relayPanel.onData(function (data) { ... }), where data has one entry per source; hosts lists any web hosts it must fetch from (the user approves them). A panel can read only what it declares.',
+      input_schema: obj({ title: str('Panel title'), sources: { type: 'array', items: str('cpu, memory, battery, network, disk or jobs') }, html: str('Optional custom page'), hosts: { type: 'array', items: str('A host name like api.weather.gov') }, plugin: str('Optional: plugin:<name>:<panel id> for a plugin panel') }, []),
+      describe: (i) => `Opening a panel${i.title ? `: ${i.title}` : ''}`,
+      run: async (i) => panels.show(i)
+    });
+    tools.push({ name: 'close_panel', description: 'Close the live panels the user has open.', input_schema: obj({}), describe: () => 'Closing the panels', run: async () => panels.close() });
   }
 
   // Long jobs that do not need the screen can run in the background while the user carries on.
