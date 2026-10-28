@@ -1002,6 +1002,23 @@ const PAGES = {
       ex.append(row);
     }
     if (ex.children.length) c.append(ex, h('<div class="d" style="margin:4px 4px 14px">New features start off. Turn one on to try it; turn it off again any time.</div>'));
+    if (S.settings.flags?.proactive) {
+      const pr = S.settings.proactive || { mode: 'silent-urgent', quiet: { on: true, from: 22, to: 7 } };
+      c.append(h('<div class="section-title">Speak up on its own</div>'));
+      const hours = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</option>`).join('');
+      const bx = h(`<div class="card"><div class="row"><div class="grow"><div class="t">How loud</div><div class="d">Relay tells you about a meeting about to start, a long job that finished, or a low battery.</div></div><div class="select"><span id="prm"></span><select id="prs"><option value="silent-urgent">Quiet banner, speak only if urgent</option><option value="silent">Always quiet</option><option value="speak">Speak anything important</option></select></div></div><div class="row"><div class="grow"><div class="t">Quiet hours</div><div class="d">Nothing is spoken then, and only the most urgent things reach your phone.</div></div><div style="display:flex;gap:8px;align-items:center"><select id="pqf">${hours}</select><span class="d">to</span><select id="pqt">${hours}</select><div class="toggle ${pr.quiet?.on ? 'on' : ''}" id="pqo"></div></div></div></div>`);
+      const ps = $('#prs', bx); ps.value = pr.mode || 'silent-urgent'; $('#prm', bx).textContent = ps.options[ps.selectedIndex].text;
+      ps.onchange = () => relay.set('settings.proactive.mode', ps.value);
+      $('#pqf', bx).value = String(pr.quiet?.from ?? 22); $('#pqt', bx).value = String(pr.quiet?.to ?? 7);
+      $('#pqf', bx).onchange = (e) => relay.set('settings.proactive.quiet.from', Number(e.target.value));
+      $('#pqt', bx).onchange = (e) => relay.set('settings.proactive.quiet.to', Number(e.target.value));
+      $('#pqo', bx).onclick = () => relay.set('settings.proactive.quiet.on', !pr.quiet?.on);
+      c.append(bx);
+    }
+    if (S.settings.flags?.offline) {
+      c.append(h('<div class="section-title">Offline mode</div>'));
+      c.append(h(`<div class="card"><div class="row"><div class="grow"><div class="t">${S.offlineNow ? 'Offline right now' : 'Online'}</div><div class="d">With no internet, Relay answers plain questions with a local model (Ollama, the one chosen in Account). Anything that needs the Mac or the web waits until you are back online.</div></div></div></div>`));
+    }
     if (S.settings.flags?.folderQa) {
       c.append(h('<div class="section-title">Ask my notes</div>'));
       const nl = S.notesList || [];

@@ -80,6 +80,14 @@ const CHECKS = [
     }
   },
   {
+    id: 'offline', title: 'Offline mode', run: (env) => {
+      const m = env.offline?.();
+      if (!m || !m.on) return ok('Off.');
+      if (m.ollama === false) return warn('Ollama is not running, so offline Relay can only say it needs the internet. Install Ollama (ollama.com) and start it, then pull the model chosen in Account.');
+      return ok(`${m.online ? 'Online' : 'Offline right now'}; a local model is ready.`);
+    }
+  },
+  {
     id: 'notes', title: 'Ask my notes', run: (env) => {
       const m = env.notes?.();
       if (!m || !m.on) return ok('Off.');

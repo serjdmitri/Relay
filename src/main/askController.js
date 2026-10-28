@@ -68,6 +68,7 @@ const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
 const { ConfirmHub } = require('./confirmHub');
 const { parsePanelCommand } = require('./panels/hub');
+const { needsInternet, OFFLINE_SYSTEM } = require('./connectivity');
 const RISKY_AFTER_PLUGIN = new Set(['messages_send', 'trash_path', 'run_shell', 'run_applescript', 'drive_apply']); // send, delete, run code: always ask once a plugin's output was read
 const flagsMod = require('./flags');
 const phish = require('./phish');
@@ -175,6 +176,8 @@ class AskController {
     this.hub = new ConfirmHub({ unanswered: () => this.store.get('settings.inbound.unanswered') || 'expire' }); // a question that may be asked on the Mac and the phone
     this.plugins = null; // the PluginManager, set by the app
     this.panelHub = null; // the live panels, set by the app
+    this.offline = false; // no internet right now (set by the app)
+    this.onProactive = null; // the app's way to tell you something on its own
     this.notesService = null; // "ask my notes", set by the app
     this.tainted = false;
     this.inbound = null; // set by the app when "Command Relay by text" is on
@@ -900,6 +903,7 @@ class AskController {
   }
 
   agentFinished(a) {
+    this.onProactive?.({ type: 'job', title: String(a.task).slice(0, 60), status: a.status === 'done' ? 'done' : 'failed', id: a.id || a.task });
     this.store.addHistory({ id: crypto.randomUUID(), text: `Agent: ${a.task}`, status: a.status === 'done' ? 'done' : a.status === 'stopped' ? 'stopped' : 'failed', reply: a.result, actions: a.steps, ts: Date.now() });
     this.onChange();
     if (a.status !== 'stopped') this.sound(a.status === 'done' ? 'Pop' : 'Basso');
@@ -2587,7 +2591,21 @@ class AskController {
     return { provider: new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel }), vision: true };
   }
 
+  // No internet (and "Offline mode" on): plain conversation goes to a local Ollama model with no tools; anything that needs the Mac or the web waits.
+  async executeOffline(text) {
+    if (needsInternet(text)) return { status: 'done', reply: 'That needs the internet, and I am offline right now. Ask me again when the connection is back.', actions: 0 };
+    const m = this.store.get('settings.model');
+    try {
+      const res = await new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
+      return { status: 'done', reply: (res.text || '').trim() || 'I have no answer for that offline.', actions: 0 };
+    } catch { return { status: 'done', reply: 'I am offline and no local model is running. Start Ollama to chat without the internet.', actions: 0 }; }
+  }
+
+  // Said aloud in the chosen voice, outside a request (for things Relay brings up on its own).
+  speakText(text) { this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en' }); }
+
   async execute(text, requestId) {
+    if (this.offline && flagsMod.isOn(this.store.get('settings'), 'offline')) return this.executeOffline(text);
     // Use the list fetched while you were talking; never wait long for it.
     const runningApps = await Promise.race([this.appsP || this.mac.listApps().catch(() => []), new Promise((r) => setTimeout(() => r(this.lastApps), 500))]);
     const model = this.store.get('settings.model');
@@ -2729,6 +2747,7 @@ class AskController {
     this.emitResult({ id: entry.remote || null, reply, status: res.status });
     this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
     this.store.set('lastReply', reply);
+    if (Date.now() - entry.ts > 60000 && !entry.remote && entry.text) this.onProactive?.({ type: 'job', title: String(entry.text).slice(0, 60), status: res.status === 'done' ? 'done' : 'failed', id: entry.id });
     if (res.status === 'done' && reply && entry.text) {
       this.prevExchange = { request: entry.text, reply };
       if (flagsMod.isOn(this.store.get('settings'), 'memoryV2') && ++this.noticeCount >= 20) { this.noticeCount = 0; this.noticeAboutUser(); }
