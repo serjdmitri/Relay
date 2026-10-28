@@ -135,8 +135,11 @@ header, #top, #bottom { position: relative; z-index: 1; }
   #kbd { width: 46px; height: 46px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
   #kb { gap: 4px; padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: calc(env(safe-area-inset-bottom) + 6px); }
   .kbtext { font-size: 19px; min-height: 2.6em; max-height: 22vh; padding: 3px 4px; }
-  .kbboard { height: min(54vh, 230px); transform: perspective(900px) rotateX(5deg); gap: 5px; }
+  .kbboard { flex: 1; height: auto; margin-top: 0; min-height: 0; transform: perspective(900px) rotateX(4deg); gap: 5px; }
+  #kb { padding-left: 0; padding-right: 0; }
+  .kbhead, .kbtext { margin-left: max(env(safe-area-inset-left), 14px); margin-right: max(env(safe-area-inset-right), 14px); }
+  .kbrow { gap: 5px; justify-content: stretch; }
   .key { font-size: clamp(14px, 4.4vh, 22px); } .key.mod { font-size: clamp(12px, 3.4vh, 17px); }
-  .kbrow .key:not(.mod) { max-width: 8vw; }
+  .kbrow .key:not(.mod) { max-width: none; }
 }
 body.kbopen main { visibility: hidden; } /* nothing from the page shows through the keyboard */
