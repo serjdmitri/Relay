@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Homework helper.** Select an assignment (or open it on screen) and say one of these. Relay reads it on the Mac, has the model do the long work on a stronger model, and saves the result in Documents/Relay Homework (a Word file, PDF or plain text, your choice; code as a folder of files shown in Finder). The spoken reply is one or two sentences. Nothing is ever overwritten (a taken name gets " (2)").
+  - "Help me with this assignment": the requirements, rubric items, likely hard parts and a plan.
+  - "Outline this essay" (or "outline an essay about ..."): thesis options and an outline with where the evidence goes.
+  - "Write a draft" / "write an essay about ..." (add "in my voice"): a complete draft in your voice, with [square brackets] where a detail should be your own. Say "use this as my writing sample" with some of your writing selected, or paste a sample and describe your voice in Settings, so it sounds like you. The default voice description is the one you gave me: conversational but clear, concrete examples, SAT-level words, no em dashes, no stock AI phrases.
+  - "Give me a template for this assignment" / "starter code": the project skeleton with function signatures, docstrings, TODO hints and a few tests, without the working logic.
+  - "Do this assignment" / "complete the whole coding assignment": the complete solution (a working project with README and tests, a full draft, or every step of a problem), with a short "How it works" section so you can explain it in your own words.
+  - "Walk me through this problem": every step with its reason, then one practice problem. "Check my answer": says whether it is right and points at the first wrong step with a hint instead of the answer. "Give me feedback on my essay" (also "proofread my paper"): strengths, then weaknesses in order (thesis, evidence, structure, analysis, comparison, word choice with stronger SAT-level words), quoting your lines.
+  - Settings > General > Homework helper: save as Word, PDF or text; your voice description and writing sample; "Allow whole solutions" (off: "do this assignment" gives a template or outline instead); "Explain what it made".
+  - The assignment text is passed to the model as material, never as instructions. Use it only where your teacher allows AI help.
+  - Not tried on a real Mac: the Word file is made with the Mac's own `textutil` (falls back to PDF, then text if it fails), and the PDF with the same hidden window as the workshop handouts.
+
 ## 0.32.0
 
 - **Codex as the backup when Claude runs out of usage.** Account > "Backup when Claude runs out": sign in to Codex with your ChatGPT account (the button runs Codex's own `codex login`, so your plan is used and no API key is; Relay never sees or stores the login, and a Codex that is signed in with a key does not count). When a request comes back from Claude stopped by its usage limit, Relay notes when the limit resets and finishes that same request with Codex, with no message, no sound and no question: you just get the answer. Later requests go straight to Codex until the reset time, then Claude is tried again by the next request; if it is still limited, that request is finished by Codex and the wait starts over. The reset time is kept across restarts.

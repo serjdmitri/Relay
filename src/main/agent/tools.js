@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, stickies = null, study = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, models = null, drive = null, stickies = null, study = null, homework = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -415,6 +415,26 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         confirm: () => 'Put the last tidy-up back where it was?',
         describe: () => 'Putting the files back',
         run: () => drive.undo()
+      }
+    );
+  }
+
+  // Homework helper: save a written piece as a Word or PDF file, or code as a project folder, in Documents/Relay Homework. Never overwrites.
+  if (homework) {
+    tools.push(
+      {
+        name: 'make_document',
+        description: 'Save a written piece (an essay, outline, draft, walkthrough, feedback, plan) as a document the student can open and edit. Only in homework mode (the request says [Homework]). Give the whole text in markdown (headings with #, lists with -, bold with **). It is saved in Documents/Relay Homework and opened. Never overwrites a file.',
+        input_schema: obj({ title: str('A short title, used as the file name'), markdown: str('The whole document in markdown'), format: str('docx (Word, the default) | pdf | md') }, ['title', 'markdown']),
+        describe: (i) => `Writing ${String(i.title || 'the document').slice(0, 40)}`,
+        run: async (i) => { const r = await homework.saveDocument({ title: i.title, markdown: i.markdown, format: /^(docx|pdf|md)$/.test(i.format) ? i.format : 'docx' }); return `Saved ${r.path.split('/').pop()} (${r.format}) in Documents/Relay Homework and opened it.${r.note ? ` ${r.note}` : ''}`; }
+      },
+      {
+        name: 'save_files',
+        description: 'Save code as a project folder: a folder name and each file with its full content (names like main.py or src/utils.py, up to 40 files). Only in homework mode (the request says [Homework]). It goes in Documents/Relay Homework and is shown in Finder. Never overwrites a folder.',
+        input_schema: obj({ folder: str('The project folder name'), files: { type: 'array', description: 'The files', items: { type: 'object', properties: { name: str('File name or relative path'), content: str('The file content') }, required: ['name', 'content'] } } }, ['folder', 'files']),
+        describe: (i) => `Saving ${String(i.folder || 'the project').slice(0, 40)}`,
+        run: async (i) => { const r = await homework.saveFiles({ folder: i.folder, files: i.files }); return `Saved ${r.files.length} file${r.files.length === 1 ? '' : 's'} (${r.files.slice(0, 6).join(', ')}) in Documents/Relay Homework/${r.path.split('/').pop()} and showed it in Finder.`; }
       }
     );
   }
