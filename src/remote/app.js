@@ -125,16 +125,16 @@
     ask('lock my mac');
   };
 
-  // The typing bar comes and goes with the keyboard button; it goes away again once something is sent.
-  function showTyping(on, focus = true) {
-    $('bar').hidden = !on;
-    $('quick').hidden = on;
+  // The keyboard: a full-screen hologram keyboard instead of the phone's own. What you type shows at the top; Enter sends it and the keyboard goes away.
+  const kb = window.HoloKeyboard({ onSend: (t) => { $('kbd').setAttribute('aria-pressed', 'false'); ask(t); }, onClose: () => $('kbd').setAttribute('aria-pressed', 'false') });
+  function showTyping(on) {
+    if (on) kb.open(); else kb.close();
     $('kbd').setAttribute('aria-pressed', String(on));
-    try { localStorage.setItem('relay-remote-typing', on ? '1' : '0'); } catch {}
-    if (on && focus) setTimeout(() => $('text').focus(), 50); else $('text').blur();
   }
-  $('kbd').onclick = () => showTyping($('bar').hidden);
-  showTyping((() => { try { return localStorage.getItem('relay-remote-typing') === '1'; } catch { return false; } })(), false);
+  $('kbd').onclick = () => showTyping(!kb.isOpen);
+
+  // What was asked stays at the top while the answer comes, and above the answer after it.
+  function showAsked(t) { const a = $('asked'); a.textContent = t || ''; a.hidden = !t; }
 
   function showReply(text) { $('reply').textContent = text || ''; }
 
@@ -196,15 +196,15 @@
     unlockSpeech();
     try {
       showReply('');
-      line(t, true);
+      showAsked(t);
+      line('');
       setMode('working');
       const r = await api('/api/ask', { text: t });
       waiting = r.id;
     } catch (e) { waiting = null; setMode('idle'); line(e.message); }
   }
   for (const b of document.querySelectorAll('#quick button')) b.onclick = () => ask(b.dataset.say);
-  $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value; $('text').value = ''; showTyping(false); ask(v); };
-
+  
   let unlocked = false;
   function unlockSpeech() { // iOS only lets speech start after a tap; a silent word on the first tap opens it
     if (unlocked || !('speechSynthesis' in window)) return;

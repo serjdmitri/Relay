@@ -30,6 +30,7 @@
     <button id="gear" aria-label="Settings">&#9881;</button>
   </header>
   <div id="top">
+    <div id="asked" hidden></div>
     <ul id="tasks"></ul>
     <div id="agents"></div>
     <div id="reply"></div>
@@ -53,10 +54,6 @@
       <button data-say="end focus mode">End focus</button>
       <button data-say="screen off">Screen off</button>
     </div>
-    <form id="bar" autocomplete="off" hidden>
-      <input id="text" type="text" enterkeyhint="send" placeholder="Ask Relay" autocapitalize="sentences">
-      <button id="send" type="submit" aria-label="Send">&#8593;</button>
-    </form>
     <button id="lock" class="open" type="button" aria-label="Lock my Mac">
       <svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="10" y="21" width="28" height="21" rx="5" fill="currentColor" fill-opacity=".16"/>
@@ -74,6 +71,7 @@
     <div id="support"></div>
   </aside>
 </main>
+<script src="/holokb.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

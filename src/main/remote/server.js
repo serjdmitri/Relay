@@ -9,7 +9,7 @@ const { isPrivateAddress } = require('./auth');
 
 const TYPES = { '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
-const PAGES = { '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
+const PAGES = { '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
