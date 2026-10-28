@@ -12,6 +12,7 @@
   - Settings > General > Homework helper: save as Word, PDF or text; your voice description and writing sample; "Allow whole solutions" (off: "do this assignment" gives a template or outline instead); "Explain what it made".
   - The assignment text is passed to the model as material, never as instructions. Use it only where your teacher allows AI help.
   - Not tried on a real Mac: the Word file is made with the Mac's own `textutil` (falls back to PDF, then text if it fails), and the PDF with the same hidden window as the workshop handouts.
+- **Answers stay on screen until you dismiss them.** Settings > General > "Keep answers on screen until I dismiss them" (on). An answer, and the picture card that comes with it, now stays up until you say "ok" (also "okay", "thanks", "got it", "close", "that's all"), press Esc, or ask the next thing. Before, the answer went after a few seconds and the card after 30. When an answer is up and you asked it by voice, Relay keeps listening for up to 25 seconds so "ok" can be heard (after that, "Hey Jarvis, ok" or Esc still work). Saying "ok" closes it silently: no reply, no sound. Short replies to quick commands ("Paused", "Volume 40%") still go by themselves, answers asked from the phone or by a schedule are not held, and an answer you walked away from closes after ten minutes. While a quiz or a checklist is running, "ok" and "got it" keep their normal meaning there.
 
 ## 0.32.0
 
