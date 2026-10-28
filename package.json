@@ -49,6 +49,10 @@
       {
         "from": "native/build/relay-ax",
         "to": "native/relay-ax"
+      },
+      {
+        "from": "native/build/relay-embed",
+        "to": "native/relay-embed"
       }
     ],
     "npmRebuild": false,

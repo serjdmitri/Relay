@@ -18,6 +18,7 @@ const { PluginManager } = require('./plugins');
 const { PanelHub, approvalText } = require('./panels/hub');
 const { Sampler } = require('./panels/sources');
 const { PanelWindows } = require('./panelWindow');
+const { NotesService } = require('./notes/service');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -56,7 +57,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -158,6 +159,7 @@ function publicState() {
     version: app.getVersion(),
     flagList: flagsMod.offered(),
     pluginList: pluginMgr?.list() || [],
+    notesList: notesSvc?.status() || [],
     inboundInfo: inbound?.status() || { running: false, paired: false },
     extensionPath: extensionPath()
   };
@@ -469,6 +471,22 @@ function registerIpc() {
   ipcMain.handle('inbound:unpair', () => { inbound?.unpair(); broadcast(); return { ok: true }; });
 
 
+
+  // ----- Ask my notes -----
+  ipcMain.handle('notes:status', () => notesSvc?.status() || []);
+  ipcMain.handle('notes:add', async () => {
+    const r = await dialog.showOpenDialog({ title: 'Choose a folder for Ask my notes', properties: ['openDirectory'], defaultPath: app.getPath('documents') });
+    if (r.canceled || !r.filePaths[0]) return { ok: false };
+    try { const p = notesSvc.addFolder(r.filePaths[0]); broadcast(); return { ok: true, path: p }; } catch (e) { return { ok: false, error: e.message }; }
+  });
+  ipcMain.handle('notes:remove', (_e, p) => { notesSvc.removeFolder(String(p)); broadcast(); return { ok: true }; });
+  ipcMain.handle('notes:index', async (_e, p) => {
+    const folder = String(p);
+    if (!notesSvc.folders().includes(folder)) return { ok: false, error: 'That folder is not set up.' };
+    const run = async (force) => { try { const r = await notesSvc.reindex(folder, { force }); broadcast(); return { ok: true, ...r }; } catch (e) { if (e.tooBig && !force) { const ok = (await dialog.showMessageBox({ type: 'question', buttons: ['Index it', 'Cancel'], defaultId: 1, cancelId: 1, message: 'This folder is large', detail: `${e.message} Reading it can take a while. Index it anyway?` })).response === 0; return ok ? run(true) : { ok: false, error: 'Not indexed.' }; } return { ok: false, error: e.message }; } };
+    return run(false);
+  });
+
   // ----- Plugins -----
   ipcMain.handle('plugins:list', () => pluginMgr?.list() || []);
   ipcMain.handle('plugins:inspect', async (_e, input) => { try { return { ok: true, ...(await pluginMgr.inspect(String(input || ''))) }; } catch (e) { return { ok: false, error: e.message }; } });
@@ -497,6 +515,7 @@ function registerIpc() {
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
+      notes: () => ({ on: flagsMod.isOn(store.get('settings'), 'folderQa'), folders: notesSvc?.status() || [], noEmbed: !!notesSvc?.noEmbed }),
       plugins: () => ({ on: flagsMod.isOn(store.get('settings'), 'plugins'), list: pluginMgr?.list() || [], sandbox: !!pluginMgr?.sandbox }),
       imessage: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), fullDisk: fullDisk(), ...(inbound?.status() || {}) }),
       _signing: st
@@ -967,6 +986,13 @@ app.whenReady().then(() => {
   });
   setInterval(async () => { if (panelHub.panels.size) batteryNow = await panelSampler.sample('battery').catch(() => batteryNow); }, 60000);
   ask.panelHub = panelHub;
+  // Ask my notes
+  const embedBin = app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-embed') : path.join(__dirname, '../../native/build/relay-embed');
+  notesSvc = new NotesService({
+    store, root: path.join(app.getPath('home'), 'Relay', 'index'), embedBin: require('fs').existsSync(embedBin) ? embedBin : '',
+    run: (file, args, input) => new Promise((res, rej) => { const c = execFile(file, args, { timeout: 60000, maxBuffer: 64e6 }, (e, out) => (e ? rej(Object.assign(e, { code: e.code })) : res(String(out)))); if (input !== undefined) { c.stdin.on('error', () => {}); c.stdin.end(input); } })
+  });
+  ask.notesService = notesSvc;
   // The macOS sandbox is used only if a trivial profile really starts on this Mac.
   execFile('/usr/bin/sandbox-exec', ['-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true'], { timeout: 3000 }, (err) => { pluginMgr.sandbox = !err; });
   syncInbound();

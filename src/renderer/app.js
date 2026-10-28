@@ -1002,6 +1002,26 @@ const PAGES = {
       ex.append(row);
     }
     if (ex.children.length) c.append(ex, h('<div class="d" style="margin:4px 4px 14px">New features start off. Turn one on to try it; turn it off again any time.</div>'));
+    if (S.settings.flags?.folderQa) {
+      c.append(h('<div class="section-title">Ask my notes</div>'));
+      const nl = S.notesList || [];
+      const box = h('<div class="card"></div>');
+      if (!nl.length) box.append(h('<div class="row"><div class="grow"><div class="d">No folders yet. Add a folder of notes, documents or PDFs, then ask “what did I write about …”. Files named like passwords or keys, and hidden folders, are never read.</div></div></div>'));
+      for (const f of nl) {
+        const row = h(`<div class="row" style="align-items:flex-start"><div class="grow"><div class="t">${esc(f.path.split('/').pop())}</div><div class="d">${esc(f.path)}</div><div class="d">${f.indexing ? 'Indexing…' : f.chunks ? `${f.files} files, ${f.chunks} passages, searched by ${f.mode === 'meaning' ? 'meaning' : 'words'}${f.skipped ? `, ${f.skipped} without readable text` : ''}${f.truncated ? '. Too big: only the first part is searchable' : ''}.` : 'Not indexed yet.'}</div><div class="d warn" hidden></div></div><div style="display:flex;gap:8px"><button class="btn" data-ni="${esc(f.path)}">${f.chunks ? 'Update' : 'Index now'}</button><button class="btn" data-nr="${esc(f.path)}">Remove</button></div></div>`);
+        row.onclick = async (e) => {
+          const t = e.target.dataset;
+          if (t.nr) relay.notesRemove(t.nr);
+          else if (t.ni) { e.target.disabled = true; e.target.textContent = 'Indexing…'; const r = await relay.notesIndex(t.ni); if (!r.ok) { const w = $('.warn', row); w.textContent = r.error || 'Could not index it.'; w.hidden = false; e.target.disabled = false; e.target.textContent = 'Index now'; } }
+        };
+        box.append(row);
+      }
+      c.append(box);
+      const addb = h('<div class="row" style="margin:12px 0"><button class="btn primary" id="nadd">Add a folder</button><div class="d warn" id="nerr"></div></div>');
+      $('#nadd', addb).onclick = async () => { const r = await relay.notesAdd(); if (r && r.error) $('#nerr', addb).textContent = r.error; };
+      c.append(addb);
+      c.append(h('<div class="d" style="margin:4px 4px 14px">Everything is searched on this Mac. Only the few passages that answer a question are sent to Claude, as part of that question.</div>'));
+    }
     if (S.settings.flags?.plugins) {
       c.append(h('<div class="section-title">Plugins</div>'));
       const pl = S.pluginList || [];
