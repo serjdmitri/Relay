@@ -222,7 +222,7 @@ function friendlyError(text) {
 // One Claude process, started early and reused for a whole request: start it while you are still talking,
 // send the request when it is ready, switch model on the fly, and keep the conversation if it has to move up.
 class ClaudeSession {
-  constructor({ claudePath, host, system, tools, model = 'haiku', spawnFn = spawn, timeoutMs = 5 * 60 * 1000 }) {
+  constructor({ claudePath, host, system, tools, model = 'haiku', fast = false, spawnFn = spawn, timeoutMs = 5 * 60 * 1000 }) {
     this.host = host;
     this.model = model;
     this.timeoutMs = timeoutMs;
@@ -241,7 +241,7 @@ class ClaudeSession {
     this.buf = '';
     this.stderr = '';
     this.startedAt = Date.now();
-    const child = spawnFn(claudePath, buildArgs({ model, system, config: host.config() }), { cwd: os.tmpdir(), env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnFn(claudePath, buildArgs({ model, system, config: host.config() }), { cwd: os.tmpdir(), env: childEnv(fast ? { MAX_THINKING_TOKENS: '0' } : {}), stdio: ['pipe', 'pipe', 'pipe'] }); // fast: no extended thinking, which is most of the wait on ordinary requests
     this.child = child;
     child.stdout.on('data', (d) => this._onData(d.toString()));
     child.stderr.on('data', (d) => (this.stderr += d));

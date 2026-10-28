@@ -260,3 +260,22 @@ test('escalationReason: when to move up and when to leave the answer alone', () 
   assert.equal(escalationReason({ ...ok, status: 'failed', fatal: true }), null);
   assert.equal(escalationReason({ status: 'done', reply: "I can't say.", actions: 2, toolErrors: 0 }), null);
 });
+
+test('fast mode turns extended thinking off for the Claude process, and normal mode leaves it alone', () => {
+  const seen = [];
+  const spawnFn = (file, args, opts) => { seen.push(opts.env.MAX_THINKING_TOKENS); const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); c.stdin = new PassThrough(); c.kill = () => {}; return c; };
+  const host = { run: null, config: () => ({ mcpServers: {} }) };
+  new ClaudeSession({ claudePath: '/x/claude', host, system: 's', tools: [], spawnFn, fast: true });
+  new ClaudeSession({ claudePath: '/x/claude', host, system: 's', tools: [], spawnFn });
+  assert.deepEqual(seen, ['0', process.env.MAX_THINKING_TOKENS]); // normal mode: whatever the environment already had
+});
+
+test('the system prompt: fast mode does not ask for a re-check after every action, and both ask for tool calls together', () => {
+  const { buildSystemPrompt } = require('../src/main/agent/system-prompt');
+  const fast = buildSystemPrompt({ fast: true, withContext: false });
+  const slow = buildSystemPrompt({ withContext: false });
+  assert.match(slow, /verify it worked/);
+  assert.ok(!/verify it worked/.test(fast));
+  assert.match(fast, /Be quick/);
+  for (const p of [fast, slow]) assert.match(p, /together in one step/);
+});

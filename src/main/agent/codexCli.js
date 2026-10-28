@@ -74,11 +74,12 @@ function codexLogout(codexPath) {
 // ---- running one request ----
 
 // Codex gets Relay's tools as an MCP server. Its own file tools are held to a read-only sandbox, nothing is remembered, and the user's own Codex config is left out.
-function buildArgs({ port, outFile, cwd }) {
+function buildArgs({ port, outFile, cwd, fast = false }) {
   return [
     'exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules',
     '-s', 'read-only', '-C', cwd,
     '-c', 'approval_policy="never"',
+    ...(fast ? ['-c', 'model_reasoning_effort="low"'] : []), // fast: little reasoning before acting
     '-c', `mcp_servers.relay.url="http://127.0.0.1:${port}/mcp"`,
     '-c', 'mcp_servers.relay.bearer_token_env_var="RELAY_MCP_TOKEN"',
     '-o', outFile,
@@ -102,7 +103,7 @@ function parseEvent(line) {
 }
 
 // host: an McpHost (its own, started). run: { tools, confirm, onEvent, signal }. Returns { status, reply, actions, usage, limit }.
-async function runCodex({ codexPath, host, system = '', text, tools, confirm, onEvent = () => {}, signal, spawnFn = spawn, timeoutMs = 5 * 60 * 1000, tmpDir = os.tmpdir() }) {
+async function runCodex({ codexPath, host, system = '', text, tools, confirm, onEvent = () => {}, signal, fast = false, spawnFn = spawn, timeoutMs = 5 * 60 * 1000, tmpDir = os.tmpdir() }) {
   const dir = fs.mkdtempSync(path.join(tmpDir, 'relay-codex-'));
   const outFile = path.join(dir, 'last.txt');
   const counter = { actions: 0 };
@@ -110,7 +111,7 @@ async function runCodex({ codexPath, host, system = '', text, tools, confirm, on
   const prompt = `${system ? `${system}\n\n` : ''}${RULES}\n\n${text}`;
   return new Promise((resolve) => {
     let settled = false, last = '', usage = { in: 0, out: 0, model: 'codex' }, error = '', buf = '', errText = '';
-    const child = spawnFn(codexPath, buildArgs({ port: host.port, outFile, cwd: dir }), { cwd: dir, env: codexEnv({ RELAY_MCP_TOKEN: host.token }), stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnFn(codexPath, buildArgs({ port: host.port, outFile, cwd: dir, fast }), { cwd: dir, env: codexEnv({ RELAY_MCP_TOKEN: host.token }), stdio: ['pipe', 'pipe', 'pipe'] });
     const done = (res) => {
       if (settled) return;
       settled = true;
