@@ -600,7 +600,7 @@ class AskController {
   }
 
   remoteSnapshot() {
-    return { state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view() };
+    return { state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view(), locked: !!this.lockWatch?.locked };
   }
 
   remoteRecent(n = 8) {

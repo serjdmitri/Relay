@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification, nativeTheme, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -20,6 +20,7 @@ const { HoloLibrary } = require('./holo/library');
 const { nightlyDue, dayKey } = require('./drive/nightly');
 const uiText = require('../renderer/ui-es');
 const { AssistPanel } = require('./assistPanel');
+const { LockWatch } = require('./lockState');
 const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
 const { Timers, humanDuration } = require('./timers');
@@ -747,6 +748,13 @@ app.whenReady().then(() => {
   ask.scheduler = new Scheduler({ store });
   ask.cardPanel = cardPanel;
   ask.assistPanel = assistPanel;
+  // Is the Mac locked: the phone page shows it as a padlock. macOS tells us when it locks and unlocks; a slow check catches the rest.
+  const lockWatch = new LockWatch({ exec: (cmd, args) => new Promise((resolve, reject) => require('child_process').execFile(cmd, args, { timeout: 4000 }, (e, out) => (e ? reject(e) : resolve(String(out))))), onChange: () => ask.statusChanged() });
+  ask.lockWatch = lockWatch;
+  powerMonitor.on('lock-screen', () => lockWatch.set(true));
+  powerMonitor.on('unlock-screen', () => lockWatch.set(false));
+  lockWatch.refresh();
+  setInterval(() => { if (store.get('settings.remote.enabled')) lockWatch.refresh(); }, 8000);
   ask.holos = holos;
   ask.stickies = new Stickies({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } });
   stickyPanel = new StickyPanel({ stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });

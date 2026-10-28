@@ -99,6 +99,7 @@
   function line(text, dim) { $('line').textContent = text || ''; $('line').classList.toggle('dim', !!dim); }
 
   function applyStatus(s) {
+    if ('locked' in s) setLocked(!!s.locked);
     serverState = s.state || 'idle';
     $('tasks').replaceChildren(...(s.tasks || []).map((t) => { const li = document.createElement('li'); li.className = t.status; li.textContent = t.text; return li; }));
     $('agents').replaceChildren(...(s.agents || []).filter((a) => a.status === 'running').map((a) => { const d = document.createElement('div'); d.className = 'ag'; const b = document.createElement('b'); b.textContent = a.task; const sp = document.createElement('span'); sp.textContent = `${a.step}…`; d.append(b, sp); return d; }));
@@ -107,6 +108,33 @@
     setMode(working ? 'working' : 'idle');
     if (working && s.label) line(`${s.label}…`, true);
   }
+
+  // The big padlock: open while the Mac is open, closed while it is locked. Tapping it locks the Mac; unlocking is only done at the Mac itself.
+  let macLocked = false;
+  function setLocked(on) {
+    macLocked = on;
+    const b = $('lock');
+    b.className = on ? 'locked' : 'open';
+    b.setAttribute('aria-label', on ? 'The Mac is locked' : 'Lock my Mac');
+    $('locklbl').textContent = on ? 'Mac is locked' : 'Lock my Mac';
+  }
+  $('lock').onclick = () => {
+    if (macLocked) { $('locklbl').textContent = 'Unlock it at the Mac'; setTimeout(() => setLocked(macLocked), 2000); return; }
+    $('lock').classList.add('pending');
+    setTimeout(() => $('lock').classList.remove('pending'), 4000);
+    ask('lock my mac');
+  };
+
+  // The typing bar comes and goes with the keyboard button; it goes away again once something is sent.
+  function showTyping(on, focus = true) {
+    $('bar').hidden = !on;
+    $('quick').hidden = on;
+    $('kbd').setAttribute('aria-pressed', String(on));
+    try { localStorage.setItem('relay-remote-typing', on ? '1' : '0'); } catch {}
+    if (on && focus) setTimeout(() => $('text').focus(), 50); else $('text').blur();
+  }
+  $('kbd').onclick = () => showTyping($('bar').hidden);
+  showTyping((() => { try { return localStorage.getItem('relay-remote-typing') === '1'; } catch { return false; } })(), false);
 
   function showReply(text) { $('reply').textContent = text || ''; }
 
@@ -175,7 +203,7 @@
     } catch (e) { waiting = null; setMode('idle'); line(e.message); }
   }
   for (const b of document.querySelectorAll('#quick button')) b.onclick = () => ask(b.dataset.say);
-  $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value; $('text').value = ''; $('text').blur(); ask(v); };
+  $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value; $('text').value = ''; showTyping(false); ask(v); };
 
   let unlocked = false;
   function unlockSpeech() { // iOS only lets speech start after a tap; a silent word on the first tap opens it
@@ -195,7 +223,7 @@
   let heard = '';
   let blocked = false;
   function startTalk() {
-    if (!canTalk) { $('text').focus(); return; }
+    if (!canTalk) { showTyping(true); return; }
     unlockSpeech();
     speechSynthesis?.cancel?.();
     heard = '';
@@ -226,7 +254,7 @@
   $('stop').onclick = () => { api('/api/stop', {}).catch(() => {}); waiting = null; setMode('idle'); line('Stopped', true); $('menu').hidden = true; };
   $('unpair').onclick = () => { if (confirm('Unpair this phone?')) unpair(); };
   $('support').textContent = canTalk ? (window.isSecureContext ? 'Hold the reactor to talk.' : 'Hold the reactor to talk. If it says the microphone is blocked, this address is not secure enough: use the Tailscale https link, or type.') : 'This browser has no speech recognition. Open Relay in Safari to hold and talk, or type and use the keyboard microphone.';
-  $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap, then use the keyboard mic';
+  $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap the keyboard button';
 
   // ---------- start ----------
   async function start() {

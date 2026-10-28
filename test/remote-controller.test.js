@@ -63,7 +63,9 @@ test('the status snapshot and recent list are what the phone shows', () => {
   const c = make();
   c.workView = { label: 'Opening Notes' };
   c.tasks = [{ id: '1', text: 'x', status: 'running' }];
-  assert.deepEqual(c.remoteSnapshot(), { state: 'idle', label: 'Opening Notes', question: '', tasks: [{ id: '1', text: 'x', status: 'running' }], agents: [] });
+  assert.deepEqual(c.remoteSnapshot(), { state: 'idle', label: 'Opening Notes', question: '', tasks: [{ id: '1', text: 'x', status: 'running' }], agents: [], locked: false });
+  c.lockWatch = { locked: true };
+  assert.equal(c.remoteSnapshot().locked, true, 'the phone shows the lock closed');
   assert.deepEqual(c.remoteRecent(1), [{ text: 'a', reply: 'b', status: 'done', ts: 1 }]);
   c._state = 'confirm';
   c.confirmQuestion = 'Send it?';
