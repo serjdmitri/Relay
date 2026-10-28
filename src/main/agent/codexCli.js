@@ -106,7 +106,7 @@ async function runCodex({ codexPath, host, system = '', text, tools, confirm, on
   const dir = fs.mkdtempSync(path.join(tmpDir, 'relay-codex-'));
   const outFile = path.join(dir, 'last.txt');
   const counter = { actions: 0 };
-  host.run = { tools, confirm: confirm || (async () => false), onEvent, signal, counter };
+  host.run = { tools, exposed: tools.exposed || null, confirm: confirm || (async () => false), onEvent, signal, counter };
   const prompt = `${system ? `${system}\n\n` : ''}${RULES}\n\n${text}`;
   return new Promise((resolve) => {
     let settled = false, last = '', usage = { in: 0, out: 0, model: 'codex' }, error = '', buf = '', errText = '';
