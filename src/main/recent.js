@@ -159,7 +159,7 @@ class RecentPanel {
 
   place() {
     if (!this.strip) return;
-    const h = Math.min(this.panelH, this.strip.height - 40);
+    const h = Math.min(this.panelH, this.strip.height - 100); // room above and below for the curved flares
     this.rect = { x: this.strip.x, y: this.strip.y + Math.round((this.strip.height - h) / 2), width: WIDTH - 24, height: h }; // flush with the screen edge, joined to it
   }
 
