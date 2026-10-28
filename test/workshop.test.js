@@ -85,3 +85,62 @@ test('turning workshop mode on speaks replies and off puts that back as it was; 
   assert.equal(data['settings.speakReplies'], false);
   assert.match((await c.workshopCommand({ type: 'workshop-off' })).reply, /was not on/);
 });
+
+const { quizCards, handoutHtml, KIT } = require('../src/main/workshop');
+const { Quiz } = require('../src/main/study');
+
+test('the phrases for the quiz and the handout', () => {
+  const P = parseWorkshopCommand;
+  for (const t of ['run a quiz on the demo I just showed', 'quiz the class', 'quiz the students', 'give a quiz on this demo', 'start a quick quiz on the demo']) assert.deepEqual(P(t), { type: 'workshop-quiz', key: null }, t);
+  assert.deepEqual(P('quiz the class on phishing'), { type: 'workshop-quiz', key: 'phishing' });
+  assert.deepEqual(P('quiz us on how a firewall works'), { type: 'workshop-quiz', key: 'firewall' });
+  assert.deepEqual(P('print the handout'), { type: 'workshop-handout', key: null });
+  assert.deepEqual(P('make a handout for how encryption works'), { type: 'workshop-handout', key: 'encryption' });
+  assert.deepEqual(P('make a printable handout for ddos'), { type: 'workshop-handout', key: 'ddos' });
+  assert.deepEqual(P('print this demo'), { type: 'workshop-handout', key: null });
+  for (const t of ['quiz me on photosynthesis', 'quiz me', 'print this page', 'make a handout for the mitochondria']) assert.equal(P(t), null, t);
+});
+
+test('every demo has a kit: four questions a student can answer by saying the key word, a handout that fits one page, and the safety line', () => {
+  assert.deepEqual(Object.keys(KIT).sort(), Object.keys(DEMOS).sort());
+  for (const key of Object.keys(DEMOS)) {
+    const cards = quizCards(key);
+    assert.equal(cards.length, 4, key);
+    const quiz = new Quiz(cards);
+    for (const c of cards) {
+      assert.ok(c.answer.split(/\s+/).length <= 2, `${key}: "${c.answer}" should be one or two words`);
+      assert.match(quiz.attempt(`it is the ${c.answer}`).reply, /^Correct/, `${key}: ${c.answer}`);
+    }
+    const d = buildDemo(key);
+    const html = handoutHtml(key, { title: d.title, explain: d.explain, date: 'October 28, 2026' });
+    assert.match(html, /@page \{ size: letter/);
+    assert.match(html, /Never try these on real people or systems/);
+    assert.equal((html.match(/class="line"/g) || []).length, 4, 'a line to write each answer on');
+    assert.ok(KIT[key].defend.length >= 3 && KIT[key].vocab.length >= 3);
+    assert.doesNotMatch(html, /<script/i);
+  }
+  assert.equal(handoutHtml('nope', { title: 'x', explain: 'y' }), null);
+  assert.match(handoutHtml('hashing', { title: 'A <b>title</b>', explain: 'x' }), /A &lt;b&gt;title&lt;\/b&gt;/, 'text is escaped');
+});
+
+test('the quiz and the handout use the last demo shown, ask for one first, and write the handout to a folder and open it', async () => {
+  const os = require('node:os'), fs = require('node:fs'), path = require('node:path');
+  const { c } = controller();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'handouts-'));
+  const opened = [];
+  Object.assign(c, { handoutsDir: dir, mac: { openPath: async (p) => { opened.push(p); } }, startQuiz(o) { c.quiz = new Quiz(o.cards); return 'ok'; }, renderPdf: async (html, out) => fs.writeFileSync(out, '%PDF fake') });
+  assert.match((await c.workshopCommand({ type: 'workshop-quiz', key: null })).reply, /Show a demo first/);
+  await c.workshopCommand({ type: 'workshop-demo', key: 'firewall' });
+  assert.equal(c.lastDemo, 'firewall');
+  const q = await c.workshopCommand({ type: 'workshop-quiz', key: null });
+  assert.match(q.reply, /Question 1 of 4: What does a firewall check/);
+  assert.equal(c.quizFresh, false, 'the first question is not asked twice');
+  const h = await c.workshopCommand({ type: 'workshop-handout', key: 'encryption' });
+  assert.match(h.reply, /handout for how encryption works is open/i);
+  assert.ok(opened[0].endsWith('How encryption works.pdf'));
+  assert.ok(fs.readFileSync(path.join(dir, 'How encryption works.html'), 'utf8').includes('Check yourself'));
+  c.renderPdf = async () => { throw new Error('no window'); };
+  const h2 = await c.workshopCommand({ type: 'workshop-handout', key: null });
+  assert.match(h2.reply, /in your browser; use Print/);
+  assert.ok(opened[1].endsWith('How a firewall works.html'));
+});
