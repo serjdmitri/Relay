@@ -654,6 +654,12 @@ const PAGES = {
         $('#bname', row).onchange = (e) => relay.set('settings.briefing.name', e.target.value.trim().slice(0, 30));
         return row;
       })(),
+      (() => {
+        const r = (S.settings.robotics || {});
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Robotics log sheet</div><div class="d">Say “log this, drifted left on the ramp” and Relay adds a line (time, note) to this Google Sheet. Paste the sheet's link. Needs a connected Google account. Also: “what devices are connected”, “what's on my SD card”, and “start the match day checklist”.</div></div><input class="field" id="rsheet" style="width:230px" placeholder="Google Sheet link" value="${r.sheetId ? 'Sheet set (ends ' + esc(r.sheetId.slice(-6)) + ')' : ''}"></div>`);
+        $('#rsheet', row).onchange = (e) => { const m = e.target.value.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/); relay.set('settings.robotics.sheetId', m ? m[1] : ''); };
+        return row;
+      })(),
       toggleRow('Clipboard history', 'Remembers the text you copy, so you can ask “what did I copy earlier?”. Kept only in memory (never saved to disk, gone when Relay quits), for a day. Never kept: anything a password manager marks as secret, or that looks like a password, key, card or social security number. Say “clear my clipboard history” any time.', 'settings.clipboardHistory.enabled'),
       toggleRow('Workshop mode', 'For teaching younger students: Relay speaks slowly and calmly, keeps answers short and simple, and can show holograms of how attacks and defences work (“show me how phishing works”: phishing, man in the middle, DDoS, SQL injection, password hashing, encryption, firewalls). Say “workshop mode” to turn it on, “end workshop mode” to turn it off.', 'settings.workshop.enabled'),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
