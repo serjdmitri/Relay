@@ -19,6 +19,8 @@ const { PanelHub, approvalText } = require('./panels/hub');
 const { Sampler } = require('./panels/sources');
 const { PanelWindows } = require('./panelWindow');
 const { NotesService } = require('./notes/service');
+const { Alerts, parseCalendar, calendarEvents, batteryEvent } = require('./proactive');
+const { Connectivity } = require('./connectivity');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -57,7 +59,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc;
+let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -160,6 +162,7 @@ function publicState() {
     flagList: flagsMod.offered(),
     pluginList: pluginMgr?.list() || [],
     notesList: notesSvc?.status() || [],
+    offlineNow: !!ask?.offline,
     inboundInfo: inbound?.status() || { running: false, paired: false },
     extensionPath: extensionPath()
   };
@@ -507,6 +510,8 @@ function registerIpc() {
   };
   const doctorEnv = async () => {
     const st = await codesign();
+    const offlineOn = flagsMod.isOn(store.get('settings'), 'offline');
+    const ollamaUp = offlineOn ? await fetch(`${store.get('settings.model.ollamaUrl')}/api/tags`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false) : null;
     const free = await new Promise((res) => execFile('/bin/df', ['-m', app.getPath('userData')], { timeout: 2000 }, (e, out) => res(e ? null : Number(String(out).trim().split('\n').pop().trim().split(/\s+/)[3]) || null)));
     return {
       claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
@@ -515,6 +520,7 @@ function registerIpc() {
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
+      offline: () => ({ on: offlineOn, online: connectivity ? connectivity.online : true, ollama: ollamaUp }),
       notes: () => ({ on: flagsMod.isOn(store.get('settings'), 'folderQa'), folders: notesSvc?.status() || [], noEmbed: !!notesSvc?.noEmbed }),
       plugins: () => ({ on: flagsMod.isOn(store.get('settings'), 'plugins'), list: pluginMgr?.list() || [], sandbox: !!pluginMgr?.sandbox }),
       imessage: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), fullDisk: fullDisk(), ...(inbound?.status() || {}) }),
@@ -986,6 +992,32 @@ app.whenReady().then(() => {
   });
   setInterval(async () => { if (panelHub.panels.size) batteryNow = await panelSampler.sample('battery').catch(() => batteryNow); }, 60000);
   ask.panelHub = panelHub;
+
+  // Speaking up on its own, and offline mode
+  const alerts = new Alerts();
+  const surface = (event) => {
+    if (!flagsMod.isOn(store.get('settings'), 'proactive')) return;
+    const o = store.get('settings.proactive') || {};
+    const d = alerts.decide(event, { mode: o.mode, quiet: o.quiet, busy: !!ask.meeting?.active || ask.state === 'listening' || !!ask.speaker?.speaking, away: !!ask.lockWatch?.locked });
+    if (d.how === 'drop') return;
+    if (Notification.isSupported()) new Notification({ title: 'Relay', body: d.text, silent: d.how !== 'speak' || d.quiet }).show();
+    if (d.how === 'speak') ask.speakText(d.text);
+    if (d.phone) ask.phone?.send({ title: 'Relay', body: d.text }).catch(() => {});
+  };
+  ask.onProactive = surface;
+  let tickN = 0;
+  setInterval(async () => {
+    if (!flagsMod.isOn(store.get('settings'), 'proactive')) return;
+    const b = batteryEvent(await panelSampler.sample('battery').catch(() => null));
+    if (b) surface(b);
+    if (tickN++ % 5 === 0) { try { for (const e of calendarEvents(parseCalendar(await ask.mac.calendarEvents(1)))) surface(e); } catch { /* no calendar access: Doctor and Permissions say so */ } }
+  }, 60000);
+  connectivity = new Connectivity({
+    probe: () => Promise.any(['https://api.anthropic.com', 'https://www.apple.com/library/test/success.html'].map((u) => fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).then(() => true))).catch(() => false),
+    onChange: (online) => { ask.offline = !online; broadcast(); }
+  });
+  setInterval(() => { if (flagsMod.isOn(store.get('settings'), 'offline')) connectivity.check(); else if (ask.offline) { ask.offline = false; connectivity.online = true; } }, 30000);
+
   // Ask my notes
   const embedBin = app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-embed') : path.join(__dirname, '../../native/build/relay-embed');
   notesSvc = new NotesService({

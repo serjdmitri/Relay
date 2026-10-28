@@ -18,6 +18,7 @@ const DEFAULTS = {
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead
     homework: { full: true, explain: true, format: 'docx', voiceSample: '', voiceStyle: '' }, // the homework helper: allow whole solutions, add a "How it works" section, Word | PDF | text, a sample of your writing and how you describe your voice
     flags: {}, // experimental features you turned on (see flags.js); each is off by default
+    proactive: { mode: 'silent-urgent', quiet: { on: true, from: 22, to: 7 } }, // Relay speaking up on its own: silent | silent-urgent | speak, and quiet hours
     notes: { folders: [] }, // folders "ask my notes" may read (Settings > Doctor > Ask my notes)
     inbound: { unanswered: 'expire' }, // a question nobody answers (on the Mac or by text): expire after 30 minutes | reask (hourly, 3 times) | forever
     doctor: { fix: 'ask' }, // when Relay Doctor finds something fixable: ask | small (small fixes run themselves) | never
