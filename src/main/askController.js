@@ -45,6 +45,7 @@ const { shouldFollowUp } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
+const { guardTools, agentSafe } = require('./homeGuard');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
@@ -771,7 +772,7 @@ class AskController {
   // What a background agent may use: reading and writing, never the screen, and nothing that sends or deletes (so nothing needs asking).
   agentTools(vision) {
     const ok = new Set(['notion_search', 'notion_read', 'notion_create', 'notion_append', 'gmail_search', 'gmail_read', 'gmail_draft', 'gcal_events', 'gcal_create', 'web_search', 'fetch_page', 'notes_create', 'notes_list', 'notes_read', 'notes_append', 'reminders_add', 'reminders_list', 'calendar_events', 'list_folder', 'read_file']);
-    return this.makeTools(vision).filter((t) => ok.has(t.name) && !t.confirm);
+    return this.makeTools(vision).filter((t) => ok.has(t.name)).map((t) => agentSafe(t)).filter(Boolean);
   }
 
   async runAgentTask(a, signal) {
@@ -1026,7 +1027,8 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return [...this.baseTools(vision), ...this.connectorTools()];
+    const base = guardTools(this.baseTools(vision), { home: os.homedir(), enabled: () => this.store.get('settings.homeOnly') !== false });
+    return [...base, ...this.connectorTools()];
   }
 
   baseTools(vision) {
