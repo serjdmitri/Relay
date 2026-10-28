@@ -51,6 +51,8 @@ const devices = require('./devices');
 const driveInspect = require('./driveInspect');
 const robotics = require('./robotics');
 const recap = require('./recap');
+const assist = require('./assist');
+const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
 const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
 const { translateCommand, localizeReply } = require('./i18n');
 const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
@@ -204,7 +206,17 @@ class AskController {
       log: console
     });
     // Meeting notes: listens in short stretches until you say "Jarvis, end the meeting"; then the model writes the Note and the reminders.
-    this.meeting = new MeetingRecorder({ speech, getDevice: () => this.store.get('settings.speech.input') || 'auto', onStop: (r) => this.meetingEnded(r), log: console });
+    this.meeting = new MeetingRecorder({
+      speech, getDevice: () => this.store.get('settings.meeting.input') || this.store.get('settings.speech.input') || 'auto', onStop: (r) => this.meetingEnded(r), log: console,
+      onText: (t) => { if (this.assistOn) this.watcher.push(t); }, onSegment: (t) => { if (this.assistOn) this.watcher.flush(t); }
+    });
+    // The private answer assistant: finds a question in the live text (the same stretches the notes use) and answers it in a window screen sharing cannot see.
+    this.assistOn = false;
+    this.assistPanel = null; // set by the app: the private window
+    this.watcher = new assist.QuestionWatcher({
+      getNames: () => this.assistNames(), getMode: () => (this.store.get('settings.meeting.nameOnly') && this.assistNames().length ? 'name' : 'any'),
+      onQuestion: ({ question }) => this.assistQuestion(question)
+    });
     this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
@@ -1532,6 +1544,10 @@ class AskController {
           if (sc) return this.studyStart(sc, effective, entry);
         }
         if (!opts.shown && !opts.scheduled) {
+          const ac = assist.parseAssistCommand(effective);
+          if (ac) return this.finish(entry, await this.assistCommand(ac));
+        }
+        if (!opts.shown && !opts.scheduled) {
           const mc = parseMeetingCommand(effective);
           if (mc) return this.meetingCommand(mc, entry);
         }
@@ -1676,6 +1692,65 @@ class AskController {
     const r = await this.holos.requestRealSize(h, mm);
     if (r.ok) return `Life size: ${r.mm} mm long, as it would be on your desk. Calibrate your screen in Settings if it looks off.`;
     return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
+  }
+
+  // ---- private meeting answers ----
+  assistNames() {
+    const list = String(this.store.get('settings.meeting.names') || '').split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+    const own = String(this.store.get('settings.briefing.name') || '').trim();
+    return [...new Set([...list, ...(own ? [own] : [])])];
+  }
+
+  webToolsForAssist() {
+    return this.makeTools(false).filter((t) => t.name === 'web_search' || t.name === 'fetch_page');
+  }
+
+  makeAnswerer() {
+    const common = { getTools: () => this.webToolsForAssist(), getName: () => this.assistNames()[0] || '', getMemory: () => this.memoryText() };
+    if (this.store.get('settings.model.provider') === 'claude') return new ClaudeAnswerer({ deps: { findClaude, McpHost, ClaudeSession }, ...common });
+    return new ProviderAnswerer({ deps: { buildProvider: () => this.buildProvider(), runAgent }, ...common });
+  }
+
+  // Warms the models while the microphone opens, so the first question is answered at once.
+  enableAssist() {
+    if (this.assistOn) return;
+    this.assistOn = true;
+    this.watcher.reset();
+    this.answerer = this.makeAnswerer();
+    this.assistant = new assist.Assistant({ answerer: this.answerer, ui: { update: (s) => this.assistPanel?.update(s) }, getName: () => this.assistNames()[0] || '', log: console });
+    this.answerer.warm().catch((e) => console.error('assistant warm-up:', e.message));
+    this.assistPanel?.status('Listening for questions');
+  }
+
+  assistStop() {
+    if (!this.assistOn) return;
+    this.assistOn = false;
+    this.assistant?.stop();
+    this.answerer?.close();
+    this.assistant = this.answerer = null;
+    this.watcher.reset();
+    this.assistPanel?.hide();
+  }
+
+  assistQuestion(question) {
+    if (!this.assistOn || !this.assistant) return;
+    this.assistant.handle({ question, context: this.meeting.recentText() }).catch((e) => console.error('assistant:', e.message));
+  }
+
+  assistStartedReply() {
+    return 'Private answers are on. I listen for questions and show the answers top right, in a window that screen sharing should not capture. Say “test the private window” to check that on this Mac. I never speak while this is on. I only hear what this Mac’s microphone hears: on headphones that is just you, so choose a loopback audio source in Settings to hear the call. Tell the others if you record.';
+  }
+
+  async assistCommand(cmd) {
+    if (cmd.type === 'assist-start') return this.startMeeting({ assist: true });
+    if (cmd.type === 'assist-stop') {
+      const was = this.assistOn;
+      this.assistStop();
+      return { status: 'done', reply: !was ? 'Private answers were not on.' : this.meeting.active ? 'Private answers are off. I am still taking notes: say “end the meeting” for the write-up.' : 'Private answers are off.', actions: 0 };
+    }
+    if (!this.assistPanel) return { status: 'failed', reply: 'The private window is not available.', actions: 0 };
+    await this.assistPanel.test();
+    return { status: 'done', reply: this.store.get('settings.meeting.hidden') === false ? 'The test box is showing top right. Hiding is switched off in Settings, so it will show on screen shares.' : 'The test box is showing top right. Start a screen share or a recording and check that you cannot see it there. If you can, tell me which app you share with.', actions: 0 };
   }
 
   // ---- daily recap ----
@@ -1984,13 +2059,15 @@ class AskController {
   }
 
   // ---- meeting notes ----
-  async startMeeting() {
-    if (this.meeting.active) return { status: 'done', reply: 'Meeting notes are already on.', actions: 0 };
+  async startMeeting({ assist: withAnswers = false } = {}) {
+    if (this.meeting.active) { if (withAnswers) this.enableAssist(); return { status: 'done', reply: withAnswers ? this.assistStartedReply() : 'Meeting notes are already on.', actions: 0 }; }
     if (!(await this.micAllowed())) return { status: 'failed', reply: 'Microphone access is off. Turn it on in Permissions first.', actions: 0 };
     this.wake?.disarm(); this.barge?.disarm(); this.speaker?.stop();
-    try { await this.meeting.start(); } catch (e) { return { status: 'failed', reply: `I could not start listening: ${e.message}`, actions: 0 }; }
+    if (withAnswers) this.enableAssist();
+    try { await this.meeting.start(); } catch (e) { this.assistStop(); return { status: 'failed', reply: `I could not start listening: ${e.message}`, actions: 0 }; }
     this.overlay.setArmed(true);
     this.onChange();
+    if (withAnswers) return { status: 'done', reply: this.assistStartedReply(), actions: 0 };
     return { status: 'done', reply: 'Taking meeting notes. I listen through the microphone on this Mac and keep no audio, but tell the others in the room. I hear you and the room, not the other side of a call on headphones. Say “Jarvis, end the meeting” when you are done.', actions: 1 };
   }
 
@@ -2004,6 +2081,7 @@ class AskController {
   meetingEnded(r) { this.writeUpMeeting(r, null).then((res) => { if (res) this.notice(res.reply, res.status === 'failed' ? 'failed' : 'done'); }).catch(() => {}); }
 
   async writeUpMeeting(r, entry) {
+    this.assistStop();
     this.overlay.setArmed(false);
     this.onChange();
     this.wakeSoon();
@@ -2443,7 +2521,7 @@ class AskController {
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
+    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     this.holdForHolos = !!this.holos?.hasUnpinned();
