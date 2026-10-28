@@ -14,19 +14,37 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 0 0; color:
 header #devtitle { flex: 1; }
 header button { background: none; border: 0; color: var(--dim); font-size: 22px; padding: 4px 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #666; } .dot.on { background: #00d4ff; } .dot.bad { background: var(--warn); }
-#stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
-#reactor { position: relative; width: min(78vw, 46vh); aspect-ratio: 1; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#home { position: relative; }
+/* the reactor sits in the exact middle of the screen; everything else is placed around it */
+#stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; }
+#reactor { position: relative; pointer-events: auto; width: min(72vw, 36vh); aspect-ratio: 1; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #cv { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 6px rgba(0, 212, 255, .8)) drop-shadow(0 0 22px rgba(0, 160, 230, .5)); }
-#hint { position: absolute; left: 0; right: 0; bottom: -4px; font-size: 12px; color: var(--dim); opacity: .8; pointer-events: none; }
-#status { font: 700 13px ui-monospace, Menlo, monospace; letter-spacing: .16em; color: var(--acc); margin-top: 10px; } #status.busy { color: var(--warn); }
+#hint { position: absolute; left: 0; right: 0; bottom: -2px; text-align: center; font-size: 12px; color: var(--dim); opacity: .8; pointer-events: none; }
+#under { position: absolute; top: calc(100% + 16px); left: 50%; transform: translateX(-50%); width: 86vw; text-align: center; pointer-events: none; }
+#status { font: 700 13px ui-monospace, Menlo, monospace; letter-spacing: .16em; color: var(--acc); } #status.busy { color: var(--warn); }
 #line { min-height: 1.5em; max-width: 90%; font-weight: 300; font-size: 19px; color: var(--ink); } #line.dim { color: var(--dim); }
 #tasks { list-style: none; margin: 4px 0; } #tasks li { padding-left: 22px; position: relative; margin: 6px 0; font-weight: 300; } #tasks li::before { content: ""; position: absolute; left: 4px; top: .55em; width: 8px; height: 8px; border-radius: 50%; background: var(--acc); }
 #tasks li.queued { color: var(--dim); } #tasks li.queued::before { background: none; border: 1.5px solid var(--acc); } #tasks li.done::before { content: "\2713"; background: none; top: 0; width: auto; height: auto; font-size: 13px; color: var(--acc); }
 #agents .ag { margin: 6px 0; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid rgba(0, 212, 255, .25); font-size: 13px; } #agents .ag b { display: block; font-weight: 600; } #agents .ag span { color: var(--dim); }
-#reply { max-height: 22vh; overflow-y: auto; font-size: 16px; font-weight: 300; padding: 6px 2px; color: #d8f8ff; }
-#bar { display: flex; gap: 8px; padding-top: 8px; }
+#reply { max-height: 18vh; overflow-y: auto; font-size: 16px; font-weight: 300; padding: 6px 2px; color: #d8f8ff; text-align: center; }
+header, #top, #bottom { position: relative; z-index: 1; }
+#top { max-height: 27vh; overflow-y: auto; }
+#bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#bottom > * { width: 100%; }
+#bar { display: flex; gap: 8px; padding-top: 4px; }
 #bar input { text-align: left; font-size: 17px; }
 #send { width: 52px; border-radius: 50%; border: 0; background: var(--acc); color: #00141c; font-size: 24px; font-weight: 700; }
+@media (orientation: portrait) { #kb { display: none !important; } } /* upright: the phone's own keyboard */
+#kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 18px); z-index: 3; width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+#kbd[aria-pressed=true] { color: #00141c; background: var(--acc); }
+/* the big lock: open while the Mac is open, closed when it is locked */
+#lock { width: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: var(--acc); padding: 2px 18px 0; transition: color .25s; }
+#lock svg { width: 76px; height: 76px; padding: 14px; border-radius: 50%; border: 1.5px solid currentColor; background: rgba(0, 30, 50, .6); box-shadow: 0 0 18px rgba(0, 212, 255, .3); transition: box-shadow .25s, background .25s; }
+#lock #shackle { transform-box: fill-box; transform-origin: 100% 100%; transition: transform .3s cubic-bezier(.3, 1.4, .5, 1); }
+#lock.open #shackle { transform: translateY(-5px) rotate(24deg); }
+#lock.locked { color: var(--warn); } #lock.locked svg { background: rgba(60, 40, 0, .65); box-shadow: 0 0 22px rgba(255, 204, 0, .35); }
+#lock:active svg { transform: scale(.95); } #lock.pending { opacity: .6; }
+#locklbl { font-size: 12px; letter-spacing: .08em; color: var(--dim); }
 #menu { position: fixed; left: 14px; right: 14px; top: calc(env(safe-area-inset-top) + 48px); display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; background: #04121c; border: 1px solid rgba(0, 212, 255, .35); box-shadow: 0 14px 40px rgba(0, 0, 0, .6); z-index: 5; }
 #menu button { padding: 12px; border-radius: 12px; border: 1px solid rgba(0, 212, 255, .35); background: none; color: var(--ink); font-size: 16px; }
 #menu #unpair { color: var(--warn); } #support { font-size: 12px; color: var(--dim); }
@@ -73,3 +91,62 @@ header button { background: none; border: 0; color: var(--dim); font-size: 22px;
 #quick::-webkit-scrollbar { display: none; }
 #quick button { flex: 0 0 auto; height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(0, 212, 255, .4); background: rgba(0, 30, 50, .6); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; }
 #quick button:active { background: var(--acc); color: #00141c; }
+
+/* what you asked, at the top, until and after the answer */
+#asked { margin: 4px auto 2px; max-width: 94%; padding: 6px 12px; border-radius: 14px; border: 1px solid rgba(0, 212, 255, .35); background: rgba(0, 30, 50, .55); color: #bff4ff; font-size: 15px; font-weight: 300; text-align: center; text-shadow: 0 0 8px rgba(0, 212, 255, .6); overflow-wrap: anywhere; max-height: 9vh; overflow: hidden; }
+
+/* the hologram keyboard: the whole screen, blue, standing a little off the glass */
+#kb { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+  padding: calc(env(safe-area-inset-top) + 10px) max(env(safe-area-inset-right), 14px) calc(env(safe-area-inset-bottom) + 12px) max(env(safe-area-inset-left), 14px);
+  background: radial-gradient(120% 60% at 50% 105%, rgba(0, 120, 190, .42), rgba(2, 10, 20, .94) 70%), rgba(2, 10, 20, .93); animation: kbin .26s ease-out; }
+#kb[hidden] { display: none; }
+#kb::before { content: ""; position: absolute; inset: -40px; pointer-events: none; background-image: linear-gradient(rgba(0, 212, 255, .08) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 212, 255, .08) 1px, transparent 1px); background-size: 30px 30px; -webkit-mask-image: radial-gradient(closest-side, #000 40%, transparent); mask-image: radial-gradient(closest-side, #000 40%, transparent); animation: kbdrift 9s linear infinite; }
+#kb::after { content: ""; position: absolute; left: 0; right: 0; height: 22%; pointer-events: none; background: linear-gradient(transparent, rgba(0, 212, 255, .13), transparent); animation: kbscan 3.4s linear infinite; }
+@keyframes kbin { from { opacity: 0; transform: scale(1.03); filter: blur(6px); } }
+@keyframes kbdrift { to { transform: translateY(30px); } }
+@keyframes kbscan { from { top: -25%; } to { top: 105%; } }
+.kbhead { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+.kbtitle { font: 700 12px ui-monospace, Menlo, monospace; letter-spacing: .3em; color: var(--acc); text-shadow: 0 0 10px var(--acc); }
+.kbx { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(0, 212, 255, .5); background: rgba(0, 30, 50, .6); color: var(--acc); font-size: 18px; }
+.kbtext { position: relative; z-index: 1; flex: 0 0 auto; min-height: 3.2em; max-height: 26vh; overflow-y: auto; padding: 8px 4px; font-size: 26px; font-weight: 300; line-height: 1.25; color: #d6f9ff; text-shadow: 0 0 12px rgba(0, 212, 255, .7); overflow-wrap: anywhere; scrollbar-width: none; border-bottom: 1px solid rgba(0, 212, 255, .3); }
+.kbtext::-webkit-scrollbar { display: none; }
+.kbtext .ph { color: rgba(111, 191, 212, .55); }
+.kbtext .caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 2px; vertical-align: text-bottom; background: var(--acc); box-shadow: 0 0 8px var(--acc); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.kbboard { position: relative; z-index: 1; flex: 0 0 auto; height: min(36vh, 300px); margin-top: auto; display: flex; flex-direction: column; gap: 7px; transform: perspective(900px) rotateX(9deg); transform-origin: 50% 100%; animation: holoflick 6s infinite; }
+@keyframes holoflick { 0%, 92%, 100% { opacity: 1; } 94% { opacity: .82; } 96% { opacity: 1; } 97% { opacity: .9; } }
+.kbrow { flex: 1; display: flex; gap: 6px; justify-content: center; min-height: 0; }
+.key { flex: 1 1 0; min-width: 0; border-radius: 9px; border: 1px solid rgba(0, 212, 255, .6); background: linear-gradient(rgba(0, 170, 240, .2), rgba(0, 70, 120, .12)); color: #aef0ff; font: 500 clamp(16px, 4.8vw, 24px)/1 ui-monospace, Menlo, monospace; text-shadow: 0 0 10px rgba(0, 212, 255, .9); box-shadow: inset 0 0 14px rgba(0, 212, 255, .2), 0 0 9px rgba(0, 212, 255, .3); padding: 0; touch-action: manipulation; transition: background .08s, box-shadow .08s; }
+.key.hit, .key:active { background: rgba(0, 212, 255, .65); color: #001824; text-shadow: none; box-shadow: 0 0 24px #00d4ff, inset 0 0 12px rgba(255, 255, 255, .4); }
+.key.mod { font-size: clamp(14px, 4vw, 20px); color: #7fd8f0; background: linear-gradient(rgba(0, 120, 190, .22), rgba(0, 50, 90, .16)); flex-grow: 1.45; }
+.key.k-space { flex-grow: 5; } .key.k-send { flex-grow: 2.4; color: #001824; background: linear-gradient(#27dcff, #00a9d8); font-weight: 700; text-shadow: none; box-shadow: 0 0 22px rgba(0, 212, 255, .65); }
+.key.k-shift.once { background: rgba(0, 212, 255, .4); color: #fff; } .key.k-shift.lock { background: var(--acc); color: #001824; }
+.kbrow .key:not(.mod) { max-width: 11.5vw; }
+
+/* turned sideways: the same page, rearranged */
+@media (orientation: landscape) {
+  main { padding-left: max(env(safe-area-inset-left), 20px); padding-right: max(env(safe-area-inset-right), 20px); }
+  header { padding-top: 4px; }
+  /* sideways: no reactor, just what Relay says and its status */
+  #cv, #hint { display: none; }
+  #reactor { width: auto; aspect-ratio: auto; position: static; }
+  #stage { align-items: flex-end; padding-bottom: 92px; }
+  #under { position: static; transform: none; width: 54vw; }
+  #top { position: absolute; left: max(env(safe-area-inset-left), 20px); top: 44px; width: 62vw; max-height: 56vh; z-index: 1; }
+  #asked { margin-left: 0; text-align: left; font-size: 14px; }
+  #reply { text-align: left; font-size: 17px; max-height: 44vh; }
+  #bar { display: none; }
+  #bottom { position: absolute; left: max(env(safe-area-inset-left), 20px); right: auto; bottom: calc(env(safe-area-inset-bottom) + 8px); width: 36vw; align-items: stretch; }
+  #lock { position: fixed; right: max(env(safe-area-inset-right), 20px); top: 50%; transform: translateY(-50%); padding: 0; }
+  #lock svg { width: 66px; height: 66px; padding: 12px; }
+  #kbd { width: 46px; height: 46px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  #kb { gap: 4px; padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: calc(env(safe-area-inset-bottom) + 6px); }
+  .kbtext { font-size: 19px; min-height: 2.6em; max-height: 22vh; padding: 3px 4px; }
+  .kbboard { flex: 1; height: auto; margin-top: 0; min-height: 0; transform: perspective(900px) rotateX(4deg); gap: 5px; }
+  #kb { padding-left: 0; padding-right: 0; }
+  .kbhead, .kbtext { margin-left: max(env(safe-area-inset-left), 14px); margin-right: max(env(safe-area-inset-right), 14px); }
+  .kbrow { gap: 5px; justify-content: stretch; }
+  .key { font-size: clamp(14px, 4.4vh, 22px); } .key.mod { font-size: clamp(12px, 3.4vh, 17px); }
+  .kbrow .key:not(.mod) { max-width: none; }
+}
+body.kbopen main { visibility: hidden; } /* nothing from the page shows through the keyboard */

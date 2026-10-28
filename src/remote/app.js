@@ -99,6 +99,7 @@
   function line(text, dim) { $('line').textContent = text || ''; $('line').classList.toggle('dim', !!dim); }
 
   function applyStatus(s) {
+    if ('locked' in s) setLocked(!!s.locked);
     serverState = s.state || 'idle';
     $('tasks').replaceChildren(...(s.tasks || []).map((t) => { const li = document.createElement('li'); li.className = t.status; li.textContent = t.text; return li; }));
     $('agents').replaceChildren(...(s.agents || []).filter((a) => a.status === 'running').map((a) => { const d = document.createElement('div'); d.className = 'ag'; const b = document.createElement('b'); b.textContent = a.task; const sp = document.createElement('span'); sp.textContent = `${a.step}…`; d.append(b, sp); return d; }));
@@ -107,6 +108,45 @@
     setMode(working ? 'working' : 'idle');
     if (working && s.label) line(`${s.label}…`, true);
   }
+
+  // The big padlock: open while the Mac is open, closed while it is locked. Tapping it locks the Mac; unlocking is only done at the Mac itself.
+  let macLocked = false;
+  function setLocked(on) {
+    macLocked = on;
+    const b = $('lock');
+    b.className = on ? 'locked' : 'open';
+    b.setAttribute('aria-label', on ? 'The Mac is locked' : 'Lock my Mac');
+    $('locklbl').textContent = on ? 'Mac is locked' : 'Lock my Mac';
+  }
+  $('lock').onclick = () => {
+    if (macLocked) { $('locklbl').textContent = 'Unlock it at the Mac'; setTimeout(() => setLocked(macLocked), 2000); return; }
+    $('lock').classList.add('pending');
+    setTimeout(() => $('lock').classList.remove('pending'), 4000);
+    ask('lock my mac');
+  };
+
+  // The keyboard button: held upright, the phone's own keyboard (a bar at the bottom); turned sideways, the full-screen hologram keyboard. Both show what you typed at the top.
+  const landscape = () => window.matchMedia('(orientation: landscape)').matches;
+  const kbState = (on) => { $('kbd').setAttribute('aria-pressed', String(on)); document.body.classList.toggle('kbopen', on && kb.isOpen); };
+  const kb = window.HoloKeyboard({ onSend: (t) => { kbState(false); ask(t); }, onClose: () => kbState(false) });
+  const typing = () => kb.isOpen || !$('bar').hidden;
+  function showTyping(on) {
+    if (landscape()) {
+      $('bar').hidden = true; $('quick').hidden = false;
+      if (on) kb.open(); else kb.close();
+    } else {
+      kb.close();
+      $('bar').hidden = !on; $('quick').hidden = on;
+      if (on) setTimeout(() => $('text').focus(), 50); else $('text').blur();
+    }
+    kbState(on);
+  }
+  $('kbd').onclick = () => showTyping(!typing());
+  window.matchMedia('(orientation: landscape)').addEventListener('change', () => showTyping(false)); // turning the phone closes whichever keyboard was open
+  $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value.trim(); $('text').value = ''; showTyping(false); if (v) ask(v); };
+
+  // What was asked stays at the top while the answer comes, and above the answer after it.
+  function showAsked(t) { const a = $('asked'); a.textContent = t || ''; a.hidden = !t; }
 
   function showReply(text) { $('reply').textContent = text || ''; }
 
@@ -168,15 +208,15 @@
     unlockSpeech();
     try {
       showReply('');
-      line(t, true);
+      showAsked(t);
+      line('');
       setMode('working');
       const r = await api('/api/ask', { text: t });
       waiting = r.id;
     } catch (e) { waiting = null; setMode('idle'); line(e.message); }
   }
   for (const b of document.querySelectorAll('#quick button')) b.onclick = () => ask(b.dataset.say);
-  $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value; $('text').value = ''; $('text').blur(); ask(v); };
-
+  
   let unlocked = false;
   function unlockSpeech() { // iOS only lets speech start after a tap; a silent word on the first tap opens it
     if (unlocked || !('speechSynthesis' in window)) return;
@@ -195,7 +235,7 @@
   let heard = '';
   let blocked = false;
   function startTalk() {
-    if (!canTalk) { $('text').focus(); return; }
+    if (!canTalk) { showTyping(true); return; }
     unlockSpeech();
     speechSynthesis?.cancel?.();
     heard = '';
@@ -226,7 +266,7 @@
   $('stop').onclick = () => { api('/api/stop', {}).catch(() => {}); waiting = null; setMode('idle'); line('Stopped', true); $('menu').hidden = true; };
   $('unpair').onclick = () => { if (confirm('Unpair this phone?')) unpair(); };
   $('support').textContent = canTalk ? (window.isSecureContext ? 'Hold the reactor to talk.' : 'Hold the reactor to talk. If it says the microphone is blocked, this address is not secure enough: use the Tailscale https link, or type.') : 'This browser has no speech recognition. Open Relay in Safari to hold and talk, or type and use the keyboard microphone.';
-  $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap, then use the keyboard mic';
+  $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap the keyboard button';
 
   // ---------- start ----------
   async function start() {

@@ -6,7 +6,7 @@ It also gives the phone page the secure address its microphone needs.)
 
 ## Quick actions
 
-The row of buttons under the reactor on the phone page (Lock my Mac, What's playing, Pause, Play, Next song, Previous, Quieter, Louder, Mute, Focus 25 min,
+The big padlock at the bottom of the phone page locks the Mac (open padlock: the Mac is open; closed amber padlock: it is locked; the phone cannot unlock it). The keyboard button in the bottom right corner opens a typing bar (your phone's own keyboard) when the phone is upright, and the full-screen hologram keyboard when it is turned sideways (the reactor is only shown upright). Either way the question stays at the top while Relay answers. The row of buttons above the padlock (What's playing, Pause, Play, Next song, Previous, Quieter, Louder, Mute, Focus 25 min,
 End focus, Screen off) each send one instant command to the Mac: no model, so they answer at once. You can also open `http://<your Mac>:47900/?say=lock%20my%20mac`
 (a bookmark, or a Shortcut's "Open URL") and the phone page sends that phrase as soon as it is up.
 

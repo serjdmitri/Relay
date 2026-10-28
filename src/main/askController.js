@@ -45,6 +45,22 @@ const { shouldFollowUp } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
+const { guardTools, agentSafe } = require('./homeGuard');
+const { createHardware } = require('./agent/hardware');
+const devices = require('./devices');
+const driveInspect = require('./driveInspect');
+const robotics = require('./robotics');
+const recap = require('./recap');
+const assist = require('./assist');
+const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
+const { detectLanguage, parseLanguageCommand, switchedReply, languageInstruction, LANGS } = require('./lang');
+const { translateCommand, localizeReply } = require('./i18n');
+const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
+const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain');
+const phish = require('./phish');
+const workshop = require('./workshop');
+const { parseMeetingCommand, MeetingRecorder, meetingPrompt } = require('./meeting');
+const { parseBriefingCommand, buildBriefing, fetchWeather, parseMacEvents, parseMacDue, mergeEvents } = require('./briefing');
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
@@ -135,6 +151,8 @@ class AskController {
     this.holos = null; // set by the app: the holograms
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
+    this.onLanguage = null; // set by the app: the microphone's language changed (a locale id)
+    this.hw = createHardware();
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -156,7 +174,7 @@ class AskController {
     this.frontP = null;
     this.appsP = null;
     this.mcp = new McpHost();
-    this.mac = createMac({ clipboard, capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
+    this.mac = createMac({ clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
@@ -180,12 +198,24 @@ class AskController {
     this.wake = new WakeWord({
       speech,
       getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [] }),
-      canListen: () => !this.suspended && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
+      canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
       onArmed: (on) => this.overlay.setArmed(on),
       onWake: () => this.wakeTriggered(),
       log: console
+    });
+    // Meeting notes: listens in short stretches until you say "Jarvis, end the meeting"; then the model writes the Note and the reminders.
+    this.meeting = new MeetingRecorder({
+      speech, getDevice: () => this.store.get('settings.meeting.input') || this.store.get('settings.speech.input') || 'auto', onStop: (r) => this.meetingEnded(r), log: console,
+      onText: (t) => { if (this.assistOn) this.watcher.push(t); }, onSegment: (t) => { if (this.assistOn) this.watcher.flush(t); }
+    });
+    // The private answer assistant: finds a question in the live text (the same stretches the notes use) and answers it in a window screen sharing cannot see.
+    this.assistOn = false;
+    this.assistPanel = null; // set by the app: the private window
+    this.watcher = new assist.QuestionWatcher({
+      getNames: () => this.assistNames(), getMode: () => (this.store.get('settings.meeting.nameOnly') && this.assistNames().length ? 'name' : 'any'),
+      onQuestion: ({ question }) => this.assistQuestion(question)
     });
     this.guide.onReplan = (info) => this.checkGuide(info);
 
@@ -570,7 +600,7 @@ class AskController {
   }
 
   remoteSnapshot() {
-    return { state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view() };
+    return { state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view(), locked: !!this.lockWatch?.locked };
   }
 
   remoteRecent(n = 8) {
@@ -760,7 +790,7 @@ class AskController {
   // What a background agent may use: reading and writing, never the screen, and nothing that sends or deletes (so nothing needs asking).
   agentTools(vision) {
     const ok = new Set(['notion_search', 'notion_read', 'notion_create', 'notion_append', 'gmail_search', 'gmail_read', 'gmail_draft', 'gcal_events', 'gcal_create', 'web_search', 'fetch_page', 'notes_create', 'notes_list', 'notes_read', 'notes_append', 'reminders_add', 'reminders_list', 'calendar_events', 'list_folder', 'read_file']);
-    return this.makeTools(vision).filter((t) => ok.has(t.name) && !t.confirm);
+    return this.makeTools(vision).filter((t) => ok.has(t.name)).map((t) => agentSafe(t)).filter(Boolean);
   }
 
   async runAgentTask(a, signal) {
@@ -1015,11 +1045,12 @@ class AskController {
   }
 
   makeTools(vision = true) {
-    return [...this.baseTools(vision), ...this.connectorTools()];
+    const base = guardTools(this.baseTools(vision), { home: os.homedir(), enabled: () => this.store.get('settings.homeOnly') !== false });
+    return [...base, ...this.connectorTools()];
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
@@ -1038,16 +1069,40 @@ class AskController {
         tools.push(...mcpTools(this.appsClient, { label: 'your apps' }));
       } catch { /* a bad address is shown in Settings; nothing is added */ }
     }
-    if (c.google?.clientId && (c.google.accounts || []).length) {
-      if (!this.googleApi) {
-        this.googleApi = new GoogleApi({
-          accounts: () => (this.store.get('settings.connectors.google.accounts') || []).map((a) => ({ email: a.email, refreshToken: decryptKey(a.refreshEnc) })).filter((a) => a.refreshToken),
-          client: () => ({ clientId: this.store.get('settings.connectors.google.clientId'), clientSecret: decryptKey(this.store.get('settings.connectors.google.clientSecretEnc')) })
-        });
-      }
-      tools.push(...googleTools(this.googleApi));
-    }
+    const gapi = this.googleApiIfConnected();
+    if (gapi) tools.push(...googleTools(gapi));
     return tools;
+  }
+
+  // The Google connection, when an account is connected (made once).
+  googleApiIfConnected() {
+    const c = this.store.get('settings.connectors') || {};
+    if (!(c.google?.clientId && (c.google.accounts || []).length)) return null;
+    if (!this.googleApi) {
+      this.googleApi = new GoogleApi({
+        accounts: () => (this.store.get('settings.connectors.google.accounts') || []).map((a) => ({ email: a.email, refreshToken: decryptKey(a.refreshEnc) })).filter((a) => a.refreshToken),
+        client: () => ({ clientId: this.store.get('settings.connectors.google.clientId'), clientSecret: decryptKey(this.store.get('settings.connectors.google.clientSecretEnc')) })
+      });
+    }
+    return this.googleApi;
+  }
+
+  // "Good morning": the weather, the calendar (this Mac's and Google's), what is due and the important unread email, as one short spoken summary.
+  async briefingText() {
+    const cfg = this.store.get('settings.briefing') || {};
+    const now = new Date();
+    const missing = [];
+    const within = (p, ms = 7000) => Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error('too slow')), ms))]);
+    const g = this.googleApiIfConnected();
+    const [mac, due, gev, mail, weather] = await Promise.all([
+      within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
+      within(this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
+      g ? within(g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => []) : [],
+      g ? within(g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => null) : null,
+      cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null
+    ]);
+    if (!cfg.city) missing.push('weather');
+    return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
@@ -1135,10 +1190,10 @@ class AskController {
     clearTimeout(this.followTimer);
     this.followTimer = setTimeout(() => {
       const cfg = this.store.get('settings.followUp') || {};
-      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.followChain });
+      const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz || this.checklist ? 0 : this.followChain });
       if (!ok) return;
       this.followFor = null;
-      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
     }, delay);
   }
 
@@ -1188,6 +1243,7 @@ class AskController {
   }
 
   async listen(mode, held, opts = {}) {
+    if (this.meeting?.active) return this.notice('Meeting notes are using the microphone. Say “Jarvis, end the meeting”, or use the menu bar, first.', 'failed');
     this.wake?.disarm(); // the microphone is needed for this
     this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null, noSpeechMs: opts.noSpeechMs || 7000 } : null;
     this.followChain = opts.followUp ? (this.followChain || 0) + 1 : 0;
@@ -1412,6 +1468,16 @@ class AskController {
     }
     const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
+    // While a quiz runs, "next", "got it" and whatever you say are for the quiz, not for the music or the model.
+    if (this.quiz && !opts.shown && !opts.scheduled) {
+      if (Date.now() - this.quizAt > 2 * 3600000) this.quiz = null;
+      else { const qc = parseStudyCommand(text, { quizActive: true }); if (qc) return this.finish(entry, { status: 'done', reply: await this.quizCommand(qc), actions: 0 }); }
+    }
+    // While a checklist runs, "done", "skip", "not yet" are for it; anything else goes on as normal.
+    if (this.checklist && !opts.shown && !opts.scheduled) {
+      if (Date.now() - this.checklistAt > 3 * 3600000) this.checklist = null;
+      else { const cc = robotics.parseChecklistCommand(text, { names: Object.keys(this.checklistLists()), active: true }); if (cc?.type === 'cl-control') return this.finish(entry, { status: 'done', reply: this.checklistControl(cc), actions: 0 }); }
+    }
     const gc = this.guide.command(text);
     if (gc) return this.finish(entry, { status: 'done', reply: await this.guide.run(gc), actions: 0 });
     switch (cmd.type) {
@@ -1453,6 +1519,49 @@ class AskController {
           const ac = parseAgentCommand(effective);
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
         }
+        if (!opts.shown && parseBriefingCommand(effective)) {
+          const text = await this.briefingText();
+          // in another language the same facts are said by the model, which answers in the language it was asked in
+          return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const dc = devices.parseDeviceCommand(effective);
+          if (dc) return this.finish(entry, await this.devicesCommand(dc));
+          const vc = driveInspect.parseDriveCommand(effective);
+          if (vc) return this.finish(entry, await this.driveCommand(vc));
+          if (recap.parseRecapCommand(effective)) return this.finish(entry, this.recapCommand());
+          const lc2 = robotics.parseLogCommand(effective);
+          if (lc2) return this.finish(entry, await this.logCommand(lc2));
+          const kc = robotics.parseChecklistCommand(effective, { names: Object.keys(this.checklistLists()) });
+          if (kc) return this.finish(entry, this.checklistCommand(kc));
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const wc = workshop.parseWorkshopCommand(effective);
+          if (wc) return this.finish(entry, await this.workshopCommand(wc));
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const sc = parseStudyCommand(effective);
+          if (sc) return this.studyStart(sc, effective, entry);
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const ac = assist.parseAssistCommand(effective);
+          if (ac) return this.finish(entry, await this.assistCommand(ac));
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const mc = parseMeetingCommand(effective);
+          if (mc) return this.meetingCommand(mc, entry);
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const ec = parseExplainCommand(effective);
+          if (ec) return this.explainError(ec, entry);
+          const pc = phish.parsePhishCommand(effective);
+          if (pc) return this.finish(entry, await this.securityCheck(pc));
+        }
+        if (!opts.shown) {
+          const lc = parseLanguageCommand(effective);
+          if (lc) return this.finish(entry, await this.runLanguage(lc));
+          entry.lang = this.requestLanguage(effective); // the language it was said in: the answer is spoken in it
+        }
         if (!opts.shown && !opts.scheduled && this.scheduler) {
           const sc = sched.parseScheduleCommand(effective);
           if (sc) return this.finish(entry, await this.runSchedule(sc));
@@ -1486,6 +1595,38 @@ class AskController {
   // Every display and the part of it a window can use (below the menu bar, clear of the Dock).
   displayAreas() {
     return screen.getAllDisplays().map((d) => ({ bounds: d.bounds, workArea: d.workArea }));
+  }
+
+  // "What did I copy earlier?" and the rest of the clipboard history, by voice. Returns the reply.
+  async clipboardCommand(cmd) {
+    const h = this.clipHistory;
+    const cfg = this.store.get('settings.clipboardHistory') || {};
+    const ago = (t) => { const m = Math.round((h.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} minute${m === 1 ? '' : 's'} ago` : `${Math.round(m / 60)} hour${Math.round(m / 60) === 1 ? '' : 's'} ago`; };
+    const short = (t, n = 70) => { const x = t.replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n - 1).trimEnd()}…` : x; };
+    const put = (item) => { h.ignore(item.text); return this.mac.clipboardWrite(item.text); };
+    if (cmd.type === 'clip-off') { this.store.set('settings.clipboardHistory.enabled', false); h.clear(); return 'Clipboard history is off, and what it had is forgotten.'; }
+    if (cmd.type === 'clip-on') { this.store.set('settings.clipboardHistory.enabled', true); return 'Clipboard history is on. It keeps text for a day, only in memory, and never passwords or keys.'; }
+    if (cfg.enabled === false) return 'Clipboard history is off. Say “turn on clipboard history”.';
+    if (cmd.type === 'clip-clear') { const n = h.clear(); return n ? `Forgot ${n} ${n === 1 ? 'item' : 'items'}.` : 'There was nothing to forget.'; }
+    if (cmd.type === 'clip-list') {
+      const list = h.list(8);
+      if (!list.length) return 'I have not seen anything copied yet. (I never keep passwords or keys, and I only remember text.)';
+      await this.cardPanel?.show({ kind: 'list', title: 'What you copied', subtitle: `Newest first · kept in memory for a day`, summary: '', facts: [], links: [], image: null, credit: '', items: list.map((i) => ({ title: short(i.text, 60), subtitle: ago(i.t), note: '', image: null, url: '' })) });
+      return `You copied ${list.length === 1 ? 'one thing' : `${h.items.length} things`}. The latest: “${short(list[0].text, 80)}”, ${ago(list[0].t)}.${list[1] ? ` Before that: “${short(list[1].text, 60)}”.` : ''} Say “copy the second one” to get one back.`;
+    }
+    if (cmd.type === 'clip-ago') { const i = h.ago(cmd.minutes); return i ? `About ${cmd.minutes >= 60 ? `${cmd.minutes / 60} hour${cmd.minutes === 60 ? '' : 's'}` : `${cmd.minutes} minutes`} ago you copied: “${short(i.text, 160)}”.` : `I do not see anything you copied around ${cmd.minutes >= 60 ? 'then' : `${cmd.minutes} minutes ago`}.`; }
+    if (cmd.type === 'clip-find') {
+      const i = h.find(cmd.query);
+      if (!i) return `I do not see anything you copied about “${cmd.query}”.`;
+      await put(i);
+      if (cmd.paste) { await this.mac.typeText(i.text); return `Pasted: “${short(i.text, 80)}”.`; }
+      return `Found it, copied ${ago(i.t)}: “${short(i.text, 100)}”. It is on your clipboard again.`;
+    }
+    const i = h.get((cmd.index || 1) - 1);
+    if (!i) return cmd.index > 1 ? `I only have ${h.items.length} ${h.items.length === 1 ? 'item' : 'items'}.` : 'There is nothing in the history yet.';
+    await put(i);
+    if (cmd.type === 'clip-paste') { await this.mac.typeText(i.text); return `Pasted: “${short(i.text, 80)}”.`; }
+    return `Copied it back: “${short(i.text, 100)}”.`;
   }
 
   // Sticky notes, by voice. Returns { reply, undo? } or null to leave it to the model.
@@ -1551,6 +1692,189 @@ class AskController {
     const r = await this.holos.requestRealSize(h, mm);
     if (r.ok) return `Life size: ${r.mm} mm long, as it would be on your desk. Calibrate your screen in Settings if it looks off.`;
     return r.reason === 'need-size' ? 'I do not know how big it really is. Say, for example, “show it life size, it is 30 centimeters long”.' : r.reason;
+  }
+
+  // ---- private meeting answers ----
+  assistNames() {
+    const list = String(this.store.get('settings.meeting.names') || '').split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+    const own = String(this.store.get('settings.briefing.name') || '').trim();
+    return [...new Set([...list, ...(own ? [own] : [])])];
+  }
+
+  webToolsForAssist() {
+    return this.makeTools(false).filter((t) => t.name === 'web_search' || t.name === 'fetch_page');
+  }
+
+  makeAnswerer() {
+    const common = { getTools: () => this.webToolsForAssist(), getName: () => this.assistNames()[0] || '', getMemory: () => this.memoryText() };
+    if (this.store.get('settings.model.provider') === 'claude') return new ClaudeAnswerer({ deps: { findClaude, McpHost, ClaudeSession }, ...common });
+    return new ProviderAnswerer({ deps: { buildProvider: () => this.buildProvider(), runAgent }, ...common });
+  }
+
+  // Warms the models while the microphone opens, so the first question is answered at once.
+  enableAssist() {
+    if (this.assistOn) return;
+    this.assistOn = true;
+    this.watcher.reset();
+    this.answerer = this.makeAnswerer();
+    this.assistant = new assist.Assistant({ answerer: this.answerer, ui: { update: (s) => this.assistPanel?.update(s) }, getName: () => this.assistNames()[0] || '', log: console });
+    this.answerer.warm().catch((e) => console.error('assistant warm-up:', e.message));
+    this.assistPanel?.status('Listening for questions');
+  }
+
+  assistStop() {
+    if (!this.assistOn) return;
+    this.assistOn = false;
+    this.assistant?.stop();
+    this.answerer?.close();
+    this.assistant = this.answerer = null;
+    this.watcher.reset();
+    this.assistPanel?.hide();
+  }
+
+  assistQuestion(question) {
+    if (!this.assistOn || !this.assistant) return;
+    this.assistant.handle({ question, context: this.meeting.recentText() }).catch((e) => console.error('assistant:', e.message));
+  }
+
+  assistStartedReply() {
+    return 'Private answers are on. I listen for questions and show the answers top right, in a window that screen sharing should not capture. Say “test the private window” to check that on this Mac. I never speak while this is on. I only hear what this Mac’s microphone hears: on headphones that is just you, so choose a loopback audio source in Settings to hear the call. Tell the others if you record.';
+  }
+
+  async assistCommand(cmd) {
+    if (cmd.type === 'assist-start') return this.startMeeting({ assist: true });
+    if (cmd.type === 'assist-stop') {
+      const was = this.assistOn;
+      this.assistStop();
+      return { status: 'done', reply: !was ? 'Private answers were not on.' : this.meeting.active ? 'Private answers are off. I am still taking notes: say “end the meeting” for the write-up.' : 'Private answers are off.', actions: 0 };
+    }
+    if (!this.assistPanel) return { status: 'failed', reply: 'The private window is not available.', actions: 0 };
+    await this.assistPanel.test();
+    return { status: 'done', reply: this.store.get('settings.meeting.hidden') === false ? 'The test box is showing top right. Hiding is switched off in Settings, so it will show on screen shares.' : 'The test box is showing top right. Start a screen share or a recording and check that you cannot see it there. If you can, tell me which app you share with.', actions: 0 };
+  }
+
+  // ---- daily recap ----
+  recapData() {
+    return recap.buildRecap({ actions: this.store.data.actions, history: this.store.data.history, undoable: this.undos.ids() });
+  }
+
+  // "What did you do today?": said aloud, and the list (with Undo buttons) is opened when there is something to look at.
+  recapCommand() {
+    const r = this.recapData();
+    if (!r.empty && (r.items.length || r.failed)) this.onOpenRecap?.();
+    return { status: 'done', reply: r.spoken, actions: 0 };
+  }
+
+  // ---- robotics helper ----
+  // "What's plugged in?" / "is my Arduino connected?" / "what serial ports are there?"
+  async devicesCommand(cmd) {
+    const [usb, ports] = await Promise.all([this.hw.usb(), Promise.resolve(this.hw.ports())]);
+    const r = devices.describeDevices({ usb, ports }, { filter: cmd.filter, portsOnly: !!cmd.ports && cmd.filter === 'ports' });
+    if (r.groups.length > 1 || (r.groups[0]?.items.length || 0) > 2) {
+      await this.cardPanel?.show({ kind: 'list', title: 'Connected devices', subtitle: `${usb.length} on USB${ports.length ? `, ${ports.length} serial` : ''}`, summary: '', facts: [], links: [], image: null, credit: '',
+        items: r.groups.flatMap((g) => g.items.map((i) => ({ title: i.name, subtitle: g.title, note: i.label && i.label !== i.name ? i.label : i.vendor, image: null, url: '' }))) });
+    }
+    return { status: 'done', reply: r.reply, actions: 0 };
+  }
+
+  // "What's on my SD card?" / "how full is my SSD?": the kind of drive, how full, and what is on it. Read only.
+  async driveCommand(cmd) {
+    const vols = (await this.hw.volumes()).filter((v) => v.info.mounted !== false);
+    const list = vols.filter((v) => !v.info.internal || cmd.name);
+    const label = (v) => `${v.info.name} (${driveInspect.driveKind(v.info)}, ${driveInspect.bytesText(v.info.total)})`;
+    if (cmd.type === 'drives') return { status: 'done', reply: list.length ? `${list.length === 1 ? 'One drive' : `${list.length} drives`}: ${list.map(label).join('; ')}.` : 'No external drives are plugged in.', actions: 0 };
+    const clean = (x) => String(x).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    let pick = cmd.name ? list.filter((v) => clean(v.info.name).includes(clean(cmd.name)) || clean(cmd.name).includes(clean(v.info.name))) : list;
+    let note = '';
+    if (!cmd.name && cmd.want && pick.length > 1) {
+      const same = pick.filter((v) => driveInspect.driveKind(v.info) === cmd.want || (cmd.want === 'USB flash drive' && driveInspect.driveKind(v.info) === 'USB drive'));
+      if (same.length) pick = same;
+    } else if (!cmd.name && cmd.want && pick.length === 1 && driveInspect.driveKind(pick[0].info) !== cmd.want && !(cmd.want === 'USB flash drive' && driveInspect.driveKind(pick[0].info) === 'USB drive')) {
+      const art = (w) => (/^(?:[aeiou]|ssd|sd|hdd)/i.test(w) ? 'an' : 'a');
+      const have = driveInspect.driveKind(pick[0].info);
+      note = `I do not see ${art(cmd.want)} ${cmd.want}, but there is ${art(have)} ${have}. `;
+    }
+    if (!pick.length) return { status: 'failed', reply: cmd.name ? `I do not see a drive called ${cmd.name}.${list.length ? ` I see: ${list.map(label).join('; ')}.` : ''}` : `I do not see any external drive. Plug it in, give it a few seconds to show up in Finder, then ask again.`, actions: 0 };
+    if (pick.length > 1) return { status: 'done', reply: `I see ${pick.length} drives: ${pick.map(label).join('; ')}. Say “what is on my drive called ${pick[0].info.name}” for one.`, actions: 0 };
+    const v = pick[0];
+    this.push?.({ label: `Looking at ${v.info.name}`, text: 'Counting what is on it' });
+    const scan = await this.hw.scan(v.path);
+    const d = driveInspect.describeDrive({ name: v.name, path: v.path, info: v.info, scan });
+    if (d.items.length) await this.cardPanel?.show({ kind: 'list', title: `${v.info.name} (${d.kind})`, subtitle: d.reply.split('. ').slice(0, 2).join('. '), summary: '', facts: [], links: [], image: null, credit: '', items: d.items.map((i) => ({ ...i, image: null, url: '' })) });
+    return { status: 'done', reply: note + d.reply, actions: 1 };
+  }
+
+  checklistLists() {
+    return { ...robotics.DEFAULT_LISTS, ...(this.store.get('settings.robotics.lists') || {}) };
+  }
+
+  checklistCommand(cmd) {
+    const lists = this.checklistLists();
+    const done = (reply) => ({ status: 'done', reply, actions: 0 });
+    if (cmd.type === 'cl-list') return done(`You have ${Object.keys(lists).length} checklists: ${Object.entries(lists).map(([n, l]) => `${n} (${l.length} items)`).join('; ')}. Say “start the match day checklist”.`);
+    if (cmd.type === 'cl-show') return done(`${cmd.name}: ${lists[cmd.name].map((t, i) => `${i + 1}, ${t.replace(/[.?!]+$/, '')}`).join('. ')}.`);
+    if (cmd.type === 'cl-add' || cmd.type === 'cl-remove') {
+      const items = [...lists[cmd.name]];
+      if (cmd.type === 'cl-add') {
+        const item = cmd.item.charAt(0).toUpperCase() + cmd.item.slice(1);
+        items.push(item);
+        this.store.set(`settings.robotics.lists`, { ...(this.store.get('settings.robotics.lists') || {}), [cmd.name]: items });
+        return done(`Added “${item}” to the ${cmd.name} checklist. It has ${items.length} items.`);
+      }
+      const w = cmd.item.toLowerCase();
+      const at = items.findIndex((t) => t.toLowerCase().includes(w));
+      if (at < 0) return done(`Nothing on the ${cmd.name} checklist matches “${cmd.item}”.`);
+      const [gone] = items.splice(at, 1);
+      this.store.set('settings.robotics.lists', { ...(this.store.get('settings.robotics.lists') || {}), [cmd.name]: items });
+      return done(`Took “${gone.replace(/[.?!]+$/, '')}” off the ${cmd.name} checklist.`);
+    }
+    this.checklist = new robotics.Checklist(cmd.name, lists[cmd.name]);
+    this.checklistAt = Date.now();
+    return done(`${cmd.name.charAt(0).toUpperCase() + cmd.name.slice(1)} checklist, ${this.checklist.total} items. Say “done”, “skip” or “not yet” for each. ${this.checklist.ask()}`);
+  }
+
+  checklistControl(cmd) {
+    const c = this.checklist;
+    this.checklistAt = Date.now();
+    let reply;
+    if (cmd.op === 'done') reply = c.mark('done');
+    else if (cmd.op === 'skip') reply = c.mark('skipped');
+    else if (cmd.op === 'later') reply = c.later();
+    else if (cmd.op === 'back') reply = c.back();
+    else if (cmd.op === 'repeat') reply = c.ask();
+    else if (cmd.op === 'status') reply = c.status();
+    else { reply = c.summary(); c.done = true; }
+    if (c.done) { this.lastChecklist = { line: c.logLine(), at: Date.now() }; this.checklist = null; reply += ' Say “log this” to put it in your log sheet.'; }
+    return reply;
+  }
+
+  // "Log this: …": one line (time, note, who) added to the Google Sheet you chose. Bare "log this" logs the checklist you just finished, else what you selected.
+  async logCommand(cmd) {
+    const robo = () => this.store.get('settings.robotics') || {};
+    const fail = (reply) => ({ status: 'failed', reply, actions: 0 });
+    if (cmd.type === 'log-where') return { status: 'done', reply: robo().sheetId ? `Your log sheet is set (the one ending ${robo().sheetId.slice(-6)}). “Log this” adds a line to it.` : 'No log sheet is set. Copy the link of a Google Sheet and say “set my log sheet to what I copied”.', actions: 0 };
+    if (cmd.type === 'log-sheet') {
+      let id = cmd.id;
+      if (!id) { try { id = robotics.sheetIdFrom(await this.mac.clipboardRead()); } catch { /* handled below */ } }
+      if (!id) return fail('I could not find a Google Sheet link. Open the sheet, copy its link from the address bar, then say “set my log sheet to what I copied”.');
+      this.store.set('settings.robotics.sheetId', id);
+      return { status: 'done', reply: 'Done. “Log this” now adds a line to that sheet.', actions: 0 };
+    }
+    const g = this.googleApiIfConnected();
+    if (!robo().sheetId) return fail('Which Google Sheet is your log? Copy its link, then say “set my log sheet to what I copied”.');
+    if (!g) return fail('Connect your Google account in Settings > Connectors first.');
+    let note = cmd.note;
+    if (!note && this.lastChecklist && Date.now() - this.lastChecklist.at < 15 * 60000) note = this.lastChecklist.line;
+    if (!note) { try { note = (await this.mac.selectedText()).trim(); } catch { note = ''; } }
+    if (!note) return fail('Say what to log after it: “log this, drifted left on the ramp”. Or select some text first.');
+    try {
+      await g.sheetAppend(null, robo().sheetId, 'A1', [[robotics.stamp(new Date()), note.slice(0, 500), 'Relay']]);
+    } catch (e) {
+      return fail(`I could not add it to the sheet: ${e.message}`);
+    }
+    this.store.addAction({ id: crypto.randomUUID(), requestId: '', tool: 'sheet_append', input: { note: note.slice(0, 80) }, result: 'Added a line to the log sheet', ok: true, ts: Date.now() });
+    this.onChange();
+    return { status: 'done', reply: `Logged: ${note.length > 80 ? `${note.slice(0, 80)}…` : note}`, actions: 1 };
   }
 
   // The activity log's Undo button: reverses one action, once, and records that it did.
@@ -1659,6 +1983,7 @@ class AskController {
       runningApps: this.lastApps,
       layouts: this.layouts(),
       stickies: this.stickies ? (cmd) => this.stickyCommand(cmd) : null,
+      clipboardHistory: this.clipHistory ? (cmd) => this.clipboardCommand(cmd) : null,
       holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
       holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),
@@ -1678,12 +2003,258 @@ class AskController {
     setTimeout(() => this.sound('Glass'), 900);
   }
 
+  // The text the person means: what is selected, else what they copied a moment ago, else what is on the screen (read on this Mac), else the clipboard.
+  // order can say otherwise. Returns { text, from } (text '' when nothing could be read).
+  async gatherText(order = ['selection', 'recent-clipboard', 'screen', 'clipboard'], min = 8) {
+    for (const src of order) {
+      try {
+        let t = '';
+        if (src === 'selection') t = await this.mac.selectedText();
+        else if (src === 'recent-clipboard') { const last = this.clipHistory?.list(1)[0]; t = last && this.clipHistory.now() - last.t < 120000 ? last.text : ''; }
+        else if (src === 'clipboard') t = await this.mac.clipboardRead();
+        else if (src === 'screen') t = await this.screenTextOnly();
+        t = String(t || '').trim();
+        if (t.length >= min) return { text: t, from: src === 'recent-clipboard' ? 'clipboard' : src };
+      } catch { /* that source is not available: try the next */ }
+    }
+    return { text: '', from: '' };
+  }
+
+  // "Explain this error": the model gets the error text (or is told to look at the screen) and says what it means and how to fix it.
+  async explainError(cmd, entry) {
+    const { text, from } = await this.gatherText(['selection', 'screen', 'clipboard']);
+    let devs = '';
+    if (needsDevices(text)) {
+      try {
+        const [usb, ports] = await Promise.race([Promise.all([this.hw.usb(), this.hw.ports()]), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 4000))]);
+        devs = devices.describeDevices({ usb, ports }).reply;
+      } catch { /* the error is explained without it */ }
+    }
+    return this.runRequest(explainPrompt({ material: text, from, fix: cmd.fix, devices: devs }), entry);
+  }
+
+  // "Is this phishing?" and "has my password been breached?": checked here, on this Mac. Nothing about the email is sent anywhere; for the password only
+  // the first 5 characters of its hash are (see phish.js). The password is never spoken, logged or kept.
+  async securityCheck(cmd) {
+    if (cmd.type === 'phish') {
+      const { text, from } = await this.gatherText(['selection', 'recent-clipboard', 'screen', 'clipboard'], 6);
+      if (!text) return { status: 'failed', reply: 'I have nothing to check. Select the email or link first (or copy it), then ask again.', actions: 0 };
+      const r = phish.analyze(text);
+      const where = from === 'selection' ? 'the text you selected' : from === 'screen' ? 'what is on your screen' : 'what you copied';
+      if (r.flags.length) await this.cardPanel?.show({ kind: 'list', title: r.verdict === 'likely phishing' ? 'Looks like phishing' : r.verdict === 'suspicious' ? 'Suspicious' : 'Worth a careful look', subtitle: `Checked ${where}. Red flags, strongest first`, summary: '', facts: [], links: [], image: null, credit: '', items: r.flags.slice(0, 6).map((f) => ({ title: f[0].toUpperCase() + f.slice(1), subtitle: '', note: '', image: null, url: '' })) });
+      return { status: 'done', reply: `Checked ${where}. ${phish.adviceText(r)}`, actions: 0 };
+    }
+    const got = await this.gatherText(['selection', 'clipboard'], 1);
+    const pw = got.text.trim();
+    if (!pw || /\n/.test(pw) || pw.length > 128) return { status: 'failed', reply: 'Copy just the password (one line), then say “check my password”. Do not say it out loud.', actions: 0 };
+    let n;
+    try { n = await phish.pwnedCount(pw, { signal: AbortSignal.timeout(8000) }); } catch { n = -1; }
+    const st = phish.strength(pw);
+    this.clipHistory?.forget(pw);
+    let cleared = '';
+    try { if ((await this.mac.clipboardRead()).trim() === pw) { this.clipHistory?.ignore(''); await this.mac.clipboardWrite(' '); cleared = ' I cleared it from your clipboard.'; } } catch { /* the clipboard stays as it was */ }
+    if (n < 0) return { status: 'failed', reply: `I could not reach the breach database. Offline, it looks ${st.label} (${st.length} characters).${cleared}`, actions: 0 };
+    if (n > 0) return { status: 'done', reply: `That password has appeared ${n.toLocaleString('en-US')} ${n === 1 ? 'time' : 'times'} in known data breaches. Do not use it anywhere, and change it where you do.${cleared}`, actions: 0 };
+    return { status: 'done', reply: `That password is not in any known breach. It looks ${st.label}${st.label === 'weak' || st.label === 'fair' ? ': make it longer, with unrelated words' : ''}. That does not mean it is safe if you reuse it on several sites.${cleared}`, actions: 0 };
+  }
+
+  // ---- meeting notes ----
+  async startMeeting({ assist: withAnswers = false } = {}) {
+    if (this.meeting.active) { if (withAnswers) this.enableAssist(); return { status: 'done', reply: withAnswers ? this.assistStartedReply() : 'Meeting notes are already on.', actions: 0 }; }
+    if (!(await this.micAllowed())) return { status: 'failed', reply: 'Microphone access is off. Turn it on in Permissions first.', actions: 0 };
+    this.wake?.disarm(); this.barge?.disarm(); this.speaker?.stop();
+    if (withAnswers) this.enableAssist();
+    try { await this.meeting.start(); } catch (e) { this.assistStop(); return { status: 'failed', reply: `I could not start listening: ${e.message}`, actions: 0 }; }
+    this.overlay.setArmed(true);
+    this.onChange();
+    if (withAnswers) return { status: 'done', reply: this.assistStartedReply(), actions: 0 };
+    return { status: 'done', reply: 'Taking meeting notes. I listen through the microphone on this Mac and keep no audio, but tell the others in the room. I hear you and the room, not the other side of a call on headphones. Say “Jarvis, end the meeting” when you are done.', actions: 1 };
+  }
+
+  // From the voice command or the menu: ends it and has the model write it up (a Note, and reminders for your action items).
+  async stopMeeting(entry = null) {
+    const r = await this.meeting.end('asked');
+    return this.writeUpMeeting(r, entry);
+  }
+
+  // It ended by itself: you said "Jarvis, end the meeting", or too many errors, or the time limit.
+  meetingEnded(r) { this.writeUpMeeting(r, null).then((res) => { if (res) this.notice(res.reply, res.status === 'failed' ? 'failed' : 'done'); }).catch(() => {}); }
+
+  async writeUpMeeting(r, entry) {
+    this.assistStop();
+    this.overlay.setArmed(false);
+    this.onChange();
+    this.wakeSoon();
+    if (!r) return { status: 'failed', reply: 'Meeting notes were not on.', actions: 0 };
+    if (r.words < 25) return { status: 'failed', reply: `Not enough was said to make notes (${r.words} words).`, actions: 0 };
+    const prompt = meetingPrompt({ text: r.text, seconds: r.seconds });
+    if (entry) await this.runRequest(prompt, entry); // it finishes the request itself
+    else await this.handleText(prompt, { shown: 'Writing up your meeting' });
+    return null; // null: the write-up was handed to the model; anything else is a plain result to show
+  }
+
+  async meetingCommand(cmd, entry) {
+    if (cmd.type === 'meeting-start') return this.finish(entry, await this.startMeeting());
+    if (cmd.type === 'meeting-status') return this.finish(entry, { status: 'done', reply: this.meeting.active ? `Taking meeting notes: ${Math.max(1, Math.round(this.meeting.seconds / 60))} minutes, ${this.meeting.words} words so far.` : 'Meeting notes are not on.', actions: 0 });
+    if (!this.meeting.active) return this.finish(entry, { status: 'failed', reply: 'Meeting notes were not on.', actions: 0 });
+    const out = await this.stopMeeting(entry);
+    return out ? this.finish(entry, out) : undefined;
+  }
+
+  // ---- workshop mode ----
+  async workshopCommand(cmd) {
+    if (cmd.type === 'workshop-on') {
+      if (!this.store.get('settings.workshop.enabled')) this.store.set('settings.workshop.prevSpeak', !!this.store.get('settings.speakReplies'));
+      this.store.set('settings.workshop.enabled', true);
+      this.store.set('settings.speakReplies', true);
+      this.onChange();
+      return { status: 'done', reply: 'Workshop mode is on. I will speak slowly and keep things simple. Try “show me how phishing works”, or say “what demos do you have”.', actions: 1 };
+    }
+    if (cmd.type === 'workshop-off') {
+      const was = !!this.store.get('settings.workshop.enabled');
+      this.store.set('settings.workshop.enabled', false);
+      if (was) this.store.set('settings.speakReplies', !!this.store.get('settings.workshop.prevSpeak'));
+      this.onChange();
+      return { status: 'done', reply: was ? 'Workshop mode is off.' : 'Workshop mode was not on.', actions: 1 };
+    }
+    if (cmd.type === 'workshop-quiz' || cmd.type === 'workshop-handout') return this.workshopKitCommand(cmd);
+    if (cmd.type === 'workshop-demos') return { status: 'done', reply: `I can show holograms of: ${Object.values(workshop.DEMOS).map((d) => d.title.replace(/^How (?:an? )?/, '').replace(/ works$/, '').replace(/^passwords are stored \(hashing\)$/, 'password hashing')).join(', ')}. Say “show me how phishing works”.`, actions: 0 };
+    const d = workshop.buildDemo(cmd.key);
+    if (!d || !this.holos) return { status: 'failed', reply: 'I cannot show holograms right now.', actions: 0 };
+    this.holos.hideUnpinned();
+    await this.holos.show({ title: d.title, items: [{ kind: 'shapes', title: d.title, credit: 'Relay workshop demo', parts: d.parts }], scale: 1.5 });
+    this.lastDemo = d.key;
+    return { status: 'done', reply: `${d.explain} Say “quiz the class” for questions, or “print the handout”.`, actions: 1 };
+  }
+
+  // STEMINA kit: the quiz and the one-page handout for a demo (the one named, else the last one shown).
+  async workshopKitCommand(cmd) {
+    const key = cmd.key || this.lastDemo;
+    if (!key || !workshop.KIT[key]) return { status: 'failed', reply: 'Show a demo first, for example “show me how phishing works”, then ask for the quiz or the handout.', actions: 0 };
+    const d = workshop.buildDemo(key);
+    if (cmd.type === 'workshop-quiz') {
+      this.startQuiz({ cards: workshop.quizCards(key) });
+      this.quizFresh = false;
+      return { status: 'done', reply: `Quiz time: ${d.title.replace(/^How (?:an? )?/, 'how ').replace(/^how /, '')}. Answer out loud, or say “show the answer”. ${this.quiz.ask()}`, actions: 1 };
+    }
+    const html = workshop.handoutHtml(key, { title: d.title, explain: d.explain, date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) });
+    const dir = this.handoutsDir || path.join(os.homedir(), 'Documents', 'Relay Handouts');
+    const base = path.join(dir, d.title.replace(/[^A-Za-z0-9 ()-]+/g, '').trim());
+    try {
+      require('fs').mkdirSync(dir, { recursive: true });
+      require('fs').writeFileSync(`${base}.html`, html);
+      let file = `${base}.html`;
+      try { await (this.renderPdf || this.renderPdfWindow).call(this, html, `${base}.pdf`); file = `${base}.pdf`; } catch { /* the web page version still prints */ }
+      await this.mac.openPath(file);
+      return { status: 'done', reply: `The handout for ${d.title.toLowerCase()} is open${file.endsWith('.pdf') ? '' : ' in your browser; use Print there'}. It is saved in ${dir.replace(os.homedir(), '~')}.`, actions: 1 };
+    } catch (e) {
+      return { status: 'failed', reply: `I could not make the handout: ${e.message}`, actions: 0 };
+    }
+  }
+
+  // A hidden window prints the page to a PDF, letter size.
+  async renderPdfWindow(html, out) {
+    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+    try {
+      await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      require('fs').writeFileSync(out, await win.webContents.printToPDF({ pageSize: 'Letter', printBackground: true }));
+    } finally { win.destroy(); }
+  }
+
+  // ---- study mode ----
+  // The text on the screen, read on this Mac (Apple Vision); '' when it cannot be read.
+  async screenTextOnly() {
+    const fs = require('fs');
+    this.hideSoft?.();
+    await new Promise((r) => setTimeout(r, 250)); // the reactor must not be in the picture
+    const file = await this.mac.screenToFile();
+    try { return ocrLib.plainText(await this.mac.ocrFile(file)); } finally { try { fs.rmSync(file, { force: true }); } catch { /* temporary */ } }
+  }
+
+  // "Quiz me on this": gets what to study from, has the model make the cards (it calls start_quiz), and the quiz starts when the cards arrive.
+  async studyStart(cmd, text, entry) {
+    if (cmd.source === 'ask') {
+      if (cmd.minutes) { const r = await this.focusMode().start({ minutes: cmd.minutes }); return this.finish(entry, { status: 'done', reply: `Study session for ${cmd.minutes} minutes. ${r.reply.replace(/^Focus mode on for [^.]*\.\s*/, '')} Say “quiz me on this” when you want questions.`, actions: 1 }); }
+      return this.finish(entry, { status: 'done', reply: 'Say what to study: “quiz me on this” (what is on your screen), “quiz me on my notes about photosynthesis”, or “quiz me on the Krebs cycle”.', actions: 0 });
+    }
+    let material = '';
+    try {
+      if (cmd.source === 'screen') material = await this.screenTextOnly();
+      else if (cmd.source === 'selection') material = await this.mac.selectedText();
+      else if (cmd.source === 'clipboard') material = await this.mac.clipboardRead();
+      else if (cmd.source === 'notes') material = await this.mac.notesRead(cmd.topic);
+    } catch (e) {
+      if (cmd.source === 'notes') return this.finish(entry, { status: 'failed', reply: `I could not find a note about ${cmd.topic}. Say its title as it is in Notes.`, actions: 0 });
+      if (cmd.source === 'screen') return this.finish(entry, { status: 'failed', reply: 'I could not read the screen. Allow Screen Recording for Relay in System Settings, or copy the text and say “quiz me on what I copied”.', actions: 0 });
+    }
+    material = String(material || '').trim();
+    if (cmd.source !== 'topic' && material.length < 40) return this.finish(entry, { status: 'failed', reply: cmd.source === 'selection' ? 'Nothing is selected. Select some text first.' : cmd.source === 'clipboard' ? 'There is not enough copied text to make questions from.' : 'There is not enough text there to make questions from.', actions: 0 });
+    this.quiz = null;
+    return this.runRequest(quizPrompt({ text: cmd.source === 'topic' ? '' : material, topic: cmd.topic, minutes: cmd.minutes }), entry);
+  }
+
+  // The start_quiz tool: the cards the model made. The quiz is asked once its sentence has been said (finish() puts the first question after it).
+  startQuiz({ cards, minutes }) {
+    const quiz = new Quiz(Array.isArray(cards) ? cards : [], { minutes: Number(minutes) || 0 });
+    if (quiz.total < 2) return 'Could not make enough cards.';
+    this.quiz = quiz;
+    this.quizAt = Date.now();
+    this.quizFresh = true;
+    if (quiz.minutes) this.focusMode().start({ minutes: quiz.minutes }).catch(() => {});
+    return `Quiz ready with ${quiz.total} cards. Reply with one short sentence.`;
+  }
+
+  async quizCommand(cmd) {
+    const q = this.quiz;
+    this.quizAt = Date.now();
+    let reply;
+    if (cmd.type === 'quiz-answer') reply = q.attempt(cmd.text).reply;
+    else if (cmd.op === 'reveal') reply = `${q.reveal()} Say “got it” or “missed it”.`;
+    else if (cmd.op === 'right') reply = q.revealed || q.current ? q.mark(true) : q.summary();
+    else if (cmd.op === 'wrong') reply = q.mark(false);
+    else if (cmd.op === 'skip') reply = q.skip();
+    else if (cmd.op === 'repeat') reply = q.ask();
+    else if (cmd.op === 'score') reply = `${q.right} right so far, out of ${q.answered} asked, ${q.total} cards in all.`;
+    else { reply = q.summary(); q.done = true; }
+    if (q.done) this.quiz = null;
+    return reply;
+  }
+
+  // The language a request is in: what the words say, else the language the microphone is listening for (a word or two cannot be told).
+  requestLanguage(text) {
+    const seen = detectLanguage(text);
+    if (seen) return seen.lang;
+    const listening = String(this.store.get('settings.speech.locale') || 'en-US').slice(0, 2).toLowerCase();
+    return LANGS[listening] ? listening : 'en';
+  }
+
+  // "Speak Spanish": the microphone listens in it from now on; answers follow the language they are asked in.
+  async runLanguage(cmd) {
+    if (cmd.type === 'languages') return { status: 'done', reply: `I understand and answer in any language. I can listen in: ${Object.values(LANGS).map((l) => l.name).join(', ')} (if this Mac has the speech model for it). Say, for example, “speak Spanish”.`, actions: 0 };
+    const l = LANGS[cmd.lang];
+    const list = await this.speech.locales().catch(() => []);
+    if (list.length && !list.some((x) => String(x.id).toLowerCase().startsWith(cmd.lang))) return { status: 'failed', reply: `This Mac cannot listen in ${l.name} (it has no on-device speech model for it). I can still answer you in ${l.name} if you type.`, actions: 0 };
+    const id = (list.find((x) => String(x.id).toLowerCase() === l.locale.toLowerCase()) || list.find((x) => String(x.id).toLowerCase().startsWith(cmd.lang)) || { id: l.locale }).id;
+    this.store.set('settings.speech.locale', id);
+    this.onLanguage?.(id); // main prepares the speech model for it and re-arms "Hey Jarvis"
+    this.onChange();
+    return { status: 'done', reply: switchedReply(cmd.lang), actions: 1 };
+  }
+
   async quick(text, requestId) {
-    const q = parseQuick(text);
+    let q = parseQuick(text);
+    let foreign = null;
+    if (!q) { // an everyday command in another language ("pausa", "baisse le volume")
+      for (const lang of new Set([detectLanguage(text)?.lang, this.requestLanguage(text)])) {
+        const f = lang && lang !== 'en' && translateCommand(text, lang);
+        if (f && (q = parseQuick(f.english))) { foreign = f; break; }
+      }
+    }
     if (!q) return null;
     try {
       const r = await runQuick(q, this.mac, this.quickContext());
       if (!r) return null;
+      if (foreign) r.reply = localizeReply(foreign.lang, q, r.reply);
       const actionId = crypto.randomUUID();
       this.store.addAction({ id: actionId, requestId, tool: r.tool, input: r.input, result: r.reply, ok: true, ts: Date.now() });
       if (r.undo) this.undos?.register(actionId, r.undo);
@@ -1867,7 +2438,7 @@ class AskController {
         this.forceTier = null;
         session.onRate = (r) => { this.rate = r; };
         const fresh = session.turns === 0;
-        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint() }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+        const context = [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : '' }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
         return result;
       } catch (e) {
@@ -1915,6 +2486,7 @@ class AskController {
   }
 
   finish(entry, res) {
+    if (this.quizFresh && this.quiz) { this.quizFresh = false; res = { ...res, status: 'done', reply: `${String(res.reply || '').trim().replace(/\s+$/, '')} ${this.quiz.ask()}`.trim() }; } else this.quizFresh = false;
     const reply = res.reply || '';
     const u = res.usage;
     const used = u && (u.in || u.out) ? { model: u.model || '', ms: Date.now() - entry.ts, in: u.in, out: u.out } : null;
@@ -1949,7 +2521,7 @@ class AskController {
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote) this.speaker?.speak(reply, profileFor(jobFor(reply, res.job), this.store.get('settings') || {}));
+    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     this.holdForHolos = !!this.holos?.hasUnpinned();
