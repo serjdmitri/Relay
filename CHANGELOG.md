@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.33.0
 
 - **No more rough 3D guesses.** A model made from one photo is a guess at every hidden side, so it is no longer shown by default. A real ready-made model still opens as a hologram, and so do the sharp generators when a Hugging Face token is set. Otherwise "show me ... in 3D" shows a card with the clearest real pictures it found and YouTube searches for an overview, reviews and a close-up/teardown (plus links for more pictures and all videos). If the model finds specific video links while researching it adds them with a second card. The old behavior (photo models from the fast generator, shapes stand-ins) comes back with `settings.models3dApprox: true`. The YouTube links are searches, not hand-picked videos, and the pictures depend on what Wikimedia has: untested against the live services from the cloud.
 - **Cut sections turn with the model.** When you cut into a hologram and rotate it, the cut plane used to stay fixed to the screen, so the section changed as you turned the piece. The plane is now fixed to the model when you turn the cut on (or change its axis) and rotates with it. Checked in a headless page: after a 90 degree turn the plane normal followed the model and the offset stayed the same.
