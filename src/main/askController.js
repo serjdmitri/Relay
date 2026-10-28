@@ -54,6 +54,7 @@ const recap = require('./recap');
 const { Failover } = require('./failover');
 const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
+const { parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
 const codexCli = require('./agent/codexCli');
 const assist = require('./assist');
 const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
@@ -139,6 +140,7 @@ class AskController {
     this.lastOk = null;
     this.scale = 1;
     this.doneTimer = null;
+    this.holdAnswer = false; // an answer is on screen until you dismiss it (Esc, "ok", or the next request)
     this.holdForHolos = false; // the reactor stays while holograms are up that you have not pinned or closed
     this.heldStart = false; // the current listening session was started by holding the key
     this.ducker = new Ducker({
@@ -1201,7 +1203,7 @@ class AskController {
       const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz || this.checklist ? 0 : this.followChain });
       if (!ok) return;
       this.followFor = null;
-      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : this.holdAnswer ? 25000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
     }, delay);
   }
 
@@ -1406,6 +1408,8 @@ class AskController {
 
   close() {
     clearTimeout(this.doneTimer);
+    clearTimeout(this.holdTimer);
+    this.holdAnswer = false;
     this.holdForHolos = false;
     this.state = 'idle';
     if (!this.runningTask) { this.tasks = []; this.queue = []; this.pendingFinish = null; }
@@ -1449,6 +1453,14 @@ class AskController {
   // opts.shown: what to show and record instead of the text itself, for requests Relay makes on its own.
   async handleText(text, opts = {}) {
     this.ensureWindow(); // the pill window is created even when the ring shows everything, because other code reads it
+    // While an answer is held on screen, "ok" (and "thanks", "got it", "close"...) puts it away: no reply, no sound, nothing asked.
+    if (this.holdAnswer && !this.runningTask && !opts.shown && !opts.scheduled && !opts.drain && parseDismiss(text)) {
+      this.followFor = null;
+      this.speaker?.stop();
+      this.cardPanel?.hide();
+      this.close();
+      return { status: 'done', reply: '', actions: 0, dismissed: true };
+    }
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
     if (!opts.drain) { this.queue = []; this.tasks = []; }
     if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
@@ -2611,6 +2623,12 @@ class AskController {
     if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
+    clearTimeout(this.holdTimer);
+    this.holdAnswer = shouldHoldAnswer({ reply, status: res.status, model: res.model, remote: !!entry.remote, unattended: !!this.unattended, busy: !!(this.quiz || this.checklist), setting: this.store.get('settings.answerStays') !== false });
+    if (this.holdAnswer) { // it stays until you say "ok", press Esc or ask the next thing (and goes by itself after ten minutes if you walked away)
+      this.holdTimer = setTimeout(() => { if (this.holdAnswer && ['done', 'listening'].includes(this.state)) this.close(); }, DISMISS_MAX_MS);
+      return res;
+    }
     this.holdForHolos = !!this.holos?.hasUnpinned();
     if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
     this.doneTimer = setTimeout(() => {
