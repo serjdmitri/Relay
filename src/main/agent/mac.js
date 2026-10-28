@@ -19,6 +19,8 @@ function defaultExec(cmd, args, opts = {}) {
 // On-device text recognition (Apple Vision) from a script: prints [{ text, x, y, w, h }] with the box as fractions of the picture, y from the top.
 const OCR_SCRIPT = 'function run(argv){ ObjC.import("Vision"); ObjC.import("Foundation"); var url=$.NSURL.fileURLWithPath(argv[0]); var req=$.VNRecognizeTextRequest.alloc.init; req.recognitionLevel=0; req.usesLanguageCorrection=true; var h=$.VNImageRequestHandler.alloc.initWithURLOptions(url,$({})); var ok=h.performRequestsError($([req]),null); var res=req.results; var out=[]; var n=res?res.count:0; for(var i=0;i<n;i++){ var o=res.objectAtIndex(i); var c=o.topCandidates(1); if(!c.count) continue; var b=o.boundingBox; out.push({text:ObjC.unwrap(c.objectAtIndex(0).string), x:b.origin.x, y:1-b.origin.y-b.size.height, w:b.size.width, h:b.size.height}); } return JSON.stringify(out); }';
 
+const LOCK_JXA = "ObjC.import('Foundation'); $.NSBundle.bundleWithPath('/System/Library/PrivateFrameworks/login.framework').load; ObjC.bindFunction('SACLockScreenImmediate', ['void', []]); $.SACLockScreenImmediate(); 'ok'";
+
 // AppleScript string literal
 const q = (s) => '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 
@@ -372,7 +374,13 @@ post(true); post(false);`);
         remaining: mins ? `${mins[0] ? mins[0] + ' hour' + (mins[0] === 1 ? '' : 's') + (mins[1] ? ' ' : '') : ''}${mins[1] ? mins[1] + ' minute' + (mins[1] === 1 ? '' : 's') : ''}`.trim() : ''
       };
     },
+    // macOS's own lock call (the one the Lock Screen menu item uses): it needs no Accessibility or Automation permission, so no prompt. If a system version does
+    // not have it, the keyboard shortcut is used instead (that one is the one that asks for permission).
     async lockScreen() {
+      try {
+        await jxa(LOCK_JXA);
+        return 'Locked the screen.';
+      } catch { /* fall back to the shortcut */ }
       await osa('tell application "System Events" to keystroke "q" using {control down, command down}');
       return 'Locked the screen.';
     },
