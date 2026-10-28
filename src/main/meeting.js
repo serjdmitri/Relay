@@ -20,8 +20,8 @@ const heardStop = (text) => STOP_PHRASE.test(String(text || ''));
 
 class MeetingRecorder {
   // speech: { listen(device), finish(), cancel(), on(event, fn), off(event, fn) }; getDevice(): the microphone; onStop(result) is called when it ends by itself (a spoken stop, too many errors, the time limit).
-  constructor({ speech, getDevice = () => 'auto', segmentMs = 50000, maxMs = 3 * 3600000, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, onStop = () => {}, log = console }) {
-    Object.assign(this, { speech, getDevice, segmentMs, maxMs, now, setTimer, clearTimer, onStop, log });
+  constructor({ speech, getDevice = () => 'auto', segmentMs = 50000, maxMs = 3 * 3600000, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, onStop = () => {}, onText = () => {}, onSegment = () => {}, log = console }) {
+    Object.assign(this, { speech, getDevice, segmentMs, maxMs, now, setTimer, clearTimer, onStop, onText, onSegment, log });
     this.active = false;
     this.segments = [];
     this.errors = 0;
@@ -29,10 +29,13 @@ class MeetingRecorder {
     this.timer = null;
     this.live = '';
     this.stopping = false;
-    this.onPartial = (t) => { this.live = t; if (this.active && heardStop(t)) this.end('said'); };
+    this.onPartial = (t) => { this.live = t; if (this.active && heardStop(t)) this.end('said'); else if (this.active) this.onText(t); };
   }
 
   get seconds() { return this.active ? Math.round((this.now() - this.startedAt) / 1000) : 0; }
+  // The last words heard (what was said just before a question), for the assistant.
+  recentText(n = 220) { return `${this.segments.slice(-3).join(' ')} ${this.live}`.split(/\s+/).filter(Boolean).slice(-n).join(' '); }
+
   get words() { return this.segments.join(' ').split(/\s+/).filter(Boolean).length; }
 
   async start() {
@@ -67,7 +70,7 @@ class MeetingRecorder {
   async takeSegment() {
     try {
       const text = String(await this.speech.finish() || '').replace(STOP_PHRASE, ' ').replace(/\s+/g, ' ').trim();
-      if (text) this.segments.push(text);
+      if (text) { this.segments.push(text); this.onSegment(text); }
     } catch { /* a stretch that could not be read is lost, the rest is kept */ }
     this.live = '';
   }

@@ -675,6 +675,25 @@ const PAGES = {
         $('#rsheet', row).onchange = (e) => { const m = e.target.value.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/); relay.set('settings.robotics.sheetId', m ? m[1] : ''); };
         return row;
       })(),
+      (() => {
+        const m = S.settings.meeting || {};
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Private meeting answers</div><div class="d">Say “meeting assistant” (or use the menu bar) and Relay listens for questions in your meeting, then shows a short answer top right within a second or two, and checks it online. The window is kept out of screen sharing and recordings, takes no clicks, and Relay never speaks while it is on. It hears what this Mac's microphone hears: on headphones that is only you, so pick a loopback audio source (such as BlackHole) below to hear the call. Tell people if you record. Use it only where AI help is allowed: not in tests, graded work or interviews that forbid it.</div></div><input class="field" id="mnames" style="width:230px" placeholder="Names to answer to, e.g. Sergey, Serge" value="${esc(m.names || '')}"><div style="flex-basis:100%;display:flex;gap:8px;margin-top:8px"><div class="select" style="margin:0;max-width:300px"><span id="msrc" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="msrcsel"></select></div><button class="btn" id="mtest">Test the private window</button></div></div>`);
+        $('#mnames', row).onchange = (e) => relay.set('settings.meeting.names', e.target.value.trim().slice(0, 120));
+        $('#mtest', row).onclick = () => relay.ask.open('test the private window');
+        const sel = $('#msrcsel', row);
+        const fill = (info) => {
+          const opts = [['', 'Same as the microphone setting'], ...(info?.list || []).map((d) => [d.uid, d.name])];
+          sel.innerHTML = opts.map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
+          sel.value = opts.some(([v]) => v === (m.input || '')) ? (m.input || '') : '';
+          $('#msrc', row).textContent = sel.options[sel.selectedIndex]?.text || '';
+        };
+        fill(null);
+        relay.inputDevices().then((info) => { if (page === 'general') fill(info); });
+        sel.onchange = () => { relay.set('settings.meeting.input', sel.value); $('#msrc', row).textContent = sel.options[sel.selectedIndex].text; };
+        return row;
+      })(),
+      toggleRow('Hide the answer window from screen sharing', 'On: the private window is excluded from screen shares and recordings. It is not guaranteed with every capture tool, so use “Test the private window” with the app you share with. Off: it shows like any window.', 'settings.meeting.hidden'),
+      toggleRow('Only answer when my name is said', 'Off: any question in the meeting gets an answer. On: only a question with one of your names right before or after it.', 'settings.meeting.nameOnly'),
       toggleRow('Evening recap', 'Around 8:30 PM Relay shows a notification with what it did today: what it changed, anything worth a second look (sent, moved to the Trash, ran a command), and what you can undo with one tap in History > Actions. Say “daily recap” or “what did you do today” any time. Only shown on days when something changed.', 'settings.recap.enabled'),
       toggleRow('Clipboard history', 'Remembers the text you copy, so you can ask “what did I copy earlier?”. Kept only in memory (never saved to disk, gone when Relay quits), for a day. Never kept: anything a password manager marks as secret, or that looks like a password, key, card or social security number. Say “clear my clipboard history” any time.', 'settings.clipboardHistory.enabled'),
       toggleRow('Workshop mode', 'For teaching younger students: Relay speaks slowly and calmly, keeps answers short and simple, and can show holograms of how attacks and defences work (“show me how phishing works”: phishing, man in the middle, DDoS, SQL injection, password hashing, encryption, firewalls). Say “workshop mode” to turn it on, “end workshop mode” to turn it off.', 'settings.workshop.enabled'),

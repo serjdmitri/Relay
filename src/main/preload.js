@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('relay', {
   connectGoogle: () => invoke('connectors:google:connect'),
   removeGoogle: (email) => invoke('connectors:google:remove', email),
   onCard: (cb) => on('card:state', (m, c) => cb(m, c)),
+  onAssist: (cb) => on('assist:state', (k, p) => cb(k, p)),
   cardClose: () => invoke('card:close'),
   cardOpen: (u) => invoke('card:open', u),
   cardSize: (h) => invoke('card:size', h),
