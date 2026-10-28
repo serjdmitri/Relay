@@ -67,6 +67,7 @@ const { parseDoctorCommand } = require('./doctor');
 const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
 const { ConfirmHub } = require('./confirmHub');
+const { parsePanelCommand } = require('./panels/hub');
 const RISKY_AFTER_PLUGIN = new Set(['messages_send', 'trash_path', 'run_shell', 'run_applescript', 'drive_apply']); // send, delete, run code: always ask once a plugin's output was read
 const flagsMod = require('./flags');
 const phish = require('./phish');
@@ -173,6 +174,7 @@ class AskController {
     this.resultListeners = new Set();
     this.hub = new ConfirmHub({ unanswered: () => this.store.get('settings.inbound.unanswered') || 'expire' }); // a question that may be asked on the Mac and the phone
     this.plugins = null; // the PluginManager, set by the app
+    this.panelHub = null; // the live panels, set by the app
     this.tainted = false;
     this.inbound = null; // set by the app when "Command Relay by text" is on
     this.currentRemote = null;
@@ -830,6 +832,18 @@ class AskController {
     return `No accurate 3D model of that exists (a model made from one photo would be a rough guess, so none is shown). A card is showing ${pics.length ? `${pics.length} real picture${pics.length === 1 ? '' : 's'} and ` : ''}YouTube searches for overviews, reviews and close-ups. If your research found specific YouTube video links, call show_card with them. Answer in one short sentence saying that.`;
   }
 
+  // ----- live panels -----
+  async showPanel(raw) {
+    const r = await this.panelHub.show(raw);
+    return r.ok ? `Showing the panel "${String(raw.title || 'Panel').slice(0, 40)}". It updates by itself and the user can drag it or close it with the x. Answer in one short sentence.` : `The panel was not shown: ${r.error}`;
+  }
+
+  closePanels() {
+    const n = this.panelHub.list().length;
+    this.panelHub.closeAll();
+    return n ? `Closed ${n} panel${n === 1 ? '' : 's'}.` : 'No panels were open.';
+  }
+
   // ----- answer cards -----
   async showCard(raw) {
     if (!this.cardPanel || this.store.get('settings.cards') === false) return 'Cards are turned off.';
@@ -1156,7 +1170,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Tools from the plugins you approved (Settings > Doctor > Plugins), only while that switch is on.
@@ -1681,6 +1695,11 @@ class AskController {
           if (ec) return this.explainError(ec, entry);
           const pc = phish.parsePhishCommand(effective);
           if (pc) return this.finish(entry, await this.securityCheck(pc));
+          if (this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels')) {
+            const pc2 = parsePanelCommand(effective);
+            if (pc2?.type === 'close') return this.finish(entry, { status: 'done', reply: this.closePanels() });
+            if (pc2?.type === 'show') { const r = await this.panelHub.show({ title: pc2.title, sources: pc2.sources }); return this.finish(entry, { status: r.ok ? 'done' : 'failed', reply: r.ok ? `Here is the ${pc2.title.toLowerCase()} panel.` : r.error }); }
+          }
           if (this.doctorRun && parseDoctorCommand(effective)) return this.finish(entry, { status: 'done', reply: await this.doctorRun() });
           const hc = hw.parseHomeworkCommand(effective);
           if (hc) return this.homeworkCommand(hc, entry);

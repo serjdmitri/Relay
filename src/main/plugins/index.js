@@ -72,7 +72,7 @@ class PluginManager {
   list() {
     return this.records().map((r) => {
       const parsed = this.manifestOf(r.name);
-      return { ...r, changed: parsed.ok && manifestHash(parsed.manifest) !== r.hash, ok: parsed.ok, error: parsed.ok ? '' : parsed.errors.join(' '), description: parsed.manifest?.description || '', permissions: parsed.ok ? describePermissions(parsed.manifest) : [], tools: parsed.manifest?.tools.map((t) => t.name) || [], running: !!this.procs.get(r.name) && !this.procs.get(r.name).exited };
+      return { ...r, changed: parsed.ok && manifestHash(parsed.manifest) !== r.hash, ok: parsed.ok, error: parsed.ok ? '' : parsed.errors.join(' '), description: parsed.manifest?.description || '', permissions: parsed.ok ? describePermissions(parsed.manifest) : [], tools: parsed.manifest?.tools.map((t) => t.name) || [], panels: parsed.manifest?.panels || [], running: !!this.procs.get(r.name) && !this.procs.get(r.name).exited };
     });
   }
 
