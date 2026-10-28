@@ -15,7 +15,7 @@ function normalizeCard(raw = {}) {
   if (!title) return null;
   const facts = (Array.isArray(raw.facts) ? raw.facts : []).map((f) => ({ label: cut(f?.label, 28), value: cut(f?.value, 90) })).filter((f) => f.label && f.value).slice(0, 6);
   const links = (Array.isArray(raw.links) ? raw.links : []).map((l) => ({ label: cut(l?.label || l?.url, 36), url: safeUrl(l?.url) })).filter((l) => l.url).slice(0, 4);
-  const items = (Array.isArray(raw.items) ? raw.items : []).map((i) => ({ title: cut(i?.title, 70), subtitle: cut(i?.subtitle, 70), note: cut(i?.note, 120), url: safeUrl(i?.url), imageQuery: cut(i?.image_query ?? i?.title, 80), image: null })).filter((i) => i.title).slice(0, 6);
+  const items = (Array.isArray(raw.items) ? raw.items : []).map((i) => ({ title: cut(i?.title, 70), subtitle: cut(i?.subtitle, 70), note: cut(i?.note, 120), url: safeUrl(i?.url), imageQuery: cut(i?.image_query ?? i?.title, 80), image: typeof i?.image_data === 'string' && /^data:image\/(?:jpeg|png|webp);base64,/.test(i.image_data) ? i.image_data : null })).filter((i) => i.title).slice(0, 6);
   return { kind, title, subtitle: cut(raw.subtitle, 100), summary: cut(raw.summary, 420), facts, links, items, imageQuery: cut(raw.image_query || raw.title, 80), image: null, credit: '' };
 }
 
@@ -36,7 +36,7 @@ async function buildCard(raw, { fetchImpl = fetch } = {}) {
     if (img) { card.image = await guard(imageData(img.url, { fetchImpl })); card.credit = card.image ? img.credit : ''; }
   } else {
     await Promise.all(card.items.map(async (it) => {
-      if (!it.imageQuery) return;
+      if (it.image || !it.imageQuery) return;
       const wiki = await guard(wikiLookup(it.imageQuery, { fetchImpl, width: 240 }));
       if (wiki?.image) it.image = await guard(imageData(wiki.image.url, { fetchImpl }));
       // every result opens something: the link the model gave, else its Wikipedia page, else a web search for it

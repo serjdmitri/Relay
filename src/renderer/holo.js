@@ -27,7 +27,7 @@ const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3, 5, 4)
 
 const CYAN = new THREE.Color(0x00d4ff);
 // The cut bar: a plane through the model (everything on its positive side is cut away). clipN and clipD are in world units; the shader and three's own clipping both use them.
-const clip = { on: false, axis: 1, t: 1, flip: false, box: null };
+const clip = { on: false, axis: 1, t: 1, flip: false, box: null, nLocal: null };
 const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e6); // three keeps the side with distance >= 0, so this is the plane turned round
 const clipPlanes = [clipPlane];
 const uniforms = { time: { value: 0 }, reveal: { value: -2 }, originY: { value: 0 }, clipOn: { value: 0 }, clipN: { value: new THREE.Vector3(0, 1, 0) }, clipD: { value: 0 } };
@@ -1145,20 +1145,28 @@ function measureClip() {
   holo.traverse((o) => { if (o.isMesh && o.geometry) { o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld)); box.union(b); } });
   clip.box = box.isEmpty() ? new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1)) : box;
 }
+// The cut is fixed in the model's own frame: when the cut is made (or its direction chosen) the screen's X, Y or Z becomes a direction in the model, and from then on
+// turning the model turns the section with it, like a real piece cut through. (A model's own axes are arbitrary, so the direction is picked on screen.)
+function lockClipAxis() {
+  holo.updateMatrixWorld(true);
+  const q = holo.getWorldQuaternion(new THREE.Quaternion()).invert();
+  clip.nLocal = AXIS_V[clip.axis].clone().applyQuaternion(q).normalize();
+}
 function updateClip() {
   if (!clip.on) { uniforms.clipOn.value = 0; clipPlane.set(tmpN.set(0, -1, 0), 1e6); cutVis.visible = false; return; }
-  // The planes are the SCREEN's: X slides left to right, Y up and down, Z front to back, whatever way the model is turned (a model's own axes are
-  // arbitrary: a horse's "X" is its width, and cutting that looks like nothing from the side). Turn the model and the section changes.
   holo.updateMatrixWorld(true);
   const wb = new THREE.Box3().setFromObject(holo);
   if (wb.isEmpty()) return;
-  const n = AXIS_V[clip.axis];
-  const c = wb.getCenter(new THREE.Vector3());
-  const half = (wb.max.getComponent(clip.axis) - wb.min.getComponent(clip.axis)) / 2;
+  if (!clip.nLocal) lockClipAxis();
+  if (!clip.box) measureClip();
   const sign = clip.flip ? -1 : 1;
-  tmpP.copy(c).addScaledVector(n, sign * clip.t * half * 1.02);
-  const pw = tmpP.clone();
-  tmpN.copy(n).multiplyScalar(sign);
+  const nl = clip.nLocal;
+  const bc = clip.box.getCenter(new THREE.Vector3());
+  const bs = clip.box.getSize(new THREE.Vector3());
+  const half = (Math.abs(nl.x) * bs.x + Math.abs(nl.y) * bs.y + Math.abs(nl.z) * bs.z) / 2; // how far the model reaches along the cut direction, from its middle
+  const pl = bc.clone().addScaledVector(nl, sign * clip.t * half * 1.02); // a point on the plane, in the model's frame
+  const pw = pl.applyMatrix4(holo.matrixWorld);
+  tmpN.copy(nl).transformDirection(holo.matrixWorld).multiplyScalar(sign);
   uniforms.clipN.value.copy(tmpN);
   uniforms.clipD.value = -tmpN.dot(pw);
   uniforms.clipOn.value = 1;
@@ -1181,7 +1189,7 @@ function updateClip() {
 }
 function setCut(on) {
   clip.on = !!on;
-  if (clip.on) { clip.box = null; clip.t = Number($('cutr').value) / 100; }
+  if (clip.on) { clip.box = null; clip.nLocal = null; clip.t = Number($('cutr').value) / 100; }
   document.body.classList.toggle('cutting', clip.on);
   $('cut').classList.toggle('on', clip.on);
   touched();
@@ -1191,7 +1199,7 @@ $('cut').onclick = () => { setCut(!clip.on); document.body.classList.remove('men
 $('cutx').onclick = () => setCut(false);
 $('cutflip').onclick = () => { clip.flip = !clip.flip; $('cutflip').classList.toggle('on', clip.flip); touched(); };
 $('cutr').addEventListener('input', () => { clip.t = Number($('cutr').value) / 100; touched(); });
-for (const b of document.querySelectorAll('#cutax b')) b.onclick = () => { clip.axis = Number(b.dataset.ax); for (const x of document.querySelectorAll('#cutax b')) x.classList.toggle('on', x === b); clip.box = null; touched(); };
+for (const b of document.querySelectorAll('#cutax b')) b.onclick = () => { clip.axis = Number(b.dataset.ax); for (const x of document.querySelectorAll('#cutax b')) x.classList.toggle('on', x === b); clip.box = null; clip.nLocal = null; touched(); };
 
 let prev = performance.now();
 const qSpin = new THREE.Quaternion();
@@ -1239,6 +1247,7 @@ window.__holoTest = {
   stage: async () => { staged = { ver: -1, path: '' }; return stageFile(); },
   info: () => { const kinds = {}; let meshes = 0; holo.traverse((o) => { if (o.isMesh) { meshes++; for (const m of [].concat(o.material)) { const k = m.isShaderMaterial ? (m.uniforms.clipOn ? 'shader+clip' : 'shader') : m.type; kinds[k] = (kinds[k] || 0) + 1; } } }); return { meshes, kinds, box: clip.box && [clip.box.min.toArray(), clip.box.max.toArray()], items: items.map((i) => i.kind) }; },
   cut: (on, axis = 1, t = 0, flip = false) => { clip.axis = axis; clip.flip = flip; $('cutr').value = String(Math.round(t * 100)); setCut(on); clip.t = t; updateClip(); return { on: clip.on, d: uniforms.clipD.value, n: uniforms.clipN.value.toArray() }; },
+  clipState: () => ({ n: uniforms.clipN.value.toArray(), d: uniforms.clipD.value, on: uniforms.clipOn.value }),
   save: (fmt) => saveModel(fmt),
   printCheck: () => runPrintCheck(),
   notes: () => notes.map((n) => ({ ...n })),
