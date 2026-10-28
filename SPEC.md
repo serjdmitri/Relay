@@ -112,7 +112,7 @@ Each item is its own minor release.
 - Doctor logs every `load_more_tools` call (category requested, request text hash) so the classifier can be improved.
 - If the pre-filter is unsure (no category matches), all tools load as today.
 
-**Constraint to verify before building.** MCP tool lists are fixed per session in the Claude CLI path; confirm that `load_more_tools` can add tools mid-session via `tools/list_changed`, or fall back to ending the turn with a "load" result and resuming the same session. Codex path (`agent/codexCli.js`) needs the same check. This is the main technical risk of 4.3.
+**Finding from the build (answers open question 1).** The tool server (`McpHost`) answers each request with plain JSON and cannot push a "tools changed" message, and the Claude session is started while you are still talking, before the request is known, so its tool list is read once. So the built version does not add tools mid-session. Instead the rarely used groups (Firefox, holograms, Drive, homework files, shell, background agents) are left out of the list, and `load_more_tools(group)` plus `use_tool(name, input)` reach them; `use_tool` calls the real tool, so confirmations and the home-folder guard are unchanged. Where the request is known (Codex, a fresh process) the groups it clearly asks for are listed directly. The pre-filter therefore only trims the hidden groups, not the whole list.
 
 **Edge cases.** Follow-up turns reuse the previous categories plus any newly matched. Phone and typed requests use the same filter. Plugin tools belong to category `plugins` and are always listed by name only until loaded.
 
@@ -242,7 +242,7 @@ Same as the rest of the repo: pure modules with injected fakes under `node:test`
 
 ## 6. Open questions
 
-1. Can `load_more_tools` add tools mid-session for both Claude CLI and Codex CLI paths, or does it need a resume-the-turn fallback? (Spike first, 4.3.)
+1. (Answered while building 4.3: no, tools cannot be added mid-session; see the finding in 4.3.)
 2. Is polling `chat.db` every 5 seconds acceptable for battery, or should it wake only on a Messages notification?
 3. Can the Swift `NLEmbedding` quality handle PDFs and notes well enough, or does Folder Q&A need Ollama embeddings as an optional upgrade later?
 4. Plugin sandboxing on macOS: how much can be enforced without deprecated `sandbox-exec`? The spec assumes install-time approval is the main control.

@@ -11,6 +11,7 @@ const os = require('os');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
 const { callTool } = require('./loop');
+const categories = require('./toolCategories');
 const { isLimitText } = require('../failover');
 
 const HOME = os.homedir();
@@ -103,11 +104,16 @@ async function handleRpc(msg, run) {
       return ok({ protocolVersion: msg.params?.protocolVersion || PROTOCOL, capabilities: { tools: {} }, serverInfo: { name: 'relay', version: '1' } });
     case 'ping':
       return ok({});
-    case 'tools/list':
-      return ok({ tools: (run?.tools || []).map((t) => ({ name: t.name, description: t.description, inputSchema: t.input_schema })) });
+    case 'tools/list': {
+      const all = run?.tools || [];
+      const shown = run?.exposed ? all.filter((t) => run.exposed.has(t.name)) : all; // fewer tools: the rest are reached through load_more_tools
+      return ok({ tools: [...shown.map((t) => ({ name: t.name, description: t.description, inputSchema: t.input_schema })), ...(run?.exposed ? categories.loaderDefs(all, run.exposed) : [])] });
+    }
     case 'tools/call': {
       if (!run) return err(-32000, 'No request is running.');
-      const { name, arguments: args } = msg.params || {};
+      let { name, arguments: args } = msg.params || {};
+      if (run.exposed && name === 'load_more_tools') return ok({ content: [{ type: 'text', text: categories.loadMore(run, args?.group) }] });
+      if (run.exposed && name === 'use_tool') { name = String(args?.name || ''); args = args?.input || {}; } // the real tool runs, with its own confirmation
       const tool = run.tools.find((t) => t.name === name);
       const out = await callTool({ tool, name, input: args || {}, confirm: run.confirm, onEvent: run.onEvent, signal: run.signal });
       if (out.aborted) return ok({ content: [{ type: 'text', text: 'Stopped by the user.' }], isError: true });
@@ -220,7 +226,7 @@ class ClaudeSession {
     this.host = host;
     this.model = model;
     this.timeoutMs = timeoutMs;
-    this.run = { tools, confirm: async () => false, onEvent: () => {}, signal: undefined, counter: { actions: 0 } };
+    this.run = { tools, exposed: tools.exposed || null, confirm: async () => false, onEvent: () => {}, signal: undefined, counter: { actions: 0 } };
     host.run = this.run;
     this.turn = null;
     this.turns = 0; // requests answered so far: a session with turns remembers the conversation
