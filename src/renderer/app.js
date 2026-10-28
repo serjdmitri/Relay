@@ -2,6 +2,7 @@
 let S = null; // latest state from main
 let page = new URLSearchParams(location.search).get('page') || 'home';
 let historyTab = 'requests';
+if (page === 'recap') { page = 'history'; historyTab = 'actions'; }
 let dictQuery = '';
 let range = 'all';
 let perms = { accessibility: false, screen: false, mic: false, micStatus: 'unknown' };
@@ -212,6 +213,12 @@ const PAGES = {
       };
       drawDict();
     } else {
+      const rc = S.recap;
+      if (rc && !rc.empty) {
+        const card = h(`<div class="card" style="margin-bottom:16px"><div class="t" style="padding:10px 14px 2px;font-weight:600">Today</div><div class="note" style="padding:0 14px 8px;line-height:1.5">${esc(rc.spoken.replace(/ The list is in History, under Actions\.$/, ''))}</div>${rc.items.length ? rc.items.map((x) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${x.risk >= 2 ? '#ff9f0a' : '#4cc2ff'}"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(x.text)}</div></div><span class="note">${esc(x.when)}</span>${x.undoable ? `<button class="btn" data-undo="${esc(x.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : ''}</div>`);
+        card.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
+        c.append(card);
+      }
       c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Where an action can be put back (a moved file, a window, the volume, a timer, a note…), it has an Undo button until Relay quits. Use this to see what happened when a request did not work.</div>'));
       const actCard = h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span>${a.undoable ? `<button class="btn" data-undo="${esc(a.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`);
       actCard.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
@@ -660,6 +667,7 @@ const PAGES = {
         $('#rsheet', row).onchange = (e) => { const m = e.target.value.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/); relay.set('settings.robotics.sheetId', m ? m[1] : ''); };
         return row;
       })(),
+      toggleRow('Evening recap', 'Around 8:30 PM Relay shows a notification with what it did today: what it changed, anything worth a second look (sent, moved to the Trash, ran a command), and what you can undo with one tap in History > Actions. Say “daily recap” or “what did you do today” any time. Only shown on days when something changed.', 'settings.recap.enabled'),
       toggleRow('Clipboard history', 'Remembers the text you copy, so you can ask “what did I copy earlier?”. Kept only in memory (never saved to disk, gone when Relay quits), for a day. Never kept: anything a password manager marks as secret, or that looks like a password, key, card or social security number. Say “clear my clipboard history” any time.', 'settings.clipboardHistory.enabled'),
       toggleRow('Workshop mode', 'For teaching younger students: Relay speaks slowly and calmly, keeps answers short and simple, and can show holograms of how attacks and defences work (“show me how phishing works”: phishing, man in the middle, DDoS, SQL injection, password hashing, encryption, firewalls). Say “workshop mode” to turn it on, “end workshop mode” to turn it off.', 'settings.workshop.enabled'),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
@@ -1084,7 +1092,7 @@ window.addEventListener('keyup', (e) => {
   S = await relay.getState();
   perms = await relay.permissions();
   render();
-  relay.onNavigate((p) => PAGES[p] && go(p));
+  relay.onNavigate((p) => { if (p === 'recap') { historyTab = 'actions'; go('history'); } else if (PAGES[p]) go(p); });
   relay.onStateChanged(async () => {
     S = await relay.getState();
     perms = await relay.permissions();
