@@ -60,6 +60,7 @@ app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
@@ -307,6 +308,12 @@ function schedulePrepareSpeech() {
   prepareTimer = setTimeout(() => prepareSpeech(), 2000);
 }
 
+// Command Relay by text runs only while its switch is on.
+function syncInbound() {
+  if (!inbound) return;
+  if (flagsMod.isOn(store.get('settings'), 'imessage')) inbound.start(); else inbound.stop();
+}
+
 function registerIpc() {
   ipcMain.handle('state:get', () => publicState());
   ipcMain.handle('state:set', (_e, key, value) => {
@@ -465,10 +472,6 @@ function registerIpc() {
 
 
   // ----- Command Relay by text -----
-  const syncInbound = () => {
-    if (!inbound) return;
-    if (flagsMod.isOn(store.get('settings'), 'imessage')) inbound.start(); else inbound.stop();
-  };
   ipcMain.handle('inbound:status', () => ({ ...(inbound?.status() || {}), fullDisk: fullDisk(), on: flagsMod.isOn(store.get('settings'), 'imessage') }));
   ipcMain.handle('inbound:code', () => { syncInbound(); return { code: inbound?.newCode() || null }; });
   ipcMain.handle('queue:review', async (_e, id, run) => { const r = await inbound?.releaseReview(String(id), !!run); broadcast(); return r || { ok: false }; });
