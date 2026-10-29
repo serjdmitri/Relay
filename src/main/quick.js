@@ -153,6 +153,8 @@ function parseQuick(text, now = new Date()) {
   if (/^(?:turn off|disable) dark(?: mode)?$/.test(n) || /^(?:switch to|go to|use|set|turn on|enable) light(?: mode)?$/.test(n) || n === 'light mode') return { type: 'dark', on: false };
 
   // ----- music and video -----
+  if ((m = n.match(/^(?:(?:toggle|turn|switch|set) )?shuffle(?: mode)?(?: (on|off))?$|^shuffle (?:my |the )?(?:music|songs|tracks|playlist)$/))) return { type: 'media', op: 'shuffle', on: m[1] === 'on' ? true : m[1] === 'off' ? false : null };
+  if ((m = n.match(/^(?:(?:toggle|turn|switch|set) )?(?:repeat|loop)(?: mode)?(?: (on|off|one|all))?$/))) return { type: 'media', op: 'repeat', mode: m[1] || null };
   if ((m = n.match(/^(?:play|resume|continue|unpause)(?: the)?(?: music| song| track| playback| audio| video)?(?: on)?(?: (spotify|apple music))?$/))) return { type: 'media', op: 'play', app: m[1] };
   if (/^(?:pause|stop)(?: the)?(?: music| song| track| playback| audio| video| spotify| apple music)?$/.test(n)) return { type: 'media', op: 'pause' };
   if (/^(?:next|skip|next song|next track|skip song|skip track|skip this song|skip this track|skip it|play the next song|play the next track|go to the next song|go to the next track)$/.test(n)) return { type: 'media', op: 'next' };
@@ -233,6 +235,33 @@ async function nowPlaying(mac, app) {
 }
 
 const pct = (v) => Math.round(v * 100);
+
+// Shuffle and repeat, for Spotify and Music. Returns the words for the new state ("Shuffle on.", "Repeat all."). want: true/false (shuffle) or off/one/all (repeat); null toggles.
+async function shuffleRepeat(mac, app, op, want) {
+  if (app === 'Spotify') {
+    if (op === 'shuffle') {
+      const now = String(await mac.osa('tell application "Spotify" to return (shuffling as text)')).trim() === 'true';
+      const next = want === null ? !now : !!want;
+      await mac.osa(`tell application "Spotify" to set shuffling to ${next}`);
+      return { reply: next ? 'Shuffle on.' : 'Shuffle off.', undo: () => mac.osa(`tell application "Spotify" to set shuffling to ${now}`) };
+    }
+    const now = String(await mac.osa('tell application "Spotify" to return (repeating as text)')).trim() === 'true';
+    const next = want === null ? !now : want !== 'off';
+    await mac.osa(`tell application "Spotify" to set repeating to ${next}`);
+    return { reply: next ? 'Repeat on.' : 'Repeat off.', undo: () => mac.osa(`tell application "Spotify" to set repeating to ${now}`) };
+  }
+  if (op === 'shuffle') {
+    const now = String(await mac.osa('tell application "Music" to return (shuffle enabled as text)')).trim() === 'true';
+    const next = want === null ? !now : !!want;
+    await mac.osa(`tell application "Music" to set shuffle enabled to ${next}`);
+    return { reply: next ? 'Shuffle on.' : 'Shuffle off.', undo: () => mac.osa(`tell application "Music" to set shuffle enabled to ${now}`) };
+  }
+  const now = String(await mac.osa('tell application "Music" to return (song repeat as text)')).trim().toLowerCase();
+  const order = ['off', 'all', 'one']; // each press: off, then repeat all, then repeat one
+  const next = want || order[(Math.max(0, order.indexOf(now)) + 1) % 3];
+  await mac.osa(`tell application "Music" to set song repeat to ${next}`);
+  return { reply: next === 'off' ? 'Repeat off.' : next === 'one' ? 'Repeat one.' : 'Repeat all.', undo: () => mac.osa(`tell application "Music" to set song repeat to ${now}`) };
+}
 
 // Returns { tool, input, reply, undo? } when it handled the command, or null to let the model take it.
 // ctx: { timers, brightness: { get(), set(v) }, now(), prevApp, runningApps }
@@ -337,6 +366,12 @@ async function runQuick(cmd, mac, ctx = {}) {
     }
     case 'media': {
       const { states, playing, any, pick } = await players(mac, cmd.app);
+      if (cmd.op === 'shuffle' || cmd.op === 'repeat') {
+        const t = pick || playing || any;
+        if (!t || t.notRunning) return { tool: 'media', input: { op: cmd.op }, reply: 'No music app is open.', readonly: true };
+        const r = await shuffleRepeat(mac, t.app, cmd.op, cmd.op === 'shuffle' ? cmd.on : cmd.mode);
+        return { tool: 'media', input: { op: cmd.op, app: t.app }, reply: r.reply, undo: async () => { await r.undo(); return 'Put it back.'; } };
+      }
       const target = pick || (cmd.op === 'play' ? states.find((s) => s.state.includes('paused')) || any : playing || any);
       const flip = { play: 'pause', pause: 'play', next: 'previous', previous: 'next' };
       if (!target || target.notRunning) {
