@@ -63,7 +63,7 @@ async function callTool({ tool, name, input, confirm, onEvent = () => {}, signal
     if (signal?.aborted) return { aborted: true, content: [] };
     if (!allowed) {
       onEvent({ type: 'tool', name, input, ok: false, result: 'declined' });
-      return { content: [{ type: 'text', text: 'The user declined this action. Do not retry it. Tell them it was not done.' }] };
+      return { content: [{ type: 'text', text: 'The user declined this action. Do not retry it. Tell them it was not done.' }], isError: true };
     }
   }
   if (signal?.aborted) return { aborted: true, content: [] };

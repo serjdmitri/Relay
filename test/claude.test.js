@@ -39,6 +39,7 @@ test('confirm gate: declined actions do not run and are reported to the model', 
   const r = await handleRpc({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'send', arguments: {} } }, run);
   assert.equal(asked, 'Send it?');
   assert.match(r.result.content[0].text, /declined/);
+  assert.equal(r.result.isError, true);
   assert.equal(run.counter.actions, 0);
 });
 
