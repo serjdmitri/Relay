@@ -179,6 +179,22 @@ test('undo keeps failed moves available for retry and never substitutes a differ
   assert.equal(log().length, 0);
 });
 
+test('folder plans reject symlinked paths and recheck them before moving', async () => {
+  const { home, w } = sandbox();
+  const source = w('Downloads/a.txt');
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-outside-'));
+  fs.symlinkSync(outside, path.join(home, 'Downloads/link'));
+  const bad = buildPlan({ moves: [{ from: source, to_folder: '~/Downloads/link' }], trash: ['~/Downloads/link/a.txt'] }, { fs, home });
+  assert.equal(bad.moves.length, 0);
+  assert.equal(bad.trash.length, 0);
+  const good = buildPlan({ moves: [{ from: source, to_folder: '~/Downloads/target' }] }, { fs, home });
+  fs.symlinkSync(outside, path.join(home, 'Downloads/target'));
+  const result = await applyPlan(good, { fs, home, trashItem: async () => {} });
+  assert.equal(result.done.length, 0);
+  assert.equal(result.failed.length, 1);
+  assert.ok(fs.existsSync(source));
+});
+
 test('a plan of things that cannot be done says so, and trash is only for what is listed', async () => {
   const { home, w } = sandbox();
   const keep = w('Downloads/keep.txt'); const junk = w('Downloads/junk.zip');

@@ -10,6 +10,18 @@ const MAX_MOVES = 500;
 
 const expand = (p, home) => path.resolve(String(p || '').startsWith('~') ? path.join(home, String(p).slice(1)) : String(p || ''));
 
+// Refuse symlinks anywhere along a path, including destination folders that may
+// otherwise redirect a move outside the user's home or into protected data.
+function hasSymlink(p, fs, home) {
+  let current = home;
+  for (const part of path.relative(home, p).split(path.sep).filter(Boolean)) {
+    current = path.join(current, part);
+    try { if (fs.lstatSync(current).isSymbolicLink()) return true; }
+    catch (e) { if (e.code === 'ENOENT') return false; throw e; }
+  }
+  return false;
+}
+
 // A folder that holds a project (code or an app being built): its files are not moved one by one, they would stop working.
 function isProject(dir, fs) {
   try {
@@ -52,6 +64,7 @@ function buildPlan(raw, { fs, home }) {
     const from = expand(m?.from, home);
     const bad = pathProblem(from, home);
     if (bad) { skipped.push({ path: m?.from, reason: bad }); continue; }
+    try { if (hasSymlink(from, fs, home)) { skipped.push({ path: m?.from, reason: 'A path contains a symbolic link (alias), left alone.' }); continue; } } catch { skipped.push({ path: m?.from, reason: 'The path could not be checked.' }); continue; }
     if (seen.has(from)) continue;
     seen.add(from);
     let st;
@@ -63,6 +76,7 @@ function buildPlan(raw, { fs, home }) {
     const badTo = pathProblem(path.join(folder, 'x'), home);
     if (!m?.to_folder && !m?.to) { skipped.push({ path: m?.from, reason: 'No destination folder.' }); continue; }
     if (badTo) { skipped.push({ path: m?.from, reason: `Destination: ${badTo}` }); continue; }
+    try { if (hasSymlink(folder, fs, home)) { skipped.push({ path: m?.from, reason: 'Destination contains a symbolic link.' }); continue; } } catch { skipped.push({ path: m?.from, reason: 'Destination could not be checked.' }); continue; }
     if (folder === from || folder.startsWith(from + path.sep)) { skipped.push({ path: m?.from, reason: 'It cannot go inside itself.' }); continue; }
     const name = m?.to && !m?.to_folder ? path.basename(String(m.to)) : path.basename(from);
     const dest = path.join(folder, name);
@@ -75,6 +89,7 @@ function buildPlan(raw, { fs, home }) {
     const full = expand(t, home);
     const bad = pathProblem(full, home);
     if (bad) { skipped.push({ path: t, reason: bad }); continue; }
+    try { if (hasSymlink(full, fs, home)) { skipped.push({ path: t, reason: 'A path contains a symbolic link, left alone.' }); continue; } } catch { skipped.push({ path: t, reason: 'The path could not be checked.' }); continue; }
     try { if (fs.lstatSync(full).isSymbolicLink()) { skipped.push({ path: t, reason: 'A shortcut (alias), left alone.' }); continue; } } catch { skipped.push({ path: t, reason: 'It is not there.' }); continue; }
     if (!seen.has(full)) { seen.add(full); trash.push(full); }
   }
@@ -84,11 +99,12 @@ function buildPlan(raw, { fs, home }) {
 }
 
 // Carries out a plan: folders are made, files moved (never over anything), the Trash gets what was asked. Returns what was done.
-async function applyPlan(plan, { fs, trashItem }) {
+async function applyPlan(plan, { fs, trashItem, home }) {
   const done = [];
   const failed = [];
   for (const m of plan.moves) {
     try {
+      if (home && (hasSymlink(m.from, fs, home) || hasSymlink(m.folder, fs, home))) throw new Error('A path now contains a symbolic link.');
       if (fs.existsSync(m.to)) throw new Error('Something appeared at the destination.');
       fs.mkdirSync(path.dirname(m.to), { recursive: true });
       fs.renameSync(m.from, m.to); // a move: if it is on another drive this throws, and nothing is copied or removed
@@ -97,7 +113,7 @@ async function applyPlan(plan, { fs, trashItem }) {
   }
   const trashed = [];
   for (const t of plan.trash) {
-    try { await trashItem(t); trashed.push(t); } catch (e) { failed.push({ path: t, reason: e.message }); }
+    try { if (home && hasSymlink(t, fs, home)) throw new Error('A path now contains a symbolic link.'); await trashItem(t); trashed.push(t); } catch (e) { failed.push({ path: t, reason: e.message }); }
   }
   return { id: plan.id, ts: Date.now(), done, trashed, failed };
 }
