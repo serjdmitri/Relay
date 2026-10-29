@@ -36,6 +36,7 @@
     'Ask my notes': 'Preguntar a mis notas', 'Add a folder': 'Añadir una carpeta', 'Index now': 'Indexar ahora', Update: 'Actualizar', 'Live panels': 'Paneles en vivo',
     'Speak up on its own': 'Hablar por iniciativa propia', 'Offline mode': 'Modo sin conexión', 'Quiet hours': 'Horas de silencio', 'How loud': 'Qué tan alto',
     'Faster answers': 'Respuestas más rápidas',
+    'Move app windows and tabs with hands': 'Mover ventanas y pestañas con las manos',
     'How long before it opens': 'Cuánto tarda en abrirse', Instantly: 'De inmediato',
     'Welcome back when I unlock': 'Bienvenida al desbloquear', 'Unlock greeting': 'Saludo al desbloquear',
     Doctor: 'Doctor', 'Relay Doctor': 'Doctor de Relay', 'Checking…': 'Comprobando…', 'Check again': 'Comprobar de nuevo', 'Copy report': 'Copiar informe', 'Report a bug': 'Informar de un error', 'Request a feature': 'Pedir una función', 'Fixed automatically': 'Arreglado automáticamente', 'When Doctor can fix something': 'Cuando Doctor pueda arreglar algo', 'Ask first': 'Preguntar antes', 'Fix small things': 'Arreglar cosas pequeñas', 'Only tell me': 'Solo avisarme', Experimental: 'Experimental',

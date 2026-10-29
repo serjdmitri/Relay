@@ -359,3 +359,13 @@ test('calibration saves a bounded reach only after enough two-dimensional motion
   assert.deepEqual(saved, [0.2], 'a stationary hand does not overwrite calibration');
   hc.disable();
 });
+
+test('a fist away from Relay objects drags a Mac window and releases on tracking loss', async () => {
+  const { hc, at, ev } = await rig(); const events = [];
+  hc.externalDrag = { begin: (_owner, pt) => { events.push(['down', pt]); return true; }, move: (_owner, pt) => events.push(['move', pt]), end: () => events.push(['up']), close() {} };
+  await ev({ type: 'grab', ...at(100, 100) });
+  await ev({ type: 'move', ...at(250, 140), held: true });
+  await ev({ type: 'lost' });
+  assert.deepEqual(events.map(e => e[0]), ['down', 'move', 'up']);
+  hc.disable();
+});

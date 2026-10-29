@@ -115,6 +115,45 @@ let args = CommandLine.arguments
 guard args.count >= 2 else { fail("usage: relay-ax find|list|press <app> ... | ocr <png> <text> | focused") }
 
 switch args[1] {
+case "hand-drag":
+    let trustOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    guard AXIsProcessTrustedWithOptions(trustOptions) else { fail("Allow Relay’s hand-drag helper in System Settings > Privacy & Security > Accessibility, then try again.") }
+    var held = false
+    var last = CGPoint.zero
+    func emit(_ type: CGEventType, _ point: CGPoint) {
+        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left) else { return }
+        event.post(tap: .cghidEventTap)
+    }
+    func eligible(_ point: CGPoint) -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return false }
+        for w in windows {
+            guard (w[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = w[kCGWindowBounds as String] as? [String: Any],
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary), rect.contains(point) else { continue }
+            let owner = (w[kCGWindowOwnerName as String] as? String ?? "").lowercased()
+            if owner == "relay" || owner == "finder" && rect.height < 100 { return false }
+            return point.y <= rect.minY + min(110, rect.height * 0.3)
+        }
+        return false
+    }
+    print("ready")
+    while let line = readLine() {
+        guard let data = line.data(using: .utf8), let m = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let op = m["op"] as? String, let x = m["x"] as? Double, let y = m["y"] as? Double,
+              x.isFinite, y.isFinite, abs(x) < 100000, abs(y) < 100000 else { continue }
+        let point = CGPoint(x: x, y: y)
+        switch op {
+        case "down":
+            if !held && eligible(point) { emit(.mouseMoved, point); emit(.leftMouseDown, point); held = true; last = point; print("down") }
+            else { print("not-draggable") }
+        case "move":
+            if held { emit(.leftMouseDragged, point); last = point }
+        case "up":
+            if held { emit(.leftMouseUp, point); held = false; last = point; print("up") }
+        default: break
+        }
+    }
+    if held { emit(.leftMouseUp, last) }
 case "find":
     guard args.count >= 4 else { fail("usage: relay-ax find <app> <name> [seconds]") }
     let secs = args.count > 4 ? Double(args[4]) ?? 2.5 : 2.5
