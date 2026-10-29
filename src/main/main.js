@@ -561,7 +561,7 @@ function registerIpc() {
       claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
       failoverOn: () => store.get('settings.failover.codex') !== false,
       perms: () => perms.status(), signing: () => st, remote: () => remote?.info(),
-      handsEnabled: () => !!store.get('settings.hands.enabled'), browser: () => ({ connected: bridge.isConnected() }),
+      handsEnabled: () => !!store.get('settings.hands.enabled'), presenceEnabled: () => !!store.get('settings.presence.enabled'), browser: () => ({ connected: bridge.isConnected() }),
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),

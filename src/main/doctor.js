@@ -49,10 +49,13 @@ const CHECKS = [
     }
   })),
   {
-    id: 'perm-camera', title: 'Camera permission for hands', run: (env) => {
-      if (!env.handsEnabled?.()) return ok('Hand control is off.');
+    id: 'perm-camera', title: 'Camera permission', run: (env) => {
+      const hands = !!env.handsEnabled?.();
+      const presence = !!env.presenceEnabled?.();
+      if (!hands && !presence) return ok('Hand control and presence are off.');
       const p = env.perms?.() || {};
-      return p.camera ? ok('Allowed') : p.cameraStatus === 'not-determined' ? warn('Turn on hand control to request camera access.', pane('camera')) : fail('Camera access is off, so hand control cannot see your hands.', pane('camera'));
+      const feature = hands && presence ? 'hand control and presence' : hands ? 'hand control' : 'presence detection';
+      return p.camera ? ok(`Allowed for ${feature}.`) : p.cameraStatus === 'not-determined' ? warn(`Camera access is needed for ${feature}.`, pane('camera')) : fail(`Camera access is off, so ${feature} cannot use the camera.`, pane('camera'));
     }
   },
   {
