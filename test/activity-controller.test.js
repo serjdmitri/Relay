@@ -7,6 +7,20 @@ Module._load = function (req, ...rest) { return req === 'electron' ? { app: {}, 
 let AskController, UndoRegistry;
 try { ({ AskController } = require('../src/main/askController')); ({ UndoRegistry } = require('../src/main/activity')); } finally { Module._load = real; }
 
+test('presence locks before pausing music and reports lock failures', async () => {
+  const events = [];
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, {
+    store: { get: () => ({ lock: true, pause: true }) },
+    mac: { lockScreen: async () => { events.push('lock'); throw new Error('failed'); } },
+    quick: async () => { events.push('pause'); return { reply: 'Paused music.' }; },
+    notice: (_message, status) => events.push(status)
+  });
+  await c.presenceAway();
+  assert.deepEqual(events, ['lock', 'failed', 'pause']);
+  assert.equal(c.pausedByPresence, true);
+});
+
 test('an instant command that can be reversed gets an Undo in the log; one that cannot does not; using it records it', async () => {
   const added = [];
   const timers = { items: [], add(s) { const t = { id: `t${this.items.length}`, seconds: s }; this.items.push(t); return t; }, cancel(id) { this.items = this.items.filter((t) => t.id !== id); } };
