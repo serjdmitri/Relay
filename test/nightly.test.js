@@ -32,6 +32,21 @@ test('the nightly plan sorts loose files by kind, and leaves alone folders, hidd
   assert.deepEqual(none.raw.moves, []);
 });
 
+test('a chosen folder gets a reviewable plan with no file moves', async () => {
+  const { home, w } = sandbox();
+  const pdf = w('Documents/Loose/invoice.pdf');
+  w('Documents/Loose/photo.png');
+  w('Documents/Loose/mystery.xyz');
+  const cards = [];
+  const d = new Drive({ fs, home, exec: async () => '', cards: { show: async (c) => cards.push(c) }, trashItem: async () => {} });
+  const result = await d.suggestFolder({ folder: '~/Documents/Loose' });
+  assert.match(result, /Nothing has been moved yet/);
+  assert.match(result, /Organized\/PDFs/);
+  assert.ok(fs.existsSync(pdf));
+  assert.equal(cards.length, 1);
+  assert.match(await d.suggestFolder({ folder: '~/Library' }), /Library/);
+});
+
 test('it is due once a day after the set time, not before, not twice, and not far too late', () => {
   const cfg = { enabled: true, hour: 21, minute: 0, lastRun: '' };
   const at = (h, m = 0, d = 10) => new Date(2026, 9, d, h, m);
