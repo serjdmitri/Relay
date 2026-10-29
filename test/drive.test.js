@@ -162,6 +162,23 @@ test('tidying: the plan is shown first and nothing moves until it is applied; ap
   assert.match(await d.undo(), /nothing to undo/);
 });
 
+test('undo keeps failed moves available for retry and never substitutes a different plan id', async () => {
+  const { home, w } = sandbox();
+  const original = w('Downloads/invoice.pdf', 'original');
+  const { d, log } = driveOn(home);
+  const proposed = await d.propose({ moves: [{ from: original, to_folder: '~/Documents/Invoices' }] });
+  const id = proposed.match(/Plan ([0-9a-f-]{36})/)[1];
+  await d.apply({ plan_id: id });
+  w('Downloads/invoice.pdf', 'replacement');
+  assert.match(await d.undo('wrong-id'), /nothing to undo/i);
+  assert.match(await d.undo(id), /could not be put back/);
+  assert.equal(log()[0].done.length, 1);
+  fs.unlinkSync(original);
+  assert.match(await d.undo(id), /Put 1 back/);
+  assert.equal(fs.readFileSync(original, 'utf8'), 'original');
+  assert.equal(log().length, 0);
+});
+
 test('a plan of things that cannot be done says so, and trash is only for what is listed', async () => {
   const { home, w } = sandbox();
   const keep = w('Downloads/keep.txt'); const junk = w('Downloads/junk.zip');

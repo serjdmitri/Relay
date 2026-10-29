@@ -112,14 +112,18 @@ class Drive {
   // Puts the last thing back: moved files go back where they were, and files Relay made go to the Trash (nothing is deleted; the person can take them back).
   async undo(id = '') {
     const list = this.log.read() || [];
-    const last = (id && list.find((e) => e.id === id)) || list.at(-1);
+    const last = id ? list.find((e) => e.id === id) : list.at(-1);
     if (!last || !(last.done?.length || last.made?.length)) return 'There is nothing to undo.';
     const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs });
     const gone = [];
     for (const m of last.made || []) {
       try { if (!this.fs.existsSync(m)) { left.push({ path: m, reason: 'It is no longer there.' }); continue; } await this.trashItem(m); gone.push(m); } catch (e) { left.push({ path: m, reason: e.message }); }
     }
-    this.log.write(list.filter((e) => e !== last));
+    // Keep failed items in the undo log so the user can fix the conflict and retry.
+    const restored = new Set(back.map((item) => item.to));
+    const removed = new Set(gone);
+    const pending = { ...last, done: (last.done || []).filter((item) => !restored.has(item.to)), made: (last.made || []).filter((item) => !removed.has(item)) };
+    this.log.write(list.flatMap((entry) => entry !== last ? [entry] : (pending.done.length || pending.made.length ? [pending] : [])));
     const bits = [];
     if (back.length) bits.push(`Put ${back.length} back where ${back.length === 1 ? 'it was' : 'they were'}.`);
     if (gone.length) bits.push(`Put ${gone.length} ${gone.length === 1 ? 'file' : 'files'} Relay made in the Trash (Put Back there if you want ${gone.length === 1 ? 'it' : 'them'} again).`);
