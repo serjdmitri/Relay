@@ -141,3 +141,11 @@ test('browser connection and camera diagnostics say what is missing', async () =
   assert.equal(by(checks, 'perm-camera').fix.action.name, 'camera');
   assert.equal(d.parseDoctorCommand('fix relay'), true);
 });
+
+test('Doctor reports camera access needed for presence even when hand control is off', async () => {
+  const checks = await d.runChecks({ ...good, handsEnabled: () => false, presenceEnabled: () => true, perms: () => ({ accessibility: true, screen: true, mic: true, camera: false, cameraStatus: 'denied' }) });
+  const camera = by(checks, 'perm-camera');
+  assert.equal(camera.status, 'fail');
+  assert.match(camera.cause, /presence detection/);
+  assert.equal(camera.fix.action.name, 'camera');
+});
