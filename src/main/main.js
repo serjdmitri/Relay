@@ -319,7 +319,7 @@ function syncInbound() {
 // "Welcome back, Sir" with what happened while the screen was locked. Quick: no model is asked, only what the app already knows.
 async function welcomeBack(lockedAt, lastWelcome) {
   const cfg = store.get('settings.welcome') || {};
-  if (!lockedAt || !welcome.shouldGreet({ enabled: cfg.enabled !== false, awayMs: Date.now() - lockedAt, minAwayMs: (cfg.minAwayMin ?? 5) * 60000, sinceLastMs: Date.now() - lastWelcome, busy: !!ask.meeting?.active })) return false;
+  if (!lockedAt || !welcome.shouldGreet({ enabled: cfg.enabled !== false, awayMs: Date.now() - lockedAt, minAwayMs: (cfg.minAwayMin ?? 5) * 60000, minGapMs: (cfg.repeatMin ?? 10) * 60000, sinceLastMs: Date.now() - lastWelcome, busy: !!ask.meeting?.active })) return false;
   const [day, battery] = await Promise.all([
     Promise.race([ask.mac.calendarEvents(1).then(parseCalendar).catch(() => []), new Promise((r) => setTimeout(() => r([]), 2500))]),
     new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out)))))
