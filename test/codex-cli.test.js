@@ -94,6 +94,17 @@ test('a usage limit, a missing login, a crash, a file change, a timeout and a st
   assert.equal((await p).status, 'stopped');
 });
 
+test('partial output never masks a failed Codex turn or process', async () => {
+  const message = { type: 'item.completed', item: { type: 'agent_message', text: 'Starting.' } };
+  for (const fake of [
+    { events: [message, { type: 'turn.failed', error: { message: 'Tool access failed' } }], code: 0 },
+    { events: [message], code: 2 }
+  ]) {
+    const result = await runCodex({ codexPath: 'c', host, text: 't', tools: [], spawnFn: fakeSpawn(fake).fn });
+    assert.equal(result.status, 'failed');
+  }
+});
+
 test('fast mode asks Codex for little reasoning', () => {
   const { buildArgs } = require('../src/main/agent/codexCli');
   const base = { port: 1, outFile: '/o', cwd: '/c' };

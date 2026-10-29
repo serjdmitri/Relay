@@ -144,7 +144,7 @@ async function runCodex({ codexPath, host, system = '', text, tools, confirm, on
       let reply = '';
       try { reply = fs.readFileSync(outFile, 'utf8').trim(); } catch { /* not written */ }
       reply = reply || last;
-      if (reply && !(code && error)) return done({ status: 'done', reply });
+      if (reply && code === 0 && !error) return done({ status: 'done', reply });
       const msg = error || errText.trim().split('\n').slice(-2).join(' ') || `Codex stopped (code ${code}).`;
       done({ status: 'failed', reply: /not logged in|login/i.test(msg) ? 'Relay is not signed in to Codex. Open Account and sign in with ChatGPT.' : msg, limit: isLimitText(msg), resetText: msg });
     });
