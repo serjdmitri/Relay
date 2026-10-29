@@ -41,6 +41,7 @@ const { CardPanel } = require('./cards/panel');
 const { HoloManager } = require('./holo/manager');
 const { Drive } = require('./drive');
 const { HandControl } = require('./hands/control');
+const { ExternalDrag } = require('./hands/externalDrag');
 const os = require('os');
 const { execFile } = require('child_process');
 const holoWin = require('./holo/windows');
@@ -360,6 +361,7 @@ function registerIpc() {
     if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
+    if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
@@ -958,7 +960,9 @@ app.whenReady().then(() => {
   });
   cardPanel.onFile = (p) => ask.drive.openFile(p);
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
+  const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
   hands = new HandControl({
+    externalDrag,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
     onThrow: (undo) => { lastThrown = undo; },

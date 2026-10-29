@@ -11,11 +11,13 @@ const momentum = require('./momentum');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {} }) {
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.sensitivity = sensitivity;
     this.saveMargin = saveMargin;
     this.onThrow = onThrow;
+    this.externalDrag = externalDrag;
+    this.externalHeld = false;
     this.shortcut = shortcut;
     this.onShortcut = onShortcut;
     this.paused = false;
@@ -58,11 +60,12 @@ class HandControl {
     this.status = 'starting'; this.message = ''; this.onChange();
     if (!(await this.askAccess())) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
     this.enabled = true;
+    this.externalDrag?.start();
     this.cam = await this.createCamera();
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor();
     if (!this.secondary) {
-      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, now: this.now, secondary: true });
+      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
       this.peer.claims = this.claims;
       this.peer.glides = this.glides;
       this.peer.enabled = true;
@@ -78,6 +81,7 @@ class HandControl {
     this.release();
     if (this.peer) { this.peer.release(); this.peer.ring?.close?.(); this.peer.enabled = false; this.peer = null; }
     for (const key of [...this.glides.keys()]) this.stopGlide(key);
+    if (!this.secondary) this.externalDrag?.close();
     this.tracks.reset();
     try { this.cam?.close?.(); } catch { /* gone */ }
     try { this.ring?.close?.(); } catch { /* gone */ }
@@ -236,6 +240,7 @@ class HandControl {
   }
 
   release({ throwAtEdge = false } = {}) {
+    if (this.externalHeld) { this.externalDrag?.end(this); this.externalHeld = false; }
     this.generation++;
     if (this.claim && this.claims.get(this.claim) === this) this.claims.delete(this.claim);
     this.claim = null;
@@ -282,6 +287,7 @@ class HandControl {
       return;
     }
     if (e.type === 'move') {
+      if (this.externalHeld) { this.externalDrag?.move(this, pt); this.ringState('held'); return; }
       if (this.drag) {
         this.drag.target.move(pt.x - this.drag.ax, pt.y - this.drag.ay);
         const now = this.now();
@@ -308,7 +314,7 @@ class HandControl {
       }
       const h = this.target(pt);
       this.ringState('held');
-      if (!h) return;
+      if (!h) { this.externalHeld = !!this.externalDrag?.begin(this, pt); return; }
       this.stopGlide(`holo:${h.id}`);
       if (this.claims.has(`holo:${h.id}`)) return;
       this.claim = `holo:${h.id}`; this.claims.set(this.claim, this);
