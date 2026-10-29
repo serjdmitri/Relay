@@ -382,6 +382,13 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => drive.scan(i)
       },
       {
+        name: 'drive_suggest',
+        description: 'Inspect loose files in a chosen folder and suggest grouping older files by type into an Organized subfolder. Read-only: shows a plan; nothing moves until the user approves drive_apply. Leaves unknown, recent, hidden and partial files alone. Use when asked to check if a folder could be organized.',
+        input_schema: obj({ folder: str('The folder to inspect, e.g. ~/Downloads') }, ['folder']),
+        describe: (i) => `Checking ${i.folder} for organization`,
+        run: (i) => drive.suggestFolder(i)
+      },
+      {
         name: 'drive_propose',
         description: 'Propose how to tidy files: a list of moves, shown to the user on screen as "where I will put everything". NOTHING MOVES YET. Check the plan with drive_scan first, group sensibly (by kind, by project or by year), keep names as they are, and prefer moving files into folders (new folders are made for you) over anything else. Only put something in the Trash (trash list) if the user asked you to get rid of it; otherwise use a folder such as ~/Documents/To review. After it returns, tell the user plainly where things will go, ask them to confirm, and only then call drive_apply.',
         input_schema: obj({

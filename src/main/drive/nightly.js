@@ -7,6 +7,7 @@ const { kindOf } = require('./files');
 
 const PARTIAL = /\.(?:crdownload|download|part|partial|tmp|opdownload)$/i;
 const DOC = /\.(?:docx?|pages|txt|rtf|md|odt|epub)$/i;
+const FOLDER_NAMES = { image: 'Images', video: 'Videos', audio: 'Audio', pdf: 'PDFs', document: 'Documents', spreadsheet: 'Spreadsheets', slides: 'Slides', archive: 'Archives', code: 'Code' };
 
 // kind -> the folder (inside the home folder) it goes to. Kinds not listed stay where they are.
 const DEST = {
@@ -23,8 +24,8 @@ const DEST = {
 
 // opts: { fs, home, now, minAgeHours = 3, declined: Set of paths the person already skipped, limit = 150 }
 // Returns { raw, counts, left } where raw is a plan for buildPlan ({ moves, note }) and left is how many files were left alone.
-function planDownloads({ fs, home, now = Date.now(), minAgeHours = 3, declined = new Set(), limit = 150 }) {
-  const dir = path.join(home, 'Downloads');
+function planDownloads({ fs, home, folder, now = Date.now(), minAgeHours = 3, declined = new Set(), limit = 150 }) {
+  const dir = folder || path.join(home, 'Downloads');
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return { raw: { moves: [], note: '' }, counts: {}, left: 0 }; }
   const moves = [];
@@ -39,14 +40,14 @@ function planDownloads({ fs, home, now = Date.now(), minAgeHours = 3, declined =
     try { st = fs.statSync(full); } catch { continue; }
     if (now - st.mtimeMs < minAgeHours * 3600 * 1000) { left++; continue; } // still being written, or just arrived: the person may be using it
     const kind = kindOf(e.name);
-    const to = DEST[kind];
+    const to = folder && FOLDER_NAMES[kind] ? path.join(dir, 'Organized', FOLDER_NAMES[kind]) : folder ? null : DEST[kind];
     if (!to) { left++; continue; }
     if (moves.length >= limit) { left++; continue; }
     moves.push({ from: full, to_folder: to });
     counts[kind] = (counts[kind] || 0) + 1;
   }
   const bits = Object.entries(counts).map(([k, n]) => `${n} ${k === 'pdf' ? 'PDF' : k}${n === 1 ? '' : 's'}`);
-  return { raw: { moves, note: bits.length ? `New downloads by kind: ${bits.join(', ')}` : '' }, counts, left };
+  return { raw: { moves, note: bits.length ? `${folder ? 'Loose files' : 'New downloads'} by kind: ${bits.join(', ')}` : '' }, counts, left };
 }
 
 // Is it time to run tonight's? cfg: { enabled, hour, minute, lastRun: 'YYYY-MM-DD' }. Runs once a day, any time after the set time (a Mac that was

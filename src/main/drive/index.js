@@ -137,6 +137,20 @@ class Drive {
   }
 
   // Tonight's tidy of ~/Downloads, shown but not done. Returns { moves } (0 when there is nothing to tidy) after showing the plan on screen.
+  async suggestFolder({ folder } = {}) {
+    if (!folder) return 'Choose a folder to inspect first.';
+    const root = this.resolve(folder);
+    const bad = root === this.home ? 'Choose a folder inside your home, not the whole home folder.' : pathProblem(path.join(root, 'x'), this.home);
+    if (bad && !/main folders|itself/.test(bad)) return bad;
+    try {
+      if (hasSymlink(root, this.fs, this.home)) return 'That folder path contains a symbolic link, so Relay will not inspect it.';
+      if (!this.fs.statSync(root).isDirectory()) return 'That is not a folder.';
+    } catch { return 'That folder could not be checked.'; }
+    const { raw, left } = planDownloads({ fs: this.fs, home: this.home, folder: root });
+    if (!raw.moves.length) return `No loose files were suggested for sorting. ${left} left alone. Nothing moved.`;
+    return this.propose(raw);
+  }
+
   async proposeDownloads({ nightly = true } = {}) {
     const { raw, left } = planDownloads({ fs: this.fs, home: this.home, declined: this.declined || new Set() });
     if (!raw.moves.length) return { moves: 0, left };
