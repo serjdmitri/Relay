@@ -6,6 +6,7 @@
 const { HandPointer } = require('./logic');
 const { recognizeStroke } = require('./shape');
 const { HandTracks } = require('./tracks');
+const momentum = require('./momentum');
 
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
@@ -19,6 +20,7 @@ class HandControl {
     this.peer = null;
     this.drag = null;
     this.claims = new Map();
+    this.glides = new Map();
     this.claim = null;
     this.generation = 0;
     this.preview = !!preview; // the camera view in the top right of the screen (what the hand finder sees, its hand outlines, the gesture and the hand count)
@@ -54,6 +56,7 @@ class HandControl {
     if (!this.secondary) {
       this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, now: this.now, secondary: true });
       this.peer.claims = this.claims;
+      this.peer.glides = this.glides;
       this.peer.enabled = true;
       this.peer.ring = this.createCursor();
     }
@@ -65,6 +68,7 @@ class HandControl {
     this.status = 'off'; this.message = '';
     this.release();
     if (this.peer) { this.peer.release(); this.peer.ring?.close?.(); this.peer.enabled = false; this.peer = null; }
+    for (const key of [...this.glides.keys()]) this.stopGlide(key);
     this.tracks.reset();
     try { this.cam?.close?.(); } catch { /* gone */ }
     try { this.ring?.close?.(); } catch { /* gone */ }
@@ -96,7 +100,7 @@ class HandControl {
     if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }
     else if (this.handMode && !this.handTimer) this.handTimer = setTimeout(() => { this.handTimer = null; this.setHandMode(false); }, 2500);
     const margin = Number(this.sensitivity());
-    const safeMargin = Number.isFinite(margin) ? Math.max(0.04, Math.min(0.25, margin)) : 0.12;
+    const safeMargin = Number.isFinite(margin) ? Math.max(0.04, Math.min(0.35, margin)) : 0.12;
     this.pointer.margin = safeMargin;
     this.peer.pointer.margin = safeMargin;
     const [first, second] = this.tracks.update(f.hands);
@@ -150,6 +154,34 @@ class HandControl {
     try { this.ring?.setState?.(cls); } catch { /* the ring is only a hint */ }
   }
 
+  stopGlide(key) {
+    const glide = this.glides.get(key);
+    if (!glide) return;
+    clearInterval(glide.timer);
+    this.glides.delete(key);
+    try { glide.target.finish?.(); } catch { /* it may already be closed */ }
+  }
+
+  glide(drag, initial, bounds) {
+    const key = drag.target.key;
+    this.stopGlide(key);
+    const last = drag.trail.at(-1);
+    let point = { x: last.x, y: last.y }, v = initial, frames = 0;
+    const g = { target: drag.target, timer: null };
+    g.timer = setInterval(() => {
+      if (!this.enabled || ++frames > 100) return this.stopGlide(key);
+      const next = momentum.step(point, v, bounds);
+      point = next.point; v = next.velocity;
+      try {
+        drag.target.move(point.x - drag.ax, point.y - drag.ay);
+        if (next.close) { clearInterval(g.timer); this.glides.delete(key); drag.target.close(); return; }
+      } catch { return this.stopGlide(key); }
+      if (Math.hypot(v.vx, v.vy) < 0.06) this.stopGlide(key);
+    }, 16);
+    g.timer.unref?.();
+    this.glides.set(key, g);
+  }
+
   release({ throwAtEdge = false } = {}) {
     this.generation++;
     if (this.claim && this.claims.get(this.claim) === this) this.claims.delete(this.claim);
@@ -162,7 +194,8 @@ class HandControl {
       const start = recent[0];
       const finish = recent.at(-1);
       const thrown = throwAtEdge && start && finish && finish.x >= b.x + b.width * 0.9 && finish.x - start.x >= Math.max(90, b.width * 0.1);
-      if (thrown) drag.target.close(); else drag.target.finish?.();
+      const v = throwAtEdge ? momentum.velocity(drag.trail, this.now()) : null;
+      if (thrown) drag.target.close(); else if (v) this.glide(drag, v, b); else drag.target.finish?.();
       this.captured = null;
       return;
     }
@@ -199,7 +232,7 @@ class HandControl {
       if (this.drag) {
         this.drag.target.move(pt.x - this.drag.ax, pt.y - this.drag.ay);
         const now = this.now();
-        this.drag.trail.push({ x: pt.x, t: now });
+        this.drag.trail.push({ x: pt.x, y: pt.y, t: now });
         this.drag.trail = this.drag.trail.filter(p => now - p.t <= 500);
         this.ringState('held');
         return;
@@ -212,25 +245,28 @@ class HandControl {
     if (e.type === 'grab') {
       const floating = this.floatingAt(pt);
       if (floating) {
+        this.stopGlide(floating.key);
         if (this.claims.has(floating.key)) return;
         this.claim = floating.key; this.claims.set(this.claim, this);
         const origin = floating.position();
-        this.drag = { target: floating, ax: pt.x - origin.x, ay: pt.y - origin.y, trail: [{ x: pt.x, t: this.now() }] };
+        this.drag = { target: floating, ax: pt.x - origin.x, ay: pt.y - origin.y, trail: [{ x: pt.x, y: pt.y, t: this.now() }] };
         this.ringState('held');
         return;
       }
       const h = this.target(pt);
       this.ringState('held');
-      if (!h || this.claims.has(`holo:${h.id}`)) return;
+      if (!h) return;
+      this.stopGlide(`holo:${h.id}`);
+      if (this.claims.has(`holo:${h.id}`)) return;
       this.claim = `holo:${h.id}`; this.claims.set(this.claim, this);
       const generation = this.generation;
       this.send(h, 'mouseMove', pt);
       const mode = await h.win.webContents.executeJavaScript('window.__holoTest ? window.__holoTest.mode() : "whole"').catch(() => 'whole');
       if (!this.enabled || generation !== this.generation || h.win.isDestroyed()) return;
       if (mode !== 'parts') {
-        const target = { position: () => ({ x: h.x, y: h.y }), move: (x, y) => { h.x = Math.round(x); h.y = Math.round(y); this.holos.place(h); if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.holos.local(h)); }, finish: () => this.holos.persist(), close: () => this.holos.close(h.id) };
+        const target = { key: `holo:${h.id}`, position: () => ({ x: h.x, y: h.y }), move: (x, y) => { h.x = Math.round(x); h.y = Math.round(y); this.holos.place(h); if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.holos.local(h)); }, finish: () => this.holos.persist(), close: () => this.holos.close(h.id) };
         this.captured = h;
-        this.drag = { target, ax: pt.x - h.x, ay: pt.y - h.y, trail: [{ x: pt.x, t: this.now() }] };
+        this.drag = { target, ax: pt.x - h.x, ay: pt.y - h.y, trail: [{ x: pt.x, y: pt.y, t: this.now() }] };
         return;
       }
       this.captured = h;
@@ -248,9 +284,20 @@ class HandControl {
       return;
     }
     if (e.type === 'point') { const h = this.holos.holoNear(pt, 330); if (h) { this.ringState('click'); setTimeout(() => this.ringState('open'), 300); this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); } return; }
-    if (e.type === 'swipe') { const h = this.holos.holoNear(pt, 330); if (h) this.holos.step(h.id, e.dir === 'right' ? 1 : -1); return; }
+    if (e.type === 'swipe') {
+      const panel = this.floatingAt(pt);
+      if (panel && !this.claims.has(panel.key)) {
+        this.stopGlide(panel.key);
+        const b = this.display(), origin = panel.position();
+        const x = Math.max(b.x, Math.min(b.x + b.width - (origin.width || 100), origin.x + (e.dir === 'right' ? 1 : -1) * b.width * 0.15));
+        panel.move(x, origin.y);
+        panel.finish?.();
+        return;
+      }
+      const h = this.holos.holoNear(pt, 330); if (h) this.holos.step(h.id, e.dir === 'right' ? 1 : -1); return;
+    }
     if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
-    if (e.type === 'thumbdown') { const h = this.holos.holoNear(pt, 330); if (h) this.holos.close(h.id); return; }
+    if (e.type === 'thumbdown') { const panel = this.floatingAt(pt); if (panel && !this.claims.has(panel.key)) { this.stopGlide(panel.key); panel.close(); return; } const h = this.holos.holoNear(pt, 330); if (h) this.holos.close(h.id); return; }
     if (e.type === 'mic') {
       const h = this.holos.holoNear(pt, 330) || this.holos.latest();
       this.ringState('mic');

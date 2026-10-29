@@ -353,6 +353,7 @@ function registerIpc() {
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
     if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.workMode') ask.dropWarm(true);
+    if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
@@ -952,7 +953,7 @@ app.whenReady().then(() => {
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   hands = new HandControl({
     preview: !!store.get('settings.hands.preview'),
-    sensitivity: () => store.get('settings.hands.margin') ?? 0.12,
+    sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
     floatingAt: (pt) => {
       const panel = panelWins?.handTarget(pt);
       if (panel) return panel;
@@ -965,17 +966,17 @@ app.whenReady().then(() => {
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
     createCamera: async () => {
-      // The window that watches the camera. Hidden, unless the hand view is on: then it sits in the top right of the screen (above everything, never taking a click or focus,
-      // and kept out of screenshots Relay takes). The picture stays inside this window: it is drawn here and never saved or sent.
+      // The camera window is hidden unless the hand view is on. The header can be dragged, but the view does not take keyboard focus.
+      // It is kept out of Relay screenshots; the camera picture stays on this Mac.
       const W = 336, H = 300;
-      const win = new BrowserWindow({ width: W, height: H, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, type: 'panel', webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
-      win.setIgnoreMouseEvents(true);
+      const win = new BrowserWindow({ width: W, height: H, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, movable: true, resizable: false, skipTaskbar: true, type: 'panel', webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
       win.setAlwaysOnTop(true, 'screen-saver');
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       win.setHiddenInMissionControl?.(true);
       win.setContentProtection(true);
       let shown = false;
-      const sync = () => { if (win.isDestroyed()) return; win.webContents.send('hands:preview', shown); };
+      const sync = () => { if (win.isDestroyed()) return; win.webContents.send('hands:preview', shown); win.webContents.send('hands:config', { margin: store.get('settings.hands.margin') ?? 0.22 }); };
+      win.on('moved', () => { if (shown && !win.isDestroyed()) { const [x, y] = win.getPosition(); store.set('settings.hands.previewPosition', { x, y }); } });
       win.webContents.on('did-finish-load', sync);
       win.loadFile(path.join(__dirname, '../renderer/hands.html'));
       return {
@@ -983,9 +984,10 @@ app.whenReady().then(() => {
         setPreview: (on) => {
           if (win.isDestroyed()) return;
           shown = !!on;
-          if (shown) { const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; win.setBounds({ x: wa.x + wa.width - W - 12, y: wa.y + 6, width: W, height: H }); win.showInactive(); } else win.hide();
+          if (shown) { const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; const p = store.get('settings.hands.previewPosition'); const visible = p && Number.isFinite(p.x) && Number.isFinite(p.y) && screen.getAllDisplays().some(d => p.x >= d.workArea.x && p.y >= d.workArea.y && p.x + W <= d.workArea.x + d.workArea.width && p.y + H <= d.workArea.y + d.workArea.height); win.setBounds({ x: visible ? p.x : wa.x + wa.width - W - 12, y: visible ? p.y : wa.y + 6, width: W, height: H }); win.showInactive(); } else win.hide();
           sync();
         },
+        syncConfig: sync,
         action: (a) => { if (shown && !win.isDestroyed()) win.webContents.send('hands:action', a); }
       };
     },

@@ -8,11 +8,13 @@
   html, body { margin: 0; background: transparent; overflow: hidden; font: 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, Arial, sans-serif; color: #eef6fb; -webkit-user-select: none; user-select: none; }
   #card { position: absolute; left: 8px; top: 4px; width: 320px; border-radius: 16px; overflow: hidden; background: rgba(6, 14, 22, .94); border: 1px solid rgba(76, 194, 255, .38); box-shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 0 22px rgba(76, 194, 255, .16); }
   #card[hidden] { display: none; }
-  #head { display: flex; justify-content: space-between; align-items: center; height: 32px; padding: 0 12px; letter-spacing: .02em; }
+  #head { -webkit-app-region: drag; cursor: grab; display: flex; justify-content: space-between; align-items: center; height: 32px; padding: 0 12px; letter-spacing: .02em; }
   #count { font-weight: 600; color: #4cc2ff; }
   #state { color: #9db4c4; font-size: 12px; }
   #stage { position: relative; width: 320px; height: 240px; background: #04080d; }
   canvas { display: block; width: 320px; height: 240px; }
+  #hitbox { position:absolute; pointer-events:none; border:2px dashed rgba(255,255,255,.9); box-sizing:border-box; border-radius:8px; box-shadow:0 0 0 999px rgba(0,0,0,.16); }
+  #hitbox span { position:absolute; left:4px; top:4px; color:white; background:rgba(0,0,0,.65); font-size:10px; padding:2px 4px; border-radius:3px; }
   #act { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 12px; border-radius: 999px; background: rgba(76, 194, 255, .92); color: #04121c; font-weight: 700; font-size: 12px; letter-spacing: .02em; opacity: 0; transition: opacity .25s; white-space: nowrap; }
   #act.on { opacity: 1; }
   #none { position: absolute; inset: 0; display: grid; place-items: center; color: #9db4c4; font-size: 13px; pointer-events: none; }
@@ -23,8 +25,8 @@
 <!-- The camera picture is only drawn here, in this small window (the "hand view"), when you turn the view on. It is never saved or sent; only where your hands are is passed on. -->
 <video id="v" autoplay muted playsinline width="640" height="480" style="display:none"></video>
 <div id="card" hidden>
-  <div id="head"><span id="count">No hand</span><span id="state">Hand view</span></div>
-  <div id="stage"><canvas id="cv" width="640" height="480"></canvas><div id="none">Hold a hand up</div><div id="act"></div></div>
+  <div id="head"><span id="count">No hand</span><span id="state">Drag here to move</span></div>
+  <div id="stage"><canvas id="cv" width="640" height="480"></canvas><div id="hitbox"><span>Tracking area</span></div><div id="none">Hold a hand up</div><div id="act"></div></div>
 </div>
 <script type="module" src="hands.js"></script>
 </body>

@@ -130,6 +130,7 @@ contextBridge.exposeInMainWorld('relay', {
   handStatus: (s) => invoke('hands:status', s),
   setHandsPreview: (on) => invoke('hands:preview', on),
   onHandPreview: (cb) => on('hands:preview', cb),
+  onHandConfig: (cb) => on('hands:config', cb),
   onHandAction: (cb) => on('hands:action', cb),
   holoPlace: (d) => invoke('holo:place', d),
   addSchedule: (text) => invoke('schedule:add', text),
