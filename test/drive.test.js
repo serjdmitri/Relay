@@ -195,6 +195,16 @@ test('folder plans reject symlinked paths and recheck them before moving', async
   assert.ok(fs.existsSync(source));
 });
 
+test('tidy plans do not put individual project files in the Trash', () => {
+  const { home, w } = sandbox();
+  w('Documents/project/package.json', '{}');
+  const file = w('Documents/project/src/app.js');
+  const plan = buildPlan({ moves: [], trash: [file] }, { fs, home });
+  assert.deepEqual(plan.trash, []);
+  assert.match(plan.skipped[0].reason, /part of a project/);
+  assert.ok(fs.existsSync(file));
+});
+
 test('a plan of things that cannot be done says so, and trash is only for what is listed', async () => {
   const { home, w } = sandbox();
   const keep = w('Downloads/keep.txt'); const junk = w('Downloads/junk.zip');
