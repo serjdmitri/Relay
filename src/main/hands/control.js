@@ -10,8 +10,9 @@ const { HandTracks } = require('./tracks');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null }) {
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12 }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
+    this.sensitivity = sensitivity;
     this.secondary = secondary;
     this.floatingAt = floatingAt;
     this.tracks = new HandTracks();
@@ -51,7 +52,7 @@ class HandControl {
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor();
     if (!this.secondary) {
-      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, now: this.now, secondary: true });
+      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, now: this.now, secondary: true });
       this.peer.claims = this.claims;
       this.peer.enabled = true;
       this.peer.ring = this.createCursor();
@@ -94,6 +95,10 @@ class HandControl {
     if (!this.enabled || !f || !Array.isArray(f.hands)) return;
     if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }
     else if (this.handMode && !this.handTimer) this.handTimer = setTimeout(() => { this.handTimer = null; this.setHandMode(false); }, 2500);
+    const margin = Number(this.sensitivity());
+    const safeMargin = Number.isFinite(margin) ? Math.max(0.04, Math.min(0.25, margin)) : 0.12;
+    this.pointer.margin = safeMargin;
+    this.peer.pointer.margin = safeMargin;
     const [first, second] = this.tracks.update(f.hands);
     // Keep the established two-hand gestures when both hands address the same hologram.
     const a = first && this.holos.holoNear(this.toScreen(this.pointer.map(first)), 0);

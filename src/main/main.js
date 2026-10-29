@@ -142,6 +142,7 @@ function publicState() {
     hasKeys,
     hasTtsKeys,
     hasHfToken,
+    activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
     handsInfo: { status: hands?.status || 'off', message: hands?.message || '' },
     presenceInfo: { status: presence?.status || 'off', message: presence?.message || '', state: presence?.state || 'unknown', faces: presence?.faces || 0 },
     voiceProblem,
@@ -332,12 +333,26 @@ async function welcomeBack(lockedAt, lastWelcome) {
 
 function registerIpc() {
   ipcMain.handle('state:get', () => publicState());
+  ipcMain.handle('skills:review', (_e, id, approve) => {
+    const list = store.get('skillSuggestions') || [];
+    const item = list.find(x => x.id === id);
+    if (!item) return { ok: false, error: 'That suggestion is no longer available.' };
+    if (approve) {
+      const existing = (store.get('routines') || []).some(r => r.name.toLowerCase() === item.name.toLowerCase());
+      if (existing) return { ok: false, error: 'A routine with that name already exists.' };
+      ask.upsertRoutine(item.name, item.steps);
+    }
+    store.set('skillSuggestions', list.filter(x => x.id !== id));
+    broadcast();
+    return { ok: true };
+  });
   ipcMain.handle('state:set', (_e, key, value) => {
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
     if (key === 'settings.language.ui') rebuildTray();
+    if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
@@ -937,6 +952,7 @@ app.whenReady().then(() => {
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   hands = new HandControl({
     preview: !!store.get('settings.hands.preview'),
+    sensitivity: () => store.get('settings.hands.margin') ?? 0.12,
     floatingAt: (pt) => {
       const panel = panelWins?.handTarget(pt);
       if (panel) return panel;

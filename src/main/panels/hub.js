@@ -116,9 +116,11 @@ class PanelHub {
 function parsePanelCommand(text) {
   const t = String(text || '').trim().replace(/[“”"]/g, '').replace(/[.!?]+$/, '').replace(/^(?:hey |ok |okay )?(?:relay|jarvis)[, ]+/i, '').replace(/^please /i, '');
   if (/^(?:close|hide|dismiss|remove|get rid of) (?:the |all |my |these |those )?(?:live )?panels?$/i.test(t)) return { type: 'close' };
+  if (/^(?:show|open|give|put up|bring up) (?:me )?(?:a |the |my )?(?:calculator|calc)(?: panel)?$/i.test(t)) return { type: 'calculator' };
   const m = t.match(/^(?:show|open|give|put up|bring up) (?:me )?(?:a |the |my )?(.+?)(?: panel| stats| monitor)?$/i);
   if (!m || !/\b(?:panel|stats|monitor)\b|^(?:cpu|memory|battery|network|disk)\b/i.test(t)) return null;
   const w = m[1].toLowerCase();
+  if (/^(?:calculator|calc)$/.test(w)) return { type: 'calculator' };
   if (/^(?:system|mac|computer|pc)(?: load| stats| status)?$/.test(w) || /system (?:load|stats)/.test(w)) return { type: 'show', title: 'System', sources: ['cpu', 'memory', 'battery', 'network', 'disk'] };
   const WORDS = { cpu: /\b(?:cpu|processor|load)\b/, memory: /\b(?:memory|ram)\b/, battery: /\bbattery\b/, network: /\b(?:network|wifi|internet)\b/, disk: /\b(?:disk|storage)\b/, jobs: /\b(?:jobs|work|progress)\b/ };
   const found = Object.keys(WORDS).filter((k) => WORDS[k].test(w));
