@@ -20,14 +20,11 @@
   body.hide .wrap { animation: tuck .26s cubic-bezier(.5, 0, .75, .4) forwards; }
   .lift { position: relative; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, .42)) drop-shadow(0 2px 5px rgba(0, 0, 0, .3)); }
   #glass { position: relative; width: 100%; max-height: calc(100vh - 56px); padding: 22px 0; display: flex; flex-direction: column; overflow: hidden;
-    /* black like the notch, except at the screen-edge end, where it melts into liquid glass (the glass layers show through where the black fades out) */
-    background:
-      linear-gradient(90deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, .5) 38px, rgba(0, 0, 0, .94) 92px, #000 128px),
-      radial-gradient(280px 220px at 0% 0%, rgba(160, 225, 255, .30), rgba(160, 225, 255, 0) 70%),
-      linear-gradient(160deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, .06) 40%, rgba(120, 190, 255, .10) 72%, rgba(255, 255, 255, .14)),
-      rgba(20, 31, 44, .66); }
+    /* black like the notch where it touches the side of the screen (the flares included), fading out to clear toward the open end */
+    background: linear-gradient(90deg, #000 0, #000 56%, rgba(0, 0, 0, .55) 80%, rgba(0, 0, 0, 0) 100%); }
+  #glass header, #glass #list .item .q, #glass footer { text-shadow: 0 1px 6px rgba(0, 0, 0, .55); }
   #outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-  #outline path { fill: none; stroke: rgba(255, 255, 255, .2); stroke-width: 1; }
+  #outline path { fill: none; stroke: url(#og); stroke-width: 1; }
   @keyframes pop {
     0% { opacity: 0; transform: scale(.03, .4); filter: blur(10px); }
     40% { opacity: 1; transform: scale(1.05, 1.02); filter: blur(1.5px); }
@@ -74,7 +71,7 @@
   <div id="list"></div>
   <footer>Click one to ask it again</footer>
 </div>
-<svg id="outline"><path id="outpath"/></svg>
+<svg id="outline"><defs><linearGradient id="og" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".7" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><path id="outpath"/></svg>
 </div></div>
 <script src="recent.js"></script>
 </body>
