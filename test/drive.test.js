@@ -132,6 +132,23 @@ test('scanning a folder refuses a path redirected through a symbolic link', () =
   assert.match(d.scan({ folder: '~/Downloads' }), /visible.txt/);
 });
 
+test('file search and open do not follow paths into protected or linked folders', async () => {
+  const { home, w } = sandbox();
+  w('Library/private.txt');
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-search-outside-'));
+  fs.writeFileSync(path.join(outside, 'secret.pdf'), 'private');
+  fs.mkdirSync(path.join(home, 'Downloads'), { recursive: true });
+  fs.symlinkSync(outside, path.join(home, 'Downloads/link'));
+  const linked = path.join(home, 'Downloads/link/secret.pdf');
+  const opened = [];
+  const { d } = driveOn(home, { exec: async () => linked, open: (p) => opened.push(p) });
+  assert.match(await d.find({ query: 'secret', folder: '~/Library' }), /Library/);
+  assert.match(await d.find({ query: 'secret', folder: '~/Downloads/link' }), /symbolic link/);
+  assert.match(await d.find({ query: 'secret' }), /Nothing found/);
+  d.openFile(linked);
+  assert.deepEqual(opened, []);
+});
+
 test('finding files uses Spotlight and shows the matches with previews on a card; clicking only opens safe kinds', async () => {
   const { home, w } = sandbox();
   const pdf = w('Documents/Taxes 2025.pdf'), exe = w('Downloads/tool.command'), lib = w('Library/x.txt');
