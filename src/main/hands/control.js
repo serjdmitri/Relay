@@ -5,12 +5,21 @@
 
 const { HandPointer } = require('./logic');
 const { recognizeStroke } = require('./shape');
+const { HandTracks } = require('./tracks');
 
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now }) {
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
+    this.secondary = secondary;
+    this.floatingAt = floatingAt;
+    this.tracks = new HandTracks();
+    this.peer = null;
+    this.drag = null;
+    this.claims = new Map();
+    this.claim = null;
+    this.generation = 0;
     this.preview = !!preview; // the camera view in the top right of the screen (what the hand finder sees, its hand outlines, the gesture and the hand count)
     this.drawing = false; // a fist in one hand and a pinch in the other: the pinching hand draws a glowing line in the air, and a rough shape becomes a model
     this.stroke = []; // the points of what is being drawn, in screen points
@@ -41,6 +50,12 @@ class HandControl {
     this.cam = await this.createCamera();
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor();
+    if (!this.secondary) {
+      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, now: this.now, secondary: true });
+      this.peer.claims = this.claims;
+      this.peer.enabled = true;
+      this.peer.ring = this.createCursor();
+    }
     return { ok: true };
   }
 
@@ -48,6 +63,8 @@ class HandControl {
     this.enabled = false;
     this.status = 'off'; this.message = '';
     this.release();
+    if (this.peer) { this.peer.release(); this.peer.ring?.close?.(); this.peer.enabled = false; this.peer = null; }
+    this.tracks.reset();
     try { this.cam?.close?.(); } catch { /* gone */ }
     try { this.ring?.close?.(); } catch { /* gone */ }
     clearTimeout(this.handTimer); this.handTimer = null;
@@ -77,7 +94,23 @@ class HandControl {
     if (!this.enabled || !f || !Array.isArray(f.hands)) return;
     if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }
     else if (this.handMode && !this.handTimer) this.handTimer = setTimeout(() => { this.handTimer = null; this.setHandMode(false); }, 2500);
-    this.pointer.update(f);
+    const [first, second] = this.tracks.update(f.hands);
+    // Keep the established two-hand gestures when both hands address the same hologram.
+    const a = first && this.holos.holoNear(this.toScreen(this.pointer.map(first)), 0);
+    const b = second && this.holos.holoNear(this.toScreen(this.pointer.map(second)), 0);
+    const closed = h => h && (h.gesture === 'Closed_Fist' || h.pinch < 0.28);
+    const drawing = first && second && ((first.gesture === 'Closed_Fist' && second.gesture !== 'Closed_Fist' && second.pinch < 0.28) || (second.gesture === 'Closed_Fist' && first.gesture !== 'Closed_Fist' && first.pinch < 0.28));
+    const combined = drawing || (first && second && a && a === b && closed(first) && closed(second));
+    if (combined) {
+      this.peer.release();
+      this.peer.pointer = new HandPointer({ onEvent: e => this.peer?.handle(e).catch(() => {}) });
+      const pt = this.toScreen(this.pointer.map(second));
+      this.peer.ring?.moveTo?.(pt);
+      this.pointer.update({ ...f, hands: [first, second] });
+    } else {
+      this.pointer.update({ ...f, hands: first ? [first] : [] });
+      this.peer.pointer.update({ ...f, hands: second ? [second] : [] });
+    }
   }
 
   // While a hand is in view the holograms show bigger controls (easy to hit from a distance); they go back to normal after the hand has left.
@@ -112,7 +145,22 @@ class HandControl {
     try { this.ring?.setState?.(cls); } catch { /* the ring is only a hint */ }
   }
 
-  release() {
+  release({ throwAtEdge = false } = {}) {
+    this.generation++;
+    if (this.claim && this.claims.get(this.claim) === this) this.claims.delete(this.claim);
+    this.claim = null;
+    const drag = this.drag;
+    this.drag = null;
+    if (drag) {
+      const b = this.display();
+      const recent = drag.trail.filter(p => this.now() - p.t <= 500);
+      const start = recent[0];
+      const finish = recent.at(-1);
+      const thrown = throwAtEdge && start && finish && finish.x >= b.x + b.width * 0.9 && finish.x - start.x >= Math.max(90, b.width * 0.1);
+      if (thrown) drag.target.close(); else drag.target.finish?.();
+      this.captured = null;
+      return;
+    }
     const h = this.captured;
     this.captured = null;
     if (h && !h.win.isDestroyed() && this.pos) this.send(h, 'mouseUp', this.pos);
@@ -143,22 +191,48 @@ class HandControl {
       return;
     }
     if (e.type === 'move') {
+      if (this.drag) {
+        this.drag.target.move(pt.x - this.drag.ax, pt.y - this.drag.ay);
+        const now = this.now();
+        this.drag.trail.push({ x: pt.x, t: now });
+        this.drag.trail = this.drag.trail.filter(p => now - p.t <= 500);
+        this.ringState('held');
+        return;
+      }
       this.ringState(e.held ? 'held' : 'open');
       const h = this.target(pt);
       if (h) { const now = this.now(); if (now - this.lastMoveSent >= 16) { this.lastMoveSent = now; this.send(h, 'mouseMove', pt, this.captured ? { modifiers: ['leftButtonDown'] } : {}); } }
       return;
     }
     if (e.type === 'grab') {
+      const floating = this.floatingAt(pt);
+      if (floating) {
+        if (this.claims.has(floating.key)) return;
+        this.claim = floating.key; this.claims.set(this.claim, this);
+        const origin = floating.position();
+        this.drag = { target: floating, ax: pt.x - origin.x, ay: pt.y - origin.y, trail: [{ x: pt.x, t: this.now() }] };
+        this.ringState('held');
+        return;
+      }
       const h = this.target(pt);
       this.ringState('held');
-      if (!h) return;
+      if (!h || this.claims.has(`holo:${h.id}`)) return;
+      this.claim = `holo:${h.id}`; this.claims.set(this.claim, this);
+      const generation = this.generation;
       this.send(h, 'mouseMove', pt);
       const mode = await h.win.webContents.executeJavaScript('window.__holoTest ? window.__holoTest.mode() : "whole"').catch(() => 'whole');
+      if (!this.enabled || generation !== this.generation || h.win.isDestroyed()) return;
+      if (mode !== 'parts') {
+        const target = { position: () => ({ x: h.x, y: h.y }), move: (x, y) => { h.x = Math.round(x); h.y = Math.round(y); this.holos.place(h); if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.holos.local(h)); }, finish: () => this.holos.persist(), close: () => this.holos.close(h.id) };
+        this.captured = h;
+        this.drag = { target, ax: pt.x - h.x, ay: pt.y - h.y, trail: [{ x: pt.x, t: this.now() }] };
+        return;
+      }
       this.captured = h;
-      this.send(h, 'mouseDown', pt, mode === 'parts' ? {} : { modifiers: ['alt'] }); // a piece or a shape is carried; anything else moves the whole hologram
+      this.send(h, 'mouseDown', pt, {}); // a piece or a shape is carried; anything else moves the whole hologram
       return;
     }
-    if (e.type === 'release') { this.ringState('open'); this.release(); return; }
+    if (e.type === 'release') { this.ringState('open'); this.release({ throwAtEdge: true }); return; }
     if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (h) { this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; } // a pinch held on a hologram turns it; drawing needs the other hand to be a fist
     if (e.type === 'pinchup') { this.ringState('open'); this.release(); return; }
     if (e.type === 'click') {

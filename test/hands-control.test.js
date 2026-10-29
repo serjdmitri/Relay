@@ -31,17 +31,14 @@ test('an open hand over a hologram moves the pointer there; far from any hologra
   assert.equal(hc.virtualCursor(), null, 'and the real pointer is not replaced');
 });
 
-test('a fist grabs and moves the whole hologram (the Option-drag), holding the pointer for the manager while it is held', async () => {
+test('a fist grabs and moves the whole hologram, then releases it', async () => {
   const { hc, h, ev, at } = await rig('whole');
   await ev({ type: 'grab', ...at(900, 550) });
-  const down = h.win.input.find((e) => e.type === 'mouseDown');
-  assert.deepEqual(down.modifiers, ['alt']);
   assert.deepEqual(hc.virtualCursor(), { x: 900, y: 550 });
   await ev({ type: 'move', ...at(1100, 600), held: true });
   assert.deepEqual(hc.virtualCursor(), { x: 1100, y: 600 }, 'the hand now is the pointer for dragging');
-  assert.deepEqual(h.win.input.at(-1).modifiers, ['leftButtonDown']);
+  assert.deepEqual({ x: h.x, y: h.y }, { x: 1100, y: 600 });
   await ev({ type: 'release', ...at(1100, 600) });
-  assert.equal(h.win.input.at(-1).type, 'mouseUp');
   assert.equal(hc.virtualCursor(), null);
 });
 
@@ -73,7 +70,7 @@ test('two hands resize the hologram under them; the peace sign opens the mic for
   assert.ok(hc.captured);
   await ev({ type: 'lost' });
   assert.equal(hc.captured, null);
-  assert.equal(h.win.input.at(-1).type, 'mouseUp');
+  assert.equal(hc.drag, null);
 });
 
 test('it is off until enabled, needs the camera allowed, and turning it off closes the camera and the ring', async () => {
@@ -89,7 +86,7 @@ test('it is off until enabled, needs the camera allowed, and turning it off clos
   ok.setStatus({ state: 'running' });
   assert.equal(ok.status, 'running');
   ok.disable();
-  assert.equal(closed, 2);
+  assert.equal(closed, 3);
   assert.equal(ok.status, 'off');
   ok.frame({ t: 1, hands: [{ x: 0.5, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, size: 0.2, score: 1 }] }); // ignored once off
 });
@@ -189,4 +186,89 @@ test('the hand view: shown and hidden on the camera window, remembered when the 
   assert.deepEqual(seen.at(-1), ['preview', false]);
   await hc.handle({ type: 'click', x: 0.5, y: 0.5 });
   assert.equal(seen.filter((s) => s[0] === 'action').length, 1, 'with the view away nothing is sent to it');
+});
+
+
+test('two visible hands have distinct cursor rings and losing one hides only that cursor', async () => {
+  const { hc } = await rig();
+  const first = { x: 0.25, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, size: 0.1, score: 1, handed: 'Left' };
+  const second = { ...first, x: 0.75, handed: 'Right' };
+  hc.frame({ t: 1000, hands: [first, second] });
+  assert.notDeepEqual(hc.pos, hc.peer.pos);
+  assert.ok(hc.ring && hc.peer.ring && hc.ring !== hc.peer.ring);
+  for (let i = 1; i <= 8; i++) hc.frame({ t: 1000 + i * 33, hands: [first] });
+  assert.ok(hc.pos);
+  assert.equal(hc.peer.pos, null);
+  hc.disable();
+});
+
+test('a fast right-edge release dismisses only the held floating item; a slow move or lost hand does not', async () => {
+  const { hc, ev, at } = await rig();
+  let t = 1000, closed = 0, position = { x: 700, y: 500 };
+  hc.now = () => t;
+  hc.floatingAt = () => ({ key: 'panel:test', position: () => position, move: (x,y) => { position = { x,y }; }, close: () => { closed++; } });
+  await ev({ type: 'grab', ...at(800, 550) });
+  t += 100;
+  await ev({ type: 'move', ...at(1700, 550), held: true });
+  await ev({ type: 'release', ...at(1700, 550) });
+  assert.equal(closed, 1);
+  await ev({ type: 'grab', ...at(800, 550) });
+  t += 1000;
+  await ev({ type: 'move', ...at(1700, 550), held: true });
+  await ev({ type: 'release', ...at(1700, 550) });
+  assert.equal(closed, 1, 'a slow move does not dismiss');
+  await ev({ type: 'grab', ...at(800, 550) });
+  t += 100;
+  await ev({ type: 'move', ...at(1700, 550), held: true });
+  await ev({ type: 'lost' });
+  assert.equal(closed, 1, 'tracking loss does not dismiss');
+});
+
+
+test('each hand can carry a different hologram at the same time', async () => {
+  const { hc, h, at } = await rig();
+  const other = hc.holos.get(await hc.holos.show({ title: 'Other', items: [{ kind: 'shapes', title: 'Other', parts: [] }], x: 300, y: 300 }));
+  await hc.handle({ type: 'grab', ...at(900, 550) });
+  await hc.peer.handle({ type: 'grab', ...at(300, 300) });
+  await hc.handle({ type: 'move', ...at(1100, 550), held: true });
+  await hc.peer.handle({ type: 'move', ...at(450, 350), held: true });
+  assert.deepEqual([h.x, h.y], [1100, 550]);
+  assert.deepEqual([other.x, other.y], [450, 350]);
+  await hc.handle({ type: 'release', ...at(1100, 550) });
+  await hc.peer.handle({ type: 'release', ...at(450, 350) });
+  hc.disable();
+});
+
+test('a right-edge throw closes the held hologram', async () => {
+  const { hc, h, ev, at } = await rig();
+  let t = 1000; hc.now = () => t;
+  await ev({ type: 'grab', ...at(900, 550) });
+  t += 100;
+  await ev({ type: 'move', ...at(1700, 550), held: true });
+  await ev({ type: 'release', ...at(1700, 550) });
+  assert.equal(hc.holos.get(h.id), null);
+  hc.disable();
+});
+
+test('camera frames drive both hands to grab separate floating panels', async () => {
+  const { hc } = await rig();
+  const positions = [{ x: 200, y: 400 }, { x: 1400, y: 400 }];
+  hc.floatingAt = pt => {
+    const i = pt.x < 900 ? 0 : 1;
+    return { key: `panel:${i}`, position: () => positions[i], move: (x, y) => { positions[i] = { x, y }; }, close() {} };
+  };
+  hc.peer.floatingAt = hc.floatingAt;
+  const hand = (handed, x, gesture) => ({ handed, x, y: 0.5, gesture, pinch: 0.8, score: 1, size: 0.1 });
+  for (let i = 0; i < 5; i++) {
+    hc.frame({ t: 1000 + i * 33, hands: [hand('Left', 0.8, 'Closed_Fist'), hand('Right', 0.2, 'Closed_Fist')] });
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.ok(hc.drag && hc.peer.drag, 'both hands captured their own panel');
+  for (let i = 0; i < 10; i++) {
+    hc.frame({ t: 1200 + i * 33, hands: [hand('Right', 0.35, 'Closed_Fist'), hand('Left', 0.65, 'Closed_Fist')] });
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.ok(positions[0].x > 200);
+  assert.ok(positions[1].x < 1400);
+  hc.disable();
 });
