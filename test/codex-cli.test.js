@@ -27,6 +27,7 @@ test('Codex is started read-only with Relay as its only tool server, no saved se
   assert.ok(a.includes('mcp_servers.relay.url="http://127.0.0.1:5555/mcp"'));
   assert.ok(a.includes('mcp_servers.relay.bearer_token_env_var="RELAY_MCP_TOKEN"'));
   assert.ok(a.includes('approval_policy="never"'));
+  assert.ok(a.includes('mcp_servers.relay.default_tools_approval_mode="approve"'));
   assert.equal(a.at(-1), '-');
   process.env.OPENAI_API_KEY = 'sk-test';
   const env = codexEnv({ RELAY_MCP_TOKEN: 't' });

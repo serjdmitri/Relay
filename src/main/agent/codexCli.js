@@ -80,6 +80,8 @@ function buildArgs({ port, outFile, cwd, fast = false }) {
     '-s', 'read-only', '-C', cwd,
     '-c', 'approval_policy="never"',
     ...(fast ? ['-c', 'model_reasoning_effort="low"'] : []), // fast: little reasoning before acting
+    // Relay's own MCP host enforces its confirmation gate; Codex must allow those calls to reach it.
+    '-c', 'mcp_servers.relay.default_tools_approval_mode="approve"',
     '-c', `mcp_servers.relay.url="http://127.0.0.1:${port}/mcp"`,
     '-c', 'mcp_servers.relay.bearer_token_env_var="RELAY_MCP_TOKEN"',
     '-o', outFile,
