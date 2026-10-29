@@ -3,6 +3,15 @@ const assert = require('node:assert/strict');
 const { HandTracks } = require('../src/main/hands/tracks');
 const hand = (handed, x) => ({ handed, x, y: 0.5, score: 1 });
 
+test('four tracked hands retain separate slots when their order changes', () => {
+  const tracks = new HandTracks(4);
+  tracks.update([hand('Left', 0.1), hand('Right', 0.3), hand('Left', 0.7), hand('Right', 0.9)]);
+  const result = tracks.update([hand('Right', 0.89), hand('Left', 0.69), hand('Right', 0.31), hand('Left', 0.11)]);
+  assert.deepEqual(result.map((h) => h.x), [0.11, 0.31, 0.69, 0.89]);
+  tracks.reset();
+  assert.deepEqual(tracks.slots, [null, null, null, null]);
+});
+
 test('two hands with the same handedness keep their cursors when detection order changes', () => {
   const tracks = new HandTracks();
   tracks.update([hand('Left', 0.2), hand('Left', 0.8)]);

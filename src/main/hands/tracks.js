@@ -1,11 +1,11 @@
 // Keep two cursor identities stable when the detector reorders its results.
 // Prefer its handedness label; otherwise associate with the nearest last position.
 class HandTracks {
-  constructor() { this.slots = [null, null]; }
+  constructor(count = 2) { this.count = Math.max(1, Math.min(4, count)); this.slots = Array(this.count).fill(null); }
   update(hands) {
-    const remaining = (hands || []).filter(h => h && h.score !== 0).slice(0, 2);
-    const next = [null, null];
-    for (let i = 0; i < 2; i++) {
+    const remaining = (hands || []).filter(h => h && h.score !== 0).slice(0, this.count);
+    const next = Array(this.count).fill(null);
+    for (let i = 0; i < this.count; i++) {
       const prev = this.slots[i];
       if (!prev?.handed) continue;
       // Two people can both present the same handedness. Match the closest
@@ -21,7 +21,7 @@ class HandTracks {
     }
     while (remaining.length) {
       let best = null;
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < this.count; i++) {
         if (next[i]) continue;
         for (let j = 0; j < remaining.length; j++) {
           const p = this.slots[i];
@@ -35,6 +35,6 @@ class HandTracks {
     this.slots = next;
     return next;
   }
-  reset() { this.slots = [null, null]; }
+  reset() { this.slots = Array(this.count).fill(null); }
 }
 module.exports = { HandTracks };
