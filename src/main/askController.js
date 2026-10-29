@@ -1870,11 +1870,14 @@ class AskController {
   async presenceAway() {
     const cfg = this.store.get('settings.presence') || {};
     this.pausedByPresence = false;
+    if (cfg.lock) {
+      try { await this.mac.lockScreen(); }
+      catch { this.notice('Could not lock the Mac when you left. Check Relay permissions and try locking it manually.', 'failed'); }
+    }
     if (cfg.pause !== false) {
       const r = await this.quick('pause').catch(() => null);
       if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
     }
-    if (cfg.lock) await this.mac.lockScreen().catch(() => {});
   }
 
   // You are back: start what it paused (not what you paused yourself).
