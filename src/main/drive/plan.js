@@ -136,4 +136,4 @@ function undoMoves(entry, { fs }) {
   return { back, left };
 }
 
-module.exports = { buildPlan, applyPlan, undoMoves, isProject, freeName, MAX_MOVES };
+module.exports = { buildPlan, applyPlan, undoMoves, isProject, freeName, hasSymlink, MAX_MOVES };

@@ -2,7 +2,7 @@
 // or overwritten; the most Relay does is move files (and, only if asked, put some in the Trash). See guard.js and plan.js for the rules.
 
 const path = require('path');
-const { buildPlan, applyPlan, undoMoves } = require('./plan');
+const { buildPlan, applyPlan, undoMoves, hasSymlink } = require('./plan');
 const { pathProblem } = require('./guard');
 const { planMake, runMake } = require('./make');
 const { planDownloads } = require('./nightly');
@@ -41,6 +41,8 @@ class Drive {
     const bad = root === this.home ? '' : pathProblem(path.join(root, 'x'), this.home);
     if (root !== this.home && !root.startsWith(this.home + path.sep)) return 'Relay only looks inside your home folder.';
     if (bad && !/main folders|itself/.test(bad)) return bad;
+    try { if (hasSymlink(root, this.fs, this.home)) return 'That folder path contains a symbolic link, so Relay will not scan it.'; }
+    catch { return 'That folder path could not be checked.'; }
     try { if (!this.fs.statSync(root).isDirectory()) return 'That is not a folder.'; } catch { return 'That folder is not there.'; }
     return describeScan(scanFolder(root, { fs: this.fs, home: this.home, depth: Math.min(5, Math.max(1, +depth || 3)) }), this.home);
   }
