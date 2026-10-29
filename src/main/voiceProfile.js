@@ -29,8 +29,9 @@ function profileFor(job, settings = {}) {
   const own = { ...(DEFAULTS[job] || {}), ...(settings.voices?.[job] || {}) };
   const out = { job };
   for (const k of ['voice', 'rate', 'volume', 'kokoroVoice']) out[k] = own[k] !== undefined && own[k] !== '' ? own[k] : base[k];
-  // a slower "reading" voice must not undo a faster speed the person chose for everything
-  if (job === 'reading' && settings.voiceRate === 'slower') out.rate = 'slower';
+  // A deliberate global speed takes precedence over profile defaults, while an
+  // explicit per-profile choice still wins. Normal keeps the slower reading default.
+  if (settings.voiceRate && settings.voiceRate !== 'normal' && !settings.voices?.[job]?.rate) out.rate = settings.voiceRate;
   if (settings.workshop && settings.workshop.enabled) { out.rate = 'slower'; out.volume = Math.min(out.volume, 0.95); } // workshop mode: calm and unhurried
   if (out.voice === JARVIS && !out.kokoroVoice) out.kokoroVoice = JARVIS_KOKORO;
   const vol = Number(out.volume);
