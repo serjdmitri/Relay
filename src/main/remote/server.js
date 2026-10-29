@@ -167,6 +167,12 @@ class RemoteServer {
       if (!['lesson-delete', 'inferred-approve', 'inferred-delete'].includes(action) || !body.id) return this.json(res, 400, { error: 'Not allowed.' });
       return this.json(res, 200, this.control.memoryAct?.(action, String(body.id)) || { ok: false });
     }
+    if (p === '/api/volume' && req.method === 'POST') { // the volume bar and mute button on the phone
+      const b = await this.body(req).catch(() => null) || {};
+      const level = b.level === undefined ? undefined : Number(b.level);
+      if ((level !== undefined && !Number.isFinite(level)) || (b.mute !== undefined && typeof b.mute !== 'boolean') || (level === undefined && b.mute === undefined)) return this.json(res, 400, { error: 'Send a level from 0 to 100, or mute true or false.' });
+      return this.json(res, 200, (await this.control.volume?.({ level, mute: b.mute })) || {});
+    }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });

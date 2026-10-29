@@ -202,3 +202,27 @@ test('the phone can list, approve and delete what Relay learned, but not edit it
   assert.deepEqual(acted, [['lesson-delete', 'l1'], ['inferred-approve', 'i1']]);
   s.stop();
 });
+
+test('the phone volume bar: a level or mute reaches the Mac, anything else is refused, and it needs pairing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-remote-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<title>Relay</title>');
+  const got = [];
+  const control = { snapshot: () => ({}), recent: () => [], volume: async (o) => { got.push(o); return { level: o.level ?? 40, muted: !!o.mute }; } };
+  let list = [];
+  const pairing = new Pairing({ code: () => '424242' });
+  const devices = new Devices({ list: () => list, save: (l) => { list = l; } });
+  const s = new RemoteServer({ control, pairing, devices, root, host: '127.0.0.1', port: 0 });
+  await s.start();
+  const base = `http://127.0.0.1:${s.port}`;
+  const post = (p, body, token) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-relay-remote': '1', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+  assert.equal((await post('/api/volume', { level: 30 })).status, 401);
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'iPhone' })).json();
+  assert.deepEqual(await (await post('/api/volume', { level: 30 }, token)).json(), { level: 30, muted: false });
+  assert.equal((await (await post('/api/volume', { mute: true }, token)).json()).muted, true);
+  assert.equal((await post('/api/volume', {}, token)).status, 400);
+  assert.equal((await post('/api/volume', { level: 'loud' }, token)).status, 400);
+  assert.equal((await post('/api/volume', { mute: 'yes' }, token)).status, 400);
+  assert.deepEqual(got, [{ level: 30, mute: undefined }, { level: undefined, mute: true }]);
+  s.stop();
+});

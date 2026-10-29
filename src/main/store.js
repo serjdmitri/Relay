@@ -23,6 +23,7 @@ const DEFAULTS = {
     inbound: { unanswered: 'expire' }, // a question nobody answers (on the Mac or by text): expire after 30 minutes | reask (hourly, 3 times) | forever
     doctor: { fix: 'ask' }, // when Relay Doctor finds something fixable: ask | small (small fixes run themselves) | never
     recentDelay: 140, // milliseconds the pointer must rest on the left-edge tab before the Recent menu opens (0 to 1500)
+    welcome: { enabled: true, name: 'Sir', minAwayMin: 5, repeatMin: 10, speak: true, show: true }, // "Welcome back, Sir" with what happened, when you unlock after being away a while
     fastMode: true, // faster answers: no extended thinking, less re-checking of what it just did (off: slower, double-checks)
     answerStays: true, // an answer (and its card) stays on screen until you say ok, press Esc or ask the next thing
     actEnabled: true, // off: Relay only types what you say into the previous app

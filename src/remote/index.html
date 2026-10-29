@@ -41,23 +41,26 @@
     </div>
   </section>
   <div id="bottom">
+    <div id="player" aria-label="Music controls">
+      <button type="button" id="shuf" data-say="toggle shuffle" aria-label="Shuffle"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3.2c2 0 3.2 1 4.3 2.6l2.4 3.8c1.1 1.6 2.3 2.6 4.3 2.6H21M3 17h3.2c2 0 3.2-1 4.3-2.6M13.2 9.6C14.3 8 15.5 7 17.5 7H21M18 4l3 3-3 3M18 14l3 3-3 3"/></svg></button>
+      <button type="button" data-say="previous song" aria-label="Previous"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M18.5 5.5v13L9 12z"/><rect x="5" y="5.5" width="2.6" height="13" rx="1"/></svg></button>
+      <button type="button" id="pp" class="big" aria-label="Play or pause"><svg id="ppicon" viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg></button>
+      <button type="button" data-say="next song" aria-label="Next"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M5.5 5.5v13L15 12z"/><rect x="16.4" y="5.5" width="2.6" height="13" rx="1"/></svg></button>
+      <button type="button" id="rep" data-say="toggle repeat" aria-label="Repeat"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+    </div>
+    <div id="vol" aria-label="Volume">
+      <button type="button" id="mute" aria-label="Mute" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5z" fill="currentColor" fill-opacity=".25"/><path id="wave1" d="M15.5 9a4 4 0 0 1 0 6"/><path id="wave2" d="M18 6.5a7.5 7.5 0 0 1 0 11"/><path id="slash" d="M4 4l16 16" style="display:none"/></svg></button>
+      <input id="volume" type="range" min="0" max="100" step="1" value="50" aria-label="Volume">
+      <span id="volpct">50</span>
+    </div>
     <div id="quick" aria-label="Quick actions">
       <button data-say="what's playing">What's playing</button>
-      <button data-say="pause">Pause</button>
-      <button data-say="play">Play</button>
-      <button data-say="next song">Next song</button>
-      <button data-say="previous song">Previous</button>
-      <button data-say="volume down">Quieter</button>
-      <button data-say="volume up">Louder</button>
-      <button data-say="mute">Mute</button>
-      <button data-say="focus mode for 25 minutes">Focus 25 min</button>
-      <button data-say="end focus mode">End focus</button>
-      <button data-say="screen off">Screen off</button>
     </div>
     <form id="bar" autocomplete="off" hidden>
       <input id="text" type="text" enterkeyhint="send" placeholder="Ask Relay" autocapitalize="sentences">
       <button id="send" type="submit" aria-label="Send">&#8593;</button>
     </form>
+    <div id="lockbox">
     <button id="lock" class="open" type="button" aria-label="Lock my Mac">
       <svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="10" y="21" width="28" height="21" rx="5" fill="currentColor" fill-opacity=".16"/>
@@ -66,6 +69,8 @@
       </svg>
       <span id="locklbl">Lock my Mac</span>
     </button>
+    <button id="sleep" type="button" aria-label="Turn the Mac screen off">Screen off</button>
+    </div>
   </div>
   <button id="qtog" aria-label="Show or hide the music and shortcut buttons" aria-pressed="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></button>
   <button id="kbd" aria-label="Show the typing bar" aria-pressed="false"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 14h.01M18 14h.01M9 14.2h6"/></svg></button>

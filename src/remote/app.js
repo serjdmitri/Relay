@@ -99,6 +99,7 @@
   function line(text, dim) { $('line').textContent = text || ''; $('line').classList.toggle('dim', !!dim); }
 
   function applyStatus(s) {
+    if (s.volume && typeof applyVolume === 'function') applyVolume(s.volume);
     if ('locked' in s) setLocked(!!s.locked);
     serverState = s.state || 'idle';
     $('tasks').replaceChildren(...(s.tasks || []).map((t) => { const li = document.createElement('li'); li.className = t.status; li.textContent = t.text; return li; }));
@@ -126,8 +127,8 @@
   };
 
   // Sideways, the answer column gets the height the shortcut buttons leave (the CSS reads --quickh).
-  const measureQuick = () => document.documentElement.style.setProperty('--quickh', `${$('quick').offsetHeight}px`);
-  if (window.ResizeObserver) new ResizeObserver(measureQuick).observe($('quick'));
+  const measureQuick = () => { document.documentElement.style.setProperty('--quickh', `${$('quick').offsetHeight + $('player').offsetHeight + $('vol').offsetHeight}px`); document.documentElement.style.setProperty('--bottomh', `${$('bottom').offsetHeight + 8}px`); };
+  if (window.ResizeObserver) { const ro = new ResizeObserver(measureQuick); ro.observe($('quick')); ro.observe($('player')); ro.observe($('vol')); ro.observe($('bottom')); }
   addEventListener('resize', measureQuick);
 
   // The music and shortcut buttons can be hidden (button at the bottom left); the choice is remembered.
@@ -146,11 +147,11 @@
   const typing = () => kb.isOpen || !$('bar').hidden;
   function showTyping(on) {
     if (landscape()) {
-      $('bar').hidden = true; $('quick').hidden = false;
+      $('bar').hidden = true; $('quick').hidden = false; $('player').hidden = false; $('vol').hidden = false;
       if (on) kb.open(); else kb.close();
     } else {
       kb.close();
-      $('bar').hidden = !on; $('quick').hidden = on;
+      $('bar').hidden = !on; $('quick').hidden = on; $('player').hidden = on; $('vol').hidden = on;
       if (on) setTimeout(() => $('text').focus(), 50); else $('text').blur();
     }
     kbState(on);
@@ -162,7 +163,38 @@
   // What was asked stays at the top while the answer comes, and above the answer after it.
   function showAsked(t) { const a = $('asked'); a.textContent = t || ''; a.hidden = !t; }
 
-  function showReply(text) { $('reply').textContent = text || ''; }
+  function showReply(text) { $('reply').textContent = text || ''; syncPlayer(text); }
+
+  // The music strip: the big button flips between pause and play as the Mac says what it did, and shuffle and repeat light up when they are on.
+  const ICON_PAUSE = '<rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/>';
+  const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
+  let musicPlaying = false;
+  function setPlaying(on) { musicPlaying = on; $('ppicon').innerHTML = on ? ICON_PAUSE : ICON_PLAY; }
+  function syncPlayer(text) {
+    const t = String(text || '');
+    if (/^(?:Paused|Nothing is playing|No music app)/i.test(t)) setPlaying(false);
+    else if (/^(?:Playing|Skipped|Back to|Went back)|is already playing/i.test(t)) setPlaying(true);
+    if (/^Shuffle on/i.test(t)) $('shuf').classList.add('on'); else if (/^Shuffle off/i.test(t)) $('shuf').classList.remove('on');
+    if (/^Repeat (?:on|all|one)/i.test(t)) $('rep').classList.add('on'); else if (/^Repeat off/i.test(t)) $('rep').classList.remove('on');
+  }
+  setPlaying(false);
+  $('pp').onclick = () => ask(musicPlaying ? 'pause' : 'play');
+  for (const b of document.querySelectorAll('#player button[data-say]')) b.onclick = () => ask(b.dataset.say);
+  $('sleep').onclick = () => ask('screen off');
+
+  // The volume bar and mute button talk to the Mac directly (no request, nothing in History).
+  let muted = false;
+  let dragging = false;
+  const volShow = (level) => { $('volume').value = String(level); $('volume').style.setProperty('--v', `${level}%`); $('volpct').textContent = String(level); };
+  const muteShow = (m) => { muted = !!m; $('mute').setAttribute('aria-pressed', String(muted)); $('slash').style.display = muted ? '' : 'none'; $('wave1').style.display = $('wave2').style.display = muted ? 'none' : ''; };
+  function applyVolume(v) { if (!v || dragging) return; volShow(v.level); muteShow(v.muted); }
+  let volTimer = null;
+  const sendVolume = (body) => api('/api/volume', body).then(applyVolume).catch((e) => line(e.message, true));
+  $('volume').addEventListener('pointerdown', () => { dragging = true; });
+  $('volume').addEventListener('input', () => { volShow(Number($('volume').value)); clearTimeout(volTimer); volTimer = setTimeout(() => sendVolume({ level: Number($('volume').value) }), 120); });
+  $('volume').addEventListener('change', () => { clearTimeout(volTimer); sendVolume({ level: Number($('volume').value) }); dragging = false; });
+  for (const ev of ['pointerup', 'pointercancel']) $('volume').addEventListener(ev, () => { dragging = false; });
+  $('mute').onclick = () => { muteShow(!muted); sendVolume({ mute: muted }); };
 
   function speak(text) {
     if (!speakOn || !('speechSynthesis' in window) || !text) return;

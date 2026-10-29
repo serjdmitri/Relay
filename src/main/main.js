@@ -21,6 +21,7 @@ const { PanelWindows } = require('./panelWindow');
 const { NotesService } = require('./notes/service');
 const { Alerts, parseCalendar, calendarEvents, batteryEvent } = require('./proactive');
 const { Connectivity } = require('./connectivity');
+const welcome = require('./welcome');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
@@ -312,6 +313,21 @@ function schedulePrepareSpeech() {
 function syncInbound() {
   if (!inbound) return;
   if (flagsMod.isOn(store.get('settings'), 'imessage')) inbound.start(); else inbound.stop();
+}
+
+
+// "Welcome back, Sir" with what happened while the screen was locked. Quick: no model is asked, only what the app already knows.
+async function welcomeBack(lockedAt, lastWelcome) {
+  const cfg = store.get('settings.welcome') || {};
+  if (!lockedAt || !welcome.shouldGreet({ enabled: cfg.enabled !== false, awayMs: Date.now() - lockedAt, minAwayMs: (cfg.minAwayMin ?? 5) * 60000, minGapMs: (cfg.repeatMin ?? 10) * 60000, sinceLastMs: Date.now() - lastWelcome, busy: !!ask.meeting?.active })) return false;
+  const [day, battery] = await Promise.all([
+    Promise.race([ask.mac.calendarEvents(1).then(parseCalendar).catch(() => []), new Promise((r) => setTimeout(() => r([]), 2500))]),
+    new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out)))))
+  ]);
+  const w = welcome.buildWelcome({ name: cfg.name || 'Sir', lockedAt, now: Date.now(), history: store.get('history') || [], events: day, battery });
+  if (cfg.show !== false && Notification.isSupported()) new Notification({ title: `Welcome back, ${cfg.name || 'Sir'}`, body: w.lines.join(' '), silent: true }).show();
+  if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(w.spoken);
+  return true;
 }
 
 function registerIpc() {
@@ -896,8 +912,14 @@ app.whenReady().then(() => {
   // Is the Mac locked: the phone page shows it as a padlock. macOS tells us when it locks and unlocks; a slow check catches the rest.
   const lockWatch = new LockWatch({ exec: (cmd, args) => new Promise((resolve, reject) => require('child_process').execFile(cmd, args, { timeout: 4000 }, (e, out) => (e ? reject(e) : resolve(String(out))))), onChange: () => ask.statusChanged() });
   ask.lockWatch = lockWatch;
-  powerMonitor.on('lock-screen', () => lockWatch.set(true));
-  powerMonitor.on('unlock-screen', () => lockWatch.set(false));
+  let lockedAt = 0;
+  let lastWelcome = 0;
+  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); });
+  powerMonitor.on('unlock-screen', () => {
+    lockWatch.set(false);
+    welcomeBack(lockedAt, lastWelcome).then((did) => { if (did) lastWelcome = Date.now(); }).catch(() => {});
+    lockedAt = 0;
+  });
   lockWatch.refresh();
   setInterval(() => { if (store.get('settings.remote.enabled')) lockWatch.refresh(); }, 8000);
   ask.holos = holos;

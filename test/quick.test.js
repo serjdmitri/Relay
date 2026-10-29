@@ -275,3 +275,29 @@ test('running a window command moves the window, can be undone, and says when th
   const none = await runQuick({ type: 'window', position: 'right', app: 'Preview' }, { windowFrame: async () => { throw new Error('Preview has no open window.'); } }, ctx);
   assert.match(none.reply, /no open window/);
 });
+
+test('shuffle and repeat: parsed, and they flip the right setting in Spotify and Music', async () => {
+  const { parseQuick, runQuick } = require('../src/main/quick');
+  assert.deepEqual(parseQuick('toggle shuffle'), { type: 'media', op: 'shuffle', on: null });
+  assert.deepEqual(parseQuick('turn shuffle off'), { type: 'media', op: 'shuffle', on: false });
+  assert.deepEqual(parseQuick('repeat all'), { type: 'media', op: 'repeat', mode: 'all' });
+  const mk = (app, answers) => { const log = []; return { log, mac: { listApps: async () => [app], osa: async (s) => { log.push(s); if (/player state/.test(s)) return 'playing'; const k = Object.keys(answers).find((x) => s.includes(x) && s.includes('return')); return k ? answers[k] : ''; } } }; };
+  let m = mk('Spotify', { shuffling: 'false' });
+  let r = await runQuick({ type: 'media', op: 'shuffle', on: null }, m.mac, {});
+  assert.equal(r.reply, 'Shuffle on.');
+  assert.ok(m.log.some((s) => /set shuffling to true/.test(s)));
+  await r.undo();
+  assert.ok(m.log.some((s) => /set shuffling to false/.test(s)));
+  m = mk('Spotify', { repeating: 'true' });
+  r = await runQuick({ type: 'media', op: 'repeat', mode: null }, m.mac, {});
+  assert.equal(r.reply, 'Repeat off.');
+  m = mk('Music', { 'song repeat': 'off' });
+  r = await runQuick({ type: 'media', op: 'repeat', mode: null }, m.mac, {});
+  assert.equal(r.reply, 'Repeat all.', 'off, then all, then one');
+  assert.ok(m.log.some((s) => /set song repeat to all/.test(s)));
+  m = mk('Music', { 'shuffle enabled': 'true' });
+  r = await runQuick({ type: 'media', op: 'shuffle', on: false }, m.mac, {});
+  assert.equal(r.reply, 'Shuffle off.');
+  const none = { listApps: async () => ['Safari'], osa: async () => '' };
+  assert.equal((await runQuick({ type: 'media', op: 'shuffle', on: null }, none, {})).reply, 'No music app is open.');
+});
