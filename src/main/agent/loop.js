@@ -55,6 +55,7 @@ async function runAgent({ text, provider, tools, system, confirm, onEvent = () =
 // Runs one tool call: unknown tool, confirmation gate, execution and event reporting.
 // Shared by the built-in loop and by the MCP server that the signed-in Claude CLI calls.
 async function callTool({ tool, name, input, confirm, onEvent = () => {}, signal }) {
+  if (signal?.aborted) return { aborted: true, content: [] };
   if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
   const ask = tool.confirm ? tool.confirm(input) : null;
   if (ask) {
@@ -65,6 +66,7 @@ async function callTool({ tool, name, input, confirm, onEvent = () => {}, signal
       return { content: [{ type: 'text', text: 'The user declined this action. Do not retry it. Tell them it was not done.' }] };
     }
   }
+  if (signal?.aborted) return { aborted: true, content: [] };
   onEvent({ type: 'tool-start', name, input, label: tool.describe?.(input) });
   try {
     const out = await tool.run(input, { signal });
