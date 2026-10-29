@@ -1,3 +1,6 @@
+const { suggestSkill } = require('./skillSuggestions');
+const { parseDebate, debatePrompt } = require('./debate');
+const { parseWorkMode, workStyle } = require('./workModes');
 const { app, BrowserWindow, screen, clipboard, desktopCapturer, safeStorage, systemPreferences, nativeImage } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
@@ -1674,6 +1677,8 @@ class AskController {
         const tier = !opts.shown ? parseModelCommand(text) : null;
         if (tier) return this.finish(entry, this.setModelTier(tier));
         let effective = text;
+        const mode = !opts.shown && parseWorkMode(text);
+        if (mode) { this.store.set('settings.workMode', mode); this.dropWarm(true); this.onChange(); return this.finish(entry, { status: 'done', reply: `Work mode set to ${mode}.` }); }
         if (!opts.shown && isRetry(text)) {
           if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to try again yet.', actions: 0 });
           effective = this.lastRequestText;
@@ -1687,6 +1692,8 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
+        const debateTopic = !opts.shown && !opts.scheduled && parseDebate(effective);
+        if (debateTopic) return this.runRequest(debatePrompt(debateTopic), entry);
         if (!opts.shown) {
           const ac = parseAgentCommand(effective);
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
@@ -1728,6 +1735,11 @@ class AskController {
           if (ec) return this.explainError(ec, entry);
           const pc = phish.parsePhishCommand(effective);
           if (pc) return this.finish(entry, await this.securityCheck(pc));
+          const panelCommand = this.panelHub && parsePanelCommand(effective);
+          if (panelCommand?.type === 'calculator') {
+            const r = await this.panelHub.show({ title: 'Calculator', html: require('./panels/calculator').HTML });
+            return this.finish(entry, { status: r.ok ? 'done' : 'failed', reply: r.ok ? 'Here is the calculator.' : r.error });
+          }
           if (this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels')) {
             const pc2 = parsePanelCommand(effective);
             if (pc2?.type === 'close') return this.finish(entry, { status: 'done', reply: this.closePanels() });
@@ -2578,6 +2590,12 @@ class AskController {
       const calls = this.store.get('actions').filter((a) => a.requestId === entry.id).reverse();
       const steps = learnFrom(calls);
       this.lastLearned = steps ? { text, steps } : null;
+      const proposals = this.store.get('skillSuggestions') || [];
+      const idea = suggestSkill(text, steps, this.store.get('history'), proposals);
+      if (idea && !(this.store.get('routines') || []).some(r => r.name.toLowerCase() === idea.name.toLowerCase())) {
+        this.store.set('skillSuggestions', [{ id: crypto.randomUUID(), ...idea }, ...proposals].slice(0, 10));
+        this.onChange();
+      }
       if (this.recording) this.recording.push(text);
     }
     if (res.status === 'done') this.lastAction = internal ? null : { kind: 'model', ts: Date.now() };
@@ -2699,8 +2717,9 @@ class AskController {
       firefoxConnected: this.bridge.isConnected(), screen: display.size, visionCapable: vision
     });
     const followUp = this.followUpContext();
+    const workSystem = `${system}\n\n${workStyle(this.store.get('settings.workMode'))}`;
     try {
-      return await runAgent({ text: followUp ? `${followUp}\n\nRequest: ${text}` : text, tools, system, signal, confirm, onEvent, provider });
+      return await runAgent({ text: followUp ? `${followUp}\n\nRequest: ${text}` : text, tools, system: workSystem, signal, confirm, onEvent, provider });
     } catch (e) {
       if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: 0 };
       return { status: 'failed', reply: e.message, actions: 0 };
@@ -2709,7 +2728,7 @@ class AskController {
 
   // What goes with every request: the front app, running apps, marked area, files, memory, language, and (for a fresh process) the last exchanges.
   requestContext(runningApps, fresh = true) {
-    return [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : '' }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
+    return [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: [workStyle(this.store.get('settings.workMode')), this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : ''].filter(Boolean).join(' ') }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
   }
 
   // Is Codex there, and signed in with a ChatGPT plan (not a key)? Checked at most once a minute. Returns its path, or null.

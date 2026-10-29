@@ -5,6 +5,7 @@ const PANES = {
   screen: 'Privacy_ScreenCapture',
   input: 'Privacy_ListenEvent',
   mic: 'Privacy_Microphone',
+  camera: 'Privacy_Camera',
   automation: 'Privacy_Automation',
   fulldisk: 'Privacy_AllFiles'
 };
@@ -14,7 +15,8 @@ function status() {
   const trusted = systemPreferences.isTrustedAccessibilityClient?.(false) ?? false;
   const screen = (systemPreferences.getMediaAccessStatus?.('screen') ?? 'unknown') === 'granted';
   const micStatus = systemPreferences.getMediaAccessStatus?.('microphone') ?? 'unknown';
-  return { accessibility: trusted, screen, mic: micStatus === 'granted', micStatus };
+  const cameraStatus = systemPreferences.getMediaAccessStatus?.('camera') ?? 'unknown';
+  return { accessibility: trusted, screen, mic: micStatus === 'granted', micStatus, camera: cameraStatus === 'granted', cameraStatus };
 }
 
 function requestAccessibility() {

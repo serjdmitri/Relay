@@ -184,6 +184,19 @@ const PAGES = {
     c.append(sel);
     c.append(h(`<div class="card stats">${[[st.requests, 'Requests'], [st.actions, 'Actions taken'], [st.words, 'Words dictated'], [time, 'Time saved']].map(([n, l]) => `<div><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}</div>`));
 
+    const activity = S.activity || {};
+    const inProgress = [...(activity.tasks || []).filter(t => ['queued', 'running', 'working'].includes(t.status)).map(t => t.text), ...(activity.agents || []).filter(a => ['running', 'working'].includes(a.status)).map(a => a.task)];
+    const failed = (S.history || []).filter(x => x.status === 'failed').slice(0, 3);
+    const complete = (S.history || []).filter(x => x.status === 'done').slice(0, 3);
+    c.append(h('<div class="section-title">Activity center</div>'));
+    c.append(h(`<div class="card" style="padding:16px"><div class="t">${activity.question ? 'Waiting for your approval' : inProgress.length ? 'Working now' : 'No work in progress'}</div>${activity.question ? `<div class="d">${esc(activity.question)} — answer in the Relay prompt.</div>` : inProgress.map(x => `<div class="d">${esc(x)}</div>`).join('')}<div class="d" style="margin-top:8px">Recent: ${complete.length} completed, ${failed.length} failed (last ${Math.min(3, (S.history || []).length)} of each).</div>${failed.map(x => `<div class="d">Failed: ${esc(x.text)}</div>`).join('')}</div>`));
+    const proposals = S.skillSuggestions || [];
+    if (proposals.length) {
+      c.append(h('<div class="section-title">Suggested routines</div>'));
+      const review = h(`<div class="card">${proposals.map(p => `<div class="row"><div class="grow"><div class="t">${esc(p.name)}</div><div class="d">Save this repeated request as a routine? It will run only when you ask.</div></div><button class="btn" data-accept="${esc(p.id)}">Save</button><button class="btn" data-dismiss="${esc(p.id)}">Dismiss</button></div>`).join('')}</div>`);
+      review.onclick = async e => { const b = e.target.closest('[data-accept],[data-dismiss]'); if (!b) return; const r = await relay.reviewSkill(b.dataset.accept || b.dataset.dismiss, !!b.dataset.accept); if (r && !r.ok) alert(r.error); };
+      c.append(review);
+    }
     c.append(h('<div class="section-title">Get started</div>'));
     const gs = h('<div style="margin-top:-8px"></div>');
     const row = (ic, t, d, right, onclick, blue) => {
@@ -622,6 +635,9 @@ const PAGES = {
     const talk = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Talking</div><div class="seg">${[['tap-or-hold', 'Tap or hold'], ['tap', 'Tap'], ['hold', 'Hold']].map(([v, l]) => `<button data-v="${v}" class="${S.settings.talking === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Tap to start and tap to send, or hold while you talk and let go.</div></div>`);
     talk.onclick = (e) => e.target.dataset.v && relay.set('settings.talking', e.target.dataset.v);
     card.append(talk, toggleRow('Welcome back when I unlock', 'When you unlock the Mac after being away a while, Jarvis says “Welcome back, Sir” and what happened: what finished, what failed, your next meeting, a low battery. No model is asked, so it is instant.', 'settings.welcome.enabled'), welcomeRow(), toggleRow('Faster answers', 'On: Relay skips extended thinking and does not re-check every action it just did, so things happen sooner. Off: slower, but it thinks longer and double-checks. Applies to Claude and to the Codex backup.', 'settings.fastMode'), toggleRow('Play sounds', '', 'settings.playSounds'), toggleRow('Recent asks on the left edge', 'Rest the pointer on the thin tab at the middle of the left edge to open a list of what you asked lately. Click one to ask it again.', 'settings.recent'), recentDelayRow(), toggleRow('Lower the volume while I talk', 'Turns the volume down to 30% while Relay listens and puts it back exactly when you stop. Off: your volume is never touched.', 'settings.duckAudio'), toggleRow('Dictation', 'Right ⌘ types what you say. Off: the shortcut is disabled.', 'settings.dictation'), toggleRow('Make 3D models from real photos', 'When there is no good ready-made model, Relay finds real photos of the thing (Wikipedia, Wikimedia Commons, or a photo it found while researching) and turns one into a realistic 3D model with a free online service (Stable Fast 3D on Hugging Face). Only the public photo is sent, never anything about you. It can be busy or out of its free daily limit; then Relay tries another option.', 'settings.models3dFromPhotos'), toggleRow('3D models', 'Ask to see something in 3D (“show me a 3D model of a skull”) and a hologram floats on your screen: no window, no border. Drag its glowing base to move it, drag the model to turn it, scroll to resize, pin it to keep it, switch to other models, and drop one hologram on another to combine them. Relay looks for real models on Wikimedia Commons first (free, with the maker and license shown), else builds a simple one from shapes and says so.', 'settings.models3d'), toggleRow('Answer cards with pictures', 'For “who is…”, “what does … look like” and “show me … options”, a card with a picture, key facts and links appears beside the answer. Pictures come from Wikipedia and Wikimedia Commons, fetched by Relay itself.', 'settings.cards'), toggleRow('Show usage after each ask', 'A small line under the answer: the model, how long it took, tokens, and how much of your Claude limit is used. It is never read aloud.', 'settings.showUsage'), toggleRow('Learn my words from corrections', 'After you dictate, Relay looks at that text in the field. A word you fixed by hand twice becomes a word fix in Vocabulary. Only the changed words are kept; password fields are never read.', 'settings.learnWords'), toggleRow('Keep dictation history', 'Off: dictated text is typed but not saved in History.', 'settings.saveDictation'));
+    const modes = h(`<div class="row talk" style="flex-wrap:wrap"><div class="grow"><div class="t">Work mode</div><div class="d">Changes how Jarvis responds. Say “set work mode to coding” to switch by voice.</div></div><div class="seg">${[['personal', 'Personal'], ['homework', 'Homework'], ['coding', 'Coding'], ['focus', 'Focus']].map(([v,l]) => `<button data-v="${v}" class="${(S.settings.workMode || 'personal') === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>`);
+    modes.onclick = e => { if (e.target.dataset.v) relay.set('settings.workMode', e.target.dataset.v); };
+    card.append(modes);
     c.append(card);
     // Better 3D from photos: a free Hugging Face token unlocks the stronger generators (TRELLIS), which need more free GPU time than anonymous use allows.
     const hf = h(`<div class="row"><div class="grow"><div class="t">Hugging Face token (optional)</div><div class="d">${S.hasHfToken ? 'Saved on this Mac (encrypted with your Keychain). Photo models now try the sharper TRELLIS generators first.' : 'Without it Relay uses Stable Fast 3D, which is fast but blobby. A free account\'s token at huggingface.co/settings/tokens (a “read” token) gives enough free GPU time for TRELLIS: much cleaner shapes and textures, about a minute each. Only the public photo is sent.'}</div></div><input class="field" type="password" style="width:200px" placeholder="${S.hasHfToken ? 'Paste to replace' : 'hf_…'}"><button class="btn">Save</button><button class="btn" id="hftest">Test it</button></div><div class="note" id="hfout" style="margin:0 14px 10px;line-height:1.5"></div>`);
@@ -666,6 +682,12 @@ const PAGES = {
     const hrow = h(`<div class="row"><div class="grow"><div class="t">Hand control (camera)</div><div class="d">${hs.status === 'error' ? esc(hs.message || 'It could not start.') : handsOn ? (hs.status === 'running' ? 'On. Hold a hand up to the camera: you should see a small glowing ring follow it.' : 'Starting…') : 'Move holograms in the air. Turn it on, allow the camera when macOS asks (Relay only looks at where your hands are, on this Mac; no picture is kept or sent), then hold an open hand up to the camera.'}</div></div><div class="toggle ${handsOn && hs.status !== 'error' ? 'on' : ''}"></div></div>`);
     hrow.onclick = async () => { const r = await relay.setHands(!(handsOn && hs.status !== 'error')); if (r && !r.ok) alert(r.error); };
     hcard.append(hrow);
+    const handMargin = Math.round((S.settings.hands?.margin ?? 0.12) * 100);
+    const handCal = h(`<div class="row"><div class="grow"><div class="t">Hand reach</div><div class="d">Increase this if you need smaller hand movements to reach the screen edges. Use Show hand view to see what the camera detects.</div></div><input type="range" min="4" max="25" value="${handMargin}" aria-label="Hand reach"><span>${handMargin}%</span></div>`);
+    const handRange = $('input', handCal);
+    handRange.oninput = () => { $('span', handCal).textContent = `${handRange.value}%`; };
+    handRange.onchange = () => relay.set('settings.hands.margin', Number(handRange.value) / 100);
+    hcard.append(handCal);
     const pvOn = !!S.settings.hands?.preview;
     const prow = h(`<div class="row"><div class="grow"><div class="t">Show hand view (top right)</div><div class="d">A small window in the top right of the screen shows the camera, the outline of each hand it finds, what each hand is doing (fist, pinch, peace sign…) and how many hands it sees. The picture stays in that window; nothing is saved or sent. You can also say "hands" to open it and "hide hands" to put it away.</div></div><div class="toggle ${pvOn ? 'on' : ''}"></div></div>`);
     prow.onclick = async () => { if (!pvOn && !handsOn) { const r = await relay.setHands(true); if (r && !r.ok) { alert(r.error); return; } } relay.setHandsPreview(!pvOn); };
@@ -1124,13 +1146,15 @@ const PAGES = {
     const a = prow(glyph('accessibility'), '#1f86cf', 'Accessibility', 'Types for you and works in your apps.', perms.accessibility ? allowed : '<button class="btn primary" data-p="acc">Allow</button>');
     const s = prow(glyph('screen'), '#2aa5d8', 'Screen Recording', "Sees apps it can't read any other way.", perms.screen ? allowed : '<button class="btn primary" data-p="screen">Allow</button>');
     const i = prow(glyph('input'), '#1f86cf', 'Input Monitoring', 'Hears your shortcut keys from any app.', S.hotkeysRunning && S.hotkeysSeen ? allowed : S.hotkeysRunning ? '<span class="note" style="color:var(--dim)">Press any key to check</span>' : '<button class="btn primary" data-p="input">Open Settings</button>');
-    card.append(mic, a, s, i);
+    const camera = prow(glyph('screen'), '#537bbb', 'Camera', 'Lets hand control see your hands.', perms.camera ? allowed : `<button class="btn primary" data-p="camera">Open Settings</button>`);
+    card.append(mic, a, s, i, camera);
     card.onclick = (e) => {
       const p = e.target.dataset.p;
       if (p === 'mic') (perms.micStatus === 'denied' ? relay.openPane('mic') : relay.requestMic());
       if (p === 'acc') relay.requestAccessibility().then(() => relay.openPane('accessibility'));
       if (p === 'screen') relay.openPane('screen');
       if (p === 'input') relay.openPane('input');
+      if (p === 'camera') relay.openPane('camera');
     };
     c.append(card);
     if (S.hotkeysError) c.append(h(`<div class="note warn" style="margin-top:10px">Shortcuts are not running: ${esc(S.hotkeysError)}. Grant Accessibility and Input Monitoring, then reopen Relay.</div>`));

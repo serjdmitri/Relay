@@ -7,6 +7,7 @@ const SCHEMA = 3;
 const DEFAULTS = {
   schema: SCHEMA,
   onboardingDone: false,
+  skillSuggestions: [], // proposed routines; never run without review and approval
   settings: {
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
     playSounds: true,
@@ -17,13 +18,14 @@ const DEFAULTS = {
     robotics: { lists: {}, sheetId: '' }, // checklists you edited (the standard ones are built in), and the Google Sheet that "log this" adds a line to
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead
     homework: { full: true, explain: true, format: 'docx', voiceSample: '', voiceStyle: '' }, // the homework helper: allow whole solutions, add a "How it works" section, Word | PDF | text, a sample of your writing and how you describe your voice
-    flags: {}, // experimental features you turned on (see flags.js); each is off by default
+    flags: { panels: true }, // custom panels require approval; other experimental features are off by default
     proactive: { mode: 'silent-urgent', quiet: { on: true, from: 22, to: 7 } }, // Relay speaking up on its own: silent | silent-urgent | speak, and quiet hours
     notes: { folders: [] }, // folders "ask my notes" may read (Settings > Doctor > Ask my notes)
     inbound: { unanswered: 'expire' }, // a question nobody answers (on the Mac or by text): expire after 30 minutes | reask (hourly, 3 times) | forever
     doctor: { fix: 'ask' }, // when Relay Doctor finds something fixable: ask | small (small fixes run themselves) | never
     recentDelay: 140, // milliseconds the pointer must rest on the left-edge tab before the Recent menu opens (0 to 1500)
     welcome: { enabled: true, name: 'Sir', minAwayMin: 5, repeatMin: 10, speak: true, show: true }, // "Welcome back, Sir" with what happened, when you unlock after being away a while
+    workMode: 'personal', // response style for the user's current context
     fastMode: true, // faster answers: no extended thinking, less re-checking of what it just did (off: slower, double-checks)
     answerStays: true, // an answer (and its card) stays on screen until you say ok, press Esc or ask the next thing
     actEnabled: true, // off: Relay only types what you say into the previous app
@@ -70,7 +72,7 @@ const DEFAULTS = {
     },
     holoUi: { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl', pointsPerInch: 125 }, // holograms: where the controls are (menu, side, bar), slow turning, and how long to leave it alone after a touch
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
-    hands: { enabled: false, preview: false }, // Hand control: move holograms in the air through the camera (opt-in)
+    hands: { enabled: false, preview: false, margin: 0.12 }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {
