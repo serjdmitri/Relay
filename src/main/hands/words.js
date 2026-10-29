@@ -10,6 +10,11 @@ const OFF = new RegExp(`^(?:(?:stop|turn off|disable|deactivate|switch off|end|q
 function parseHandsCommand(text) {
   const t = String(text || '').trim().replace(/[“”"]/g, '').replace(/[.!?,]+$/g, '').replace(/^(?:hey |ok |okay )?(?:relay|jarvis|j\.a\.r\.v\.i\.s)[, ]*/i, '').replace(/^please /i, '').replace(/ please$/i, '').replace(/\s+/g, ' ').trim();
   if (!t) return null;
+  if (/^(?:show|open)(?: me)?(?: my| the)? (?:jarvis )?dashboard$/i.test(t)) return 'dashboard';
+  if (/^(?:undo (?:that |the )?throw|bring back (?:the |that )?(?:panel|hologram|item))[.!?]*$/i.test(t)) return 'undo';
+  if (/^(?:show|open|list)(?: me)?(?: the)?(?: my)? (?:hand )?gestures?(?: cheat sheet| guide| help)?$/i.test(t)) return 'help';
+  if (/^(?:calibrate|adjust|set up)(?: my| the)? hand(?:s| control| tracking)?$/i.test(t)) return 'calibrate';
+  if (/^(?:pause|resume)(?: my| the)? hand(?:s| control| tracking)?$/i.test(t)) return /^pause/i.test(t) ? 'pause' : 'resume';
   if (OFF.test(t)) return 'off';
   if (HIDE.test(t)) return 'hide';
   if (SHOW.test(t)) return 'show';

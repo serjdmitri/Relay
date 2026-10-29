@@ -312,3 +312,50 @@ test('the tracking margin updates both cursors without restarting hand control',
   assert.equal(hc.pointer.margin, 0.35);
   hc.disable();
 });
+
+test('both palms pause once and can resume after being lowered', async () => {
+  const { hc } = await rig();
+  const palms = [{ x: 0.2, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, score: 1, handed: 'Left' }, { x: 0.8, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, score: 1, handed: 'Right' }];
+  hc.frame({ t: 1000, hands: palms }); hc.frame({ t: 2600, hands: palms });
+  assert.equal(hc.paused, true);
+  hc.frame({ t: 4500, hands: palms }); assert.equal(hc.paused, true, 'one hold only toggles once');
+  hc.frame({ t: 4600, hands: [] });
+  hc.frame({ t: 4700, hands: palms }); hc.frame({ t: 6300, hands: palms });
+  assert.equal(hc.paused, false);
+  hc.disable();
+});
+
+test('throwing an item registers the undo callback before closing', async () => {
+  const { hc, ev, at } = await rig();
+  let t = 1000, undo = null, closed = false;
+  hc.now = () => t; hc.onThrow = fn => { undo = fn; };
+  const restore = () => 'restored';
+  hc.floatingAt = () => ({ key: 'panel:undo', position: () => ({ x: 700, y: 500 }), move() {}, close: () => { closed = true; }, undo: restore });
+  await ev({ type: 'grab', ...at(800, 550) }); t += 100;
+  await ev({ type: 'move', ...at(1700, 550), held: true });
+  await ev({ type: 'release', ...at(1700, 550) });
+  assert.equal(closed, true); assert.equal(undo, restore);
+  hc.disable();
+});
+
+test('a configured peace-sign shortcut runs instead of opening the microphone', async () => {
+  const { hc, ev, at, mics } = await rig();
+  const called = []; hc.shortcut = () => 'timer5'; hc.onShortcut = x => called.push(x);
+  await ev({ type: 'mic', ...at(900, 550) });
+  assert.deepEqual(called, ['timer5']); assert.deepEqual(mics, []);
+  hc.disable();
+});
+
+test('calibration saves a bounded reach only after enough two-dimensional motion', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { hc } = await rig(); const saved = []; hc.saveMargin = v => saved.push(v);
+  assert.equal(hc.calibrate().ok, true);
+  for (let i = 0; i < 24; i++) hc.frame({ t: i * 33, hands: [{ x: i % 2 ? 0.8 : 0.2, y: i % 2 ? 0.75 : 0.25, score: 1 }] });
+  t.mock.timers.tick(8000);
+  assert.deepEqual(saved, [0.2]);
+  hc.calibrate();
+  for (let i = 0; i < 24; i++) hc.frame({ t: i * 33, hands: [{ x: 0.5, y: 0.5, score: 1 }] });
+  t.mock.timers.tick(8000);
+  assert.deepEqual(saved, [0.2], 'a stationary hand does not overwrite calibration');
+  hc.disable();
+});

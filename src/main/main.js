@@ -60,6 +60,7 @@ const claudeCli = require('./agent/claudeCli');
 app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
+let lastThrown = null;
 let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
@@ -209,6 +210,11 @@ function setHandsPreview(on) {
 
 // "hands" said to Relay: show / hide the view (turning control on if it is off) or stop it.
 async function handsCommand(cmd) {
+  if (cmd === 'dashboard') { const r = await panelHub.show({ title: 'Jarvis dashboard', sources: ['dashboard'] }); return r.ok ? 'Here is your dashboard.' : r.error; }
+  if (cmd === 'undo') { if (!lastThrown) return 'There is no thrown item to restore.'; const undo = lastThrown; try { await undo(); if (lastThrown === undo) lastThrown = null; return 'Restored the last thrown item.'; } catch { return 'I could not restore the thrown item.'; } }
+  if (cmd === 'help') { const r = await panelHub.show({ title: 'Hand gestures', html: require('./hands/help').HTML }); return r.ok ? 'Here is the hand gesture guide.' : r.error; }
+  if (cmd === 'pause' || cmd === 'resume') { if (!hands.enabled) return 'Hand control is off.'; hands.setPaused(cmd === 'pause'); return `Hand control ${cmd === 'pause' ? 'paused' : 'resumed'}.`; }
+  if (cmd === 'calibrate') { if (!hands.enabled) { const r = await setHands(true, { quiet: true }); if (!r.ok) return r.error; } setHandsPreview(true); const r = hands.calibrate(); return r.ok ? 'Move your hand around the edges of the camera view for eight seconds.' : r.error; }
   if (cmd === 'off') { await setHands(false); return 'Hand control is off.'; }
   if (cmd === 'hide') { setHandsPreview(false); return hands.enabled ? 'Hand view hidden. Hand control is still on.' : 'Hand control is off.'; }
   setHandsPreview(true);
@@ -553,6 +559,7 @@ function registerIpc() {
       claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
       failoverOn: () => store.get('settings.failover.codex') !== false,
       perms: () => perms.status(), signing: () => st, remote: () => remote?.info(),
+      handsEnabled: () => !!store.get('settings.hands.enabled'), browser: () => ({ connected: bridge.isConnected() }),
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
@@ -585,7 +592,7 @@ function registerIpc() {
     broadcast();
     return { ok: true, copied: a.type === 'copy' };
   };
-  ask.doctorRun = async () => doctor.summarize((await runDoctor()).results);
+  ask.doctorRun = async () => { const r = await runDoctor(); openMain('doctor'); return doctor.summarize(r.results); };
   ipcMain.handle('memory2:act', (_e, action, id, payload) => ask.memoryV2Act(String(action), String(id), payload || {}));
   ipcMain.handle('doctor:run', () => runDoctor());
   ipcMain.handle('doctor:fix', async (_e, id) => { const fix = doctorFixes.get(String(id)); return fix ? applyFix(fix) : { ok: false, error: 'Run the checks again first.' }; });
@@ -954,14 +961,33 @@ app.whenReady().then(() => {
   hands = new HandControl({
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
+    onThrow: (undo) => { lastThrown = undo; },
+    shortcut: () => store.get('settings.hands.peaceShortcut') || 'listen',
+    onShortcut: (choice) => {
+      if (choice === 'home') openMain('home');
+      else if (choice === 'timer5') { timers.add(300, 'Timer'); ask.notice('Five-minute timer started.', 'done'); }
+      else if (choice === 'guide') handsCommand('help').catch(() => {});
+      else if (choice === 'dashboard') handsCommand('dashboard').catch(() => {});
+      else if (typeof choice === 'string' && choice.startsWith('routine:')) {
+        const routine = (store.get('routines') || []).find(r => r.id === choice.slice(8));
+        if (routine && ['idle', 'done'].includes(ask.state)) ask.handleText(routine.name).catch(() => {});
+        else if (routine) ask.notice('Relay is busy. Try the gesture when the current request finishes.', 'failed');
+      }
+    },
+    saveMargin: (margin) => { store.set('settings.hands.margin', margin); hands?.cam?.syncConfig?.(); broadcast(); },
     floatingAt: (pt) => {
       const panel = panelWins?.handTarget(pt);
-      if (panel) return panel;
+      if (panel) {
+        const spec = panelHub?.panels.get(panel.id)?.spec;
+        if (spec) { const original = { ...spec }; const pos = panel.position(); panel.undo = async () => { const r = await panelHub.show(original); if (!r.ok) throw new Error(r.error); const win = panelWins.windows.get(r.id); if (win && !win.isDestroyed()) win.setPosition(pos.x, pos.y); }; }
+        return panel;
+      }
       const win = cardPanel?.win;
       if (!cardPanel?.visible || cardPanel.card?.hold || !win || win.isDestroyed() || !win.isVisible()) return null;
       const b = win.getBounds();
       if (pt.x < b.x || pt.y < b.y || pt.x > b.x + b.width || pt.y > b.y + b.height) return null;
-      return { key: 'answer-card', position: () => win.getBounds(), move: (x, y) => { if (!win.isDestroyed()) win.setPosition(Math.round(x), Math.round(y)); }, close: () => cardPanel.hide() };
+      const savedCard = cardPanel.card; const pos = win.getBounds();
+      return { key: 'answer-card', undo: async () => { await cardPanel.show(savedCard); if (cardPanel.win && !cardPanel.win.isDestroyed()) cardPanel.win.setPosition(pos.x, pos.y); }, position: () => win.getBounds(), move: (x, y) => { if (!win.isDestroyed()) win.setPosition(Math.round(x), Math.round(y)); }, close: () => cardPanel.hide() };
     },
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
@@ -1037,7 +1063,17 @@ app.whenReady().then(() => {
   // Live panels
   panelWins = new PanelWindows({ preload: path.join(__dirname, 'preload.js') });
   let batteryNow = { present: false };
-  const panelSampler = new Sampler({ os: require('os'), exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 3000, maxBuffer: 4e6 }, (e, out) => (e ? rej(e) : res(String(out))))), jobs: () => (ask.tasks || []).map((t) => ({ text: t.text, status: t.status })) });
+  let dashboardCalendar = { events: [], checked: false, updated: 0 }, dashboardBusy = false;
+  const dashboard = () => {
+    if (!dashboardBusy && Date.now() - dashboardCalendar.updated > 60000) {
+      dashboardBusy = true;
+      Promise.race([ask.mac.calendarEvents(1), new Promise((_, reject) => setTimeout(() => reject(new Error('calendar timeout')), 3000))])
+        .then(text => { dashboardCalendar = { events: parseCalendar(text).filter(e => e.start >= Date.now()).sort((a, b) => a.start - b.start).slice(0, 3), checked: true, updated: Date.now() }; })
+        .catch(() => { dashboardCalendar = { events: [], checked: false, updated: Date.now() }; }).finally(() => { dashboardBusy = false; });
+    }
+    return { tasks: (ask.tasks || []).filter(t => ['running', 'queued'].includes(t.status)).slice(0, 3).map(t => ({ text: String(t.text).slice(0, 80), status: t.status })), timers: timers.list().slice(0, 3).map(t => ({ label: t.label || 'Timer', seconds: timers.remainingSeconds(t) })), events: dashboardCalendar.events, calendarChecked: dashboardCalendar.checked, recent: (store.get('history') || []).slice(0, 3).map(h => ({ text: String(h.text || '').slice(0, 80), status: h.status })) };
+  };
+  const panelSampler = new Sampler({ os: require('os'), exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 3000, maxBuffer: 4e6 }, (e, out) => (e ? rej(e) : res(String(out))))), jobs: () => (ask.tasks || []).map((t) => ({ text: t.text, status: t.status })), dashboard });
   panelHub = new PanelHub({
     sampler: panelSampler, callPlugin: (name, tool) => pluginMgr.call(name, tool, {}), getPlugins: () => pluginMgr.list(),
     openWindow: (p) => panelWins.open(p), approved: (h) => (store.get('panelsApproved') || []).includes(h), remember: (h) => store.set('panelsApproved', [...(store.get('panelsApproved') || []), h].slice(-100)),
@@ -1046,6 +1082,40 @@ app.whenReady().then(() => {
   });
   setInterval(async () => { if (panelHub.panels.size) batteryNow = await panelSampler.sample('battery').catch(() => batteryNow); }, 60000);
   ask.panelHub = panelHub;
+  ask.onLayout = async ({ type, name }) => {
+    const layouts = store.get('panelLayouts') || [];
+    if (type === 'save') {
+      const panels = [...panelHub.panels.values()].map(p => ({ spec: p.spec, bounds: panelWins.windows.get(p.id)?.getBounds() })).filter(p => p.bounds);
+      const { cleanSaved } = require('./holo/logic');
+      const snapshot = holos.snapshot();
+      const saved = cleanSaved(snapshot.map(x => ({ ...x.saved, pinned: x.pinned })), { anyPinned: true });
+      if (!panels.length && !saved.length) return 'There are no restorable panels or holograms on screen.';
+      store.set('panelLayouts', [{ name, panels, holos: saved, savedAt: Date.now() }, ...layouts].slice(0, 10));
+      return `Saved layout ${name} with ${panels.length} panels and ${saved.length} holograms${snapshot.length > saved.length ? `; ${snapshot.length - saved.length} could not be saved` : ''}.`;
+    }
+    const layout = require('./panels/layout').findLayout(layouts, name);
+    if (!layout) return `I do not have a saved layout named ${name}.`;
+    let restored = 0, skipped = 0;
+    const usedPanels = new Set();
+    for (const item of layout.panels || []) {
+      try {
+        const hash = require('./panels/hub').hashOf(item.spec);
+        let existing = [...panelHub.panels.values()].find(p => !usedPanels.has(p.id) && require('./panels/hub').hashOf(p.spec) === hash);
+        if (!existing) { const r = await panelHub.show(item.spec); if (!r.ok) { skipped++; continue; } existing = panelHub.panels.get(r.id); }
+        usedPanels.add(existing.id);
+        const w = panelWins.windows.get(existing.id); const b = item.bounds;
+        const valid = b && screen.getAllDisplays().some(d => b.x >= d.workArea.x && b.y >= d.workArea.y && b.x + 60 <= d.workArea.x + d.workArea.width && b.y + 60 <= d.workArea.y + d.workArea.height);
+        if (w && !w.isDestroyed() && valid) w.setBounds(b);
+        restored++;
+      } catch { skipped++; }
+    }
+    const { cleanSaved } = require('./holo/logic');
+    for (const saved of cleanSaved(layout.holos, { anyPinned: true })) {
+      try { const existing = holos.get(saved.id); if (existing) { existing.x = saved.x; existing.y = saved.y; holos.place(existing); existing.win.webContents.send('holo:state', 'pos', holos.local(existing)); } else { if (holos.holos.size >= 6) { skipped++; continue; } await holos.restoreSaved(saved, { pinned: !!saved.pinned, id: saved.id }); } restored++; } catch { skipped++; }
+    }
+    holos.persist();
+    return `Restored ${restored} items from ${name}${skipped ? `; ${skipped} could not be restored` : ''}.`;
+  };
 
   // Speaking up on its own, and offline mode
   const alerts = new Alerts();

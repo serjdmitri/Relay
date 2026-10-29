@@ -7,7 +7,8 @@ const SOURCES = {
   battery: { label: 'Battery' },
   network: { label: 'Network speed' },
   disk: { label: 'Disk space' },
-  jobs: { label: 'What Relay is working on' }
+  jobs: { label: 'What Relay is working on' },
+  dashboard: { label: 'Tasks, calendar, timers and recent activity' }
 };
 
 // os.cpus() twice: how busy the processors were between the two readings, 0 to 100.
@@ -53,8 +54,8 @@ const speed = (a, b, ms) => (ms > 0 && a && b ? { downKBs: Math.max(0, Math.roun
 
 class Sampler {
   // os: { cpus(), totalmem(), freemem() }; exec(file, args) -> text; jobs() -> [{ text, status }]
-  constructor({ os, exec, jobs = () => [], now = Date.now }) {
-    Object.assign(this, { os, exec, jobs, now });
+  constructor({ os, exec, jobs = () => [], dashboard = () => ({}), now = Date.now }) {
+    Object.assign(this, { os, exec, jobs, dashboard, now });
     this.lastCpu = null;
     this.lastNet = null;
   }
@@ -66,6 +67,7 @@ class Sampler {
       case 'battery': return parseBattery(await this.exec('/usr/bin/pmset', ['-g', 'batt']).catch(() => ''));
       case 'network': { const cur = { ...parseNetstat(await this.exec('/usr/sbin/netstat', ['-ib']).catch(() => '')), at: this.now() }; const out = speed(this.lastNet, cur, this.lastNet ? cur.at - this.lastNet.at : 0); this.lastNet = cur; return out; }
       case 'disk': return parseDf(await this.exec('/bin/df', ['-k', '/']).catch(() => ''));
+      case 'dashboard': return this.dashboard();
       case 'jobs': return { jobs: this.jobs().slice(0, 6).map((j) => ({ text: String(j.text).slice(0, 80), status: j.status })) };
       default: return null;
     }

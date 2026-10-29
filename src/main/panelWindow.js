@@ -24,7 +24,7 @@ class PanelWindows {
       if (w.isDestroyed() || !w.isVisible()) continue;
       const b = w.getBounds();
       if (point.x < b.x || point.y < b.y || point.x > b.x + b.width || point.y > b.y + b.height) continue;
-      return { key: `panel:${id}`, position: () => w.getBounds(), move: (x, y) => { if (!w.isDestroyed()) w.setPosition(Math.round(x), Math.round(y)); }, close: () => this.closers.get(id)?.() };
+      return { id, key: `panel:${id}`, position: () => w.getBounds(), move: (x, y) => { if (!w.isDestroyed()) w.setPosition(Math.round(x), Math.round(y)); }, close: () => this.closers.get(id)?.() };
     }
     return null;
   }

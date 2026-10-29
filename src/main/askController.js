@@ -1,3 +1,4 @@
+const { parseLayout } = require('./panels/layout');
 const { suggestSkill } = require('./skillSuggestions');
 const { parseDebate, debatePrompt } = require('./debate');
 const { parseWorkMode, workStyle } = require('./workModes');
@@ -1637,6 +1638,10 @@ class AskController {
       this.closeHolograms();
       return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: 'Closed.', actions: 0 });
     }
+    if (!opts.shown && !opts.scheduled && this.onLayout) {
+      const layout = parseLayout(text);
+      if (layout) return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: await this.onLayout(layout), actions: 0 });
+    }
     if (!opts.shown && this.onHands) { // "hands": the camera view and hand control, on the spot
       const hc = parseHandsCommand(text);
       if (hc) return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: await this.onHands(hc), actions: 0 });
@@ -1745,7 +1750,9 @@ class AskController {
             if (pc2?.type === 'close') return this.finish(entry, { status: 'done', reply: this.closePanels() });
             if (pc2?.type === 'show') { const r = await this.panelHub.show({ title: pc2.title, sources: pc2.sources }); return this.finish(entry, { status: r.ok ? 'done' : 'failed', reply: r.ok ? `Here is the ${pc2.title.toLowerCase()} panel.` : r.error }); }
           }
-          if (this.doctorRun && parseDoctorCommand(effective)) return this.finish(entry, { status: 'done', reply: await this.doctorRun() });
+          const recentFailure = (this.store.get('history') || [])[0];
+          const fixLast = /^fix this[.!?]*$/i.test(effective.trim()) && recentFailure?.status === 'failed' && Date.now() - recentFailure.ts < 300000;
+          if (this.doctorRun && (parseDoctorCommand(effective) || fixLast)) return this.finish(entry, { status: 'done', reply: await this.doctorRun() });
           const hc = hw.parseHomeworkCommand(effective);
           if (hc) return this.homeworkCommand(hc, entry);
         }

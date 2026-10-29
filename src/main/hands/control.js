@@ -11,9 +11,17 @@ const momentum = require('./momentum');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12 }) {
+  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {} }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.sensitivity = sensitivity;
+    this.saveMargin = saveMargin;
+    this.onThrow = onThrow;
+    this.shortcut = shortcut;
+    this.onShortcut = onShortcut;
+    this.paused = false;
+    this.pauseHold = null;
+    this.pauseLatched = false;
+    this.calibration = null;
     this.secondary = secondary;
     this.floatingAt = floatingAt;
     this.tracks = new HandTracks();
@@ -54,7 +62,7 @@ class HandControl {
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor();
     if (!this.secondary) {
-      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, now: this.now, secondary: true });
+      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, now: this.now, secondary: true });
       this.peer.claims = this.claims;
       this.peer.glides = this.glides;
       this.peer.enabled = true;
@@ -66,6 +74,7 @@ class HandControl {
   disable() {
     this.enabled = false;
     this.status = 'off'; this.message = '';
+    clearTimeout(this.calibration?.timer); this.calibration = null; this.paused = false; this.pauseHold = null; this.pauseLatched = false;
     this.release();
     if (this.peer) { this.peer.release(); this.peer.ring?.close?.(); this.peer.enabled = false; this.peer = null; }
     for (const key of [...this.glides.keys()]) this.stopGlide(key);
@@ -86,6 +95,33 @@ class HandControl {
     this.onChange();
   }
 
+  setPaused(on) {
+    this.paused = !!on;
+    this.release(); this.peer?.release();
+    this.ring?.hide?.(); this.peer?.ring?.hide?.();
+    this.pointer = new HandPointer({ onEvent: e => this.handle(e).catch(() => {}) });
+    if (this.peer) this.peer.pointer = new HandPointer({ onEvent: e => this.peer?.handle(e).catch(() => {}) });
+    this.notify(this.paused ? 'Hand control paused. Hold both palms up to resume.' : 'Hand control resumed.');
+  }
+
+  calibrate() {
+    if (!this.enabled) return { ok: false, error: 'Turn on hand control first.' };
+    clearTimeout(this.calibration?.timer);
+    this.release(); this.peer?.release();
+    const c = { minX: 1, maxX: 0, minY: 1, maxY: 0, samples: 0, timer: null };
+    this.calibration = c;
+    this.notify('Move one hand comfortably around the edges of the camera view for eight seconds.');
+    c.timer = setTimeout(() => {
+      if (this.calibration !== c) return;
+      this.calibration = null;
+      if (c.samples < 20 || c.maxX - c.minX < 0.15 || c.maxY - c.minY < 0.15) { this.notify('Calibration did not see enough movement. Try again with your hand visible.'); return; }
+      const margin = Math.max(0.04, Math.min(0.35, Math.min(c.minX, 1 - c.maxX, c.minY, 1 - c.maxY)));
+      this.saveMargin(Math.round(margin * 100) / 100);
+      this.notify('Hand reach calibrated.');
+    }, 8000);
+    return { ok: true };
+  }
+
   // From the camera page.
   setStatus(s) {
     if (!this.enabled) return;
@@ -97,6 +133,18 @@ class HandControl {
 
   frame(f) {
     if (!this.enabled || !f || !Array.isArray(f.hands)) return;
+    if (this.calibration) {
+      const h = f.hands.find(x => x && x.score !== 0);
+      if (h && Number.isFinite(h.x) && Number.isFinite(h.y)) { const c = this.calibration; c.minX = Math.min(c.minX, h.x); c.maxX = Math.max(c.maxX, h.x); c.minY = Math.min(c.minY, h.y); c.maxY = Math.max(c.maxY, h.y); c.samples++; }
+      return;
+    }
+    const palms = f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.42).length >= 2;
+    if (!palms) { this.pauseHold = null; this.pauseLatched = false; }
+    else if (!this.pauseLatched) {
+      if (this.pauseHold === null) this.pauseHold = f.t;
+      if (f.t - this.pauseHold >= 1500) { this.pauseLatched = true; this.setPaused(!this.paused); }
+    }
+    if (this.paused) return;
     if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }
     else if (this.handMode && !this.handTimer) this.handTimer = setTimeout(() => { this.handTimer = null; this.setHandMode(false); }, 2500);
     const margin = Number(this.sensitivity());
@@ -154,6 +202,11 @@ class HandControl {
     try { this.ring?.setState?.(cls); } catch { /* the ring is only a hint */ }
   }
 
+  dismissThrown(target) {
+    if (typeof target.undo === 'function') this.onThrow(target.undo);
+    target.close();
+  }
+
   stopGlide(key) {
     const glide = this.glides.get(key);
     if (!glide) return;
@@ -174,7 +227,7 @@ class HandControl {
       point = next.point; v = next.velocity;
       try {
         drag.target.move(point.x - drag.ax, point.y - drag.ay);
-        if (next.close) { clearInterval(g.timer); this.glides.delete(key); drag.target.close(); return; }
+        if (next.close) { clearInterval(g.timer); this.glides.delete(key); this.dismissThrown(drag.target); return; }
       } catch { return this.stopGlide(key); }
       if (Math.hypot(v.vx, v.vy) < 0.06) this.stopGlide(key);
     }, 16);
@@ -195,7 +248,7 @@ class HandControl {
       const finish = recent.at(-1);
       const thrown = throwAtEdge && start && finish && finish.x >= b.x + b.width * 0.9 && finish.x - start.x >= Math.max(90, b.width * 0.1);
       const v = throwAtEdge ? momentum.velocity(drag.trail, this.now()) : null;
-      if (thrown) drag.target.close(); else if (v) this.glide(drag, v, b); else drag.target.finish?.();
+      if (thrown) this.dismissThrown(drag.target); else if (v) this.glide(drag, v, b); else drag.target.finish?.();
       this.captured = null;
       return;
     }
@@ -264,7 +317,8 @@ class HandControl {
       const mode = await h.win.webContents.executeJavaScript('window.__holoTest ? window.__holoTest.mode() : "whole"').catch(() => 'whole');
       if (!this.enabled || generation !== this.generation || h.win.isDestroyed()) return;
       if (mode !== 'parts') {
-        const target = { key: `holo:${h.id}`, position: () => ({ x: h.x, y: h.y }), move: (x, y) => { h.x = Math.round(x); h.y = Math.round(y); this.holos.place(h); if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.holos.local(h)); }, finish: () => this.holos.persist(), close: () => this.holos.close(h.id) };
+        const original = { title: h.title, items: h.items, options: h.options, pinned: h.pinned, x: h.x, y: h.y, scale: h.scale, solid: h.solid, annotations: h.annotations };
+        const target = { key: `holo:${h.id}`, undo: () => this.holos.show(original), position: () => ({ x: h.x, y: h.y }), move: (x, y) => { h.x = Math.round(x); h.y = Math.round(y); this.holos.place(h); if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.holos.local(h)); }, finish: () => this.holos.persist(), close: () => this.holos.close(h.id) };
         this.captured = h;
         this.drag = { target, ax: pt.x - h.x, ay: pt.y - h.y, trail: [{ x: pt.x, y: pt.y, t: this.now() }] };
         return;
@@ -299,6 +353,8 @@ class HandControl {
     if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
     if (e.type === 'thumbdown') { const panel = this.floatingAt(pt); if (panel && !this.claims.has(panel.key)) { this.stopGlide(panel.key); panel.close(); return; } const h = this.holos.holoNear(pt, 330); if (h) this.holos.close(h.id); return; }
     if (e.type === 'mic') {
+      const choice = this.shortcut();
+      if (choice !== 'listen') { this.onShortcut(choice); return; }
       const h = this.holos.holoNear(pt, 330) || this.holos.latest();
       this.ringState('mic');
       setTimeout(() => this.ringState('open'), 900);
