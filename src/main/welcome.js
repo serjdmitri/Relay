@@ -3,9 +3,9 @@
 
 const DAY_MS = 86400e3;
 
-// Should it greet? Away at least `minAwayMs`, not greeted in the last 10 minutes, and nothing else is using the screen (a meeting recording).
-function shouldGreet({ enabled = true, awayMs = 0, minAwayMs = 5 * 60000, sinceLastMs = Infinity, busy = false } = {}) {
-  return enabled && !busy && awayMs >= minAwayMs && sinceLastMs >= 10 * 60000;
+// Should it greet? Away at least `minAwayMs` (your setting; 0 means every unlock), not greeted within `minGapMs` (your setting, 10 minutes by default), and nothing else is using the screen (a meeting recording).
+function shouldGreet({ enabled = true, awayMs = 0, minAwayMs = 5 * 60000, minGapMs = 10 * 60000, sinceLastMs = Infinity, busy = false } = {}) {
+  return enabled && !busy && awayMs >= minAwayMs && sinceLastMs >= minGapMs;
 }
 
 const clip = (s, n = 60) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };

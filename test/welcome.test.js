@@ -12,6 +12,9 @@ test('it greets only after a real absence, not twice in a row, and not while som
   assert.equal(shouldGreet({ awayMs: 10 * MIN, busy: true }), false, 'a meeting is being recorded');
   assert.equal(shouldGreet({ awayMs: 10 * MIN, enabled: false }), false);
   assert.equal(shouldGreet({ awayMs: 3 * MIN, minAwayMs: MIN }), true, 'the wait is a setting');
+  assert.equal(shouldGreet({ awayMs: 1000, minAwayMs: 0 }), true, '0 greets every unlock');
+  assert.equal(shouldGreet({ awayMs: 10 * MIN, sinceLastMs: 3 * MIN, minGapMs: 2 * MIN }), true, 'the gap between greetings is a setting too');
+  assert.equal(shouldGreet({ awayMs: 10 * MIN, sinceLastMs: 30 * MIN, minGapMs: 60 * MIN }), false);
 });
 
 test('nothing happened: a greeting and "nothing needs your attention"', () => {

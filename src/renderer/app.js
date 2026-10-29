@@ -125,10 +125,13 @@ function toggleRow(title, desc, key) {
 // How long you must be away before the unlock greeting, and what to call you.
 function welcomeRow() {
   const w = S.settings.welcome || {};
-  const row = h(`<div class="row"><div class="grow"><div class="t">Unlock greeting</div><div class="d">Away at least this long, and what it calls you. It also shows a banner; turn the voice off to see the banner only.</div></div><div style="display:flex;gap:8px;align-items:center"><select id="wm">${[1, 5, 15, 30, 60].map((m) => `<option value="${m}">${m} min</option>`).join('')}</select><input class="field" id="wn" style="width:90px" maxlength="20"><div class="toggle ${w.speak !== false ? 'on' : ''}" id="ws" title="Speak it"></div></div></div>`);
+  const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Unlock greeting</div><div class="d">Greet me only if I was away at least this many minutes (0 greets every unlock), and not again within the second number of minutes. Name and voice on the right.</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="field" id="wm" type="number" min="0" max="1440" step="1" style="width:72px" title="Minutes away before it greets"><span class="d">min away</span><input class="field" id="wr" type="number" min="0" max="1440" step="1" style="width:72px" title="Do not greet again within this many minutes"><span class="d">min between</span><input class="field" id="wn" style="width:90px" maxlength="20"><div class="toggle ${w.speak !== false ? 'on' : ''}" id="ws" title="Speak it"></div></div></div>`);
+  const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(1440, Math.round(n))) : d; };
   $('#wm', row).value = String(w.minAwayMin ?? 5);
+  $('#wr', row).value = String(w.repeatMin ?? 10);
   $('#wn', row).value = w.name || 'Sir';
-  $('#wm', row).onchange = (e) => relay.set('settings.welcome.minAwayMin', Number(e.target.value));
+  $('#wm', row).onchange = (e) => relay.set('settings.welcome.minAwayMin', num(e.target.value, 5));
+  $('#wr', row).onchange = (e) => relay.set('settings.welcome.repeatMin', num(e.target.value, 10));
   $('#wn', row).onchange = (e) => relay.set('settings.welcome.name', e.target.value.trim().slice(0, 20) || 'Sir');
   $('#ws', row).onclick = () => relay.set('settings.welcome.speak', w.speak === false);
   return row;
