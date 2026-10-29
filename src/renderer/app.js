@@ -1024,13 +1024,14 @@ const PAGES = {
     const ecard = h('<div class="card"></div>');
     if (S.settings.model.provider === 'ollama') c.append(h('<div class="note">Ollama is selected: cloud voices are paused and Relay uses a voice on this Mac. Other connected services may still use the internet.</div>'));
     else c.append(h('<div class="note">If Relay falls back to a local model while offline, cloud voices pause and an on-device voice is used.</div>'));
-    const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['omnivoice', 'OmniVoice'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['omnivoice', 'OmniVoice'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini']];
     const eseg = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Voice engine</div><div class="seg">${ENGINES.map(([v, l]) => `<button data-v="${v}" class="${T.engine === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">${{
       system: 'The voice chosen above. Free and instant.',
       kokoro: 'A natural voice that runs on this Mac. Free, no key, and your replies never leave your Mac. Apple Silicon only.',
       omnivoice: 'A British voice generated locally on this Mac. The first reply may take longer while the model loads.',
       openai: 'Natural voices from OpenAI, using your own OpenAI API key. OpenAI bills your account; Relay takes nothing.',
-      elevenlabs: 'Some of the most human-sounding voices, using your own ElevenLabs key. ElevenLabs bills your account; Relay takes nothing.'
+      elevenlabs: 'Some of the most human-sounding voices, using your own ElevenLabs key. ElevenLabs bills your account; Relay takes nothing.',
+      gemini: 'Google Gemini voices (Charon, Puck, Kore and more), using your own Gemini API key. Google bills your account (there is a free tier); Relay takes nothing.'
     }[T.engine] || ''}</div></div>`);
     eseg.onclick = (e) => e.target.dataset.v && relay.set('settings.tts.engine', e.target.dataset.v);
     ecard.append(eseg);
@@ -1051,6 +1052,13 @@ const PAGES = {
       const vsel = h(`<div class="row"><div class="grow"><div class="t">Voice</div></div><div class="select" style="margin:0"><span>${esc(T.openai.voice)}</span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select>${['coral', 'marin', 'cedar', 'alloy', 'ash', 'ballad', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'].map((v) => `<option ${v === T.openai.voice ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>`);
       $('select', vsel).onchange = (e) => relay.set('settings.tts.openai.voice', e.target.value);
       ecard.append(vsel, field('Model', T.openai.model, 'settings.tts.openai.model'), field('Style', T.openai.instructions, 'settings.tts.openai.instructions', { ph: 'How it should speak', wide: 320 }));
+    } else if (T.engine === 'gemini') {
+      const G = T.gemini || { voice: 'Charon', model: 'gemini-3.8-flash-tts', style: '' };
+      const GV = ['Charon', 'Puck', 'Kore', 'Fenrir', 'Aoede', 'Zephyr', 'Leda', 'Orus', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'];
+      ecard.append(keyRow('gemini', 'Gemini', 'https://aistudio.google.com/apikey'));
+      const gsel = h(`<div class="row"><div class="grow"><div class="t">Voice</div></div><div class="select" style="margin:0"><span>${esc(G.voice)}</span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select>${GV.map((v) => `<option ${v === G.voice ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>`);
+      $('select', gsel).onchange = (e) => relay.set('settings.tts.gemini.voice', e.target.value);
+      ecard.append(gsel, field('Model', G.model, 'settings.tts.gemini.model'), field('Style', G.style, 'settings.tts.gemini.style', { ph: 'How it should speak', wide: 320 }));
     } else if (T.engine === 'elevenlabs') {
       ecard.append(keyRow('elevenlabs', 'ElevenLabs', 'https://elevenlabs.io/app/settings/api-keys'));
       const vrow2 = field('Voice ID', T.elevenlabs.voiceId, 'settings.tts.elevenlabs.voiceId', { ph: 'Copy it from your voice library' });

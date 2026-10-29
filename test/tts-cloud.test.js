@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { sentences, openaiRequest, elevenRequest, synthesize } = require('../src/main/tts/cloud');
+const cloud = require('../src/main/tts/cloud');
+const { sentences, openaiRequest, elevenRequest, synthesize } = cloud;
 
 test('sentences splits a reply into short pieces and keeps all the words', () => {
   const t = 'I opened Notes. Then I made a note called Plan! Did that work? Yes, it did.';
@@ -42,4 +43,28 @@ test('synthesize returns audio bytes and turns failures into advice', async () =
   await assert.rejects(() => synthesize('openai', { key: 'k' }, 'Hi', { fetchFn: async () => { throw new Error('ENOTFOUND'); } }), /Could not reach OpenAI/);
   await assert.rejects(() => synthesize('openai', {}, 'Hi', { fetchFn: ok }), /Add your OpenAI key/);
   await assert.rejects(() => synthesize('nope', { key: 'k' }, 'Hi'), /Unknown voice engine/);
+});
+
+test('gemini: asks for one voice with a style note and decodes the last audio part', async () => {
+  const wav = Buffer.from('RIFFdata');
+  let seen;
+  const fetchFn = async (url, init) => { seen = { url, init }; return { ok: true, json: async () => ({ steps: [{ type: 'thought' }, { type: 'model_output', content: [{ type: 'text' }, { type: 'audio', data: wav.toString('base64') }] }] }) }; };
+  const out = await cloud.synthesize('gemini', { key: 'k', voice: 'Puck', style: 'dry' }, 'Hello.', { fetchFn });
+  assert.deepEqual(out, wav);
+  assert.match(seen.url, /v1beta\/interactions$/);
+  assert.equal(seen.init.headers['x-goog-api-key'], 'k');
+  const body = JSON.parse(seen.init.body);
+  assert.equal(body.generation_config.speech_config[0].voice, 'Puck');
+  assert.equal(body.input[0].content[0].annotations[0].style, 'dry');
+  assert.equal(cloud.EXT.gemini, 'wav');
+});
+
+test('gemini: a reply with no audio says what to check', async () => {
+  const fetchFn = async () => ({ ok: true, json: async () => ({ steps: [] }) });
+  await assert.rejects(cloud.synthesize('gemini', { key: 'k' }, 'Hi.', { fetchFn }), /no audio/);
+  await assert.rejects(cloud.synthesize('gemini', {}, 'Hi.', { fetchFn }), /Gemini key/);
+});
+
+test('gemini voices include the ones the other Jarvis projects use', () => {
+  for (const v of ['Charon', 'Puck', 'Kore']) assert.ok(cloud.GEMINI_VOICES.includes(v));
 });

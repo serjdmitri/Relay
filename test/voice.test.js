@@ -166,4 +166,18 @@ test('stop settles playback even if an audio subprocess never emits exit', async
   const speaker=new Spk({spawnFn:()=>child,setTimer:()=>1,clearTimer:()=>{cleared=true;}});
   const playing=speaker.play('fixture.wav',speaker.token);speaker.stop();await playing;
   assert.equal(killed,true);assert.equal(cleared,true);assert.equal(speaker.speaking,false);
+test('an online voice that fails is skipped for the next replies instead of failing every sentence', async () => {
+  const { Speaker } = require('../src/main/voice');
+  const spoke = [];
+  let calls = 0;
+  const sp = new Speaker({
+    getTts: () => ({ engine: 'gemini', gemini: { key: 'k', voice: 'Charon' } }),
+    fetchFn: async () => { calls++; return { ok: false, status: 429, text: async () => '{}' }; },
+    log: { error() {} }
+  });
+  sp.speakSystem = async (say) => { spoke.push(say); };
+  await sp.speak('First answer.');
+  await sp.speak('Second answer.');
+  assert.deepEqual(spoke, ['First answer.', 'Second answer.'], 'both are still spoken, by the system voice');
+  assert.equal(calls, 1, 'the dead engine was asked once, then left to rest');
 });
