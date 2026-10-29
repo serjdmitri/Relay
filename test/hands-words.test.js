@@ -15,3 +15,16 @@ test('hide keeps control on; stop turns it off', () => {
 test('anything bigger is left to the rest of Relay', () => {
   for (const s of ['wash my hands', 'give me a hand', 'what is a hand', 'show me a hand model', 'open the hand drawing', 'hands on a clock', 'close', 'show me a skull', '']) assert.equal(parseHandsCommand(s), null, s);
 });
+
+test('the gesture guide, calibration, pause and undo use explicit commands', () => {
+  assert.equal(parseHandsCommand('show hand gestures'), 'help');
+  assert.equal(parseHandsCommand('calibrate hands'), 'calibrate');
+  assert.equal(parseHandsCommand('pause hand control'), 'pause');
+  assert.equal(parseHandsCommand('resume hand control'), 'resume');
+  assert.equal(parseHandsCommand('undo the throw'), 'undo');
+});
+
+test('dashboard command is explicit', () => {
+  assert.equal(parseHandsCommand('show my dashboard'), 'dashboard');
+  assert.equal(parseHandsCommand('open dashboard'), 'dashboard');
+});

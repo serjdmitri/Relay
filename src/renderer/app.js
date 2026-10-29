@@ -688,6 +688,10 @@ const PAGES = {
     handRange.oninput = () => { $('span', handCal).textContent = `${handRange.value}%`; };
     handRange.onchange = () => relay.set('settings.hands.margin', Number(handRange.value) / 100);
     hcard.append(handCal);
+    const handShortcut = h(`<div class="row"><div class="grow"><div class="t">Peace-sign shortcut</div><div class="d">Hold a peace sign to run the action you choose.</div></div><select aria-label="Peace-sign shortcut"><option value="listen">Start listening</option><option value="dashboard">Show dashboard</option><option value="timer5">Start a five-minute timer</option><option value="home">Open Activity center</option><option value="guide">Show gesture guide</option><option value="none">Do nothing</option>${(S.routines || []).map(r => `<option value="routine:${esc(r.id)}">Routine: ${esc(r.name)}</option>`).join('')}</select></div>`);
+    $('select', handShortcut).value = S.settings.hands?.peaceShortcut || 'listen';
+    $('select', handShortcut).onchange = e => relay.set('settings.hands.peaceShortcut', e.target.value);
+    hcard.append(handShortcut);
     const pvOn = !!S.settings.hands?.preview;
     const prow = h(`<div class="row"><div class="grow"><div class="t">Show hand view (top right)</div><div class="d">A small window in the top right of the screen shows the camera, the outline of each hand it finds, what each hand is doing (fist, pinch, peace sign…) and how many hands it sees. The picture stays in that window; nothing is saved or sent. You can also say "hands" to open it and "hide hands" to put it away.</div></div><div class="toggle ${pvOn ? 'on' : ''}"></div></div>`);
     prow.onclick = async () => { if (!pvOn && !handsOn) { const r = await relay.setHands(true); if (r && !r.ok) { alert(r.error); return; } } relay.setHandsPreview(!pvOn); };

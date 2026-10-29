@@ -22,6 +22,16 @@ function draw(data) {
   for (const key of spec.sources) {
     const d = data[key];
     if (!d) continue;
+    if (key === 'dashboard') {
+      rows.dashboard ||= (() => { const el = document.createElement('div'); body.append(el); return el; })();
+      const root = rows.dashboard; root.replaceChildren();
+      const section = (title, lines) => { const head = document.createElement('div'); head.className = 'l'; head.textContent = title; root.append(head); for (const text of lines) { const el = document.createElement('div'); el.className = 'job'; el.textContent = text; root.append(el); } };
+      section('Tasks', d.tasks.length ? d.tasks.map(t => `${t.text} · ${t.status}`) : ['Nothing running.']);
+      section('Calendar', d.events.length ? d.events.map(e => `${new Date(e.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${e.title}`) : [d.calendarChecked ? 'No upcoming events today.' : 'Calendar not available yet.']);
+      section('Timers', d.timers.length ? d.timers.map(t => `${t.label} · ${Math.ceil(t.seconds / 60)} min`) : ['No timers.']);
+      section('Recent', d.recent.length ? d.recent.map(r => `${r.text} · ${r.status}`) : ['Nothing yet.']);
+      continue;
+    }
     if (key === 'jobs') {
       rows.jobs ||= (() => { const el = document.createElement('div'); body.append(el); return el; })();
       rows.jobs.textContent = '';

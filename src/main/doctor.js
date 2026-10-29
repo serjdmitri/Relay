@@ -5,7 +5,7 @@
 const CHECK_TIMEOUT_MS = 3000;
 const REPO = 'serjdmitri/Relay';
 
-const PANE_LABEL = { accessibility: 'Accessibility', screen: 'Screen Recording', input: 'Input Monitoring', mic: 'Microphone', automation: 'Automation', fulldisk: 'Full Disk Access' };
+const PANE_LABEL = { accessibility: 'Accessibility', screen: 'Screen Recording', input: 'Input Monitoring', mic: 'Microphone', automation: 'Automation', camera: 'Camera', fulldisk: 'Full Disk Access' };
 
 const ok = (cause = '') => ({ status: 'ok', cause });
 const warn = (cause, fix) => ({ status: 'warn', cause, ...(fix ? { fix } : {}) });
@@ -48,6 +48,20 @@ const CHECKS = [
       return fail(`${PANE_LABEL[name]} is off for Relay, so ${{ accessibility: 'it cannot click, type or press keys for you', screen: 'it cannot see your screen', mic: 'it cannot hear you' }[name]}.`, pane(name));
     }
   })),
+  {
+    id: 'perm-camera', title: 'Camera permission for hands', run: (env) => {
+      if (!env.handsEnabled?.()) return ok('Hand control is off.');
+      const p = env.perms?.() || {};
+      return p.camera ? ok('Allowed') : p.cameraStatus === 'not-determined' ? warn('Turn on hand control to request camera access.', pane('camera')) : fail('Camera access is off, so hand control cannot see your hands.', pane('camera'));
+    }
+  },
+  {
+    id: 'browser', title: 'Browser control', run: (env) => {
+      const b = env.browser?.();
+      if (!b) return warn('Browser connection has not been checked.');
+      return b.connected ? ok('Firefox extension connected.') : warn('Firefox extension is not connected. Relay can open sites and switch tabs, but page-reading and clicking require the extension. Open Settings > Permissions for setup.');
+    }
+  },
   {
     id: 'signing', title: 'App signature', run: (env) => {
       const s = env.signing?.() || 'unknown';
@@ -229,7 +243,8 @@ function parseDoctorCommand(text) {
     || /^(?:run |do )?(?:a )?(?:health check|self[- ]?check|diagnostic|diagnostics)(?: on (?:yourself|relay))?$/i.test(n)
     || /^check (?:yourself|your health|relay(?:'s)? health)$/i.test(n)
     || /^what(?:'s| is) wrong with (?:you|relay)$/i.test(n)
-    || /^diagnose (?:yourself|relay)$/i.test(n);
+    || /^diagnose (?:yourself|relay|jarvis)$/i.test(n)
+    || /^fix (?:yourself|relay|jarvis)$/i.test(n);
 }
 
 // One or two spoken sentences from the results.

@@ -7,6 +7,7 @@ const SCHEMA = 3;
 const DEFAULTS = {
   schema: SCHEMA,
   onboardingDone: false,
+  panelLayouts: [], // saved panel and hologram arrangements
   skillSuggestions: [], // proposed routines; never run without review and approval
   settings: {
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
@@ -72,7 +73,7 @@ const DEFAULTS = {
     },
     holoUi: { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl', pointsPerInch: 125 }, // holograms: where the controls are (menu, side, bar), slow turning, and how long to leave it alone after a touch
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
-    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null }, // Hand control: move holograms in the air through the camera (opt-in)
+    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen' }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

@@ -131,3 +131,12 @@ test('voice commands for panels', () => {
   assert.equal(parsePanelCommand('show me a picture of a cat'), null);
   assert.equal(parsePanelCommand('open safari'), null);
 });
+
+test('dashboard is an allowed source and uses its injected local data', async () => {
+  const { Sampler } = require('../src/main/panels/sources');
+  const { normalize } = require('../src/main/panels/hub');
+  const data = { tasks: [{ text: 'Writing', status: 'running' }], timers: [], events: [], recent: [] };
+  const sampler = new Sampler({ os: {}, exec: async () => '', dashboard: () => data });
+  assert.deepEqual(await sampler.sample('dashboard'), data);
+  assert.equal(normalize({ title: 'Dashboard', sources: ['dashboard'] }).ok, true);
+});

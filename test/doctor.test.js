@@ -9,6 +9,8 @@ const good = {
   failoverOn: () => true,
   perms: () => ({ accessibility: true, screen: true, mic: true }),
   signing: () => 'local',
+  browser: () => ({ connected: true }),
+  handsEnabled: () => false,
   remote: () => ({ enabled: true, running: true, urls: ['http://x'], devices: [{}] }),
   hotkeys: () => ({ running: true }),
   speech: () => ({ available: true }),
@@ -129,4 +131,13 @@ test('the spoken summary names the worst problems first and counts the rest', ()
 test('every feature that is built is offered in Settings (a missed "ready" hides a feature)', () => {
   const { FLAGS, offered } = require('../src/main/flags');
   assert.deepEqual(Object.keys(offered()).sort(), Object.keys(FLAGS).sort());
+});
+
+
+test('browser connection and camera diagnostics say what is missing', async () => {
+  const checks = await d.runChecks({ ...good, browser: () => ({ connected: false }), handsEnabled: () => true, perms: () => ({ accessibility: true, screen: true, mic: true, camera: false, cameraStatus: 'denied' }) });
+  assert.equal(by(checks, 'browser').status, 'warn');
+  assert.equal(by(checks, 'perm-camera').status, 'fail');
+  assert.equal(by(checks, 'perm-camera').fix.action.name, 'camera');
+  assert.equal(d.parseDoctorCommand('fix relay'), true);
 });
