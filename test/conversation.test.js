@@ -46,6 +46,9 @@ test('voices by job: soft confirmations, slower long answers, and the Jarvis voi
   const settings = { voice: 'auto', voiceRate: 'normal', voices: { quiet: { volume: 0.55 }, reading: {} } };
   assert.deepEqual(profileFor('quiet', settings), { job: 'quiet', voice: 'auto', rate: 'normal', volume: 0.55, kokoroVoice: undefined });
   assert.equal(profileFor('reading', settings).rate, 'slower');
+  assert.equal(profileFor('reading', { ...settings, voiceRate: 'faster' }).rate, 'faster');
+  assert.equal(profileFor('quiet', { ...settings, voiceRate: 'slower' }).rate, 'slower');
+  assert.equal(profileFor('reading', { ...settings, voiceRate: 'faster', voices: { reading: { rate: 'slower' } } }).rate, 'slower');
   assert.equal(profileFor('reply', settings).volume, 1);
   assert.equal(profileFor('reply', { ...settings, voices: { quiet: { volume: 0 } } }).volume, 1);
   assert.equal(profileFor('quiet', { ...settings, voices: { quiet: { volume: 0 } } }).volume, 0.1, 'never silent');
