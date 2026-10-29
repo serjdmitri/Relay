@@ -80,7 +80,7 @@ class Drive {
     if (!plan) return 'There is no such plan (it may be old). Use drive_propose again.';
     if (Date.now() - plan.createdAt > (plan.ttl || PLAN_TTL)) { this.plans.delete(plan_id); return 'That plan is too old. Use drive_propose again so the user sees it fresh.'; }
     this.plans.delete(plan_id);
-    const res = await applyPlan(plan, { fs: this.fs, trashItem: this.trashItem });
+    const res = await applyPlan(plan, { fs: this.fs, home: this.home, trashItem: this.trashItem });
     this.cards?.hide?.();
     const list = [...(this.log.read() || []), { id: res.id, ts: res.ts, done: res.done, trashed: res.trashed }].slice(-30);
     this.log.write(list);
