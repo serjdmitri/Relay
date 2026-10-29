@@ -20,9 +20,11 @@
   body.hide .wrap { animation: tuck .26s cubic-bezier(.5, 0, .75, .4) forwards; }
   .lift { position: relative; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, .42)) drop-shadow(0 2px 5px rgba(0, 0, 0, .3)); }
   #glass { position: relative; width: 100%; max-height: calc(100vh - 56px); padding: 22px 0; display: flex; flex-direction: column; overflow: hidden;
+    /* black like the notch, except at the screen-edge end, where it melts into liquid glass (the glass layers show through where the black fades out) */
     background:
-      radial-gradient(280px 220px at 0% 0%, rgba(160, 225, 255, .26), rgba(160, 225, 255, 0) 70%),
-      linear-gradient(160deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .05) 40%, rgba(120, 190, 255, .09) 72%, rgba(255, 255, 255, .13)),
+      linear-gradient(90deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, .5) 38px, rgba(0, 0, 0, .94) 92px, #000 128px),
+      radial-gradient(280px 220px at 0% 0%, rgba(160, 225, 255, .30), rgba(160, 225, 255, 0) 70%),
+      linear-gradient(160deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, .06) 40%, rgba(120, 190, 255, .10) 72%, rgba(255, 255, 255, .14)),
       rgba(20, 31, 44, .66); }
   #outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
   #outline path { fill: none; stroke: rgba(255, 255, 255, .2); stroke-width: 1; }
@@ -42,17 +44,17 @@
   body.show .sheen { animation: sweep .6s .05s ease-out forwards; }
   @keyframes sweep { 0% { opacity: 1; transform: translateX(-100%); } 100% { opacity: 0; transform: translateX(100%); } }
   .rim { position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
-    background: radial-gradient(220px 160px at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, .18), rgba(255, 255, 255, 0) 70%); }
+    background: radial-gradient(220px 160px at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, .13), rgba(255, 255, 255, 0) 70%); }
   header { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 22px 8px 30px; }
   header h1 { font-size: 14px; font-weight: 650; letter-spacing: .02em; }
   header span { font-size: 11.5px; color: var(--dim); }
   #list { overflow-y: auto; padding: 4px 10px 12px 18px; scrollbar-width: none; }
   #list::-webkit-scrollbar { display: none; }
-  .item { position: relative; margin: 4px 0; padding: 10px 14px 10px 16px; border-radius: 18px; cursor: pointer; background: rgba(255, 255, 255, .10);
-    box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .26), inset 0 0 0 .5px rgba(255, 255, 255, .12);
+  .item { position: relative; margin: 4px 0; padding: 10px 14px 10px 16px; border-radius: 18px; cursor: pointer; background: rgba(255, 255, 255, .07);
+    box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .18), inset 0 0 0 .5px rgba(255, 255, 255, .08);
     opacity: 0; transform: translateX(-16px); transition: transform .45s cubic-bezier(.3, 1.4, .5, 1), background .2s ease, opacity .3s ease; transition-delay: calc(var(--i, 0) * 14ms + 50ms), 0s, calc(var(--i, 0) * 14ms + 50ms); }
   body.show .item { opacity: 1; transform: none; }
-  body.show .item:hover { transform: translateX(4px) scale(1.02); transition-delay: 0s; background: rgba(255, 255, 255, .20); }
+  body.show .item:hover { transform: translateX(4px) scale(1.02); transition-delay: 0s; background: rgba(255, 255, 255, .14); }
   body.show .item:active { transform: scale(.985); transition-duration: .1s; }
   .item::before { content: ""; position: absolute; left: 0; top: 13px; bottom: 13px; width: 3px; border-radius: 2px; background: var(--acc); }
   .item.stopped::before { background: #ffb347; }
