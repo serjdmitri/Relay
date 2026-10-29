@@ -633,7 +633,7 @@ class AskController {
 
   // The Mac's output volume, for the phone's volume bar: the last reading is returned at once and a fresh one is fetched for the next look.
   refreshVolume() {
-    if (this.volumeBusy || Date.now() - (this.volumeAt || 0) < 1500) return;
+    if (!this.mac?.osa || this.volumeBusy || Date.now() - (this.volumeAt || 0) < 1500) return;
     this.volumeBusy = true;
     this.mac.osa('(output volume of (get volume settings) as text) & "," & (output muted of (get volume settings) as text)')
       .then((t) => { const [l, m] = String(t).split(','); const level = Number(l); if (Number.isFinite(level)) this.volumeNow = { level: Math.round(level), muted: String(m).trim() === 'true' }; })
