@@ -52,3 +52,26 @@ test('the camera is opened only on request, refused politely, told how long to w
   c.frame({ faces: 0 });
   assert.equal(c.faces, 0, 'frames after it was turned off are ignored');
 });
+
+test('turning presence off while permission or camera startup is pending never leaves a camera running', async () => {
+  let allow, finishCamera, opened = 0, closed = 0;
+  const c = new PresenceControl({
+    askAccess: () => new Promise((resolve) => { allow = resolve; }),
+    createCamera: () => { opened++; return new Promise((resolve) => { finishCamera = resolve; }); },
+    getConfig: () => ({})
+  });
+  const first = c.enable();
+  c.disable();
+  allow(true);
+  assert.equal((await first).cancelled, true);
+  assert.equal(opened, 0);
+  const second = c.enable();
+  allow(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  c.disable();
+  finishCamera({ close: () => closed++ });
+  assert.equal((await second).cancelled, true);
+  assert.equal(closed, 1);
+  assert.equal(c.enabled, false);
+  assert.equal(c.status, 'off');
+});
