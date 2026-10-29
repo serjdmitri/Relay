@@ -760,6 +760,11 @@ const PAGES = {
       toggleRow('Pause music when I leave the desk', 'Uses the camera, all the time while on (the green light stays on): it only counts faces once a second, on this Mac. Nothing is recognised, saved or sent. When nobody has been there for a minute it pauses the music, and plays it again when you are back.', 'settings.presence.enabled'),
       toggleRow('Lock my Mac when I leave too', 'Also locks the screen when you have been away.', 'settings.presence.lock'),
       (() => {
+        const row = h('<div class="row"><div class="grow"><div class="t">Face unlock with Glance</div><div class="d">Glance is a separate app. Set up your face and password there; Relay does not receive them. Webcam face unlock is less secure than Apple Face ID and may be fooled by video. Relay can greet you after macOS unlocks.</div><div data-glance-result></div></div><button class="btn" data-glance>Open Glance</button></div>');
+        $('[data-glance]', row).onclick = async () => { const r = await relay.openGlance(); $('[data-glance-result]', row).textContent = r.ok ? 'Opened Glance. Complete enrollment there.' : r.message; };
+        return row;
+      })(),
+      (() => {
         const cur = (S.settings.presence && S.settings.presence.awayAfter) || 60;
         const row = h(`<div class="row"><div class="grow"><div class="t">Count me as away after</div><div class="d">How long with no face in front of the camera. Short enough to notice you left, long enough not to fire when you look away.</div></div><div class="seg sm">${[[30, '30 s'], [60, '1 min'], [180, '3 min'], [600, '10 min']].map(([v, l]) => `<button data-v="${v}" class="${cur === v ? 'on' : ''}" style="width:64px">${l}</button>`).join('')}</div></div>`);
         row.onclick = (e) => e.target.dataset.v && relay.set('settings.presence.awayAfter', Number(e.target.dataset.v));

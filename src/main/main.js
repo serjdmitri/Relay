@@ -499,6 +499,13 @@ function registerIpc() {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
     if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
   });
+  // Glance remains a separate application and manages its own enrollment and credentials.
+  ipcMain.handle('glance:open', async () => {
+    const target = '/Applications/Glance.app';
+    if (!require('fs').existsSync(target)) return { ok: false, message: 'Glance is not installed in Applications.' };
+    const error = await shell.openPath(target);
+    return error ? { ok: false, message: 'Could not open Glance. Open it from Applications.' } : { ok: true };
+  });
   ipcMain.handle('voice:open-settings', () => shell.openExternal('x-apple.systempreferences:com.apple.Accessibility-Settings.extension'));
   ipcMain.handle('speech:locales', () => speech.locales().catch(() => []));
   ipcMain.handle('speech:set-locale', async (_e, id) => {
