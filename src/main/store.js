@@ -68,11 +68,12 @@ const DEFAULTS = {
     glass: true, // draw the pill as real see-through glass when this Mac can
     voice: 'auto', // auto, or a voice name from `say -v ?`
     voiceRate: 'normal', // slower | normal | faster
-    tts: { // which voice speaks replies: system | kokoro (on this Mac) | openai | elevenlabs (your own key)
+    tts: { // which voice speaks replies: system | kokoro (on this Mac) | openai | elevenlabs | gemini (your own key)
       engine: 'system',
       kokoro: { voice: 'af_heart' },
       openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
-      elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
+      elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' },
+      gemini: { model: 'gemini-3.8-flash-tts', voice: 'Charon', style: 'Calm, dry and polite, like a British butler', keyEnc: '' }
     },
     notify: { enabled: false, channel: 'ntfy', ntfyTopic: '', ntfyServer: 'https://ntfy.sh', imessageTo: '', minSeconds: 30, includeText: false }, // tell the phone when a long job finishes (see notify.js)
     remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone

@@ -302,6 +302,15 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => memory.remove(i.match)
       }
     );
+    if (memory.recall) {
+      tools.push({
+        name: 'recall_memory',
+        description: 'Look up remembered facts about the user by a few words (a name, a place, a habit). Use it when the request might involve something older than the facts already shown, e.g. a person or a preference you were not told about.',
+        input_schema: obj({ words: str('A few words to look for') }, ['words']),
+        describe: () => 'Checking what I remember',
+        run: (i) => memory.recall(String(i.words || ''))
+      });
+    }
   }
 
   // A 3D model you can turn and zoom: a real one from Wikimedia Commons (an STL, when someone has made one), else built from shapes.

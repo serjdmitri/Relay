@@ -138,7 +138,7 @@ function publicState() {
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
   const hasTtsKeys = {};
-  for (const id of ['openai', 'elevenlabs']) {
+  for (const id of ['openai', 'elevenlabs', 'gemini']) {
     hasTtsKeys[id] = !!decryptKey(d.settings.tts[id].keyEnc);
     delete d.settings.tts[id].keyEnc;
   }
@@ -574,7 +574,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('tts:set-key', (_e, engine, key) => {
-    if (!['openai', 'elevenlabs'].includes(engine)) return;
+    if (!['openai', 'elevenlabs', 'gemini'].includes(engine)) return;
     store.set(`settings.tts.${engine}.keyEnc`, encryptKey(String(key || '').trim()));
     voiceProblem = '';
     broadcast();
@@ -1049,7 +1049,7 @@ app.whenReady().then(() => {
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
     getTts: () => {
       const t = store.get('settings.tts');
-      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) } };
+      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) }, gemini: { ...t.gemini, key: decryptKey(t.gemini?.keyEnc) } };
     },
     onProblem: (m) => { voiceProblem = m; broadcast(); }
   });

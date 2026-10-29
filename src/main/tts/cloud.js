@@ -3,6 +3,10 @@
 
 const OPENAI_URL = 'https://api.openai.com/v1/audio/speech';
 const ELEVEN_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+
+// Gemini's prebuilt voices. Charon, Puck and Kore are the ones the other Jarvis projects use most.
+const GEMINI_VOICES = ['Charon', 'Puck', 'Kore', 'Fenrir', 'Aoede', 'Zephyr', 'Leda', 'Orus', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'];
 
 // Short pieces so the first one can start playing while the rest are still being made.
 function sentences(text, max = 260) {
@@ -37,8 +41,31 @@ function elevenRequest(cfg, text) {
   return { url, ext: 'mp3', init: { method: 'POST', headers: { 'xi-api-key': cfg.key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' }, body: JSON.stringify({ text, model_id: cfg.model || 'eleven_multilingual_v2' }) } };
 }
 
-const BUILDERS = { openai: openaiRequest, elevenlabs: elevenRequest };
-const NAMES = { openai: 'OpenAI', elevenlabs: 'ElevenLabs' };
+// Gemini speech: one text part with an optional style note; the reply is JSON with the audio (a WAV file by default) in base64.
+function geminiRequest(cfg, text) {
+  const note = { type: 'speech_metadata' };
+  if (cfg.style) note.style = cfg.style;
+  const body = {
+    model: cfg.model || 'gemini-3.8-flash-tts',
+    input: [{ type: 'user_input', content: [{ type: 'text', text, annotations: [note] }] }],
+    response_format: { type: 'audio' },
+    generation_config: { speech_config: [{ voice: cfg.voice || 'Charon' }] }
+  };
+  return { url: GEMINI_URL, ext: 'wav', init: { method: 'POST', headers: { 'x-goog-api-key': cfg.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, parse: geminiAudio };
+}
+
+// The last audio part of the model's output, decoded.
+async function geminiAudio(res) {
+  const j = await res.json();
+  const parts = [];
+  for (const step of j.steps || []) if (step.type === 'model_output') for (const c of step.content || []) if (c.type === 'audio' && c.data) parts.push(c.data);
+  if (!parts.length) throw new Error('Gemini sent back no audio. Check the voice and model names in Speech settings.');
+  return Buffer.from(parts[parts.length - 1], 'base64');
+}
+
+const BUILDERS = { openai: openaiRequest, elevenlabs: elevenRequest, gemini: geminiRequest };
+const NAMES = { openai: 'OpenAI', elevenlabs: 'ElevenLabs', gemini: 'Gemini' };
+const EXT = { gemini: 'wav' };
 
 // What went wrong, in words a person can act on.
 async function explain(engine, res) {
@@ -73,7 +100,7 @@ async function synthesize(engine, cfg, text, { rate = 'normal', fetchFn = fetch,
     throw new Error(`Could not reach ${NAMES[engine]}. Check your internet connection.`);
   }
   if (!res.ok) throw new Error(await explain(engine, res));
-  return Buffer.from(await res.arrayBuffer());
+  return req.parse ? req.parse(res) : Buffer.from(await res.arrayBuffer());
 }
 
-module.exports = { sentences, openaiRequest, elevenRequest, synthesize, explain, SPEEDS, NAMES };
+module.exports = { sentences, openaiRequest, elevenRequest, geminiRequest, geminiAudio, synthesize, explain, SPEEDS, NAMES, EXT, GEMINI_VOICES };
