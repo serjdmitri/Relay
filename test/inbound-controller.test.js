@@ -87,3 +87,17 @@ test('an old request held for review can be run or dropped from the Mac', async 
   assert.ok(sent.some((s) => s[1] === 'did lock my mac'));
   assert.deepEqual(await svc.releaseReview('zzz', true), { ok: false });
 });
+
+test('the phone volume bar sets the level, mutes and unmutes, and unmutes when the level is raised', async () => {
+  const c = Object.create(AskController.prototype);
+  const log = [];
+  c.mac = { osa: async (s) => { log.push(s); return /get volume settings/.test(s) && /as text\) & ","/.test(s) ? '55,false' : ''; } };
+  const r = await c.remoteVolume({ level: 55 });
+  assert.ok(log.includes('set volume output volume 55'));
+  assert.ok(log.includes('set volume without output muted'));
+  assert.deepEqual(r, { level: 55, muted: false });
+  await c.remoteVolume({ mute: true });
+  assert.ok(log.includes('set volume with output muted'));
+  await c.remoteVolume({ level: 500 });
+  assert.ok(log.includes('set volume output volume 100'), 'kept between 0 and 100');
+});

@@ -36,7 +36,7 @@ header, #top, #bottom { position: relative; z-index: 1; }
 #send { width: 52px; border-radius: 50%; border: 0; background: var(--acc); color: #00141c; font-size: 24px; font-weight: 700; }
 @media (orientation: portrait) { #kb { display: none !important; } } /* upright: the phone's own keyboard */
 #qtog { position: fixed; left: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
-body.noquick #quick, body.noquick #player { display: none; } /* the music and shortcut buttons, hidden with the button at the bottom left */
+body.noquick #quick, body.noquick #player, body.noquick #vol { display: none; } /* the music and shortcut buttons, hidden with the button at the bottom left */
 #kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
 #kbd[aria-pressed=true] { color: #00141c; background: var(--acc); }
 /* the big lock: open while the Mac is open, closed when it is locked */
@@ -183,3 +183,16 @@ body.kbopen main { visibility: hidden; } /* nothing from the page shows through 
   #player .big { width: 48px; height: 48px; }
   #player svg { transform: scale(.85); }
 }
+
+/* the volume bar: a mute button and a slider, like a music app */
+#vol { display: flex; align-items: center; gap: 12px; padding: 6px 4px 0; }
+#vol button { flex: none; width: 36px; height: 36px; padding: 0; display: grid; place-items: center; background: none; border: 0; color: rgba(205, 244, 255, .8); border-radius: 50%; }
+#vol button[aria-pressed=true] { color: var(--warn); }
+#volpct { flex: none; width: 30px; text-align: right; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#volume { flex: 1; min-width: 0; height: 28px; -webkit-appearance: none; appearance: none; background: transparent; touch-action: none; }
+#volume::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(90deg, #fff var(--v, 50%), rgba(255, 255, 255, .22) var(--v, 50%)); }
+#volume::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, .5); }
+#volume::-moz-range-track { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .22); }
+#volume::-moz-range-progress { height: 5px; border-radius: 3px; background: #fff; }
+#volume::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; }
+@media (orientation: landscape) { #vol { padding-top: 2px; } #vol button { width: 30px; height: 30px; } #volume { height: 22px; } }

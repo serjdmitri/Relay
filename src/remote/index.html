@@ -48,13 +48,13 @@
       <button type="button" data-say="next song" aria-label="Next"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M5.5 5.5v13L15 12z"/><rect x="16.4" y="5.5" width="2.6" height="13" rx="1"/></svg></button>
       <button type="button" id="rep" data-say="toggle repeat" aria-label="Repeat"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
     </div>
+    <div id="vol" aria-label="Volume">
+      <button type="button" id="mute" aria-label="Mute" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5z" fill="currentColor" fill-opacity=".25"/><path id="wave1" d="M15.5 9a4 4 0 0 1 0 6"/><path id="wave2" d="M18 6.5a7.5 7.5 0 0 1 0 11"/><path id="slash" d="M4 4l16 16" style="display:none"/></svg></button>
+      <input id="volume" type="range" min="0" max="100" step="1" value="50" aria-label="Volume">
+      <span id="volpct">50</span>
+    </div>
     <div id="quick" aria-label="Quick actions">
       <button data-say="what's playing">What's playing</button>
-      <button data-say="volume down">Quieter</button>
-      <button data-say="volume up">Louder</button>
-      <button data-say="mute">Mute</button>
-      <button data-say="focus mode for 25 minutes">Focus 25 min</button>
-      <button data-say="end focus mode">End focus</button>
     </div>
     <form id="bar" autocomplete="off" hidden>
       <input id="text" type="text" enterkeyhint="send" placeholder="Ask Relay" autocapitalize="sentences">

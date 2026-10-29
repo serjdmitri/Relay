@@ -631,8 +631,32 @@ class AskController {
     return r ? { ...r, title: h.title } : null;
   }
 
+  // The Mac's output volume, for the phone's volume bar: the last reading is returned at once and a fresh one is fetched for the next look.
+  refreshVolume() {
+    if (this.volumeBusy || Date.now() - (this.volumeAt || 0) < 1500) return;
+    this.volumeBusy = true;
+    this.mac.osa('(output volume of (get volume settings) as text) & "," & (output muted of (get volume settings) as text)')
+      .then((t) => { const [l, m] = String(t).split(','); const level = Number(l); if (Number.isFinite(level)) this.volumeNow = { level: Math.round(level), muted: String(m).trim() === 'true' }; })
+      .catch(() => {}).finally(() => { this.volumeBusy = false; this.volumeAt = Date.now(); });
+  }
+
+  // From the phone's volume bar and mute button.
+  async remoteVolume({ level, mute } = {}) {
+    if (typeof mute === 'boolean') await this.mac.osa(mute ? 'set volume with output muted' : 'set volume without output muted');
+    const n = Number(level);
+    if (level !== undefined && Number.isFinite(n)) {
+      await this.mac.osa(`set volume output volume ${Math.max(0, Math.min(100, Math.round(n)))}`);
+      if (n > 0 && mute === undefined) await this.mac.osa('set volume without output muted');
+    }
+    this.volumeAt = 0;
+    this.refreshVolume();
+    await new Promise((r) => setTimeout(r, 120));
+    return this.volumeNow || {};
+  }
+
   remoteSnapshot() {
-    return { state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view(), locked: !!this.lockWatch?.locked };
+    this.refreshVolume();
+    return { volume: this.volumeNow || null, state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view(), locked: !!this.lockWatch?.locked };
   }
 
   remoteRecent(n = 8) {
