@@ -682,8 +682,8 @@ const PAGES = {
     const hrow = h(`<div class="row"><div class="grow"><div class="t">Hand control (camera)</div><div class="d">${hs.status === 'error' ? esc(hs.message || 'It could not start.') : handsOn ? (hs.status === 'running' ? 'On. Hold a hand up to the camera: you should see a small glowing ring follow it.' : 'Starting…') : 'Move holograms in the air. Turn it on, allow the camera when macOS asks (Relay only looks at where your hands are, on this Mac; no picture is kept or sent), then hold an open hand up to the camera.'}</div></div><div class="toggle ${handsOn && hs.status !== 'error' ? 'on' : ''}"></div></div>`);
     hrow.onclick = async () => { const r = await relay.setHands(!(handsOn && hs.status !== 'error')); if (r && !r.ok) alert(r.error); };
     hcard.append(hrow);
-    const handMargin = Math.round((S.settings.hands?.margin ?? 0.12) * 100);
-    const handCal = h(`<div class="row"><div class="grow"><div class="t">Hand reach</div><div class="d">Increase this if you need smaller hand movements to reach the screen edges. Use Show hand view to see what the camera detects.</div></div><input type="range" min="4" max="25" value="${handMargin}" aria-label="Hand reach"><span>${handMargin}%</span></div>`);
+    const handMargin = Math.round((S.settings.hands?.margin ?? 0.22) * 100);
+    const handCal = h(`<div class="row"><div class="grow"><div class="t">Hand reach</div><div class="d">Increase this to reach the edges with smaller movements. The dashed box in Hand view shows the tracking area; drag its header to move the view. Swipe an open hand to shift a panel, or hold a thumbs-down to close it.</div></div><input type="range" min="4" max="35" value="${handMargin}" aria-label="Hand reach"><span>${handMargin}%</span></div>`);
     const handRange = $('input', handCal);
     handRange.oninput = () => { $('span', handCal).textContent = `${handRange.value}%`; };
     handRange.onchange = () => relay.set('settings.hands.margin', Number(handRange.value) / 100);

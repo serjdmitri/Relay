@@ -272,3 +272,43 @@ test('camera frames drive both hands to grab separate floating panels', async ()
   assert.ok(positions[1].x < 1400);
   hc.disable();
 });
+
+test('thumb down closes a panel and swiping moves it without closing', async () => {
+  const { hc, ev, at } = await rig();
+  let x = 500, closed = 0;
+  hc.floatingAt = () => ({ key: 'panel:one', position: () => ({ x, y: 100, width: 300 }), move: px => { x = px; }, close: () => { closed++; } });
+  await ev({ type: 'swipe', dir: 'right', ...at(600, 200) });
+  assert.ok(x > 500); assert.equal(closed, 0);
+  await ev({ type: 'thumbdown', ...at(600, 200) });
+  assert.equal(closed, 1);
+  hc.disable();
+});
+
+test('a released panel glides and closes when it reaches the right edge', async () => {
+  const { hc, ev, at } = await rig();
+  let t = 1000, x = 900, closed = 0;
+  hc.now = () => t;
+  hc.floatingAt = () => ({ key: 'panel:glide', position: () => ({ x, y: 400 }), move: value => { x = value; }, close: () => { closed++; } });
+  await ev({ type: 'grab', ...at(1000, 500) });
+  t += 100;
+  await ev({ type: 'move', ...at(1500, 500), held: true });
+  await ev({ type: 'release', ...at(1500, 500) });
+  assert.equal(closed, 0, 'not dismissed before the glide reaches the edge');
+  const start = x;
+  await new Promise(resolve => setTimeout(resolve, 400));
+  assert.ok(x > start, 'the panel continues moving after release');
+  assert.equal(closed, 1, 'the glide reached the right edge');
+  hc.disable();
+});
+
+test('the tracking margin updates both cursors without restarting hand control', async () => {
+  const { hc } = await rig();
+  hc.sensitivity = () => 0.3;
+  hc.frame({ t: 1000, hands: [] });
+  assert.equal(hc.pointer.margin, 0.3);
+  assert.equal(hc.peer.pointer.margin, 0.3);
+  hc.sensitivity = () => 1;
+  hc.frame({ t: 1033, hands: [] });
+  assert.equal(hc.pointer.margin, 0.35);
+  hc.disable();
+});

@@ -63,6 +63,9 @@ const countEl = document.getElementById('count');
 const stateEl = document.getElementById('state');
 const actEl = document.getElementById('act');
 const noneEl = document.getElementById('none');
+const hitbox = document.getElementById('hitbox');
+function showHitbox(margin) { const n = Math.max(0.04, Math.min(0.35, Number(margin) || 0.22)) * 100; hitbox.style.inset = `${n}%`; }
+showHitbox(0.22);
 let previewOn = false;
 let actTimer = 0;
 
@@ -106,6 +109,7 @@ function draw(result, src = video) {
 
 try {
   relay.onHandPreview((on) => { previewOn = !!on; card.hidden = !previewOn; });
+  relay.onHandConfig?.((c) => showHitbox(c.margin));
   relay.onHandAction((a) => {
     const t = a.type === 'swipe' ? `Swipe ${a.dir === 'left' ? '←' : '→'}` : ACTIONS[a.type];
     if (!t) return;
