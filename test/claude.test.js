@@ -42,6 +42,19 @@ test('confirm gate: declined actions do not run and are reported to the model', 
   assert.equal(run.counter.actions, 0);
 });
 
+test('a cancelled request does not start a tool or ask for confirmation', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let ran = false, asked = false;
+  const tool = { ...risky, run: async () => { ran = true; } };
+  const run = mkRun({ tools: [tool], signal: controller.signal, confirm: async () => { asked = true; return true; } });
+  const result = await handleRpc({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'send', arguments: {} } }, run);
+  assert.equal(result.result.isError, true);
+  assert.match(result.result.content[0].text, /Stopped/);
+  assert.equal(ran, false);
+  assert.equal(asked, false);
+});
+
 test('unknown tools and missing runs are errors, not crashes', async () => {
   const r = await handleRpc({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'nope', arguments: {} } }, mkRun());
   assert.equal(r.result.isError, true);
