@@ -70,3 +70,19 @@ test('stopping while the system voice is being selected prevents stale speech', 
   assert.equal(calls.length, 0);
   assert.equal(sp.speaking, false);
 });
+
+test('interrupted speech removes a prefetched sentence even if synthesis finishes later', async () => {
+  let finishNext, finishPlay, count = 0;
+  const discarded = [];
+  const sp = new Spk({ kokoro: { installed: () => true, synthesize: () => ++count === 1 ? Promise.resolve('first') : new Promise((resolve) => { finishNext = resolve; }) }, getTts: () => ({ engine: 'kokoro' }) });
+  sp.play = () => new Promise((resolve) => { finishPlay = resolve; });
+  sp.discard = (file) => discarded.push(file);
+  const pending = sp.speak('a'.repeat(200) + '. ' + 'b'.repeat(200) + '.');
+  await new Promise((resolve) => setImmediate(resolve));
+  sp.stop();
+  finishPlay();
+  await pending;
+  finishNext('second');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(discarded, ['first', 'second']);
+});

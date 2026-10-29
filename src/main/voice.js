@@ -169,7 +169,11 @@ class Speaker {
       if (pending) pending.catch(() => {});
       await this.play(file, token, volume);
       this.discard(file);
-      if (token !== this.token) return;
+      if (token !== this.token) {
+        // The next sentence may still finish after playback was interrupted.
+        if (pending) pending.then((next) => this.discard(next), () => {});
+        return;
+      }
     }
   }
 
