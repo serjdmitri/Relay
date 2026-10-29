@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Welcome back when you unlock** (General): "Welcome back, Sir." and what finished, what failed, your next meeting and a low battery, after you were away a number of minutes you set (0 greets every unlock), with a set gap between greetings. No model call. Not tried on a real Mac.
+- **Recent menu: clear glossy glass.** See-through glass with very little tint (a little darker where it touches the screen edge), a bright specular band along the top, a diagonal sheen, a soft glow along the bottom and a bright rim; the curved flares join it to the screen edge as one shape. It does not blur what is behind it (a transparent window cannot); real blurred glass needs the native `relay-glass` helper, which I could not build or test here. Checked in a headless browser only.
+
 ## 0.34.0
 
 Built by the cloud session; unit-tested only. **None of it has run on a real Mac**: if Relay does not open, run `npm start` in the repo and send the first error. The experimental features are all off by default: turn them on one at a time in Settings > Doctor > Experimental, and run Doctor first.
