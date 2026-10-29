@@ -48,7 +48,13 @@ class PresenceControl {
     if (this.cam) return { ok: true };
     if (this.pending) return this.pending;
     const generation = ++this.generation;
-    const start = this.startCamera(generation);
+    const start = this.startCamera(generation).catch(() => {
+      if (generation !== this.generation) return { ok: true, cancelled: true };
+      this.status = 'error';
+      this.message = 'Presence could not start the camera. Check Camera permissions and try again.';
+      this.onChange();
+      return { ok: false, error: this.message };
+    });
     this.pending = start;
     try { return await start; } finally { if (this.pending === start) this.pending = null; }
   }

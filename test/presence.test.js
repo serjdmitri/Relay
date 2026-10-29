@@ -75,3 +75,12 @@ test('turning presence off while permission or camera startup is pending never l
   assert.equal(c.enabled, false);
   assert.equal(c.status, 'off');
 });
+
+test('a camera startup error is reported instead of leaving presence stuck starting', async () => {
+  const c = new PresenceControl({ askAccess: async () => true, createCamera: async () => { throw new Error('failed'); }, getConfig: () => ({}) });
+  const result = await c.enable();
+  assert.equal(result.ok, false);
+  assert.match(result.error, /could not start the camera/);
+  assert.equal(c.status, 'error');
+  assert.equal(c.enabled, false);
+});
