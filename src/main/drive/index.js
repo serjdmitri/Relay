@@ -120,10 +120,10 @@ class Drive {
     const list = this.log.read() || [];
     const last = id ? list.find((e) => e.id === id) : list.at(-1);
     if (!last || !(last.done?.length || last.made?.length)) return 'There is nothing to undo.';
-    const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs });
+    const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs, home: this.home });
     const gone = [];
     for (const m of last.made || []) {
-      try { if (!this.fs.existsSync(m)) { left.push({ path: m, reason: 'It is no longer there.' }); continue; } await this.trashItem(m); gone.push(m); } catch (e) { left.push({ path: m, reason: e.message }); }
+      try { if (pathProblem(m, this.home) || hasSymlink(m, this.fs, this.home)) { left.push({ path: m, reason: 'A path is protected or contains a symbolic link.' }); continue; } if (!this.fs.existsSync(m)) { left.push({ path: m, reason: 'It is no longer there.' }); continue; } await this.trashItem(m); gone.push(m); } catch (e) { left.push({ path: m, reason: e.message }); }
     }
     // Keep failed items in the undo log so the user can fix the conflict and retry.
     const restored = new Set(back.map((item) => item.to));

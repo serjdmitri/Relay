@@ -207,6 +207,21 @@ test('undo keeps failed moves available for retry and never substitutes a differ
   assert.equal(log().length, 0);
 });
 
+test('undo refuses a destination folder replaced by a symbolic link', async () => {
+  const { home, w } = sandbox();
+  const original = w('Downloads/a.txt', 'original');
+  const { d, log } = driveOn(home);
+  const proposed = await d.propose({ moves: [{ from: original, to_folder: '~/Documents/Sorted' }] });
+  const id = proposed.match(/Plan ([0-9a-f-]{36})/)[1];
+  await d.apply({ plan_id: id });
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-undo-outside-'));
+  fs.renameSync(path.join(home, 'Downloads'), path.join(home, 'Downloads-old'));
+  fs.symlinkSync(outside, path.join(home, 'Downloads'));
+  assert.match(await d.undo(id), /symbolic link/);
+  assert.equal(log()[0].done.length, 1);
+  assert.equal(fs.existsSync(path.join(outside, 'a.txt')), false);
+});
+
 test('folder plans reject symlinked paths and recheck them before moving', async () => {
   const { home, w } = sandbox();
   const source = w('Downloads/a.txt');

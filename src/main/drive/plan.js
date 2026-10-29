@@ -121,11 +121,12 @@ async function applyPlan(plan, { fs, trashItem, home }) {
 }
 
 // Puts a finished plan's moves back where they were (never over anything that is there now).
-function undoMoves(entry, { fs }) {
+function undoMoves(entry, { fs, home }) {
   const back = [];
   const left = [];
   for (const d of [...entry.done].reverse()) {
     try {
+      if (home && (pathProblem(d.from, home) || pathProblem(d.to, home) || hasSymlink(d.from, fs, home) || hasSymlink(d.to, fs, home))) { left.push({ path: d.to, reason: 'A path is protected or contains a symbolic link.' }); continue; }
       if (!fs.existsSync(d.to)) { left.push({ path: d.to, reason: 'It is no longer there.' }); continue; }
       if (fs.existsSync(d.from)) { left.push({ path: d.to, reason: 'Something is in its old place now.' }); continue; }
       fs.mkdirSync(path.dirname(d.from), { recursive: true });
