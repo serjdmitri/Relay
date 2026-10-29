@@ -37,6 +37,7 @@
     'Speak up on its own': 'Hablar por iniciativa propia', 'Offline mode': 'Modo sin conexión', 'Quiet hours': 'Horas de silencio', 'How loud': 'Qué tan alto',
     'Faster answers': 'Respuestas más rápidas',
     'How long before it opens': 'Cuánto tarda en abrirse', Instantly: 'De inmediato',
+    'Welcome back when I unlock': 'Bienvenida al desbloquear', 'Unlock greeting': 'Saludo al desbloquear',
     Doctor: 'Doctor', 'Relay Doctor': 'Doctor de Relay', 'Checking…': 'Comprobando…', 'Check again': 'Comprobar de nuevo', 'Copy report': 'Copiar informe', 'Report a bug': 'Informar de un error', 'Request a feature': 'Pedir una función', 'Fixed automatically': 'Arreglado automáticamente', 'When Doctor can fix something': 'Cuando Doctor pueda arreglar algo', 'Ask first': 'Preguntar antes', 'Fix small things': 'Arreglar cosas pequeñas', 'Only tell me': 'Solo avisarme', Experimental: 'Experimental',
     'Homework helper': 'Ayudante de tareas', 'Allow whole solutions (complete the assignment)': 'Permitir soluciones completas (completar la tarea)', 'Explain what it made': 'Explicar lo que hizo', 'Save as': 'Guardar como', Word: 'Word', 'Plain text': 'Texto sin formato',
     'Keep answers on screen until I dismiss them': 'Mantener las respuestas en pantalla hasta que las cierre',
