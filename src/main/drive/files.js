@@ -1,6 +1,7 @@
 // Looking at files: what is in a folder (for planning) and finding files by name or content (Spotlight). Read-only. No Electron in here.
 
 const path = require('path');
+const { hasSymlink } = require('./plan');
 
 const EXT = {
   image: 'jpg jpeg png gif heic heif webp tiff tif bmp raw cr2 nef svg psd ai',
@@ -75,6 +76,7 @@ async function findFiles(query, { exec, fs, home, folder, kind, limit = 12 }) {
     if (seen.has(p)) continue;
     seen.add(p);
     if (!p.startsWith(home + path.sep) || hiddenOrLibrary(path.relative(home, p))) continue;
+    try { if (hasSymlink(p, fs, home)) continue; } catch { continue; }
     let st; try { st = fs.statSync(p); } catch { continue; }
     if (!st.isFile() && !st.isDirectory()) continue;
     const name = path.basename(p);

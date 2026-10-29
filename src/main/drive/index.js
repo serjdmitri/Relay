@@ -27,6 +27,10 @@ class Drive {
   async find({ query, folder, kind, limit } = {}) {
     const where = folder ? this.resolve(folder) : this.home;
     if (where !== this.home && !where.startsWith(this.home + path.sep)) return 'Relay only looks inside your home folder.';
+    const bad = where === this.home ? '' : pathProblem(path.join(where, 'x'), this.home);
+    if (bad && !/main folders|itself/.test(bad)) return bad;
+    try { if (hasSymlink(where, this.fs, this.home)) return 'That folder path contains a symbolic link, so Relay will not search it.'; }
+    catch { return 'That folder path could not be checked.'; }
     const found = await findFiles(query, { exec: this.exec, fs: this.fs, home: this.home, folder: where, kind, limit: Math.min(24, Math.max(1, +limit || 10)) });
     if (!found.length) return `Nothing found for "${query}"${folder ? ` in ${tilde(where, this.home)}` : ''}. Try fewer or different words, or look in a folder with drive_scan.`;
     const items = await Promise.all(found.slice(0, 10).map(async (f) => ({
@@ -166,6 +170,8 @@ class Drive {
   openFile(p) {
     const full = this.resolve(p);
     if (!full.startsWith(this.home + path.sep)) return;
+    if (pathProblem(full, this.home)) return;
+    try { if (hasSymlink(full, this.fs, this.home)) return; } catch { return; }
     let st; try { st = this.fs.statSync(full); } catch { return; }
     if (st.isFile() && OPEN_SAFE.has(kindOf(full))) this.open(full); else this.reveal(full);
   }
