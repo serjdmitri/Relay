@@ -26,8 +26,9 @@ class HandControl {
     this.calibration = null;
     this.secondary = secondary;
     this.floatingAt = floatingAt;
-    this.tracks = new HandTracks();
+    this.tracks = new HandTracks(secondary ? 2 : 4);
     this.peer = null;
+    this.extraPeers = [];
     this.drag = null;
     this.claims = new Map();
     this.glides = new Map();
@@ -70,6 +71,11 @@ class HandControl {
       this.peer.glides = this.glides;
       this.peer.enabled = true;
       this.peer.ring = this.createCursor();
+      this.extraPeers = Array.from({ length: 2 }, () => {
+        const peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
+        peer.claims = this.claims; peer.glides = this.glides; peer.enabled = true; peer.ring = this.createCursor();
+        return peer;
+      });
     }
     return { ok: true };
   }
@@ -80,6 +86,8 @@ class HandControl {
     clearTimeout(this.calibration?.timer); this.calibration = null; this.paused = false; this.pauseHold = null; this.pauseLatched = false;
     this.release();
     if (this.peer) { this.peer.release(); this.peer.ring?.close?.(); this.peer.enabled = false; this.peer = null; }
+    for (const peer of this.extraPeers) { peer.release(); peer.ring?.close?.(); peer.enabled = false; }
+    this.extraPeers = [];
     for (const key of [...this.glides.keys()]) this.stopGlide(key);
     if (!this.secondary) this.externalDrag?.close();
     this.tracks.reset();
@@ -102,6 +110,7 @@ class HandControl {
   setPaused(on) {
     this.paused = !!on;
     this.release(); this.peer?.release();
+    for (const peer of this.extraPeers) { peer.release(); peer.ring?.hide?.(); peer.pointer = new HandPointer({ onEvent: e => peer.handle(e).catch(() => {}) }); }
     this.ring?.hide?.(); this.peer?.ring?.hide?.();
     this.pointer = new HandPointer({ onEvent: e => this.handle(e).catch(() => {}) });
     if (this.peer) this.peer.pointer = new HandPointer({ onEvent: e => this.peer?.handle(e).catch(() => {}) });
@@ -112,6 +121,7 @@ class HandControl {
     if (!this.enabled) return { ok: false, error: 'Turn on hand control first.' };
     clearTimeout(this.calibration?.timer);
     this.release(); this.peer?.release();
+    for (const peer of this.extraPeers) peer.release();
     const c = { minX: 1, maxX: 0, minY: 1, maxY: 0, samples: 0, timer: null };
     this.calibration = c;
     this.notify('Move one hand comfortably around the edges of the camera view for eight seconds.');
@@ -142,7 +152,8 @@ class HandControl {
       if (h && Number.isFinite(h.x) && Number.isFinite(h.y)) { const c = this.calibration; c.minX = Math.min(c.minX, h.x); c.maxX = Math.max(c.maxX, h.x); c.minY = Math.min(c.minY, h.y); c.maxY = Math.max(c.maxY, h.y); c.samples++; }
       return;
     }
-    const palms = f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.42).length >= 2;
+    // With more than two hands, another person's open palms must not pause everyone.
+    const palms = f.hands.length === 2 && f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.42).length === 2;
     if (!palms) { this.pauseHold = null; this.pauseLatched = false; }
     else if (!this.pauseLatched) {
       if (this.pauseHold === null) this.pauseHold = f.t;
@@ -155,13 +166,14 @@ class HandControl {
     const safeMargin = Number.isFinite(margin) ? Math.max(0.04, Math.min(0.35, margin)) : 0.12;
     this.pointer.margin = safeMargin;
     this.peer.pointer.margin = safeMargin;
-    const [first, second] = this.tracks.update(f.hands);
+    for (const peer of this.extraPeers) peer.pointer.margin = safeMargin;
+    const [first, second, ...others] = this.tracks.update(f.hands);
     // Keep the established two-hand gestures when both hands address the same hologram.
     const a = first && this.holos.holoNear(this.toScreen(this.pointer.map(first)), 0);
     const b = second && this.holos.holoNear(this.toScreen(this.pointer.map(second)), 0);
     const closed = h => h && (h.gesture === 'Closed_Fist' || h.pinch < 0.28);
     const drawing = first && second && ((first.gesture === 'Closed_Fist' && second.gesture !== 'Closed_Fist' && second.pinch < 0.28) || (second.gesture === 'Closed_Fist' && first.gesture !== 'Closed_Fist' && first.pinch < 0.28));
-    const combined = drawing || (first && second && a && a === b && closed(first) && closed(second));
+    const combined = f.hands.length <= 2 && (drawing || (first && second && a && a === b && closed(first) && closed(second)));
     if (combined) {
       this.peer.release();
       this.peer.pointer = new HandPointer({ onEvent: e => this.peer?.handle(e).catch(() => {}) });
@@ -172,6 +184,7 @@ class HandControl {
       this.pointer.update({ ...f, hands: first ? [first] : [] });
       this.peer.pointer.update({ ...f, hands: second ? [second] : [] });
     }
+    this.extraPeers.forEach((peer, i) => peer.pointer.update({ ...f, hands: others[i] ? [others[i]] : [] }));
   }
 
   // While a hand is in view the holograms show bigger controls (easy to hit from a distance); they go back to normal after the hand has left.

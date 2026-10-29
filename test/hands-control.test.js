@@ -86,9 +86,24 @@ test('it is off until enabled, needs the camera allowed, and turning it off clos
   ok.setStatus({ state: 'running' });
   assert.equal(ok.status, 'running');
   ok.disable();
-  assert.equal(closed, 3);
+  assert.equal(closed, 5, 'the camera and all four cursor windows close');
   assert.equal(ok.status, 'off');
   ok.frame({ t: 1, hands: [{ x: 0.5, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, size: 0.2, score: 1 }] }); // ignored once off
+});
+
+test('four hands drive four distinct cursors and all are released on disable', async () => {
+  const { hc } = await rig();
+  const hands = [0.15, 0.35, 0.65, 0.85].map((x, i) => ({ x, y: 0.5, gesture: 'Open_Palm', pinch: 0.9, size: 0.1, score: 1, handed: i % 2 ? 'Right' : 'Left' }));
+  hc.frame({ t: 1000, hands });
+  await new Promise((resolve) => setImmediate(resolve));
+  const cursors = [hc, hc.peer, ...hc.extraPeers];
+  assert.equal(cursors.length, 4);
+  assert.equal(new Set(cursors.map((c) => c.pos?.x)).size, 4);
+  hc.frame({ t: 4000, hands });
+  assert.equal(hc.paused, false, 'multiple people showing palms do not pause control');
+  hc.disable();
+  assert.equal(hc.extraPeers.length, 0);
+  assert.equal(hc.enabled, false);
 });
 
 test('thumb up pins the hologram, thumb down closes it, a swipe steps to the next model, fists pull apart, twisting rolls', async () => {
