@@ -7,7 +7,7 @@ const path = require('path');
 const DWELL_MS = 140; // rest the pointer on the tab this long to open it (you can change it in Settings > General)
 const LEAVE_MS = 700; // away from the panel this long to close it
 const MARGIN = 28; // how far past the panel still counts as being on it
-const WIDTH = 344; // the window; the panel inside is 320 wide
+const WIDTH = 412; // the window; the panel inside is 376 wide: 320 of black with the text, then 56 where only the backdrop fades out
 const HANDLE_W = 7; // the tab that sticks out of the edge, and how tall it is: resting the pointer on it (and only on it) opens the menu
 const HANDLE_H = 360;
 
@@ -160,7 +160,7 @@ class RecentPanel {
   place() {
     if (!this.strip) return;
     const h = Math.min(this.panelH, this.strip.height - 100); // room above and below for the curved flares
-    this.rect = { x: this.strip.x, y: this.strip.y + Math.round((this.strip.height - h) / 2), width: WIDTH - 24, height: h }; // flush with the screen edge, joined to it
+    this.rect = { x: this.strip.x, y: this.strip.y + Math.round((this.strip.height - h) / 2), width: WIDTH - 36, height: h }; // flush with the screen edge, joined to it
   }
 
   setPanelHeight(h) {

@@ -15,14 +15,15 @@
   /* One shape: the glass panel and the two curved flares that sweep it into the screen edge (like the notch's inward corners) are cut from a single
      piece of glass with a clip-path, so the colour is the same all the way and there are no seams or extra lines. .wrap carries the animation,
      .lift the shadow, #glass the glass and its content; the page script draws the clip and the faint outline for the current size. */
-  .wrap { position: relative; width: 320px; transform-origin: 0 50%; opacity: 0; pointer-events: none; transform: scale(.03, .4); filter: blur(10px); }
+  .wrap { position: relative; width: 376px; transform-origin: 0 50%; opacity: 0; pointer-events: none; transform: scale(.03, .4); filter: blur(10px); }
   body.show .wrap { pointer-events: auto; animation: pop .36s cubic-bezier(.2, .9, .25, 1) forwards; }
   body.hide .wrap { animation: tuck .26s cubic-bezier(.5, 0, .75, .4) forwards; }
   .lift { position: relative; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, .42)) drop-shadow(0 2px 5px rgba(0, 0, 0, .3)); }
   #glass { position: relative; width: 100%; max-height: calc(100vh - 56px); padding: 22px 0; display: flex; flex-direction: column; overflow: hidden;
-    /* black like the notch where it touches the side of the screen (the flares included), fading out to clear toward the open end */
-    background: linear-gradient(90deg, #000 0, #000 56%, rgba(0, 0, 0, .55) 80%, rgba(0, 0, 0, 0) 100%); }
-  #glass header, #glass #list .item .q, #glass footer { text-shadow: 0 1px 6px rgba(0, 0, 0, .55); }
+    /* black like the notch where it touches the side of the screen (the flares included). The text and cards sit in the first 320 points, all on black;
+       only the extra 56 points beyond them are backdrop, and that is what fades out to clear. */
+    padding-right: 56px;
+    background: linear-gradient(90deg, #000 0, #000 320px, rgba(0, 0, 0, .55) 348px, rgba(0, 0, 0, 0) 376px); }
   #outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
   #outline path { fill: none; stroke: url(#og); stroke-width: 1; }
   @keyframes pop {
