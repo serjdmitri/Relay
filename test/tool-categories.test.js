@@ -5,6 +5,12 @@ const { handleRpc } = require('../src/main/agent/claudeCli');
 
 const mk = (name, extra = {}) => ({ name, description: `does ${name}`, input_schema: { type: 'object', properties: {} }, run: async (i) => `ran ${name} ${JSON.stringify(i)}`, ...extra });
 const tools = () => ['open_app', 'web_search', 'notes_create', 'firefox_open', 'firefox_read_page', 'show_3d', 'drive_scan', 'make_document', 'run_shell'].map((n) => mk(n));
+
+test('folder inspection requests expose the organization tools', () => {
+  for (const request of ['check my folder', 'inspect this folder', 'review my downloads']) {
+    assert.ok(tc.exposure(tools(), { request }).has('drive_scan'), request);
+  }
+});
 const run = (request) => { const t = tools(); t.exposed = tc.exposure(t, { request }); return { tools: t, exposed: t.exposed, confirm: async () => true, onEvent: () => {}, counter: { actions: 0 } }; };
 const list = async (r) => (await handleRpc({ id: 1, method: 'tools/list' }, r)).result.tools.map((t) => t.name);
 const call = (r, name, args) => handleRpc({ id: 2, method: 'tools/call', params: { name, arguments: args } }, r);
