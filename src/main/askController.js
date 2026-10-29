@@ -57,6 +57,9 @@ const driveInspect = require('./driveInspect');
 const robotics = require('./robotics');
 const recap = require('./recap');
 const { Failover } = require('./failover');
+const { YoutubeControl } = require('./youtube');
+const { Modes } = require('./modes');
+const { describe: describeNotification } = require('./notifications');
 const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
 const { parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
@@ -1037,6 +1040,17 @@ class AskController {
     this.unattended = true;
     this.sound('Tink');
     return this.handleText(s.text, { scheduled: true });
+  }
+
+  modeSet() {
+    return this._modes || (this._modes = new Modes({ store: this.store, mac: this.mac, layouts: this.layouts(), focus: this.focusMode() }));
+  }
+
+  // "Read my notifications": what came in (from notifications.js), or the reason it cannot be read.
+  async notificationReply(cmd) {
+    if (this.store.get('settings.notifications.enabled') !== true) return 'Reading notifications is off. Turn it on in Settings under Notifications; it needs Full Disk Access.';
+    try { await this.notificationReader.poll(); } catch (e) { return e.message; }
+    return this.notificationReader.summary({ app: cmd.app });
   }
 
   // ----- what Relay remembers about you -----
@@ -2532,6 +2546,9 @@ class AskController {
       holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
       holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),
+      youtube: this.youtube || (this.youtube = new YoutubeControl({ osa: (lines) => this.mac.osa(lines) })),
+      notifications: this.notificationReader ? (cmd) => this.notificationReply(cmd) : null,
+      modes: this.modeSet(),
       ocr: (cmd) => this.readScreenText(cmd),
       downloads: this.drive ? {
         plan: async () => { const r = await this.drive.proposeDownloads({ nightly: false }); return r.moves ? `Here is where ${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads would go. Say “apply the plan” to do it, or “skip the plan”.` : 'Nothing in Downloads needs tidying right now.'; },
