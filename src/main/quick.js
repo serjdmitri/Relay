@@ -15,6 +15,9 @@ const { parseOcrCommand } = require('./ocr');
 const { parseHoloCommand } = require('./holo/commands');
 const { parseStickyCommand } = require('./stickies');
 const { parseClipboardCommand } = require('./clipboardHistory');
+const { parseYoutubeCommand } = require('./youtube');
+const { parseNotificationCommand } = require('./notifications');
+const { parseModeCommand } = require('./modes');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -114,7 +117,7 @@ function parseQuick(text, now = new Date()) {
   if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
 
   // ----- window layouts, focus mode, text from the screen -----
-  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text) || parseClipboardCommand(text);
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text) || parseClipboardCommand(text) || parseYoutubeCommand(text) || parseNotificationCommand(text) || parseModeCommand(text);
   if (lay) return lay;
 
   // ----- the web -----
@@ -481,6 +484,31 @@ async function runQuick(cmd, mac, ctx = {}) {
     case 'focus-status':
       if (!ctx.focus) return null;
       return { tool: 'focus', input: { status: true }, reply: ctx.focus.status(), readonly: true };
+    case 'youtube': {
+      if (!ctx.youtube) return null;
+      const r = await ctx.youtube.run(cmd);
+      if (r.miss && cmd.weak) return null; // "the video" with no YouTube tab: another player may be meant
+      return { tool: 'youtube', input: { op: cmd.op }, reply: r.reply, readonly: true };
+    }
+    case 'notifications': {
+      if (!ctx.notifications) return null;
+      return { tool: 'notifications', input: { app: cmd.app }, reply: await ctx.notifications(cmd), readonly: true };
+    }
+    case 'mode-create': case 'mode-forget': case 'mode-list': case 'mode-end': case 'mode-start': {
+      if (!ctx.modes) return null;
+      const md = ctx.modes;
+      if (cmd.type === 'mode-start') {
+        const r = await md.start(cmd.name);
+        return r ? { tool: 'mode', input: { name: cmd.name }, reply: r.reply, undo: r.undo } : null; // not one of your modes: left for the rest of Relay
+      }
+      if (cmd.type === 'mode-end') {
+        if (!md.has(cmd.name) && !md.active) return null;
+        return { tool: 'mode', input: { end: cmd.name }, reply: (await md.end({})).reply, readonly: true };
+      }
+      if (cmd.type === 'mode-list') return { tool: 'mode', input: { list: true }, reply: md.list(), readonly: true };
+      if (cmd.type === 'mode-forget') return { tool: 'mode', input: { forget: cmd.name }, reply: md.forget(cmd.name), readonly: true };
+      return { tool: 'mode', input: { create: cmd.name }, reply: md.create({ name: cmd.name, open: cmd.open, quit: cmd.quit }), readonly: true };
+    }
     case 'ocr': {
       if (!ctx.ocr) return null;
       return { tool: 'ocr', input: { source: cmd.source, mode: cmd.mode }, reply: await ctx.ocr(cmd), readonly: true };

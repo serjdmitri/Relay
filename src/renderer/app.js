@@ -1192,6 +1192,28 @@ const PAGES = {
       bx.append(wrow);
       c.append(bx);
     }
+    if (S.settings.connectors?.google?.accounts?.length) {
+      const ml = S.settings.mail || { enabled: false, everyMin: 3, vip: [] };
+      c.append(h('<div class="section-title">New email</div>'));
+      const mb = h(`<div class="card"><div class="row"><div class="grow"><div class="t">Tell me about new email</div><div class="d">Checks your connected Gmail every few minutes. People you name and words like "deadline" are spoken; ads stay quiet. Uses the loudness and quiet hours of Speak up on its own.</div></div><div class="toggle ${ml.enabled ? 'on' : ''}" id="mle"></div></div><div class="row"><div class="grow"><div class="t">Check every</div></div><input class="field" id="mlm" type="number" min="1" max="60" style="width:70px" value="${ml.everyMin || 3}"> <span class="d">minutes</span></div><div class="row"><div class="grow"><div class="t">People who always count</div><div class="d">Names or addresses, separated by commas.</div></div><input class="field" id="mlv" style="width:240px" placeholder="coach, mom, teacher@school.org" value="${esc((ml.vip || []).join(', '))}"></div></div>`);
+      $('#mle', mb).onclick = () => { relay.set('settings.mail.enabled', !ml.enabled); if (!ml.enabled) relay.set('settings.flags.proactive', true); };
+      $('#mlm', mb).onchange = (e) => relay.set('settings.mail.everyMin', Math.max(1, Math.min(60, Number(e.target.value) || 3)));
+      $('#mlv', mb).onchange = (e) => relay.set('settings.mail.vip', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
+      c.append(mb);
+    }
+    {
+      const nt = S.settings.notifications || { enabled: false, speak: false };
+      c.append(h('<div class="section-title">Notifications</div>'));
+      const nb = h('<div class="card"></div>');
+      nb.append(toggleRow('Let Relay read my notifications', 'Say "read my notifications" or "what did I miss from Messages". Needs Full Disk Access (System Settings > Privacy & Security). Nothing leaves this Mac.', 'settings.notifications.enabled'));
+      if (nt.enabled) {
+        const sp = toggleRow('Speak important ones', 'Messages from people and security alerts are told to you out loud, using the loudness and quiet hours of Speak up on its own (turned on for you).', 'settings.notifications.speak');
+        const flip = sp.onclick;
+        sp.onclick = () => { flip(); if (!nt.speak) relay.set('settings.flags.proactive', true); };
+        nb.append(sp);
+      }
+      c.append(nb);
+    }
     if (S.settings.flags?.offline) {
       c.append(h('<div class="section-title">Offline mode</div>'));
       c.append(h(`<div class="card"><div class="row"><div class="grow"><div class="t">${S.offlineNow ? 'Offline right now' : 'Online'}</div><div class="d">With no internet, Relay answers plain questions with a local model (Ollama, the one chosen in Account). Anything that needs the Mac or the web waits until you are back online.</div></div></div></div>`));
