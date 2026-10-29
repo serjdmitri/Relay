@@ -121,6 +121,17 @@ test('a scan lists what is in a folder, and does not go into projects, Library o
   assert.equal(kindOf('x.HEIC'), 'image');
 });
 
+test('scanning a folder refuses a path redirected through a symbolic link', () => {
+  const { home, w } = sandbox();
+  w('Downloads/visible.txt');
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-scan-outside-'));
+  fs.writeFileSync(path.join(outside, 'private.txt'), 'private');
+  fs.symlinkSync(outside, path.join(home, 'Downloads/link'));
+  const { d } = driveOn(home);
+  assert.match(d.scan({ folder: '~/Downloads/link' }), /symbolic link/);
+  assert.match(d.scan({ folder: '~/Downloads' }), /visible.txt/);
+});
+
 test('finding files uses Spotlight and shows the matches with previews on a card; clicking only opens safe kinds', async () => {
   const { home, w } = sandbox();
   const pdf = w('Documents/Taxes 2025.pdf'), exe = w('Downloads/tool.command'), lib = w('Library/x.txt');
