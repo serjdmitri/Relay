@@ -32,6 +32,8 @@ class PresenceControl {
   constructor({ createCamera, askAccess, getConfig, onAway = () => {}, onBack = () => {}, notify = () => {}, now = Date.now }) {
     Object.assign(this, { createCamera, askAccess, getConfig, notify, now });
     this.cam = null;
+    this.generation = 0;
+    this.pending = null;
     this.status = 'off';
     this.message = '';
     this.faces = 0;
@@ -44,14 +46,28 @@ class PresenceControl {
 
   async enable() {
     if (this.cam) return { ok: true };
+    if (this.pending) return this.pending;
+    const generation = ++this.generation;
+    const start = this.startCamera(generation);
+    this.pending = start;
+    try { return await start; } finally { if (this.pending === start) this.pending = null; }
+  }
+
+  async startCamera(generation) {
     this.status = 'starting'; this.message = ''; this.onChange();
-    if (!(await this.askAccess())) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
+    const allowed = await this.askAccess();
+    if (generation !== this.generation) return { ok: true, cancelled: true };
+    if (!allowed) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
     this.tracker.reset();
-    this.cam = await this.createCamera();
+    const cam = await this.createCamera();
+    if (generation !== this.generation) { try { cam?.close?.(); } catch {} return { ok: true, cancelled: true }; }
+    this.cam = cam;
     return { ok: true };
   }
 
   disable() {
+    this.generation++;
+    this.pending = null;
     try { this.cam?.close?.(); } catch { /* gone */ }
     this.cam = null;
     this.status = 'off'; this.message = '';
