@@ -59,6 +59,7 @@ function listVoices(exec = execFile) {
 // What a spoken reply should say: no markdown, no emoji, no URLs read out letter by letter.
 function speakable(text) {
   return String(text)
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1')
     .replace(/https?:\/\/\S+/g, 'a link')
     .replace(/[`*_#>]+/g, '')
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')

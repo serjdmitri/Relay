@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // ---- engines: the voice chosen in Speech settings
-const { Speaker: Spk } = require('../src/main/voice');
+const { Speaker: Spk, speakable } = require('../src/main/voice');
 const { EventEmitter } = require('node:events');
 function fakeSpawn(calls) {
   return (cmd, args) => {
@@ -15,6 +15,11 @@ function fakeSpawn(calls) {
   };
 }
 const okFetch = (log) => async (url, init) => { log.push([url, JSON.parse(init.body).input]); return { ok: true, arrayBuffer: async () => new Uint8Array([9]).buffer }; };
+
+test('spoken answers read link labels without reading markup or addresses', () => {
+  assert.equal(speakable('See [the guide](https://example.com/guide) for details.'), 'See the guide for details.');
+  assert.equal(speakable('Visit https://example.com'), 'Visit a link');
+});
 
 test('an online voice speaks sentence by sentence through afplay, and temp files are removed', async () => {
   const calls = [], fetched = [];
