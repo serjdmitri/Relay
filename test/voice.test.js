@@ -53,3 +53,15 @@ test('stop() drops a reply that is still being made', async () => {
   assert.ok(calls.every((c) => c.cmd !== 'afplay'), 'nothing is played after stop');
   assert.ok(!sp.speaking);
 });
+
+test('stopping while the system voice is being selected prevents stale speech', async () => {
+  const calls = [];
+  let finish;
+  const sp = new Spk({ spawnFn: fakeSpawn(calls), exec: (_c, _a, _o, cb) => { finish = cb; } });
+  const pending = sp.speak('A reply');
+  sp.stop();
+  finish(null, '');
+  await pending;
+  assert.equal(calls.length, 0);
+  assert.equal(sp.speaking, false);
+});
