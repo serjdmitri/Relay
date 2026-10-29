@@ -8,7 +8,15 @@ class HandTracks {
     for (let i = 0; i < 2; i++) {
       const prev = this.slots[i];
       if (!prev?.handed) continue;
-      const j = remaining.findIndex(h => h.handed && h.handed === prev.handed);
+      // Two people can both present the same handedness. Match the closest
+      // hand with that label, not whichever the detector returned first.
+      let j = -1, closest = Infinity;
+      for (let k = 0; k < remaining.length; k++) {
+        const h = remaining[k];
+        if (!h.handed || h.handed !== prev.handed) continue;
+        const distance = Math.hypot(prev.x - h.x, prev.y - h.y);
+        if (distance < closest) { closest = distance; j = k; }
+      }
       if (j >= 0) next[i] = remaining.splice(j, 1)[0];
     }
     while (remaining.length) {
