@@ -61,7 +61,7 @@ class Drive {
     if (plan.trash.length) items.push({ title: '→ the Trash (you can put them back)', subtitle: `${plan.trash.length} ${plan.trash.length === 1 ? 'item' : 'items'}`, note: plan.trash.slice(0, 3).map((t) => path.basename(t)).join(', '), image: null, url: '' });
     await this.cards?.show({
       kind: 'list', hold: true, title: 'Where I will put everything', subtitle: `${plan.moves.length} ${plan.moves.length === 1 ? 'item' : 'items'} to move${plan.trash.length ? `, ${plan.trash.length} to the Trash` : ''}`,
-      summary: `${nightly ? 'Say “apply the plan” to do it, or “skip the plan”. ' : ''}Nothing is deleted or overwritten, and I can undo all of it.${plan.skipped.length ? ` ${plan.skipped.length} left alone.` : ''}`, facts: [], links: [], items, image: null, credit: ''
+      summary: `${nightly ? 'Say “apply the plan” to do it, or “skip the plan”. ' : ''}Nothing is deleted or overwritten. Relay can undo moves${plan.trash.length ? '; restore items in the Trash using Put Back' : ''}.${plan.skipped.length ? ` ${plan.skipped.length} left alone.` : ''}`, facts: [], links: [], items, image: null, credit: ''
     });
     if (nightly) { this.nightlyPlanId = plan.id; return { id: plan.id, moves: plan.moves.length, groups: plan.groups.length }; }
     const lines = plan.groups.map((g) => `${tilde(g.folder, this.home)}: ${g.moves.length} (${g.moves.slice(0, 4).map((m) => path.basename(m.from)).join(', ')}${g.moves.length > 4 ? ', …' : ''})`);
@@ -72,7 +72,7 @@ class Drive {
   confirmText(planId) {
     const p = this.plans.get(planId);
     if (!p) return null;
-    return `Move ${p.moves.length} ${p.moves.length === 1 ? 'item' : 'items'} as shown${p.trash.length ? ` and put ${p.trash.length} in the Trash` : ''}? Nothing is deleted, and it can be undone.`;
+    return `Move ${p.moves.length} ${p.moves.length === 1 ? 'item' : 'items'} as shown${p.trash.length ? ` and put ${p.trash.length} in the Trash` : ''}? Nothing is deleted. Relay can undo moves${p.trash.length ? '; restore items in the Trash using Put Back' : ''}.`;
   }
 
   async apply({ plan_id } = {}) {
@@ -87,7 +87,7 @@ class Drive {
     this.lastLogId = res.id;
     const bits = [`Moved ${res.done.length}`];
     if (res.trashed.length) bits.push(`put ${res.trashed.length} in the Trash`);
-    return `${bits.join(' and ')}.${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 5).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''} It can be undone with drive_undo.`;
+    return `${bits.join(' and ')}.${res.failed.length ? ` Could not do ${res.failed.length}: ${res.failed.slice(0, 5).map((f) => `${path.basename(String(f.path))} (${f.reason})`).join('; ')}.` : ''}${res.done.length ? ' Moves can be undone with drive_undo.' : ''}${res.trashed.length ? ' Restore items in the Trash using Put Back.' : ''}`;
   }
 
   // What drive_make will do, said to the person before it happens; null when there is nothing to do (drive_make then says why).
