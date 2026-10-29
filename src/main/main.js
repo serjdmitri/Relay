@@ -937,6 +937,15 @@ app.whenReady().then(() => {
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   hands = new HandControl({
     preview: !!store.get('settings.hands.preview'),
+    floatingAt: (pt) => {
+      const panel = panelWins?.handTarget(pt);
+      if (panel) return panel;
+      const win = cardPanel?.win;
+      if (!cardPanel?.visible || cardPanel.card?.hold || !win || win.isDestroyed() || !win.isVisible()) return null;
+      const b = win.getBounds();
+      if (pt.x < b.x || pt.y < b.y || pt.x > b.x + b.width || pt.y > b.y + b.height) return null;
+      return { key: 'answer-card', position: () => win.getBounds(), move: (x, y) => { if (!win.isDestroyed()) win.setPosition(Math.round(x), Math.round(y)); }, close: () => cardPanel.hide() };
+    },
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
     createCamera: async () => {
