@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.34.0
+
+Built by the cloud session; unit-tested only. **None of it has run on a real Mac**: if Relay does not open, run `npm start` in the repo and send the first error. The experimental features are all off by default: turn them on one at a time in Settings > Doctor > Experimental, and run Doctor first.
+
+- **Faster answers** (General > Faster answers, on by default): Claude starts with extended thinking off, Codex runs with low reasoning effort, independent tool calls are made together, and Relay no longer re-checks (read back or screenshot) after every action, only when the result is unclear or hard to undo. The speed-up is not measured: try the same requests with the switch on and off, with "Show usage after each ask" on.
+- **Fewer tools per request.** Rarely used tool groups are hidden behind two small tools (load more tools, use a tool); Doctor logs when Claude asks for one.
+- **Command Relay by text, with a queue while the Mac sleeps (experimental).** Text your own thread; pairing needs a one-time code and only your own messages count. Texts sent while the Mac slept run in order on wake and a later text can cancel an earlier one. Risky requests ask on the Mac and by text, first answer wins; you choose what happens if nobody answers. Held texts older than a day are listed in Doctor with Run now and Drop. Not tried: reading `chat.db`, sending replies through Messages.
+- **Plugins (experimental).** Paste a GitHub link or a folder: Relay shows the exact commit and every permission in plain words and installs only after you approve. Each plugin runs as its own process, in a macOS sandbox where one is available; plugins that can change things or run commands ask before every call. Not tried: the sandbox and the approval dialog.
+- **Live panels (experimental).** CPU, memory, battery, network, disk or what Relay is working on, as small floating panels; a plugin can offer one; Claude can build one from a small web page that runs in an isolated frame, gets only the numbers it declares and reaches only hosts you approve. Not tried: the floating windows.
+- **Ask my notes (experimental).** Indexes folders you choose and finds passages by meaning ("car" finds "vehicle"). Files named like passwords or keys and hidden folders are never read. The Swift embedding helper was never compiled; if it fails to build, a stand-in is packed and search falls back to words (Doctor says so). The 0.55 similarity cutoff is a first guess.
+- **Smarter memory** is now shown in Settings (its switch was hidden by mistake).
+- **Speak up on its own (experimental).** Battery, upcoming meetings and long jobs: quiet banner (default), always quiet, or speak anything important, with quiet hours. Not built: "a watched folder changed" and plugin-sent events.
+- **Offline mode.** With no internet, plain questions go to your local Ollama model; anything that needs the Mac or the web says it needs the internet.
+- **Recent menu:** opens only from its tab (half as thick, three times as tall, adjustable delay), and the panel and its curved flares are one liquid-glass shape joined to the screen edge.
+- **Fixed before release:** a startup crash (the text-command switch was defined in one function and called from another).
+
 ## 0.33.1
 
 - **Phone hold-to-talk, hardened.** Speech errors are now shown in plain words (for example "The speech service could not be reached. Check the phone has internet, and that Siri & Dictation is on.") instead of only "Did not catch that". Letting go early no longer kills the mic: it always listens for at least 0.7 seconds. If the phone was just speaking, recognition waits 0.3 seconds first (iOS Safari often leaves the audio session in playback mode after speech, so the mic hears nothing). The very first tap's silent unlock word is no longer counted as "the phone was talking".
