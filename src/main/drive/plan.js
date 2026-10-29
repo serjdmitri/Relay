@@ -91,6 +91,8 @@ function buildPlan(raw, { fs, home }) {
     if (bad) { skipped.push({ path: t, reason: bad }); continue; }
     try { if (hasSymlink(full, fs, home)) { skipped.push({ path: t, reason: 'A path contains a symbolic link, left alone.' }); continue; } } catch { skipped.push({ path: t, reason: 'The path could not be checked.' }); continue; }
     try { if (fs.lstatSync(full).isSymbolicLink()) { skipped.push({ path: t, reason: 'A shortcut (alias), left alone.' }); continue; } } catch { skipped.push({ path: t, reason: 'It is not there.' }); continue; }
+    const proj = projectAbove(full, home, fs);
+    if (proj && !isProject(full, fs)) { skipped.push({ path: t, reason: `It is part of a project (${path.basename(proj)}), and removing its files would break it.` }); continue; }
     if (!seen.has(full)) { seen.add(full); trash.push(full); }
   }
   const groups = new Map();
