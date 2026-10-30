@@ -17,10 +17,11 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S' }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor' }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
     this.getName = getName; // the name shown in the reactor's core
+    this.getVisual = getVisual;
     this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
     this.wins = new Map(); // display id -> { win, display, shapes, card, halo, buddy, haloTimer }
     this.buddyState = null;
@@ -249,7 +250,7 @@ class Overlay {
       clearTimeout(this.hudEntry.hudTimer);
       this.refresh(this.hudEntry);
     }
-    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName() } });
+    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName(), visual: this.getVisual() === 'orb' ? 'orb' : 'reactor' } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
   }
 

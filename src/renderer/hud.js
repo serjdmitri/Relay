@@ -32,6 +32,7 @@
   let on = false;
   let raf = 0;
   let name = 'J.A.R.V.I.S';
+  let visual = 'reactor';
   let status = 'LISTENING';
   let base = 'LISTENING'; // the status without the speaking overlay
   let speaking = false;
@@ -62,6 +63,36 @@
     ctx.stroke();
   }
 
+  function drawOrb(cx, cy, radius) {
+    const glow = ctx.createRadialGradient(cx, cy, radius * 0.45, cx, cy, radius * 1.4);
+    glow.addColorStop(0, 'rgba(0,180,230,.30)');
+    glow.addColorStop(1, 'rgba(0,180,230,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, radius * 1.4, 0, Math.PI * 2); ctx.fill();
+    const sphere = ctx.createRadialGradient(cx - radius * .32, cy - radius * .38, radius * .02, cx, cy, radius);
+    sphere.addColorStop(0, '#92f7ff'); sphere.addColorStop(.35, '#087fa2'); sphere.addColorStop(1, '#001525');
+    ctx.fillStyle = sphere;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.clip();
+    // Latitudes of moving light points give the orb depth without external assets.
+    for (let row = -7; row <= 7; row++) {
+      const y = row / 8;
+      const band = Math.sqrt(1 - y * y);
+      for (let col = 0; col < 28; col++) {
+        const angle = col * Math.PI * 2 / 28 + tick * .007 + row * .19;
+        const depth = Math.cos(angle);
+        if (depth < 0) continue;
+        const x = Math.sin(angle) * band;
+        ctx.fillStyle = `rgba(164,250,255,${.2 + depth * .65})`;
+        ctx.beginPath(); ctx.arc(cx + x * radius, cy + y * radius, 1.2 + depth * 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(133,244,255,.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+  }
+
   function draw(now) {
     const cx = CANVAS / 2;
     const cy = CANVAS / 2;
@@ -79,6 +110,12 @@
     const tgtHalo = baseHalo + amp * (speaking ? 95 : 75);
     scale += (tgtScale - scale) * (speaking ? 0.38 : 0.2);
     halo += (tgtHalo - halo) * (speaking ? 0.38 : 0.2);
+
+    if (visual === 'orb') {
+      drawOrb(cx, cy, fw * .31 * scale);
+      drawWave(now);
+      return;
+    }
 
     const busy = status === 'PROCESSING' || status === 'THINKING';
     const boost = 1 + amp * 1.6 + (busy ? 0.6 : 0);
@@ -260,6 +297,7 @@
       return;
     }
     if (typeof msg.name === 'string' && msg.name) name = msg.name;
+    visual = msg.visual === 'orb' ? 'orb' : 'reactor';
     if (!on) hud.classList.add('snap'); // appearing from nothing: take its place at once, with no sliding
     const s = msg.state;
     let label = '';

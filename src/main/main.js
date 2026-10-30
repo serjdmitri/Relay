@@ -904,7 +904,7 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getLook: () => store.get('settings.look') || 'jarvis' });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getLook: () => store.get('settings.look') || 'jarvis' });
   overlay.watchDisplays();
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();
