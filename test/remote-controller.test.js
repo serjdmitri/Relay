@@ -17,7 +17,7 @@ function make() {
     store: { get: (k) => (k === 'routines' ? [] : k === 'settings.speakReplies' ? true : k === 'settings.playSounds' ? false : k === 'history' ? [{ text: 'a', reply: 'b', status: 'done', ts: 1 }, { text: 'c', reply: 'd', status: 'done', ts: 2 }] : null), addHistory() {}, set() {} },
     overlay: { beginRequest() {}, endRequest() {}, buddy() {}, workDone() {}, hud() {}, hide() {} }, ducker: { restore() {} }, guide: { command: () => null },
     speaker: { speak: (t) => spoken.push(t) }, onChange() {}, onState() {}, wakeSoon() {}, win: { setFocusable() {}, isDestroyed: () => false }, ensureWindow() { return this.win; }, passiveUI: () => true,
-    sound() {}, reveal() {}, captionState: () => ({}), tryQuick: async () => null, close() { this.state = 'idle'; },
+    sound() {}, reveal() {}, followUpSoon() {}, captionState: () => ({}), tryQuick: async () => null, close() { this.state = 'idle'; },
     agents: { view: () => [] },
     onResult: (r) => results.push(r),
     runRequest(text, entry) { return new Promise((resolve) => gates.push(() => resolve(this.finish(entry, { status: 'done', reply: `did ${text}` })))); }
@@ -37,10 +37,10 @@ test('a request from the phone runs, answers the phone with its id, and the Mac 
   assert.deepEqual(c.spoken, [], 'replies to the phone are not read out on the Mac');
 });
 
-test('a request made on the Mac still speaks and tells the phone with no id', async () => {
+test('a spoken request on the Mac still speaks and tells the phone with no id', async () => {
   const c = make();
   c.state = 'input';
-  c.handleText('open notes');
+  c.handleText('open notes', { voice: true });
   await tick();
   await c.release();
   assert.deepEqual(c.results, [{ id: null, reply: 'did open notes', status: 'done' }]);
