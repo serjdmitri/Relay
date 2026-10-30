@@ -25,7 +25,13 @@ function closeDay({ facts, actions = [], history = [] }) {
   lines.push(unfinished.length ? `Requests not completed: ${unfinished.map((h) => String(h.text).replace(/\s+/g, ' ').slice(0, 100)).join('; ')}.` : 'No unfinished requests were found in Relay history.');
   lines.push('Possible carryovers for tomorrow (check dates and priorities):');
   lines.push(planToday({ ...facts, events: [] }).replace('Suggested priorities for today:', 'Items still visible in checked sources:'));
-  lines.push('Tomorrow’s calendar was not checked. Work outside Relay may not appear in its records.');
+  if (facts.tomorrow) {
+    const events = facts.tomorrow.events || [];
+    if (events.length) lines.push(`Tomorrow’s calendar: ${events.slice(0, 5).map((e) => `${e.title}${e.allDay ? ' (all day)' : ` at ${e.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}`).join('; ')}${events.length > 5 ? '; more events available in Calendar' : ''}.`);
+    else if (!(facts.tomorrow.missing || []).length) lines.push('No events were found on tomorrow’s checked calendars.');
+    if (facts.tomorrow.missing?.length) lines.push(`Could not check tomorrow’s ${facts.tomorrow.missing.join(' and ')}.`);
+  } else lines.push('Tomorrow’s calendar was not checked.');
+  lines.push('Work outside Relay may not appear in its records.');
   return lines.join('\n');
 }
 

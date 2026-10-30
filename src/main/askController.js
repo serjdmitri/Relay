@@ -1301,10 +1301,28 @@ class AskController {
     return buildBriefing(await this.briefingFacts(options));
   }
 
+  async tomorrowCalendar(now) {
+    const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() + 1);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    const missing = [];
+    const within = (fn) => { let timer; return Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 7000); })]).finally(() => clearTimeout(timer)); };
+    const google = this.googleApiIfConnected();
+    const [mac, remote] = await Promise.all([
+      within(() => this.mac.calendarEvents(2)).then(parseMacEvents).catch(() => { missing.push('Mac calendar'); return []; }),
+      google ? within(() => google.calEvents(null, 2)).then((events) => events.map((e) => {
+        const value = String(e.start || '');
+        const date = /^\d{4}-\d\d-\d\d$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
+        return { title: e.title, start: date, allDay: !value.includes('T') };
+      })).catch(() => { missing.push('Google calendar'); return []; }) : (missing.push('Google calendar'), [])
+    ]);
+    return { events: mergeEvents(mac, remote).filter((e) => e.start instanceof Date && Number.isFinite(e.start.getTime()) && e.start >= start && e.start < end), missing };
+  }
+
   async dailyPlanCommand(close = false, requestId = null) {
     const abort = new AbortController();
     this.abort = abort;
     const facts = await this.briefingFacts({ includeGreeting: false });
+    if (close && !abort.signal.aborted) facts.tomorrow = await this.tomorrowCalendar(facts.now);
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
     let saved;

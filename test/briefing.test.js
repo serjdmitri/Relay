@@ -174,3 +174,13 @@ test('briefing identifies disconnected sources rather than treating them as empt
   assert.match(text, /could not check Google calendar and email/);
   assert.doesNotMatch(text, /No important unread email/);
 });
+
+test('tomorrow calendar filters today, includes all-day events, and reports disconnected Google', async () => {
+  const c = Object.create(AskController.prototype);
+  c.mac = { calendarEvents: async () => 'Today | Friday, October 30, 2026 at 9:00:00 AM\nTomorrow | Saturday, October 31, 2026 at 12:00:00 AM' };
+  c.googleApiIfConnected = () => null;
+  const result = await c.tomorrowCalendar(new Date(2026, 9, 30, 18));
+  assert.deepEqual(result.events.map((event) => event.title), ['Tomorrow']);
+  assert.equal(result.events[0].allDay, true);
+  assert.deepEqual(result.missing, ['Google calendar']);
+});

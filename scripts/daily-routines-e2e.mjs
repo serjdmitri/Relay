@@ -26,6 +26,7 @@ try {
     if (!global.__relay) throw new Error('Relay did not start.');
     electronApp.setPath('desktop', desktop);
     global.__relay.ask.briefingFacts = async () => ({ now: new Date(), due: [{ title: 'Test assignment', overdue: true }], events: [], missing: ['mail'] });
+    global.__relay.ask.tomorrowCalendar = async () => ({ events: [], missing: ['Google calendar'] });
   }, tmp);
   await app.evaluate(() => global.__relay.openMain('routines'));
   let main;
