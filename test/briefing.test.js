@@ -19,6 +19,12 @@ test('the daily briefing can follow an existing unlock greeting without repeatin
   assert.match(text, /Set your city/);
 });
 
+test('unavailable sources are disclosed instead of being reported clear', () => {
+  const text = buildBriefing({ now: new Date(2026, 9, 27, 9), includeGreeting: false, missing: ['calendar', 'google-calendar', 'reminders', 'mail', 'weather-unavailable'] });
+  assert.match(text, /could not check Mac calendar, Google calendar, reminders, email and weather/);
+  assert.doesNotMatch(text, /calendar is clear|Nothing is due|No important unread email/);
+});
+
 test('the briefing says each part that there is, in a sensible order, and leaves out what is not set up', () => {
   const now = new Date(2026, 9, 27, 7, 30);
   const text = buildBriefing({

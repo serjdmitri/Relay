@@ -66,6 +66,11 @@ function buildBriefing(f) {
   else if (f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email.');
   const miss = (f.missing || []).filter((m) => m === 'weather');
   if (miss.length) out.push('Set your city in Settings and I will add the weather.');
+  const unavailable = (f.missing || []).filter((m) => ['calendar', 'google-calendar', 'reminders', 'mail', 'weather-unavailable'].includes(m));
+  if (unavailable.length) {
+    const names = { calendar: 'Mac calendar', 'google-calendar': 'Google calendar', reminders: 'reminders', mail: 'email', 'weather-unavailable': 'weather' };
+    out.push(`I could not check ${list(unavailable.map((m) => names[m]))}.`);
+  }
   return out.join(' ');
 }
 
