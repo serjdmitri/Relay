@@ -68,6 +68,7 @@ let voiceProblem = ''; // why the chosen voice could not speak the last reply, i
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
 let mainWin = null;
+const { activateMainWindow, restoreDockPreference } = require('./mainWindowFocus');
 let onboardWin = null;
 let quitting = false;
 
@@ -87,10 +88,8 @@ function openMain(page) {
     // vibrancy gives the sidebar the native macOS sidebar material, and follows the system's light or dark
     mainWin = new BrowserWindow({ ...windowOpts(820, 620), vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' });
     mainWin.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { page: page || 'home' } });
-    mainWin.once('ready-to-show', () => { mainWin.show(); app.focus({ steal: true }); mainWin.focus(); });
-    // The menu-bar app can show a window without becoming the active macOS app.
-    // Make keyboard focus follow a click on Relay's main window.
-    mainWin.on('focus', () => app.focus({ steal: true }));
+    mainWin.once('ready-to-show', () => { mainWin.show(); activateMainWindow({ app, win: mainWin }).catch(() => {}); });
+    mainWin.on('hide', () => restoreDockPreference({ app, showInDock: store.get('settings.showInDock') }));
     mainWin.on('close', (e) => {
       if (!quitting) {
         e.preventDefault();
@@ -99,8 +98,7 @@ function openMain(page) {
     });
   } else {
     mainWin.show();
-    app.focus({ steal: true });
-    mainWin.focus();
+    activateMainWindow({ app, win: mainWin }).catch(() => {});
     if (page) mainWin.webContents.send('navigate', page);
   }
   if (store.get('settings.showInDock')) app.dock?.show();
@@ -266,7 +264,7 @@ function applyDockAndLogin() {
   const s = store.get('settings');
   if (process.platform === 'darwin') {
     if (s.showInDock) app.dock.show();
-    else app.dock.hide();
+    else if (!mainWin || mainWin.isDestroyed() || !mainWin.isVisible()) app.dock.hide();
     app.setLoginItemSettings({ openAtLogin: !!s.openAtLogin });
   }
 }
@@ -503,10 +501,9 @@ function registerIpc() {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
     if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
   });
-  ipcMain.handle('window:focus-main', (event) => {
+  ipcMain.handle('window:focus-main', async (event) => {
     if (!mainWin || mainWin.isDestroyed() || event.sender !== mainWin.webContents) return;
-    app.focus({ steal: true });
-    mainWin.focus();
+    await activateMainWindow({ app, win: mainWin });
   });
   // Glance remains a separate application and manages its own enrollment and credentials.
   ipcMain.handle('glance:open', async () => {
@@ -1271,7 +1268,7 @@ app.whenReady().then(() => {
 });
 
 app.on('second-instance', () => openMain('home'));
-app.on('activate', () => openMain('home'));
+app.on('activate', () => { if (!mainWin || mainWin.isDestroyed() || !mainWin.isVisible()) openMain('home'); });
 app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the menu bar
 app.on('before-quit', () => {
   try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
