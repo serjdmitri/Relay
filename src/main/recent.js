@@ -11,6 +11,12 @@ const WIDTH = 344; // the window; the panel inside is 320 wide
 const HANDLE_W = 7; // the tab that sticks out of the edge, and how tall it is: resting the pointer on it (and only on it) opens the menu
 const HANDLE_H = 360;
 
+async function repeatRecent(ask, text) {
+  if (typeof text !== 'string' || !text.trim()) return;
+  await ask.open();
+  await ask.submit(text);
+}
+
 // The tab's height on a display: the full 360 points, less on a short screen.
 const tabHeight = (d) => Math.max(120, Math.min(HANDLE_H, ((d.workArea || d.bounds).height) - 60));
 
@@ -187,4 +193,4 @@ class RecentPanel {
   }
 }
 
-module.exports = { RecentPanel, EdgeHover, WIDTH, HANDLE_W, HANDLE_H, tabHeight };
+module.exports = { RecentPanel, EdgeHover, WIDTH, HANDLE_W, HANDLE_H, tabHeight, repeatRecent };

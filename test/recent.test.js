@@ -4,11 +4,20 @@ const Module = require('node:module');
 // recent.js imports electron; the pure EdgeHover needs none of it.
 const origLoad = Module._load;
 Module._load = function (request, ...rest) { return request === 'electron' ? { BrowserWindow: class {}, screen: {} } : origLoad.call(this, request, ...rest); };
-const { EdgeHover, HANDLE_W, HANDLE_H, tabHeight } = require('../src/main/recent');
+const { EdgeHover, HANDLE_W, HANDLE_H, tabHeight, repeatRecent } = require('../src/main/recent');
 Module._load = origLoad;
 
 const displays = [{ bounds: { x: 0, y: 0, width: 1440, height: 900 } }, { bounds: { x: 1440, y: 0, width: 1920, height: 1080 } }];
 const panel = { x: 12, y: 48, width: 344, height: 600 };
+
+test('repeating a recent request prepares the ask window before submitting', async () => {
+  const calls = [];
+  const ask = { open: async () => calls.push('open'), submit: async (text) => calls.push(text) };
+  await repeatRecent(ask, 'open notes');
+  assert.deepEqual(calls, ['open', 'open notes']);
+  await repeatRecent(ask, ' ');
+  assert.deepEqual(calls, ['open', 'open notes']);
+});
 
 test('resting the pointer on the left edge opens it, passing through does not', () => {
   const h = new EdgeHover({ dwell: 380 });
