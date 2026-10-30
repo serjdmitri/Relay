@@ -64,4 +64,15 @@ function briefingCard(w, briefing, name = 'Sir') {
   return { kind: 'list', title: `Welcome back, ${name}`, subtitle: 'Your updates, most urgent first', items, summary: '', facts: [], links: [], image: null, credit: '' };
 }
 
-module.exports = { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard };
+// A temporary, non-interactive reactor. Never replace an existing request or hide a newer HUD.
+let nextWelcomeToken = 0;
+function showWelcomeReactor(overlay, greeting, { setTimer = setTimeout, duration = 8000 } = {}) {
+  if (!overlay || overlay.hudEntry) return false;
+  const token = `welcome-${++nextWelcomeToken}`;
+  overlay.hud({ state: 'done', status: 'done', reply: greeting, welcomeToken: token, reset: true, tasks: [] });
+  const timer = setTimer(() => { if (overlay.hudState?.welcomeToken === token) overlay.hud({ hide: true }); }, duration);
+  timer?.unref?.();
+  return true;
+}
+
+module.exports = { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard, showWelcomeReactor };

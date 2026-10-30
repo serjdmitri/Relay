@@ -340,6 +340,7 @@ async function welcomeBack(lockedAt, lastWelcome) {
   const lines = briefing && w.lines[0] === 'Nothing needs your attention.' ? [briefing] : [...w.lines, ...(briefing ? [briefing] : [])];
   const spoken = briefing ? `${w.spoken.replace(/ Nothing needs your attention\.$/, '')} ${briefing}` : w.spoken;
   const card = welcome.briefingCard(w, briefing, cfg.name || 'Sir');
+  if (cfg.show !== false) welcome.showWelcomeReactor(overlay, welcome.greetingFor(Date.now(), cfg.name || 'Sir'));
   if (cfg.show !== false && card && !ask.meeting?.active && ['idle', 'done'].includes(ask.state) && !cardPanel?.visible && !ask.lockWatch?.locked) cardPanel?.show(card).catch(() => {});
   if (cfg.show !== false && Notification.isSupported()) new Notification({ title: welcome.greetingFor(Date.now(), cfg.name || 'Sir'), body: lines.join(' '), silent: true }).show();
   if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(spoken);
