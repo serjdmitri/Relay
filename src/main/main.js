@@ -866,7 +866,7 @@ function registerIpc() {
   });
   ipcMain.handle('recent:ask', async (_e, text) => {
     recent?.close();
-    if (typeof text === 'string' && text.trim()) await ask.submit(text);
+    await require('./recent').repeatRecent(ask, text);
   });
   ipcMain.handle('recent:size', (_e, h) => recent?.setPanelHeight(h));
   ipcMain.handle('recent:hit', (_e, on) => recent?.setHit(!!on));
