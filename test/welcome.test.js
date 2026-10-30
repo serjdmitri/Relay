@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldGreet, buildWelcome, awayWords, greetingFor } = require('../src/main/welcome');
+const { shouldGreet, buildWelcome, awayWords, greetingFor, briefingCard } = require('../src/main/welcome');
 
 const T = Date.parse('2026-06-10T12:00:00');
 const MIN = 60000;
@@ -62,6 +62,18 @@ test('missed scheduled work is reported as missed, never as completed', () => {
   const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [{ text: 'Scheduled: check homework', status: 'missed', ts: T - 20 * MIN, finishedAt: T - MIN }] });
   assert.match(w.spoken, /One scheduled task was missed: check homework/);
   assert.doesNotMatch(w.spoken, /Finished while/);
+});
+
+test('briefing card puts failed and missed work before meetings and completed work', () => {
+  const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [
+    { text: 'finished', status: 'done', ts: T - MIN },
+    { text: 'failed', status: 'failed', ts: T - MIN },
+    { text: 'Scheduled: missed', status: 'missed', ts: T - MIN }
+  ], events: [{ title: 'Class', start: T + 10 * MIN }] });
+  const card = briefingCard(w, 'Rain expected today.', 'Sir');
+  assert.deepEqual(card.items.map((x) => x.title), ['Needs attention', 'Missed', 'Coming up', 'Completed', 'Today']);
+  assert.match(card.items.at(-1).subtitle, /Rain/);
+  assert.equal(briefingCard(buildWelcome({ lockedAt: T - MIN, now: T }), ''), null);
 });
 
 test('the spoken version keeps to the top three items; the banner has all of them', () => {
