@@ -764,7 +764,7 @@ function registerIpc() {
   });
   ipcMain.handle('remote:pair', async () => { await remote.sync(); return remote.server ? remote.pair() : { error: remote.error || 'Turn Relay Remote on first.' }; });
   ipcMain.handle('remote:shortcut', async () => { await remote.sync(); if (!remote.server) return { error: remote.error || 'Turn Relay Remote on first.' }; const k = remote.shortcutKey(); broadcast(); return k; });
-  ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); broadcast(); });
+  ipcMain.handle('remote:remove', (_e, id) => { remote.devices.remove(id); remote.server?.revokeDevice(id); broadcast(); });
   ipcMain.handle('remote:tailscale', async (_e, on) => { const r = on ? await remote.enableTailscale() : (await remote.disableTailscale(), { ok: true }); broadcast(); return r; });
   ipcMain.handle('remote:shortcut-file', async (_e, d) => {
     const { writeShortcutFile } = require('./remote/shortcutFile');
