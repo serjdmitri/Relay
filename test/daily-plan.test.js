@@ -37,6 +37,12 @@ test('plan reports absent priorities and unavailable school without inventing ta
   assert.match(result, /calendar, school/);
 });
 
+test('plan proposes reviewing a failed request without claiming it remains unresolved', () => {
+  const text = planToday({ now: new Date(), unfinished: [{ text: 'Check the assignment', status: 'failed' }, { text: 'Already done', status: 'done' }] });
+  assert.match(text, /Review: Check the assignment — Relay history, failed; check its latest status/);
+  assert.doesNotMatch(text, /Already done/);
+});
+
 test('stopping an in-flight plan prevents saving and save errors are reported', async () => {
   const Module = require('node:module');
   const original = Module._load;
