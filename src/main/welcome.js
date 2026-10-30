@@ -40,13 +40,15 @@ function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], 
   const lines = [];
   const priorities = [];
   const add = (text, priority, label) => { lines.push(text); priorities.push({ text, priority, label }); };
-  const done = history.filter((h) => (h.finishedAt ?? h.ts) >= lockedAt && (h.finishedAt ?? h.ts) <= now && h.text && ['done', 'failed', 'missed'].includes(h.status));
+  const done = history.filter((h) => (h.finishedAt ?? h.ts) >= lockedAt && (h.finishedAt ?? h.ts) <= now && h.text && ['done', 'failed', 'missed', 'unknown'].includes(h.status));
   const ok = done.filter((h) => h.status === 'done');
   const bad = done.filter((h) => h.status === 'failed');
   const missed = done.filter((h) => h.status === 'missed');
+  const uncertain = done.filter((h) => h.status === 'unknown');
   if (ok.length) add(ok.length === 1 ? `Finished while you were away: ${clip(ok[0].text.replace(/^Agent: /, ''))}.` : `${plural(ok.length, 'thing', 'things')} finished while you were away, including ${clip(ok[0].text.replace(/^Agent: /, ''), 40)}.`, 3, 'Completed');
   if (bad.length) add(bad.length === 1 ? `One did not work: ${clip(bad[0].text.replace(/^Agent: /, ''))}.` : `${bad.length} did not work.`, 0, 'Needs attention');
   if (missed.length) add(missed.length === 1 ? `One scheduled task was missed: ${clip(missed[0].text.replace(/^Scheduled: /, ''))}.` : `${missed.length} scheduled tasks were missed.`, 0, 'Missed');
+  if (uncertain.length) add(uncertain.length === 1 ? `The outcome of a scheduled task is unknown: ${clip(uncertain[0].text.replace(/^Scheduled: /, ''))}.` : `${uncertain.length} scheduled task outcomes are unknown.`, 0, 'Check outcome');
   const next = events.filter((e) => e.start >= now - 5 * 60000 && e.start - now <= 3 * 3600e3).sort((a, b) => a.start - b.start)[0];
   if (next) { const min = Math.round((next.start - now) / 60000); add(min <= 0 ? `${clip(next.title, 50)} is starting now.` : min < 60 ? `${clip(next.title, 50)} starts in ${plural(min, 'minute', 'minutes')}.` : `Next up: ${clip(next.title, 50)} at ${clock(next.start)}.`, 1, 'Coming up'); }
   if (battery?.present && battery.onBattery && !battery.charging && battery.percent <= 20) add(`The battery is at ${battery.percent} percent.`, 1, 'Battery');
