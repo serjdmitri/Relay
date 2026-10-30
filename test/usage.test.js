@@ -31,3 +31,15 @@ test('Claude plan utilization is not attributed to Codex or other models', () =>
   assert.equal(limitForModel('sonnet', rate), rate);
   for (const model of ['codex', 'gpt-4o', 'ollama', '']) assert.equal(limitForModel(model, rate), null);
 });
+
+test('separate usage summaries never invent Codex limits or use stale Claude reports', () => {
+  const { providerSummaries } = require('../src/main/usage');
+  const now = 100000000;
+  const history = [{ ts: now - 1000, usage: { model: 'codex', in: 12, out: 3 } }, { ts: now - 2000, usage: { model: 'claude-sonnet-4', in: 4, out: 1 } }];
+  const summary = providerSummaries(history, { type: 'five_hour', util: .4, ts: now - 1000 }, now);
+  assert.equal(summary.claude.limit.util, .4);
+  assert.deepEqual(summary.codex.last, { in: 12, out: 3, ts: now - 1000 });
+  assert.equal(summary.codex.limit, null);
+  assert.equal(providerSummaries(history, { util: .4, ts: now - 7 * 3600e3 }, now).claude.limit, null);
+  assert.equal(providerSummaries(history, { util: 2, ts: now }, now).claude.limit, null);
+});

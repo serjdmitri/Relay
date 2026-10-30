@@ -147,6 +147,7 @@ function publicState() {
     hasTtsKeys,
     hasHfToken,
     activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
+    providerUsage: require('./usage').providerSummaries(d.history, ask?.rate),
     handsInfo: { status: hands?.status || 'off', message: hands?.message || '' },
     presenceInfo: { status: presence?.status || 'off', message: presence?.message || '', state: presence?.state || 'unknown', faces: presence?.faces || 0 },
     voiceProblem,

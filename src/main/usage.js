@@ -41,4 +41,16 @@ function limitForModel(model, claudeLimit) {
   return /^(?:claude(?:-|$)|haiku(?:-|$)|sonnet(?:-|$)|opus(?:-|$))/i.test(String(model || '')) ? claudeLimit : null;
 }
 
-module.exports = { add, tokens, modelName, seconds, usageLine, limitForModel };
+// Recent request counts are not account limits. Only use an explicit Claude
+// limit report; Codex's account utilization is not available on this path.
+function providerSummaries(history = [], claudeRate = null, now = Date.now()) {
+  const rows = Array.isArray(history) ? history : [];
+  const last = (predicate) => rows.find((h) => h.usage && predicate(String(h.usage.model || ''))) || null;
+  const claude = last((m) => !!limitForModel(m, true));
+  const codex = last((m) => /^codex$/i.test(m));
+  const rate = claudeRate && Number.isFinite(claudeRate.util) && claudeRate.util >= 0 && claudeRate.util <= 1 && Number.isFinite(claudeRate.ts) && claudeRate.ts <= now && now - claudeRate.ts < 6 * 3600e3 ? { type: claudeRate.type, util: claudeRate.util, ts: claudeRate.ts } : null;
+  const view = (h) => h ? { in: h.usage.in || 0, out: h.usage.out || 0, ts: h.finishedAt || h.ts } : null;
+  return { claude: { last: view(claude), limit: rate }, codex: { last: view(codex), limit: null } };
+}
+
+module.exports = { add, tokens, modelName, seconds, usageLine, limitForModel, providerSummaries };
