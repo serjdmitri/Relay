@@ -17,12 +17,13 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
     this.getName = getName; // the name shown in the reactor's core
     this.getVisual = getVisual;
     this.getBorder = getBorder;
+    this.getBlur = getBlur;
     this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
     this.wins = new Map(); // display id -> { win, display, shapes, card, halo, buddy, haloTimer }
     this.buddyState = null;
@@ -66,7 +67,7 @@ class Overlay {
     const b = display.bounds;
     const win = new BrowserWindow({
       x: b.x, y: b.y, width: b.width, height: b.height,
-      transparent: true, frame: false, hasShadow: false, resizable: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true,
+      transparent: true, frame: false, hasShadow: false, resizable: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true, visualEffectState: 'active',
       show: false, type: 'panel',
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
     });
@@ -237,6 +238,7 @@ class Overlay {
       this.hudInteractive(false);
       this.hudEntry = null;
       if (e && !e.win.isDestroyed()) {
+        this.setHudBlur(e, false);
         this.send(e, { type: 'hud', hide: true });
         clearTimeout(e.hudTimer);
         e.hudTimer = setTimeout(() => { if (this.hudEntry !== e) { e.hud = false; this.refresh(e); } }, 500); // let it fade out first
@@ -251,8 +253,18 @@ class Overlay {
       clearTimeout(this.hudEntry.hudTimer);
       this.refresh(this.hudEntry);
     }
+    this.setHudBlur(this.hudEntry, this.getBlur());
     this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName(), visual: this.getVisual() === 'orb' ? 'orb' : 'reactor', border: this.getBorder() !== false } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
+  }
+
+  setHudBlur(entry, on) {
+    if (!entry || entry.win.isDestroyed() || entry.blur === !!on) return;
+    try { entry.win.setVibrancy(on ? 'hud' : null); entry.blur = !!on; } catch { /* unsupported on this platform */ }
+  }
+
+  refreshHudBlur() {
+    if (this.hudEntry) this.setHudBlur(this.hudEntry, this.getBlur());
   }
 
   // Typing a request and Allow / Cancel need the keyboard and the mouse, so the window takes them only while those are shown.
