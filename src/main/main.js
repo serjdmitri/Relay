@@ -948,6 +948,7 @@ app.whenReady().then(() => {
   });
   glass = new Glass({ binPath: glassBinPath() });
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
+  ask.memoryExport = (fact) => require('./memoryExport').exportMemory(path.join(app.getPath('desktop'), 'memory'), fact);
   ask.onLanguage = () => { ask.wake.disarm(); ask.ducker.recover(); prepareSpeech().finally(() => ask.wake.refresh()); broadcast(); }; // "speak Spanish" said out loud
   // What you copied (text only, in memory, a day by default; never anything a password manager marks or that looks like a key or password).
   ask.clipHistory = new ClipboardHistory({

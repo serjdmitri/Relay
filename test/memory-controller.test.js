@@ -45,3 +45,14 @@ test('with memory switched off nothing is shown to the model', () => {
   data['settings.memory'] = false;
   assert.equal(c.memoryText(), '');
 });
+
+test('new explicit memories are queued once and export failure is disclosed', () => {
+  const { c } = make();
+  const saved = [];
+  c.memoryExport = (fact) => saved.push(fact);
+  assert.match(c.rememberFact('I prefer tea').reply, /Desktop\/memory/);
+  assert.equal(c.rememberFact('I prefer tea').reply, 'I already knew that.');
+  assert.deepEqual(saved, ['I prefer tea']);
+  c.memoryExport = () => { throw new Error('disk error'); };
+  assert.match(c.rememberFact('I prefer coffee').reply, /saved that in Relay, but could not create/);
+});
