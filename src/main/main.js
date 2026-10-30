@@ -87,7 +87,10 @@ function openMain(page) {
     // vibrancy gives the sidebar the native macOS sidebar material, and follows the system's light or dark
     mainWin = new BrowserWindow({ ...windowOpts(820, 620), vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' });
     mainWin.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { page: page || 'home' } });
-    mainWin.once('ready-to-show', () => mainWin.show());
+    mainWin.once('ready-to-show', () => { mainWin.show(); app.focus({ steal: true }); mainWin.focus(); });
+    // The menu-bar app can show a window without becoming the active macOS app.
+    // Make keyboard focus follow a click on Relay's main window.
+    mainWin.on('focus', () => app.focus({ steal: true }));
     mainWin.on('close', (e) => {
       if (!quitting) {
         e.preventDefault();
@@ -96,6 +99,7 @@ function openMain(page) {
     });
   } else {
     mainWin.show();
+    app.focus({ steal: true });
     mainWin.focus();
     if (page) mainWin.webContents.send('navigate', page);
   }
