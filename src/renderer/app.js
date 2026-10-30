@@ -33,6 +33,12 @@ const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', voca
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
+// A menu-bar window can receive a click without macOS activating the app.
+// Ensure keyboard input follows the field the user chose.
+document.addEventListener('focusin', (event) => {
+  if (event.target.matches('input, textarea, [contenteditable="true"]')) relay.focusMain();
+});
+
 function ready() {
   if (!S) return { ok: false, text: 'Loading' };
   if (!S.hotkeysRunning) return { ok: false, text: 'Shortcuts off' };
