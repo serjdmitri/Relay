@@ -64,6 +64,12 @@ test('missed scheduled work is reported as missed, never as completed', () => {
   assert.doesNotMatch(w.spoken, /Finished while/);
 });
 
+test('an interrupted scheduled task is reported as an unknown outcome', () => {
+  const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [{ text: 'Scheduled: send report', status: 'unknown', ts: T - MIN }] });
+  assert.match(w.spoken, /outcome of a scheduled task is unknown: send report/);
+  assert.equal(briefingCard(w, '').items[0].title, 'Check outcome');
+});
+
 test('briefing card puts failed and missed work before meetings and completed work', () => {
   const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [
     { text: 'finished', status: 'done', ts: T - MIN },

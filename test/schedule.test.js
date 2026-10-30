@@ -110,6 +110,22 @@ test('an unlock check records overdue work without starting a newly due task', (
   assert.deepEqual(sch.items.map(s => s.id), ['new']);
 });
 
+test('dispatch durably records an uncertain outcome before handing off a one-time job', () => {
+  let clock = new Date(2026, 9, 26, 10, 0);
+  const store = memoryStore();
+  let persisted;
+  store.flush = () => { persisted = JSON.parse(JSON.stringify(store.data)); };
+  const sch = new Scheduler({ store, now: () => clock });
+  sch.add({ text: 'send a report', repeat: 'once', at: new Date(2026, 9, 26, 10, 5).getTime() }, { id: 'once' });
+  clock = new Date(2026, 9, 26, 10, 5);
+  const result = sch.tick();
+  assert.equal(persisted.schedules.length, 0);
+  assert.equal(persisted.history[0].status, 'unknown');
+  assert.equal(persisted.history[0].id, result.due[0].runId);
+  const recovered = new Scheduler({ store: { data: persisted, get: (key) => persisted[key], save() {} }, now: () => clock });
+  assert.deepEqual(recovered.tick().due, [], 'restart never blindly repeats an uncertain action');
+});
+
 test('schedules can be removed by words, turned off, and cleared', () => {
   const sch = new Scheduler({ store: memoryStore(), now: () => new Date(2026, 9, 26, 7, 0) });
   sch.add({ text: 'open my email', repeat: 'daily', hour: 8, minute: 0 }, { id: 'a' });

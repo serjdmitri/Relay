@@ -1192,7 +1192,11 @@ app.whenReady().then(() => {
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
     recordMissedSchedules(missed);
-    for (const s of due) ask.runScheduled(s);
+    for (const s of due) {
+      Promise.resolve().then(() => ask.runScheduled(s)).then((result) => {
+        if (result && ['done', 'failed', 'stopped'].includes(result.status)) store.updateHistory(s.runId, { status: 'resolved', reply: 'Outcome recorded in request history.', finishedAt: Date.now() });
+      }).catch(() => {}); // an uncertain outcome remains visible and is never automatically retried
+    }
     if (due.length || missed.length) broadcast();
     // Each evening: say what Relay did today and what can be undone. Only when something changed or failed; a click opens the list.
     const rc = store.get('settings.recap');

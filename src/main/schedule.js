@@ -182,7 +182,20 @@ class Scheduler {
       if (s.repeat === 'once') continue; // a one-time schedule is done either way
       list.push({ ...s, next: nextRun(s, now), lastRun: late <= MISSED_MS ? now.getTime() : s.lastRun });
     }
-    if (changed) this.save(list);
+    if (changed) {
+      // Persist the occurrence and schedule advancement together before handing a task
+      // to the executor. If the process dies, its outcome is uncertain, not retried.
+      if (due.length) {
+        const s = due[0];
+        const runId = `scheduled:${s.id}:${s.next}`;
+        s.runId = runId;
+        const history = this.store.data.history || [];
+        this.store.data.history = [{ id: runId, text: `Scheduled: ${s.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: s.next, finishedAt: now.getTime() }, ...history].slice(0, 500);
+      }
+      this.store.data.schedules = list;
+      if (due.length && typeof this.store.flush === 'function') this.store.flush();
+      else this.store.save();
+    }
     return { due, missed };
   }
 }
