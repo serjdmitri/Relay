@@ -13,6 +13,12 @@ test('the phrases that ask for the briefing', () => {
   for (const t of ['open notes', 'good night', 'what is the weather', 'brief the team on the plan']) assert.equal(parseBriefingCommand(t), null, t);
 });
 
+test('the daily briefing can follow an existing unlock greeting without repeating it', () => {
+  const text = buildBriefing({ now: new Date(2026, 9, 27, 9), includeGreeting: false, missing: ['calendar', 'reminders', 'weather'] });
+  assert.doesNotMatch(text, /^Good /);
+  assert.match(text, /Set your city/);
+});
+
 test('the briefing says each part that there is, in a sensible order, and leaves out what is not set up', () => {
   const now = new Date(2026, 9, 27, 7, 30);
   const text = buildBriefing({

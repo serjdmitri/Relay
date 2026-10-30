@@ -40,7 +40,7 @@ const list = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} 
 function buildBriefing(f) {
   const now = f.now || new Date();
   const part = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
-  const out = [`Good ${part}${f.name ? `, ${f.name}` : ''}.`];
+  const out = f.includeGreeting === false ? [] : [`Good ${part}${f.name ? `, ${f.name}` : ''}.`];
   const w = f.weather;
   if (w) {
     const deg = w.units === 'c' ? '°C' : ' degrees';
