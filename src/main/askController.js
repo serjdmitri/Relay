@@ -288,7 +288,7 @@ class AskController {
     if (!this.lastUsage || this.lastUsage.id !== id || typeof c.cost !== 'number') return;
     const used = { ...this.lastUsage.used, cost: c.cost };
     this.lastUsage.used = used;
-    const text = usage.usageLine({ ...used, limit: this.freshRate() });
+    const text = usage.usageLine({ ...used, limit: usage.limitForModel(used.model, this.freshRate()) });
     this.store.updateHistory(id, { usage: used, usageText: text });
     if (this.state === 'done' && this.store.get('settings.showUsage') !== false) this.push({ usage: text });
     this.onChange();
@@ -2801,7 +2801,7 @@ class AskController {
     const u = res.usage;
     const used = u && (u.in || u.out) ? { model: u.model || '', ms: Date.now() - entry.ts, in: u.in, out: u.out } : null;
     if (used) this.lastTier = ['haiku', 'sonnet', 'opus'].find((t) => String(used.model).toLowerCase().includes(t)) || this.lastTier;
-    const usageText = used ? usage.usageLine({ ...used, limit: this.freshRate() }) : '';
+    const usageText = used ? usage.usageLine({ ...used, limit: usage.limitForModel(used.model, this.freshRate()) }) : '';
     this.lastUsage = used ? { id: entry.id, used } : null;
     this.emitResult({ id: entry.remote || null, reply, status: res.status });
     this.store.addHistory({ ...entry, finishedAt: Date.now(), status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
