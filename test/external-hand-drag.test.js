@@ -26,6 +26,15 @@ test('closing releases an active drag and permission denial never starts one', (
   assert.equal(y.lines().length, 0); assert.match(y.notes[0], /Accessibility/);
 });
 
+test('a fist over a non-draggable area does not show an error', () => {
+  const x = rig(); x.drag.start(); x.child.stdout.write('ready\n');
+  const hand = {}; x.drag.begin(hand, { x: 10, y: 20 });
+  x.child.stdout.write('not-draggable\n'); x.drag.end(hand);
+  assert.deepEqual(x.notes, []);
+  assert.deepEqual(x.lines().map(line => line.op), ['down', 'up']);
+  x.drag.close();
+});
+
 test('a stalled camera stream releases a held mouse button', async () => {
   const x = rig(); x.drag.watchdogMs = 20; x.drag.start(); x.child.stdout.write('ready\n');
   x.drag.begin({}, {x: 10, y: 20});

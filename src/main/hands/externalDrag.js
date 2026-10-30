@@ -17,7 +17,8 @@ class ExternalDrag {
         while ((i = this.buf.indexOf('\n')) >= 0) {
           const line = this.buf.slice(0, i).trim(); this.buf = this.buf.slice(i + 1);
           if (line === 'ready') { this.ready = true; this.warned = false; }
-          if (line === 'not-draggable') this.notify('Grab the top bar of an app window or a browser tab to move it.');
+          // A fist away from a title bar is normal, not an error. The helper
+          // declines the drag without pressing the mouse; keep that silent.
         }
       });
       c.stderr.on('data', () => {}); c.stdin.on('error', () => {});
