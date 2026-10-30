@@ -34,7 +34,7 @@ test('the briefing says each part that there is, in a sensible order, and leaves
   });
   assert.match(text, /^Good morning, Sergey\. It is 78 degrees and partly cloudy in Hollywood, a high of 86 and a low of 74, with a 60 percent chance of rain, so take an umbrella\./);
   assert.match(text, /2 events still ahead: Calc quiz at 9:15 AM and Robotics meeting at 3 PM; all day: Spirit day\./);
-  assert.match(text, /2 reminders are due: AP Lit essay and Pay dues, 1 of them overdue\./);
+  assert.match(text, /2 reminders are due: Pay dues and AP Lit essay, 1 of them overdue\./);
   assert.match(text, /One important unread email: Ms\. Rivera about Scholarship deadline\.$/);
   assert.ok(text.indexOf('weather') < 0 && text.indexOf('degrees') < text.indexOf('calendar'), 'weather first, then the calendar');
   const bare = buildBriefing({ now, missing: ['weather'] });
@@ -59,6 +59,21 @@ test('the weather comes from the free forecast service, using the city and its r
   assert.equal(await fetchWeather('', { fetchFn }), null);
   assert.equal(await fetchWeather('Nowhere', { fetchFn: async () => ({ json: async () => ({}) }) }), null);
   assert.equal(weatherWord(95), 'thunderstorms');
+});
+
+test('weather does not silently use a city in the wrong region or incomplete measurements', async () => {
+  let requests = 0;
+  const wrongRegion = async () => { requests++; return { json: async () => ({ results: [{ name: 'Hollywood', admin1: 'California', country: 'United States', latitude: 34, longitude: -118 }] }) }; };
+  assert.equal(await fetchWeather('Hollywood, Florida', { fetchFn: wrongRegion }), null);
+  assert.equal(requests, 1, 'no forecast for the wrong place');
+  const incomplete = async (url) => ({ json: async () => /geocoding/.test(url) ? { results: [{ name: 'Paris', latitude: 1, longitude: 2 }] } : { current: {}, daily: { temperature_2m_max: [20] } } });
+  assert.equal(await fetchWeather('Paris', { fetchFn: incomplete }), null);
+});
+
+test('overdue reminders lead the daily briefing even when returned last', () => {
+  const due = [{ title: 'Later one' }, { title: 'Later two' }, { title: 'Later three' }, { title: 'Later four' }, { title: 'Past due', overdue: true }];
+  const text = buildBriefing({ includeGreeting: false, due });
+  assert.match(text, /due: Past due, Later one, Later two and Later three, and more, 1 of them overdue/);
 });
 
 test('events and reminders read from the Calendar and Reminders apps, and the same event from two calendars is said once', () => {

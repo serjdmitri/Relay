@@ -24,11 +24,11 @@ async function fetchWeather(city, { fetchFn = fetch, units = 'f', signal } = {})
   const [name, ...rest] = q.split(',').map((s) => s.trim());
   const g = await (await fetchFn(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name, count: '5', language: 'en', format: 'json' })}`, { signal })).json();
   const hint = rest.join(' ').toLowerCase();
-  const place = (g.results || []).find((r) => !hint || `${r.admin1 || ''} ${r.country || ''} ${r.country_code || ''}`.toLowerCase().includes(hint)) || (g.results || [])[0];
+  const place = (g.results || []).find((r) => !hint || `${r.admin1 || ''} ${r.country || ''} ${r.country_code || ''}`.toLowerCase().includes(hint));
   if (!place) return null;
   const f = await (await fetchFn(`https://api.open-meteo.com/v1/forecast?${new URLSearchParams({ latitude: String(place.latitude), longitude: String(place.longitude), current: 'temperature_2m,weather_code', daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code', temperature_unit: units === 'c' ? 'celsius' : 'fahrenheit', timezone: 'auto', forecast_days: '1' })}`, { signal })).json();
   const d = f.daily || {};
-  if (!d.temperature_2m_max) return null;
+  if (![f.current?.temperature_2m, d.temperature_2m_max?.[0], d.temperature_2m_min?.[0]].every(Number.isFinite)) return null;
   const code = d.weather_code?.[0] ?? f.current?.weather_code;
   return { city: place.name, tempNow: Math.round(f.current?.temperature_2m), high: Math.round(d.temperature_2m_max[0]), low: Math.round(d.temperature_2m_min[0]), rain: d.precipitation_probability_max?.[0] ?? 0, word: weatherWord(code), units };
 }
@@ -57,10 +57,10 @@ function buildBriefing(f) {
     if (allDay.length) bits.push(`all day: ${list(allDay.slice(0, 3).map((e) => e.title))}`);
     out.push(bits.length ? `On your calendar, ${bits.join('; ')}.` : 'Your calendar is clear.');
   } else if (!(f.missing || []).includes('calendar')) out.push('Your calendar is clear today.');
-  const due = f.due || [];
+  const due = [...(f.due || [])].sort((a, b) => Number(!!b.overdue) - Number(!!a.overdue));
   if (due.length) {
     const overdue = due.filter((d) => d.overdue);
-    out.push(`${due.length === 1 ? 'One reminder is' : `${due.length} reminders are`} due: ${list(due.slice(0, 4).map((d) => d.title))}${overdue.length ? `, ${overdue.length === due.length ? 'overdue' : `${overdue.length} of them overdue`}` : ''}.`);
+    out.push(`${due.length === 1 ? 'One reminder is' : `${due.length} reminders are`} due: ${list(due.slice(0, 4).map((d) => d.title))}${due.length > 4 ? ', and more' : ''}${overdue.length ? `, ${overdue.length === due.length ? 'overdue' : `${overdue.length} of them overdue`}` : ''}.`);
   } else if (!(f.missing || []).includes('reminders')) out.push('Nothing is due.');
   if (f.mail && f.mail.length) out.push(`${f.mail.length === 1 ? 'One important unread email' : `${f.mail.length} important unread emails`}: ${list(f.mail.slice(0, 3).map((m) => `${String(m.from).replace(/<.*$/, '').replace(/"/g, '').trim() || 'someone'} about ${String(m.subject || 'no subject').slice(0, 60)}`))}.`);
   else if (f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email.');
