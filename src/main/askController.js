@@ -1069,7 +1069,15 @@ class AskController {
   rememberFact(fact) {
     if (mem.isSecret(fact)) return { status: 'failed', reply: "I don't keep passwords, card numbers or other secrets." };
     const { list, added } = mem.addFact(this.store.get('memories') || [], fact, { id: crypto.randomUUID() });
-    if (added) { this.store.set('memories', list); this.onChange(); }
+    if (added) {
+      this.store.set('memories', list);
+      this.onChange();
+      if (this.memoryExport) {
+        try { this.memoryExport(list[0].text); }
+        catch { return { status: 'done', reply: 'I saved that in Relay, but could not create its import file in Desktop/memory.' }; }
+        return { status: 'done', reply: 'I saved that in Relay and made a text file in Desktop/memory for Sentient OS import.' };
+      }
+    }
     return { status: 'done', reply: added ? "Okay, I'll remember that." : 'I already knew that.' };
   }
 
