@@ -33,7 +33,7 @@ function awayWords(ms) {
 function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], events = [], battery = null } = {}) {
   const away = Math.max(0, now - lockedAt);
   const lines = [];
-  const done = history.filter((h) => h.ts >= lockedAt && h.text && ['done', 'failed'].includes(h.status));
+  const done = history.filter((h) => (h.finishedAt ?? h.ts) >= lockedAt && (h.finishedAt ?? h.ts) <= now && h.text && ['done', 'failed'].includes(h.status));
   const ok = done.filter((h) => h.status === 'done');
   const bad = done.filter((h) => h.status === 'failed');
   if (ok.length) lines.push(ok.length === 1 ? `Finished while you were away: ${clip(ok[0].text.replace(/^Agent: /, ''))}.` : `${plural(ok.length, 'thing', 'things')} finished while you were away, including ${clip(ok[0].text.replace(/^Agent: /, ''), 40)}.`);
