@@ -126,6 +126,23 @@ test('dispatch durably records an uncertain outcome before handing off a one-tim
   assert.deepEqual(recovered.tick().due, [], 'restart never blindly repeats an uncertain action');
 });
 
+test('missed work and schedule advancement survive a restart in the same saved snapshot', () => {
+  let clock = new Date(2026, 9, 26, 7, 0);
+  const store = memoryStore();
+  let persisted;
+  store.flush = () => { persisted = JSON.parse(JSON.stringify(store.data)); };
+  const sch = new Scheduler({ store, now: () => clock });
+  sch.add({ text: 'check homework', repeat: 'once', at: new Date(2026, 9, 26, 8, 0).getTime() }, { id: 'missed' });
+  clock = new Date(2026, 9, 26, 10, 0);
+  assert.equal(sch.tick(false).missed.length, 1);
+  assert.deepEqual(persisted.schedules, []);
+  assert.equal(persisted.history[0].status, 'missed');
+  assert.match(persisted.history[0].reply, /Schedule it again/);
+  const recovered = new Scheduler({ store: { data: persisted, get: (key) => persisted[key], save() {} }, now: () => clock });
+  assert.deepEqual(recovered.tick(false).missed, [], 'restart does not duplicate the missed occurrence');
+  assert.equal(persisted.history.length, 1);
+});
+
 test('schedules can be removed by words, turned off, and cleared', () => {
   const sch = new Scheduler({ store: memoryStore(), now: () => new Date(2026, 9, 26, 7, 0) });
   sch.add({ text: 'open my email', repeat: 'daily', hour: 8, minute: 0 }, { id: 'a' });
