@@ -8,8 +8,8 @@ Module._load = function (name, ...args) {
 let AskController;
 try { ({ AskController } = require('../src/main/askController')); } finally { Module._load = original; }
 
-test('completed spoken requests speak, typed requests stay silent', () => {
-  for (const byVoice of [true, false]) {
+test('spoken answers and failures are spoken, while typed requests and stopped work stay silent', () => {
+  for (const [byVoice, status] of [[true, 'done'], [true, 'failed'], [true, 'stopped'], [false, 'done'], [false, 'failed']]) {
     const spoken = [];
     const c = Object.create(AskController.prototype);
     Object.assign(c, {
@@ -18,8 +18,8 @@ test('completed spoken requests speak, typed requests stay silent', () => {
       speaker: { speak: (text) => spoken.push(text) }, overlay: { endRequest() {}, workDone() {} },
       onChange() {}, push() {}, sound() {}, followUpSoon() {}, close() {},
     });
-    c.finish({ id: 'x', text: 'hello', ts: Date.now() }, { status: 'done', reply: 'Hello, Sir.' });
+    c.finish({ id: 'x', text: 'hello', ts: Date.now() }, { status, reply: 'Hello, Sir.' });
     clearTimeout(c.doneTimer);
-    assert.deepEqual(spoken, byVoice ? ['Hello, Sir.'] : []);
+    assert.deepEqual(spoken, byVoice && status !== 'stopped' ? ['Hello, Sir.'] : [], `${status}, voice=${byVoice}`);
   }
 });
