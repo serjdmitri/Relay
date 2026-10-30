@@ -1,5 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { Store } = require('../src/main/store');
 const { parseScheduleCommand, nextRun, describe, Scheduler, acknowledgeUnknown } = require('../src/main/schedule');
 
 const add = (t, now) => parseScheduleCommand(t, now || new Date(2026, 9, 26, 10, 0));
@@ -154,6 +158,41 @@ test('missed work and schedule advancement survive a restart in the same saved s
   const recovered = new Scheduler({ store: { data: persisted, get: (key) => persisted[key], save() {} }, now: () => clock });
   assert.deepEqual(recovered.tick(false).missed, [], 'restart does not duplicate the missed occurrence');
   assert.equal(persisted.history.length, 1);
+});
+
+test('a scheduled run is saved on disk before dispatch and is not repeated after restart', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-schedule-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let clock = new Date(2026, 9, 26, 10, 0);
+  const store = new Store(dir);
+  const scheduler = new Scheduler({ store, now: () => clock });
+  scheduler.add({ text: 'check assignments', repeat: 'once', at: new Date(2026, 9, 26, 10, 5).getTime() }, { id: 'homework' });
+  clock = new Date(2026, 9, 26, 10, 5);
+  const dispatched = scheduler.tick().due[0];
+  const restarted = new Store(dir);
+  assert.equal(restarted.get('history')[0].id, dispatched.runId);
+  assert.equal(restarted.get('history')[0].status, 'unknown');
+  assert.deepEqual(new Scheduler({ store: restarted, now: () => clock }).tick().due, []);
+});
+
+test('a failed disk write keeps scheduled work pending for a later retry', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-schedule-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let clock = new Date(2026, 9, 26, 10, 0);
+  const store = new Store(dir);
+  const scheduler = new Scheduler({ store, now: () => clock });
+  scheduler.add({ text: 'check assignments', repeat: 'once', at: new Date(2026, 9, 26, 10, 5).getTime() }, { id: 'homework' });
+  store.flush();
+  clock = new Date(2026, 9, 26, 10, 5);
+  const flush = store.flush.bind(store);
+  store.flush = () => { throw new Error('disk unavailable'); };
+  assert.throws(() => scheduler.tick(), /disk unavailable/);
+  assert.equal(store.get('schedules').length, 1);
+  assert.deepEqual(store.get('history'), []);
+  assert.equal(new Store(dir).get('schedules').length, 1);
+  store.flush = flush;
+  assert.equal(scheduler.tick().due.length, 1);
+  assert.equal(new Store(dir).get('history')[0].status, 'unknown');
 });
 
 test('schedules can be removed by words, turned off, and cleared', () => {

@@ -201,10 +201,19 @@ class Scheduler {
         s.runId = runId;
         records.push({ id: runId, text: `Scheduled: ${s.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: s.next, finishedAt: now.getTime() });
       }
-      this.store.data.history = [...records, ...(this.store.data.history || [])].slice(0, 500);
+      const previousHistory = this.store.data.history;
+      const previousSchedules = this.store.data.schedules;
+      this.store.data.history = [...records, ...(previousHistory || [])].slice(0, 500);
       this.store.data.schedules = list;
-      if (typeof this.store.flush === 'function') this.store.flush();
-      else this.store.save();
+      try {
+        if (typeof this.store.flush === 'function') this.store.flush();
+        else this.store.save();
+      } catch (error) {
+        // A failed write must not consume the schedule in memory either.
+        this.store.data.history = previousHistory;
+        this.store.data.schedules = previousSchedules;
+        throw error;
+      }
     }
     return { due, missed };
   }
