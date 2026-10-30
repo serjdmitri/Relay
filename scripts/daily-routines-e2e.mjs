@@ -47,7 +47,13 @@ try {
     assert.ok(files.some(file => fs.readFileSync(path.join(tmp, 'memory', file), 'utf8').includes(`Relay local output: ${title}`)), `${title} saved`);
     await app.evaluate(() => global.__relay.ask.close());
   }
-  console.log('Both Routines buttons saved isolated reports using fake source data.');
+  const before = fs.readdirSync(path.join(tmp, 'memory')).length;
+  const scheduled = await app.evaluate(() => global.__relay.ask.runScheduled({ text: 'plan today' }));
+  assert.equal(scheduled.status, 'done');
+  assert.equal(fs.readdirSync(path.join(tmp, 'memory')).length, before + 1);
+  const history = await app.evaluate(() => global.__relay.store.get('history').map(({ text, status }) => ({ text, status })));
+  assert.ok(history.some(item => item.text === 'Scheduled: plan today' && item.status === 'done'));
+  console.log('Both Routines buttons and a scheduled plan saved isolated reports using fake source data.');
 } finally {
   if (app) await app.close();
   fs.rmSync(tmp, { recursive: true, force: true });
