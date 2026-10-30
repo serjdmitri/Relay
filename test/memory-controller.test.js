@@ -21,9 +21,9 @@ test('remember, recall and forget work through the controller, without the model
   assert.equal(data.memories.length, 1);
   assert.match((await c.runMemory({ type: 'recall' })).reply, /my sister is Anna/);
   assert.match(c.memoryText(), /my sister is Anna/);
-  assert.equal((await c.runMemory({ type: 'forget', query: 'sister' })).reply, 'Forgot it.');
+  assert.match((await c.runMemory({ type: 'forget', query: 'sister' })).reply, /^Forgot it\. Sentient OS/);
   assert.equal(data.memories.length, 0);
-  assert.equal((await c.runMemory({ type: 'forget', query: 'sister' })).reply, "I don't have anything about that.");
+  assert.match((await c.runMemory({ type: 'forget', query: 'sister' })).reply, /^I don't have anything about that\. Sentient OS/);
 });
 
 test('secrets are refused, and forgetting everything asks first', async () => {
@@ -35,8 +35,17 @@ test('secrets are refused, and forgetting everything asks first', async () => {
   assert.equal((await c.runMemory({ type: 'forget-all' })).reply, 'Okay, I kept it all.');
   assert.equal(data.memories.length, 1);
   c.askConfirm = async () => true;
-  assert.equal((await c.runMemory({ type: 'forget-all' })).reply, 'Forgot everything.');
+  assert.match((await c.runMemory({ type: 'forget-all' })).reply, /^Forgot everything in Relay’s local memory\. Sentient OS/);
   assert.equal(data.memories.length, 0);
+});
+
+test('local recall and forgetting do not claim to change the read-only vault or import files', async () => {
+  const { c, data } = make();
+  data['settings.sentient.enabled'] = true;
+  assert.match((await c.runMemory({ type: 'recall' })).reply, /no local memories[\s\S]*does not include Sentient OS/);
+  assert.match((await c.runMemory({ type: 'forget-all' })).reply, /Sentient OS and files in Desktop\/memory were not changed/);
+  c.rememberFact('I like tea');
+  assert.match((await c.runMemory({ type: 'forget', query: 'tea' })).reply, /Sentient OS and files in Desktop\/memory were not changed/);
 });
 
 test('with memory switched off nothing is shown to the model', () => {
