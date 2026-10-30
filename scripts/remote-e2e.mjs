@@ -73,6 +73,30 @@ try {
 } catch (e) {
   ok('run', false, e.message);
 }
+// If the app script cannot load, the user should see recovery instructions instead of a black page.
+const broken = await browser.newContext();
+const brokenPage = await broken.newPage();
+await brokenPage.route('**/app.js', (route) => route.abort());
+await brokenPage.goto(url);
+ok('startup failure leaves visible recovery instructions', await brokenPage.locator('#boot-warning').isVisible());
+await broken.close();
+
+// Safari may deny localStorage (for example, under restrictive browser settings).
+const restricted = await browser.newContext();
+await restricted.addInitScript(() => {
+  for (const name of ['getItem', 'setItem', 'removeItem']) Storage.prototype[name] = () => { throw new DOMException('Blocked', 'SecurityError'); };
+});
+const restrictedPage = await restricted.newPage();
+const restrictedErrors = [];
+restrictedPage.on('pageerror', (e) => restrictedErrors.push(e.message));
+await restrictedPage.goto(url);
+ok('pairing page still opens when browser storage is unavailable', await restrictedPage.locator('#pair').isVisible() && restrictedErrors.length === 0, restrictedErrors.join(' | '));
+pairing.start();
+await restrictedPage.fill('#code', '123456');
+await restrictedPage.click('#pairgo');
+await restrictedPage.waitForSelector('#home:not([hidden])');
+ok('a phone can pair for this session without browser storage', (await restrictedPage.textContent('#line')).includes('could not save the pairing'));
+await restricted.close();
 await browser.close();
 server.stop();
 for (const r of results) console.log(r.join('  '));
