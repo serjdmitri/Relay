@@ -70,6 +70,16 @@ test('an interrupted scheduled task is reported as an unknown outcome', () => {
   assert.equal(briefingCard(w, '').items[0].title, 'Check outcome');
 });
 
+test('an older unresolved outcome remains visible until reviewed', () => {
+  const w = buildWelcome({ lockedAt: T - 10 * MIN, now: T, history: [
+    { text: 'Scheduled: send report', status: 'unknown', ts: T - 2 * 60 * MIN },
+    { text: 'Scheduled: reviewed', status: 'resolved', ts: T - MIN },
+    { text: 'future', status: 'unknown', ts: T + MIN }
+  ] });
+  assert.match(w.spoken, /outcome of a scheduled task is unknown: send report/);
+  assert.doesNotMatch(w.spoken, /reviewed|future/);
+});
+
 test('briefing card puts failed and missed work before meetings and completed work', () => {
   const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [
     { text: 'finished', status: 'done', ts: T - MIN },
