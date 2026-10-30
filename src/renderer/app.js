@@ -299,6 +299,9 @@ const PAGES = {
 
   routines(c) {
     c.append(h(`<div class="lead">Say a routine's name and Relay does its steps, one after another. Anything that sends or deletes still asks you first.</div>`));
+    const daily = h('<div class="card"><div class="routine"><div class="rn"><span>Plan today</span><button class="btn" id="run-daily-plan">Run</button></div><div class="note">Suggest up to three priorities from checked reminders, school and calendar; save a local copy in Desktop/memory.</div></div></div>');
+    $('#run-daily-plan', daily).onclick = () => relay.ask.open('plan today');
+    c.append(daily);
     c.append(h(`<div class="section-title" style="margin-top:0"><span>Routines</span><span style="display:flex;gap:8px"><button class="btn" id="rec">${icon('record')}Record</button><button class="btn" id="new">${icon('plus')}New Routine</button></span></div>`));
     $('#rec', c).onclick = () => relay.ask.open('start a routine');
     $('#new', c).onclick = () => editRoutine({ name: '', steps: [] });

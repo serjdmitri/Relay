@@ -1293,6 +1293,20 @@ class AskController {
     return buildBriefing(await this.briefingFacts(options));
   }
 
+  async dailyPlanCommand() {
+    const abort = new AbortController();
+    this.abort = abort;
+    const facts = await this.briefingFacts({ includeGreeting: false });
+    if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
+    const plan = require('./dailyPlan').planToday(facts);
+    try {
+      this.outputExport('Plan today', plan);
+      return { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 };
+    } catch {
+      return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
+    }
+  }
+
   // The same for every request: the time, front app and running apps travel with each request instead.
   // "Faster answers" (General): no extended thinking, little re-checking. On unless you turn it off.
   fastMode() { return this.store.get('settings.fastMode') !== false; }
@@ -1740,15 +1754,7 @@ class AskController {
           return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
-          const facts = await this.briefingFacts({ includeGreeting: false });
-          if (this.abort?.signal.aborted) return this.finish(entry, { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 });
-          const plan = require('./dailyPlan').planToday(facts);
-          try {
-            this.outputExport('Plan today', plan);
-            return this.finish(entry, { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 });
-          } catch {
-            return this.finish(entry, { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 });
-          }
+          return this.finish(entry, await this.dailyPlanCommand());
         }
         if (!opts.shown && !opts.scheduled) {
           const dc = devices.parseDeviceCommand(effective);
