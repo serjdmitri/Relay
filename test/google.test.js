@@ -96,6 +96,21 @@ test('calendar lists across accounts in time order and creates events in your ti
   assert.deepEqual(body.end, { dateTime: '2026-10-28T16:00:00', timeZone: 'America/New_York' });
 });
 
+test('calendar query includes the whole local day across daylight-saving transitions', async () => {
+  const previous = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const { g, calls } = api({ '/events?': { items: [] } });
+    g.now = () => new Date(2026, 10, 1, 12).getTime();
+    await g.calEvents(null, 1);
+    const url = new URL(calls.find((call) => call.url.includes('/events?')).url);
+    assert.equal(url.searchParams.get('timeMin'), '2026-11-01T04:00:00.000Z');
+    assert.equal(url.searchParams.get('timeMax'), '2026-11-02T05:00:00.000Z');
+  } finally {
+    if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;
+  }
+});
+
 test('sending asks first; reading does not', () => {
   const t = Object.fromEntries(googleTools({}).map((x) => [x.name, x]));
   assert.match(t.gmail_send.confirm({ to: 'a@b.c', subject: 'Hello', account: 'me@gmail.com' }), /Send "Hello" to a@b\.c from me@gmail\.com/);

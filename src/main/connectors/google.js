@@ -208,7 +208,8 @@ class GoogleApi {
     const out = [];
     const start = new Date(this.now());
     start.setHours(0, 0, 0, 0);
-    const end = new Date(start.getTime() + days * 86400000);
+    const end = new Date(start);
+    end.setDate(end.getDate() + days); // local calendar days can be 23 or 25 hours
     for (const a of this.pick(email)) {
       const j = await this.call(a, 'GET', `https://www.googleapis.com/calendar/v3/calendars/primary/events?${new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '50' })}`);
       for (const e of j.items || []) out.push({ account: a.email, id: e.id, title: e.summary || '(no title)', start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date, where: e.location || '' });
