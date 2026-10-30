@@ -23,6 +23,14 @@ test('close of day uses recorded successes and unfinished requests without claim
   assert.match(text, /Work outside Relay may not appear/);
 });
 
+test('close of day lists tomorrow events while identifying an unavailable calendar', () => {
+  const now = new Date('2026-10-30T18:00:00');
+  const text = closeDay({ facts: { now, tomorrow: { events: [{ title: 'Exam', start: new Date('2026-10-31T09:00:00') }], missing: ['Google calendar'] } } });
+  assert.match(text, /Tomorrow’s calendar: Exam at/);
+  assert.match(text, /Could not check tomorrow’s Google calendar/);
+  assert.doesNotMatch(text, /No events were found/);
+});
+
 test('plan reports absent priorities and unavailable school without inventing tasks', () => {
   const result = planToday({ now: new Date(), due: [], events: [], school: { problem: 'Unavailable' }, missing: ['calendar'] });
   assert.match(result, /No priorities could be identified/);
