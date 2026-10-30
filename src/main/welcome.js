@@ -13,6 +13,13 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const list = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`);
 const clock = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: new Date(ms).getMinutes() ? '2-digit' : undefined });
 
+// Use the Mac's local time, not UTC: night runs from 10 PM until 5 AM.
+function greetingFor(now, name = 'Sir') {
+  const hour = new Date(now).getHours();
+  const part = hour < 5 || hour >= 22 ? 'night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  return `Good ${part}, ${name}.`;
+}
+
 // How long: "about 25 minutes", "about 3 hours".
 function awayWords(ms) {
   const m = Math.round(ms / 60000);
@@ -34,10 +41,10 @@ function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], 
   const next = events.filter((e) => e.start >= now - 5 * 60000 && e.start - now <= 3 * 3600e3).sort((a, b) => a.start - b.start)[0];
   if (next) { const min = Math.round((next.start - now) / 60000); lines.push(min <= 0 ? `${clip(next.title, 50)} is starting now.` : min < 60 ? `${clip(next.title, 50)} starts in ${plural(min, 'minute', 'minutes')}.` : `Next up: ${clip(next.title, 50)} at ${clock(next.start)}.`); }
   if (battery?.present && battery.onBattery && !battery.charging && battery.percent <= 20) lines.push(`The battery is at ${battery.percent} percent.`);
-  const greet = `Welcome back, ${name}.`;
+  const greet = greetingFor(now, name);
   const away2 = away >= 30 * 60000 ? ` You were away ${awayWords(away)}.` : '';
   const spoken = lines.length ? `${greet}${away2} ${lines.slice(0, 3).join(' ')}` : `${greet}${away2} Nothing needs your attention.`;
   return { spoken: spoken.trim(), lines: lines.length ? lines : ['Nothing needs your attention.'], away };
 }
 
-module.exports = { shouldGreet, buildWelcome, awayWords };
+module.exports = { shouldGreet, buildWelcome, awayWords, greetingFor };

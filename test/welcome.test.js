@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldGreet, buildWelcome, awayWords } = require('../src/main/welcome');
+const { shouldGreet, buildWelcome, awayWords, greetingFor } = require('../src/main/welcome');
 
 const T = Date.parse('2026-06-10T12:00:00');
 const MIN = 60000;
@@ -19,7 +19,7 @@ test('it greets only after a real absence, not twice in a row, and not while som
 
 test('nothing happened: a greeting and "nothing needs your attention"', () => {
   const w = buildWelcome({ name: 'Sir', lockedAt: T - 10 * MIN, now: T });
-  assert.equal(w.spoken, 'Welcome back, Sir. Nothing needs your attention.');
+  assert.equal(w.spoken, 'Good afternoon, Sir. Nothing needs your attention.');
   assert.deepEqual(w.lines, ['Nothing needs your attention.']);
 });
 
@@ -30,12 +30,20 @@ test('what finished while you were away, what failed, the next meeting and a low
     events: [{ title: 'Robotics meeting', start: T + 25 * MIN }, { title: 'Dentist', start: T + 5 * 3600e3 }],
     battery: { present: true, onBattery: true, charging: false, percent: 14 }
   });
-  assert.match(w.spoken, /^Welcome back, Sir\. You were away about 45 minutes\. 2 things finished while you were away, including research swerve drives\./);
+  assert.match(w.spoken, /^Good afternoon, Sir\. You were away about 45 minutes\. 2 things finished while you were away, including research swerve drives\./);
   assert.match(w.spoken, /One did not work: email Dana\./);
   assert.match(w.spoken, /Robotics meeting starts in 25 minutes\./);
   assert.ok(!/before I left/.test(w.spoken) && !/Dentist/.test(w.spoken));
   assert.equal(w.lines.length, 4);
   assert.match(w.lines[3], /battery is at 14 percent/);
+});
+
+test('the greeting follows local time at each day and night boundary', () => {
+  const local = (hour, minute = 0) => new Date(2026, 5, 10, hour, minute).getTime();
+  for (const [hour, expected] of [[0, 'night'], [4, 'night'], [5, 'morning'], [11, 'morning'], [12, 'afternoon'], [16, 'afternoon'], [17, 'evening'], [21, 'evening'], [22, 'night'], [23, 'night']]) {
+    assert.equal(greetingFor(local(hour), 'Sir'), `Good ${expected}, Sir.`);
+  }
+  assert.equal(greetingFor(local(9), 'Alex'), 'Good morning, Alex.');
 });
 
 test('the spoken version keeps to the top three items; the banner has all of them', () => {
