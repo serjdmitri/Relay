@@ -17,3 +17,25 @@ test('plan reports absent priorities and unavailable school without inventing ta
   assert.match(result, /No priorities could be identified/);
   assert.match(result, /calendar, school/);
 });
+
+test('stopping an in-flight plan prevents saving and save errors are reported', async () => {
+  const Module = require('node:module');
+  const original = Module._load;
+  Module._load = function (name, ...args) { return name === 'electron' ? { app: {}, screen: {}, BrowserWindow: class {}, ipcMain: {}, Notification: class {}, systemPreferences: {}, desktopCapturer: {}, clipboard: {}, shell: {}, safeStorage: {} } : original.call(this, name, ...args); };
+  let AskController;
+  try { ({ AskController } = require('../src/main/askController')); } finally { Module._load = original; }
+  const c = Object.create(AskController.prototype);
+  let release, saves = 0;
+  c.briefingFacts = () => new Promise((resolve) => { release = resolve; });
+  c.outputExport = () => saves++;
+  const pending = c.dailyPlanCommand();
+  c.abort.abort();
+  release({ now: new Date() });
+  assert.equal((await pending).status, 'stopped');
+  assert.equal(saves, 0);
+  c.briefingFacts = async () => ({ now: new Date() });
+  c.outputExport = () => { throw new Error('disk unavailable'); };
+  const result = await c.dailyPlanCommand();
+  assert.equal(result.status, 'failed');
+  assert.match(result.reply, /could not save/);
+});
