@@ -1255,11 +1255,12 @@ class AskController {
     const [mac, due, gev, mail, weather] = await Promise.all([
       within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
       within(this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
-      g ? within(g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => []) : [],
-      g ? within(g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => null) : null,
+      g ? within(g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
+      g ? within(g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
       cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null
     ]);
     if (!cfg.city) missing.push('weather');
+    else if (!weather) missing.push('weather-unavailable');
     return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, includeGreeting });
   }
 
