@@ -735,6 +735,7 @@ const PAGES = {
         return row;
       })(),
       toggleRow('JARVIS screen border', 'Show a cyan frame at the screen edge while the Jarvis assistant is active.', 'settings.assistantBorder'),
+      toggleRow('Blur behind JARVIS', 'Blur the desktop behind the Jarvis assistant while it is active. Uses macOS visual effects.', 'settings.assistantBlur'),
       (() => {
         const hwc = S.settings.homework || {};
         const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Homework helper</div><div class="d">Select an assignment (or open it on screen) and say “outline this essay”, “walk me through this problem”, “give me a template for this assignment”, “check my answer”, “give me feedback on my essay” or “do this assignment”. Results are saved in Documents/Relay Homework as a Word file or PDF, and code as a folder. Use it only where your teacher allows AI help, and use what it makes to learn, not just to hand in. Say “use this as my writing sample” with some of your own writing selected so drafts sound like you.</div></div>
