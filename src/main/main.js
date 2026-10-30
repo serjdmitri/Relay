@@ -330,13 +330,16 @@ function syncInbound() {
 async function welcomeBack(lockedAt, lastWelcome) {
   const cfg = store.get('settings.welcome') || {};
   if (!lockedAt || !welcome.shouldGreet({ enabled: cfg.enabled !== false, awayMs: Date.now() - lockedAt, minAwayMs: (cfg.minAwayMin ?? 5) * 60000, minGapMs: (cfg.repeatMin ?? 10) * 60000, sinceLastMs: Date.now() - lastWelcome, busy: !!ask.meeting?.active })) return false;
-  const [day, battery] = await Promise.all([
+  const [day, battery, briefing] = await Promise.all([
     Promise.race([ask.mac.calendarEvents(1).then(parseCalendar).catch(() => []), new Promise((r) => setTimeout(() => r([]), 2500))]),
-    new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out)))))
+    new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out))))),
+    ask.briefingText({ includeGreeting: false }).catch(() => '')
   ]);
   const w = welcome.buildWelcome({ name: cfg.name || 'Sir', lockedAt, now: Date.now(), history: store.get('history') || [], events: day, battery });
-  if (cfg.show !== false && Notification.isSupported()) new Notification({ title: `Welcome back, ${cfg.name || 'Sir'}`, body: w.lines.join(' '), silent: true }).show();
-  if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(w.spoken);
+  const lines = briefing && w.lines[0] === 'Nothing needs your attention.' ? [briefing] : [...w.lines, ...(briefing ? [briefing] : [])];
+  const spoken = briefing ? `${w.spoken.replace(/ Nothing needs your attention\.$/, '')} ${briefing}` : w.spoken;
+  if (cfg.show !== false && Notification.isSupported()) new Notification({ title: welcome.greetingFor(Date.now(), cfg.name || 'Sir'), body: lines.join(' '), silent: true }).show();
+  if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(spoken);
   return true;
 }
 

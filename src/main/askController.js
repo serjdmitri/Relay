@@ -1246,7 +1246,7 @@ class AskController {
   }
 
   // "Good morning": the weather, the calendar (this Mac's and Google's), what is due and the important unread email, as one short spoken summary.
-  async briefingText() {
+  async briefingText({ includeGreeting = true } = {}) {
     const cfg = this.store.get('settings.briefing') || {};
     const now = new Date();
     const missing = [];
@@ -1260,7 +1260,7 @@ class AskController {
       cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null
     ]);
     if (!cfg.city) missing.push('weather');
-    return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing });
+    return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, includeGreeting });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.
