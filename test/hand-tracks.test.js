@@ -1,6 +1,23 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { HandTracks } = require('../src/main/hands/tracks');
+
+test('same-handed people are matched by the best overall positions', () => {
+  const t = new HandTracks(2);
+  t.update([{ handed: 'Left', x: 0.20, y: 0.5 }, { handed: 'Left', x: 0.40, y: 0.5 }]);
+  const closerToSecond = { handed: 'Left', x: 0.33, y: 0.5 };
+  const closerToFirst = { handed: 'Left', x: 0.10, y: 0.5 };
+  assert.deepEqual(t.update([closerToSecond, closerToFirst]), [closerToFirst, closerToSecond]);
+});
+
+test('a briefly missing hand keeps its slot without holding an active cursor', () => {
+  const t = new HandTracks(2);
+  const left = { handed: 'Left', x: 0.2, y: 0.5 };
+  const right = { handed: 'Right', x: 0.8, y: 0.5 };
+  t.update([left, right]);
+  assert.deepEqual(t.update([right]), [null, right]);
+  assert.deepEqual(t.update([right, left]), [left, right]);
+});
 const hand = (handed, x) => ({ handed, x, y: 0.5, score: 1 });
 
 test('four tracked hands retain separate slots when their order changes', () => {
