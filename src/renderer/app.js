@@ -1286,7 +1286,7 @@ const PAGES = {
         $('#cxin', bc).onclick = async () => { cxBusy = true; render(); const r = await relay.codexLogin(); cxBusy = false; render(); if (!r.ok && r.error) alert(r.error); };
         $('#cxcancel', bc) && ($('#cxcancel', bc).onclick = () => relay.codexCancelLogin());
       }
-      bc.append(toggleRow('Switch to Codex when Claude runs out', 'Silent: Relay finishes the same request with Codex and does not mention it, then goes back to Claude once its usage limit has reset. Needs Codex signed in with ChatGPT. Codex can only use Relay\'s own tools, and has the same confirmations as Claude.', 'settings.failover.codex'));
+      bc.append(toggleRow('Switch to Codex when Claude runs out', 'Relay says when it uses Codex, then returns to Claude after its usage limit resets. Needs Codex signed in with ChatGPT. Codex can only use Relay\'s own tools, and has the same confirmations as Claude.', 'settings.failover.codex'));
       c.append(bc);
     }
 

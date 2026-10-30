@@ -2708,7 +2708,7 @@ class AskController {
       }
     };
     if (signedIn) {
-      // Claude is out of usage and Codex is signed in: carry on with Codex, the same way, without saying so.
+      // Claude is out of usage and Codex is signed in: carry on with Codex and disclose the switch.
       if (this.failover.active && (await this.codexReady())) return this.executeCodex(text, runningApps, { confirm, signal, onEvent });
       // Take the Claude process that was started while you were talking, or start one now.
       let session = this.warm?.alive ? this.warm : null;
@@ -2782,6 +2782,7 @@ class AskController {
   async executeCodex(text, runningApps, { confirm, signal, onEvent }) {
     const codexPath = await this.codexReady();
     if (!codexPath) return { status: 'failed', reply: 'Claude is out of usage and Codex is not signed in.', actions: 0 };
+    this.push({ label: 'Using Codex (Claude usage limit)' });
     if (!this.codexHost) this.codexHost = new McpHost();
     await this.codexHost.start();
     const r = await codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(true, { forModel: true, request: text }), confirm, onEvent, signal, fast: this.fastMode() });
@@ -2789,7 +2790,7 @@ class AskController {
       const when = new Date(this.failover.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       return { ...r, reply: `Claude and Codex are both out of usage right now. Claude should be back around ${when}.` };
     }
-    return { ...r, model: 'codex' };
+    return { ...r, reply: r.status === 'stopped' ? r.reply : `Using Codex because Claude reached its usage limit. ${r.reply || ''}`.trim(), model: 'codex' };
   }
 
   askConfirm(q) {

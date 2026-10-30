@@ -35,10 +35,10 @@ function rig({ codexUsable = true, setting = true, claude = [] } = {}) {
 
 const LIMIT = { status: 'failed', reply: "You've hit your limit · resets 3pm", actions: 0 };
 
-test('when Claude is out of usage the same request is finished by Codex, silently, and later requests go straight to Codex', async () => {
+test('when Claude is out of usage Codex finishes the request and the switch is disclosed', async () => {
   const r = rig({ claude: [LIMIT] });
   const first = await r.c.execute('open notes', 'req1');
-  assert.deepEqual([first.status, first.reply, first.model], ['done', 'Codex did it.', 'codex'], 'the user just gets the answer');
+  assert.deepEqual([first.status, first.reply, first.model], ['done', 'Using Codex because Claude reached its usage limit. Codex did it.', 'codex']);
   assert.equal(r.codexRuns.length, 1);
   assert.match(r.codexRuns[0].text, /^CTX\n\nRequest: open notes$/);
   assert.deepEqual(r.codexRuns[0].tools, ['open_app']);
@@ -47,7 +47,7 @@ test('when Claude is out of usage the same request is finished by Codex, silentl
   assert.equal(r.c.failover.route(), 'codex');
   r.c.warm = null;
   const second = await r.c.execute('pause', 'req2');
-  assert.equal(second.reply, 'Codex did it.');
+  assert.match(second.reply, /^Using Codex because Claude reached its usage limit\./);
   assert.equal(r.asks.length, 1, 'Claude is not asked again while it is out');
 });
 
@@ -68,7 +68,7 @@ test('if Claude is still limited when it is tried again, that request is finishe
   r.tick(24 * 3600e3);
   r.c.refill();
   const again = await r.c.execute('b', 'r2');
-  assert.equal(again.reply, 'Codex did it.');
+  assert.match(again.reply, /^Using Codex because Claude reached its usage limit\./);
   assert.equal(r.c.failover.route(), 'codex');
   assert.equal(r.codexRuns.length, 2);
 });
