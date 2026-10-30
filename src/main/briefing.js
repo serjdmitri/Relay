@@ -71,6 +71,7 @@ function buildBriefing(f) {
   }
   if (f.mail && f.mail.length) out.push(`${f.mail.length === 1 ? 'One important unread email' : `${f.mail.length} important unread emails`}: ${list(f.mail.slice(0, 3).map((m) => `${String(m.from).replace(/<.*$/, '').replace(/"/g, '').trim() || 'someone'} about ${String(m.subject || 'no subject').slice(0, 60)}`))}.`);
   else if (f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email.');
+  if (f.unfinished?.length) out.push(`Recent Relay requests that failed or were stopped and may need attention: ${list(f.unfinished.map((h) => String(h.text).replace(/\s+/g, ' ').slice(0, 100)))}. Check History for their latest status.`);
   const miss = (f.missing || []).filter((m) => m === 'weather');
   if (miss.length) out.push('Set your city in Settings and I will add the weather.');
   const unavailable = (f.missing || []).filter((m) => ['calendar', 'google-calendar', 'reminders', 'mail', 'weather-unavailable'].includes(m));

@@ -58,6 +58,12 @@ test('briefing does not infer completed events or conditions it did not receive'
   assert.doesNotMatch(text, /fine|Your calendar is clear/);
 });
 
+test('briefing flags recent failed requests without asserting they are still unresolved', () => {
+  const text = buildBriefing({ unfinished: [{ text: 'Check the assignment', status: 'failed' }] });
+  assert.match(text, /requests that failed or were stopped and may need attention: Check the assignment/);
+  assert.match(text, /Check History for their latest status/);
+});
+
 test('the weather comes from the free forecast service, using the city and its region, in the units asked for', async () => {
   const urls = [];
   const fetchFn = async (url) => {
