@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { WakeWord, heardWake } = require('../src/main/wake');
+const { WakeWord, ClapGate, heardWake } = require('../src/main/wake');
 
 test('heardWake matches the phrase, its greeting variants and one-letter mishearings, near the end of what was heard', () => {
   for (const t of ['Hey Jarvis', 'hey, jarvis!', 'okay jarvis', 'Hi Jarvis open notes', 'um so hey jarvus', 'hey jervis what time is it', 'a jarvis']) assert.ok(heardWake(t, 'hey jarvis'), t);
@@ -25,6 +25,36 @@ test('a wake-up request activates the listener through the normal wake path', as
   r.speech.emit('partial', 'Jarvis wake up');
   assert.deepEqual(r.woke, ['Jarvis wake up']);
   assert.equal(r.w.armed, false);
+});
+
+test('two distinct impulses open a short wake window, not one sustained sound', () => {
+  const gate = new ClapGate();
+  assert.equal(gate.level(0.8, 1000), false);
+  assert.equal(gate.level(0.8, 1200), false, 'continuous sound is one impulse');
+  gate.level(0.1, 1250);
+  assert.equal(gate.level(0.8, 1400), true);
+  assert.equal(gate.ready(6000), true);
+  assert.equal(gate.ready(6401), false);
+  gate.reset();
+  gate.level(0.8, 7000); gate.level(0.1, 7050);
+  assert.equal(gate.level(0.8, 7100), false, 'too close together');
+});
+
+test('clap mode requires the wake phrase after both claps', async () => {
+  const realNow = Date.now;
+  let now = 10000;
+  Date.now = () => now;
+  try {
+    const r = rig(); r.cfg.requireClaps = true;
+    await r.w.refresh();
+    r.speech.emit('partial', 'hey jarvis');
+    assert.equal(r.woke.length, 0);
+    r.speech.emit('level', 0.9); now += 80; r.speech.emit('level', 0.1); now += 120; r.speech.emit('level', 0.9);
+    r.speech.emit('partial', 'hey jarvis');
+    assert.equal(r.woke.length, 0, 'an old wake phrase cannot activate after the claps');
+    r.speech.emit('partial', 'hey jarvis jarvis wake up');
+    assert.equal(r.woke.length, 1);
+  } finally { Date.now = realNow; }
 });
 
 function rig(over = {}) {
