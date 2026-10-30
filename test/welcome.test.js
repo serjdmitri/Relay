@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard } = require('../src/main/welcome');
+const { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard, showWelcomeReactor } = require('../src/main/welcome');
 
 const T = Date.parse('2026-06-10T12:00:00');
 const MIN = 60000;
@@ -89,6 +89,22 @@ test('unlock greeting does not interrupt work, a meeting, or a re-locked Mac', (
   for (const state of ['working', 'listening', 'input', 'confirm', 'finishing']) assert.equal(canDeliverWelcome({ state }), false);
   assert.equal(canDeliverWelcome({ locked: true }), false);
   assert.equal(canDeliverWelcome({ meeting: true }), false);
+});
+
+test('unlock reactor never replaces or dismisses a newer request', () => {
+  let callback;
+  const messages = [];
+  const overlay = { hudEntry: null, hudState: {}, hud(msg) { messages.push(msg); this.hudState = msg; this.hudEntry = msg.hide ? null : {}; } };
+  assert.equal(showWelcomeReactor(overlay, 'Good morning, Sir.', { setTimer: (fn) => { callback = fn; } }), true);
+  assert.equal(messages[0].reply, 'Good morning, Sir.');
+  assert.equal(showWelcomeReactor(overlay, 'Second'), false);
+  overlay.hudState = { state: 'listening' }; // a new ask replaced the welcome
+  callback();
+  assert.equal(messages.length, 1, 'the timer does not hide the new request');
+  overlay.hudEntry = null;
+  showWelcomeReactor(overlay, 'Good evening, Sir.', { setTimer: (fn) => { callback = fn; } });
+  callback();
+  assert.deepEqual(messages.at(-1), { hide: true });
 });
 
 test('plain wording for long absences and a meeting later today', () => {
