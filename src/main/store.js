@@ -44,6 +44,7 @@ const DEFAULTS = {
     voices: { quiet: { volume: 0.55 }, reading: {} }, // how confirmations and long answers sound (see voiceProfile.js)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
     assistantVisual: 'reactor', // reactor | orb
+    assistantBorder: true, // show a screen-edge frame with the Jarvis HUD
     hfTokenEnc: '', // an optional free Hugging Face token: more free GPU time for the better 3D generators (TRELLIS)
     models3dFromPhotos: true, // make realistic 3D models from real photos with a free online service (only the public photo is sent)
     models3d: true, // show a 3D model you can turn: a real one when there is one, else built from shapes
