@@ -39,6 +39,17 @@ test('model tools refuse disabled access, label notes as data and omit obvious s
   assert.equal(reads, 2);
 });
 
+test('in-flight vault reads mark the request immediately and discard results if access is revoked', async () => {
+  let allowed = true, reads = 0, resolve;
+  const reader = { structure: () => new Promise((done) => { resolve = done; }) };
+  const [index] = sentientTools(reader, { allowed: () => allowed, onRead: () => reads++ });
+  const pending = index.run({});
+  assert.equal(reads, 1, 'concurrent actions see the precaution before the read finishes');
+  allowed = false;
+  resolve('private note');
+  await assert.rejects(pending, /result was discarded/);
+});
+
 test('Relay exposes vault tools only when enabled and not using the local model', async () => {
   const Module = require('node:module');
   const original = Module._load;
