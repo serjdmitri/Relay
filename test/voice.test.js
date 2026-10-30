@@ -33,6 +33,15 @@ test('an online voice speaks sentence by sentence through afplay, and temp files
   assert.ok(!sp.speaking);
 });
 
+test('local model mode does not send voice text to a cloud speech provider', async () => {
+  const calls = [], fetched = [];
+  const sp = new Spk({ spawnFn: fakeSpawn(calls), exec: (c, a, o, cb) => cb(null, ''), getLocalOnly: () => true, getTts: () => ({ engine: 'openai', openai: { key: 'k' } }), fetchFn: okFetch(fetched) });
+  await sp.speak('Private answer');
+  assert.equal(fetched.length, 0);
+  assert.equal(calls[0].cmd, 'say');
+  assert.match((await sp.test('test')).message, /Cloud voices are paused/);
+});
+
 test('without a key, or when the online voice fails, the system voice answers', async () => {
   const calls = [], problems = [];
   const noKey = new Spk({ spawnFn: fakeSpawn(calls), exec: (c, a, o, cb) => cb(null, ''), getTts: () => ({ engine: 'elevenlabs', elevenlabs: { key: '' } }) });

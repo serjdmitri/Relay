@@ -966,6 +966,7 @@ const PAGES = {
     c.append(h('<div class="section-title">More natural voices</div>'));
     const T = S.settings.tts || { engine: 'system' };
     const ecard = h('<div class="card"></div>');
+    if (S.settings.model.provider === 'ollama') c.append(h('<div class="note">Ollama is selected: cloud voices are paused and Relay uses a voice on this Mac. Other connected services may still use the internet.</div>'));
     const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
     const eseg = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Voice engine</div><div class="seg">${ENGINES.map(([v, l]) => `<button data-v="${v}" class="${T.engine === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">${{
       system: 'The voice chosen above. Free and instant.',

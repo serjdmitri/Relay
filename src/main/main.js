@@ -372,6 +372,7 @@ function registerIpc() {
     if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.sentient.enabled' || key === 'settings.memory' || key === 'settings.model.provider') ask.dropWarm(true);
+    if (key === 'settings.model.provider' && value === 'ollama') speaker?.stop();
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
@@ -930,6 +931,7 @@ app.whenReady().then(() => {
   kokoro = new KokoroVoice({ dir: path.join(app.getPath('userData'), 'voices', 'kokoro'), onProgress: () => broadcast() });
   speaker = new Speaker({
     kokoro,
+    getLocalOnly: () => store.get('settings.model.provider') === 'ollama',
     getTts: () => {
       const t = store.get('settings.tts');
       return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) } };
