@@ -32,6 +32,7 @@ const TITLES = Object.fromEntries(NAV.flat());
 const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', doctor: 'permissions', account: 'account' };
 
 const $ = (sel, root = document) => root.querySelector(sel);
+const usageOpen = { claude: false, codex: false };
 
 // A menu-bar window can receive a click without macOS activating the app.
 // Ensure keyboard input follows the field the user chose.
@@ -68,6 +69,15 @@ function renderSidebar() {
     sb.append(nav);
   }
   sb.append(h('<div class="spacer"></div>'));
+  for (const [id, label] of [['claude', 'Claude'], ['codex', 'Codex']]) {
+    const data = S?.providerUsage?.[id] || {};
+    const limit = data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${Math.round(data.limit.util * 100)}% used (reported ${timeAgo(data.limit.ts)})` : 'Account limit unavailable';
+    const last = data.last ? `Last request: ${data.last.in} in · ${data.last.out} out (${timeAgo(data.last.ts)})` : 'No request usage recorded';
+    const box = h(`<details class="usage-menu"><summary>${label} usage</summary><div>${esc(limit)}</div><div>${esc(last)}</div></details>`);
+    box.open = usageOpen[id];
+    box.addEventListener('toggle', () => { usageOpen[id] = box.open; });
+    sb.append(box);
+  }
   sb.append(h(`<div class="status-card"><div class="status-line"><span class="dot ${r.ok ? '' : 'off'}"></span>${r.text}</div>
     <div class="status-hint"><span class="kbd small">${esc(S?.labels.ask || '')}</span>to ask</div></div>`));
 }
