@@ -106,6 +106,19 @@ test('four hands drive four distinct cursors and all are released on disable', a
   assert.equal(hc.enabled, false);
 });
 
+test('another hand cannot click or close a hologram being manipulated', async () => {
+  const { hc, h, at } = await rig();
+  await hc.handle({ type: 'pinchdown', ...at(900, 550) });
+  const before = h.win.input.length;
+  for (const type of ['move', 'pinchdown', 'click', 'point', 'thumbdown']) await hc.peer.handle({ type, ...at(900, 550) });
+  assert.equal(h.win.input.length, before);
+  assert.equal(h.win.isDestroyed(), false);
+  await hc.handle({ type: 'pinchup', ...at(900, 550) });
+  await hc.peer.handle({ type: 'pinchdown', ...at(900, 550) });
+  assert.equal(hc.peer.captured, h);
+  hc.disable();
+});
+
 test('thumb up pins the hologram, thumb down closes it, a swipe steps to the next model, fists pull apart, twisting rolls', async () => {
   const { hc, h, ev, at } = await rig();
   const stepped = [];
