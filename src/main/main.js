@@ -51,7 +51,7 @@ const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { McpRemote } = require('./connectors/mcp');
 const { connectAccount: connectGoogle } = require('./connectors/google');
-const { Scheduler, describe: describeSchedule, parseScheduleCommand } = require('./schedule');
+const { Scheduler, describe: describeSchedule, parseScheduleCommand, missedMessage } = require('./schedule');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
@@ -952,10 +952,9 @@ app.whenReady().then(() => {
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
-  const recordMissedSchedules = (missed) => {
+  const notifyMissedSchedules = (missed) => {
     for (const s of missed) {
-      const message = `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}`;
-      store.addHistory({ id: require('crypto').randomUUID(), text: `Scheduled: ${s.text}`, status: 'missed', reply: message, ts: s.next, finishedAt: Date.now() });
+      const message = missedMessage(s);
       if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: message }).show();
     }
   };
@@ -971,7 +970,7 @@ app.whenReady().then(() => {
     lockWatch.set(false);
     // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
     const { missed } = ask.scheduler.tick(false);
-    recordMissedSchedules(missed);
+    notifyMissedSchedules(missed);
     if (missed.length) broadcast();
     welcomeBack(lockedAt, lastWelcome).then((did) => { if (did) lastWelcome = Date.now(); }).catch(() => {});
     lockedAt = 0;
@@ -1191,7 +1190,7 @@ app.whenReady().then(() => {
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
-    recordMissedSchedules(missed);
+    notifyMissedSchedules(missed);
     for (const s of due) {
       Promise.resolve().then(() => ask.runScheduled(s)).then((result) => {
         if (result && ['done', 'failed', 'stopped'].includes(result.status)) store.updateHistory(s.runId, { status: 'resolved', reply: 'Outcome recorded in request history.', finishedAt: Date.now() });

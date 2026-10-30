@@ -7,6 +7,7 @@ const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 
 const D = DAYS.join('|');
 const PARTS = { morning: [8, 0], afternoon: [14, 0], evening: [18, 0], night: [21, 0] };
 const MISSED_MS = 45 * 60 * 1000; // late by more than this (the Mac was asleep or Relay was closed): skipped, not run out of the blue
+const missedMessage = (s) => `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}`;
 
 const pad = (n) => String(n).padStart(2, '0');
 const clockText = (h, m) => `${h % 12 === 0 ? 12 : h % 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`;
@@ -185,19 +186,20 @@ class Scheduler {
     if (changed) {
       // Persist the occurrence and schedule advancement together before handing a task
       // to the executor. If the process dies, its outcome is uncertain, not retried.
+      const records = missed.map((s) => ({ id: `missed:${s.id}:${s.next}`, text: `Scheduled: ${s.text}`, status: 'missed', reply: missedMessage(s), ts: s.next, finishedAt: now.getTime() }));
       if (due.length) {
         const s = due[0];
         const runId = `scheduled:${s.id}:${s.next}`;
         s.runId = runId;
-        const history = this.store.data.history || [];
-        this.store.data.history = [{ id: runId, text: `Scheduled: ${s.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: s.next, finishedAt: now.getTime() }, ...history].slice(0, 500);
+        records.push({ id: runId, text: `Scheduled: ${s.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: s.next, finishedAt: now.getTime() });
       }
+      this.store.data.history = [...records, ...(this.store.data.history || [])].slice(0, 500);
       this.store.data.schedules = list;
-      if (due.length && typeof this.store.flush === 'function') this.store.flush();
+      if (typeof this.store.flush === 'function') this.store.flush();
       else this.store.save();
     }
     return { due, missed };
   }
 }
 
-module.exports = { parseScheduleCommand, parseRepeating, parseOnce, nextRun, describe, Scheduler, MISSED_MS };
+module.exports = { parseScheduleCommand, parseRepeating, parseOnce, nextRun, describe, Scheduler, MISSED_MS, missedMessage };
