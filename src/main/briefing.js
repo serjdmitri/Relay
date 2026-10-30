@@ -44,7 +44,7 @@ function buildBriefing(f) {
   const w = f.weather;
   if (w) {
     const deg = w.units === 'c' ? '°C' : ' degrees';
-    out.push(`It is ${w.tempNow}${deg} and ${w.word || 'fine'} in ${w.city}, a high of ${w.high} and a low of ${w.low}${w.rain >= 40 ? `, with a ${w.rain} percent chance of rain, so take an umbrella` : ''}.`);
+    out.push(`It is ${w.tempNow}${deg}${w.word ? ` and ${w.word}` : ''} in ${w.city}, a high of ${w.high} and a low of ${w.low}${w.rain >= 40 ? `, with a ${w.rain} percent chance of rain, so take an umbrella` : ''}.`);
   }
   const ev = (f.events || []).filter((e) => e && e.title);
   if (ev.length) {
@@ -53,10 +53,10 @@ function buildBriefing(f) {
     const allDay = ev.filter((e) => e.allDay || !e.start);
     const bits = [];
     if (upcoming.length) bits.push(`${upcoming.length === 1 ? 'one event' : `${upcoming.length} events`} still ahead: ${list(upcoming.slice(0, 4).map((e) => `${e.title} at ${hour(e.start)}`))}${upcoming.length > 4 ? ', and more' : ''}`);
-    else if (timed.length) bits.push(`${timed.length === 1 ? 'one event' : `${timed.length} events`} today, all already done`);
+    else if (timed.length) bits.push(`${timed.length === 1 ? 'one event was scheduled' : `${timed.length} events were scheduled`} earlier today`);
     if (allDay.length) bits.push(`all day: ${list(allDay.slice(0, 3).map((e) => e.title))}`);
     out.push(bits.length ? `On your calendar, ${bits.join('; ')}.` : 'Your calendar is clear.');
-  } else if (!(f.missing || []).includes('calendar')) out.push('Your calendar is clear today.');
+  } else if (!(f.missing || []).includes('calendar')) out.push((f.missing || []).includes('google-calendar') ? 'Your Mac calendar is clear today.' : 'Your calendar is clear today.');
   const due = [...(f.due || [])].sort((a, b) => Number(!!b.overdue) - Number(!!a.overdue));
   if (due.length) {
     const overdue = due.filter((d) => d.overdue);

@@ -47,8 +47,15 @@ test('the briefing says each part that there is, in a sensible order, and leaves
   assert.ok(text.indexOf('weather') < 0 && text.indexOf('degrees') < text.indexOf('calendar'), 'weather first, then the calendar');
   const bare = buildBriefing({ now, missing: ['weather'] });
   assert.equal(bare, 'Good morning. Your calendar is clear today. Nothing is due. Set your city in Settings and I will add the weather.');
-  assert.match(buildBriefing({ now: new Date(2026, 9, 27, 19, 0), events: [{ title: 'Practice', start: new Date(2026, 9, 27, 16, 0) }] }), /^Good evening\..*one event today, all already done/);
+  assert.match(buildBriefing({ now: new Date(2026, 9, 27, 19, 0), events: [{ title: 'Practice', start: new Date(2026, 9, 27, 16, 0) }] }), /^Good evening\..*one event was scheduled earlier today/);
   assert.doesNotMatch(buildBriefing({ now, missing: ['calendar', 'reminders'] }), /clear today|Nothing is due/, 'a source that failed is not reported as empty');
+});
+
+test('briefing does not infer completed events or conditions it did not receive', () => {
+  const text = buildBriefing({ includeGreeting: false, missing: ['google-calendar'], weather: { city: 'London', tempNow: 12, high: 15, low: 9, units: 'c', word: '' } });
+  assert.match(text, /Your Mac calendar is clear today/);
+  assert.match(text, /could not check Google calendar/);
+  assert.doesNotMatch(text, /fine|Your calendar is clear/);
 });
 
 test('the weather comes from the free forecast service, using the city and its region, in the units asked for', async () => {
