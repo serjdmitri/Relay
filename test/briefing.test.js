@@ -175,6 +175,21 @@ test('briefing identifies disconnected sources rather than treating them as empt
   assert.doesNotMatch(text, /No important unread email/);
 });
 
+test('immediate source errors are reported without aborting the briefing', async () => {
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, {
+    store: { get: () => null },
+    mac: { calendarEvents: () => { throw new Error('calendar unavailable'); }, remindersDue: () => { throw new Error('reminders unavailable'); } },
+    googleApiIfConnected: () => ({ calEvents: () => { throw new Error('google unavailable'); }, gmailSearch: () => { throw new Error('mail unavailable'); } })
+  });
+  const text = await c.briefingText();
+  assert.match(text, /could not check .*Mac calendar/);
+  assert.match(text, /Google calendar/);
+  assert.match(text, /reminders/);
+  assert.match(text, /email/);
+  assert.doesNotMatch(text, /calendar is clear|No reminders are due/);
+});
+
 test('tomorrow calendar filters today, includes all-day events, and reports disconnected Google', async () => {
   const c = Object.create(AskController.prototype);
   c.mac = { calendarEvents: async () => 'Today | Friday, October 30, 2026 at 9:00:00 AM\nTomorrow | Saturday, October 31, 2026 at 12:00:00 AM' };
