@@ -85,6 +85,19 @@ test('a busy Relay leaves what is due for the next tick, and a one-time schedule
   assert.equal(sch.items.length, 0);
 });
 
+test('simultaneous scheduled jobs remain saved until each can be started', () => {
+  let clock = new Date(2026, 9, 26, 10, 0);
+  const store = memoryStore();
+  const sch = new Scheduler({ store, now: () => clock });
+  for (const id of ['a', 'b']) sch.add({ text: id, repeat: 'once', at: new Date(2026, 9, 26, 10, 5).getTime() }, { id });
+  clock = new Date(2026, 9, 26, 10, 6);
+  assert.deepEqual(sch.tick(true).due.map(s => s.id), ['a']);
+  assert.deepEqual(sch.items.map(s => s.id), ['b']);
+  assert.deepEqual(sch.tick(false).due, []);
+  const restarted = new Scheduler({ store, now: () => clock });
+  assert.deepEqual(restarted.tick(true).due.map(s => s.id), ['b']);
+});
+
 test('schedules can be removed by words, turned off, and cleared', () => {
   const sch = new Scheduler({ store: memoryStore(), now: () => new Date(2026, 9, 26, 7, 0) });
   sch.add({ text: 'open my email', repeat: 'daily', hour: 8, minute: 0 }, { id: 'a' });

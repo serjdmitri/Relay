@@ -176,7 +176,7 @@ class Scheduler {
     for (const s of this.items) {
       if (!s.enabled || !s.next || s.next > now.getTime()) { list.push(s); continue; }
       const late = now.getTime() - s.next;
-      if (late <= MISSED_MS && !canRun) { list.push(s); continue; } // not now: try again next tick
+      if (late <= MISSED_MS && (!canRun || due.length)) { list.push(s); continue; } // hand off at most one: leave others persisted until Relay is free
       changed = true;
       if (late > MISSED_MS) missed.push(s); else due.push(s);
       if (s.repeat === 'once') continue; // a one-time schedule is done either way
