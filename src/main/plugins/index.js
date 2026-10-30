@@ -61,15 +61,38 @@ class PluginManager {
       if (fingerprint(p.dir, info.files) !== p.contentHash) throw new Error('The plugin changed after inspection. Inspect it again before approving.');
     } catch (error) { fs.rmSync(p.base, { recursive: true, force: true }); throw error; }
     const m = p.manifest;
-    this.stopOne(m.name);
     const to = path.join(this.root, m.name);
     fs.mkdirSync(this.root, { recursive: true });
-    fs.rmSync(to, { recursive: true, force: true });
-    fs.cpSync(p.dir, to, { recursive: true, dereference: false });
-    fs.rmSync(p.base, { recursive: true, force: true });
-    const rec = { name: m.name, version: m.version, hash: p.hash, sha: p.sha, source: p.source, enabled: true, approvedAt: this.now() };
-    this.save([...this.records().filter((r) => r.name !== m.name), rec]);
-    return rec;
+    const stage = fs.mkdtempSync(path.join(this.root, '.relay-update-'));
+    const replacement = path.join(stage, 'replacement');
+    const backup = path.join(stage, 'previous');
+    let movedOld = false;
+    let movedNew = false;
+    let keepStage = false;
+    try {
+      fs.cpSync(p.dir, replacement, { recursive: true, dereference: false });
+      const copied = inspectDir(replacement);
+      if (fingerprint(replacement, copied.files) !== p.contentHash) throw new Error('The plugin changed while it was copied. Inspect it again.');
+      this.stopOne(m.name);
+      if (fs.existsSync(to)) { fs.renameSync(to, backup); movedOld = true; }
+      fs.renameSync(replacement, to);
+      movedNew = true;
+      const rec = { name: m.name, version: m.version, hash: p.hash, sha: p.sha, source: p.source, enabled: true, approvedAt: this.now() };
+      this.save([...this.records().filter((r) => r.name !== m.name), rec]);
+      return rec;
+    } catch (error) {
+      try {
+        if (movedNew) fs.rmSync(to, { recursive: true, force: true });
+        if (movedOld) fs.renameSync(backup, to);
+      } catch (restoreError) {
+        keepStage = true;
+        throw new Error(`Plugin update failed and its backup could not be restored. Backup: ${backup}. ${restoreError.message}`);
+      }
+      throw error;
+    } finally {
+      fs.rmSync(p.base, { recursive: true, force: true });
+      if (!keepStage) fs.rmSync(stage, { recursive: true, force: true });
+    }
   }
 
   cancel(token) { const p = this.pending.get(token); if (p) { fs.rmSync(p.base, { recursive: true, force: true }); this.pending.delete(token); } }
