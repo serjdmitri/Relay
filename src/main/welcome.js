@@ -8,6 +8,11 @@ function shouldGreet({ enabled = true, awayMs = 0, minAwayMs = 5 * 60000, minGap
   return enabled && !busy && awayMs >= minAwayMs && sinceLastMs >= minGapMs;
 }
 
+// The state can change while calendar, mail or weather is being fetched.
+function canDeliverWelcome({ locked = false, meeting = false, state = 'idle' } = {}) {
+  return !locked && !meeting && ['idle', 'done'].includes(state);
+}
+
 const clip = (s, n = 60) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const list = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`);
@@ -47,8 +52,9 @@ function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], 
   if (battery?.present && battery.onBattery && !battery.charging && battery.percent <= 20) add(`The battery is at ${battery.percent} percent.`, 1, 'Battery');
   const greet = greetingFor(now, name);
   const away2 = away >= 30 * 60000 ? ` You were away ${awayWords(away)}.` : '';
-  const spoken = lines.length ? `${greet}${away2} ${lines.slice(0, 3).join(' ')}` : `${greet}${away2} Nothing needs your attention.`;
-  return { spoken: spoken.trim(), lines: lines.length ? lines : ['Nothing needs your attention.'], priorities: priorities.sort((a, b) => a.priority - b.priority), away };
+  priorities.sort((a, b) => a.priority - b.priority);
+  const spoken = lines.length ? `${greet}${away2} ${priorities.slice(0, 3).map((p) => p.text).join(' ')}` : `${greet}${away2} Nothing needs your attention.`;
+  return { spoken: spoken.trim(), lines: lines.length ? lines : ['Nothing needs your attention.'], priorities, away };
 }
 
 function briefingCard(w, briefing, name = 'Sir') {
@@ -58,4 +64,4 @@ function briefingCard(w, briefing, name = 'Sir') {
   return { kind: 'list', title: `Welcome back, ${name}`, subtitle: 'Your updates, most urgent first', items, summary: '', facts: [], links: [], image: null, credit: '' };
 }
 
-module.exports = { shouldGreet, buildWelcome, awayWords, greetingFor, briefingCard };
+module.exports = { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard };
