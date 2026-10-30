@@ -31,6 +31,9 @@ try {
   assert.equal(await settings.evaluate(async () => (await window.relay.getState()).settings.assistantVisual), 'orb');
   await row.getByRole('button', { name: 'Reactor' }).click();
   assert.equal(await settings.evaluate(async () => (await window.relay.getState()).settings.assistantVisual), 'reactor');
+  const border = settings.locator('.row').filter({ hasText: 'JARVIS screen border' });
+  await border.click();
+  assert.equal(await settings.evaluate(async () => (await window.relay.getState()).settings.assistantBorder), false);
 
   const page = await context.newPage();
   const errors = [];
@@ -44,6 +47,9 @@ try {
   const reactor = await render('reactor');
   const orb = await render('orb');
   assert.notEqual(orb, reactor, 'orb draws a different assistant');
+  assert.equal(await page.locator('#hud').evaluate((el) => el.classList.contains('frame')), true);
+  await page.evaluate(() => window.__overlay({ type: 'hud', state: { state: 'done', status: 'done', reply: 'Hello', visual: 'orb', border: false } }));
+  assert.equal(await page.locator('#hud').evaluate((el) => el.classList.contains('frame')), false);
   assert.equal(await page.locator('#hudline').textContent(), 'Hello');
   assert.deepEqual(errors, []);
   await context.close();
