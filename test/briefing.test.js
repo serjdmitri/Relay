@@ -142,6 +142,22 @@ test('controller reads the configured school page and includes validated assignm
   assert.match(await c.briefingText(), /Firefox extension is not connected/);
 });
 
+test('school page is not sent to a new provider when the selection changes while reading', async () => {
+  const c = Object.create(AskController.prototype);
+  const url = 'https://school.myschoolapp.com/lms-assignment/assignment-center/student';
+  let provider = 'ollama', sent = 0;
+  Object.assign(c, {
+    store: { get: (key) => key === 'settings.briefing' ? { schoolUrl: url } : key === 'settings.model.provider' ? provider : null },
+    mac: { calendarEvents: async () => 'No events.', remindersDue: async () => 'No reminders due.' },
+    googleApiIfConnected: () => null,
+    bridge: { isConnected: () => true, call: async (method) => { if (method === 'tabs.list') return [{ id: 5, url }]; provider = 'claude'; return { url, text: 'Essay due Friday' }; } },
+    askOnce: async () => { sent++; return '[]'; }
+  });
+  const text = await c.briefingText();
+  assert.match(text, /selected model changed/);
+  assert.equal(sent, 0);
+});
+
 test('briefing identifies disconnected sources rather than treating them as empty', async () => {
   const c = Object.create(AskController.prototype);
   Object.assign(c, {
