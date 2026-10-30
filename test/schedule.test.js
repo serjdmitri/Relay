@@ -98,6 +98,18 @@ test('simultaneous scheduled jobs remain saved until each can be started', () =>
   assert.deepEqual(restarted.tick(true).due.map(s => s.id), ['b']);
 });
 
+test('an unlock check records overdue work without starting a newly due task', () => {
+  let clock = new Date(2026, 9, 26, 7, 0);
+  const sch = new Scheduler({ store: memoryStore(), now: () => clock });
+  sch.add({ text: 'missed', repeat: 'once', at: new Date(2026, 9, 26, 8, 0).getTime() }, { id: 'old' });
+  sch.add({ text: 'due', repeat: 'once', at: new Date(2026, 9, 26, 9, 0).getTime() }, { id: 'new' });
+  clock = new Date(2026, 9, 26, 9, 1);
+  const result = sch.tick(false);
+  assert.deepEqual(result.missed.map(s => s.id), ['old']);
+  assert.deepEqual(result.due, []);
+  assert.deepEqual(sch.items.map(s => s.id), ['new']);
+});
+
 test('schedules can be removed by words, turned off, and cleared', () => {
   const sch = new Scheduler({ store: memoryStore(), now: () => new Date(2026, 9, 26, 7, 0) });
   sch.add({ text: 'open my email', repeat: 'daily', hour: 8, minute: 0 }, { id: 'a' });
