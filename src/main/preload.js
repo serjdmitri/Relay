@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('relay', {
   onRecent: (cb) => on('recent:state', cb),
   reviewSkill: (id, approve) => invoke('skills:review', id, approve),
   openExternal: (url) => invoke('app:open-link', url),
+  focusMain: () => invoke('window:focus-main'),
   openGlance: () => invoke('glance:open'),
   testModels3d: () => invoke('models3d:test'),
   setHfToken: (t) => invoke('models3d:set-hf-token', t),

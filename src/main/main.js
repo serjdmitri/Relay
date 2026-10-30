@@ -503,6 +503,11 @@ function registerIpc() {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
     if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
   });
+  ipcMain.handle('window:focus-main', (event) => {
+    if (!mainWin || mainWin.isDestroyed() || event.sender !== mainWin.webContents) return;
+    app.focus({ steal: true });
+    mainWin.focus();
+  });
   // Glance remains a separate application and manages its own enrollment and credentials.
   ipcMain.handle('glance:open', async () => {
     const target = '/Applications/Glance.app';
