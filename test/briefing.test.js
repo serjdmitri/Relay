@@ -144,6 +144,10 @@ test('briefing identifies disconnected sources rather than treating them as empt
     googleApiIfConnected: () => null
   });
   const text = await c.briefingText();
+  const facts = await c.briefingFacts();
+  assert.deepEqual(facts.missing.filter((source) => source === 'google-calendar' || source === 'mail'), ['google-calendar', 'mail']);
+  assert.deepEqual(facts.events, []);
+  assert.deepEqual(facts.due, []);
   assert.match(text, /School assignments are not configured/);
   assert.match(text, /could not check Google calendar and email/);
   assert.doesNotMatch(text, /No important unread email/);
