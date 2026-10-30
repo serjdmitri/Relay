@@ -594,10 +594,11 @@ const PAGES = {
   },
 
   memory(c) {
-    c.append(h('<div class="lead">What Relay knows about you. Tell it by saying “remember that my sister is Anna”, or add it here. Relay uses these in every request, and keeps them only on this Mac. Say “forget …” or delete one here. It never keeps passwords or card numbers.</div>'));
+    c.append(h('<div class="lead">What Relay knows about you. Say “remember that…” or add it here. Explicit new memories are stored in Relay and exported to Desktop/memory for manual import; they are not automatically saved to Sentient OS. Forgetting here does not remove existing export files or vault notes.</div>'));
     const on = S.settings.memory !== false;
     const sw = h('<div class="card flat" style="margin-bottom:18px"></div>');
     sw.append(toggleRow('Remember things about me', 'Off: Relay does not use or collect memories, and “remember …” does nothing.', 'settings.memory'));
+    sw.append(toggleRow('Read Sentient OS memory', 'Uses the Sentient OS connection configured in Codex. Notes are retrieved from Sentient OS and can be sent to the active cloud model. Read-only; unavailable when Ollama is selected.', 'settings.sentient.enabled'));
     c.append(sw);
     const row = h('<div class="field-row" style="margin-bottom:22px"><input class="field" id="min" placeholder="Something to remember, e.g. I am vegetarian"><button class="btn primary" id="madd" style="height:28px">Add</button></div>');
     const add = () => {

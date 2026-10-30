@@ -1223,6 +1223,12 @@ class AskController {
   connectorTools() {
     const c = this.store.get('settings.connectors') || {};
     const tools = [];
+    const sentientAllowed = () => this.store.get('settings.memory') !== false && this.store.get('settings.sentient.enabled') === true && this.store.get('settings.model.provider') !== 'ollama';
+    if (sentientAllowed()) {
+      const { SentientReader, sentientTools } = require('./connectors/sentient');
+      if (!this.sentientReader) this.sentientReader = new SentientReader();
+      tools.push(...sentientTools(this.sentientReader, { allowed: sentientAllowed, onRead: () => { this.tainted = true; } }));
+    }
     const notion = decryptKey(c.notion?.tokenEnc);
     if (notion) tools.push(...notionTools(new NotionApi({ token: notion })));
     const appKey = decryptKey(c.apps?.keyEnc);

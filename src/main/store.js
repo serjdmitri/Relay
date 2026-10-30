@@ -52,6 +52,7 @@ const DEFAULTS = {
     cards: true, // answer cards with a picture, facts and links
     showUsage: true, // a small line under the answer: model, time, tokens (never spoken)
     memory: true, // remember facts you tell it, and use them in every request
+    sentient: { enabled: false }, // optional remote, read-only personal vault
     learnWords: true, // after you dictate, notice words you fixed by hand and learn them
     recent: true, // a glass list of recent asks opens when you rest the pointer on the left edge
     buddy: true, // a small helper follows your pointer while Relay works
