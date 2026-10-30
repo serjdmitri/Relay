@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseScheduleCommand, nextRun, describe, Scheduler } = require('../src/main/schedule');
+const { parseScheduleCommand, nextRun, describe, Scheduler, acknowledgeUnknown } = require('../src/main/schedule');
 
 const add = (t, now) => parseScheduleCommand(t, now || new Date(2026, 9, 26, 10, 0));
 
@@ -55,6 +55,19 @@ function memoryStore() {
   const data = { schedules: [] };
   return { data, get: (k) => data[k], save() {} };
 }
+
+test('a user can acknowledge only an inactive uncertain scheduled run', () => {
+  const store = memoryStore();
+  store.data.history = [{ id: 'scheduled:a:1', status: 'unknown' }, { id: 'other', status: 'unknown' }, { id: 'scheduled:b:1', status: 'done' }];
+  store.updateHistory = (id, patch) => Object.assign(store.data.history.find((h) => h.id === id), patch);
+  assert.equal(acknowledgeUnknown(store, 'scheduled:a:1', 'scheduled:a:1'), false);
+  assert.equal(acknowledgeUnknown(store, 'other', null), false);
+  assert.equal(acknowledgeUnknown(store, 'scheduled:b:1', null), false);
+  assert.equal(acknowledgeUnknown(store, 'scheduled:a:1', null), true);
+  assert.equal(store.data.history[0].status, 'resolved');
+  assert.match(store.data.history[0].reply, /not verified/);
+  assert.equal(acknowledgeUnknown(store, 'scheduled:a:1', null), false);
+});
 
 test('the scheduler runs what is due once, moves on, and skips what was missed', () => {
   let clock = new Date(2026, 9, 26, 7, 59);
