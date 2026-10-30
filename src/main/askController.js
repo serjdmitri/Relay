@@ -1293,14 +1293,14 @@ class AskController {
     return buildBriefing(await this.briefingFacts(options));
   }
 
-  async dailyPlanCommand() {
+  async dailyPlanCommand(close = false) {
     const abort = new AbortController();
     this.abort = abort;
     const facts = await this.briefingFacts({ includeGreeting: false });
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
-    const plan = require('./dailyPlan').planToday(facts);
+    const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
     try {
-      this.outputExport('Plan today', plan);
+      this.outputExport(close ? 'Close the day' : 'Plan today', plan);
       return { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 };
     } catch {
       return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
@@ -1755,6 +1755,9 @@ class AskController {
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
           return this.finish(entry, await this.dailyPlanCommand());
+        }
+        if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?close (?:the|my) day[.!?]*$/i.test(effective.trim())) {
+          return this.finish(entry, await this.dailyPlanCommand(true));
         }
         if (!opts.shown && !opts.scheduled) {
           const dc = devices.parseDeviceCommand(effective);

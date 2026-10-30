@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { planToday } = require('../src/main/dailyPlan');
+const { planToday, closeDay } = require('../src/main/dailyPlan');
 
 test('plan proposes at most three sourced priorities, with overdue reminders first', () => {
   const now = new Date('2026-10-30T10:00:00');
@@ -10,6 +10,17 @@ test('plan proposes at most three sourced priorities, with overdue reminders fir
   assert.match(result, /3\. Lab — School, due Monday/);
   assert.doesNotMatch(result, /4\./);
   assert.match(result, /Sources unavailable or not configured: mail/);
+});
+
+test('close of day uses recorded successes and unfinished requests without claiming unrelated work', () => {
+  const now = new Date('2026-10-30T18:00:00');
+  const text = closeDay({ facts: { now, due: [{ title: 'Essay' }], missing: ['mail'] }, actions: [{ ts: now.getTime(), tool: 'notes_create', ok: true }, { ts: now.getTime(), tool: 'gmail_send', ok: false }], history: [{ ts: now.getTime(), status: 'failed', text: 'Check the assignment' }] });
+  assert.match(text, /Recorded successful Relay actions: created a note/);
+  assert.doesNotMatch(text, /sent an email/);
+  assert.match(text, /Requests not completed: Check the assignment/);
+  assert.match(text, /Essay/);
+  assert.match(text, /Tomorrow’s calendar was not checked/);
+  assert.match(text, /Work outside Relay may not appear/);
 });
 
 test('plan reports absent priorities and unavailable school without inventing tasks', () => {

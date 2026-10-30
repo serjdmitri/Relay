@@ -13,4 +13,20 @@ function planToday(facts) {
   return `Suggested priorities for today:\n${lines.join('\n')}`;
 }
 
-module.exports = { planToday };
+function closeDay({ facts, actions = [], history = [] }) {
+  const now = facts.now;
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  const valid = (item) => Number.isFinite(item.ts) && item.ts >= start.getTime() && item.ts <= now.getTime();
+  const recorded = actions.filter((a) => valid(a) && a.ok === true && require('./recap').CHANGES[a.tool]);
+  const unfinished = history.filter((h) => valid(h) && ['failed', 'stopped', 'working'].includes(h.status) && h.text).slice(0, 5);
+  const summary = require('./recap').buildRecap({ actions: recorded, history: [], now: now.getTime() });
+  const lines = ['Close of day — based on Relay records and currently available sources.'];
+  lines.push(recorded.length ? `Recorded successful Relay actions: ${summary.parts.join(', ')}.` : 'No successful Relay actions were recorded today.');
+  lines.push(unfinished.length ? `Requests not completed: ${unfinished.map((h) => String(h.text).replace(/\s+/g, ' ').slice(0, 100)).join('; ')}.` : 'No unfinished requests were found in Relay history.');
+  lines.push('Possible carryovers for tomorrow (check dates and priorities):');
+  lines.push(planToday({ ...facts, events: [] }).replace('Suggested priorities for today:', 'Items still visible in checked sources:'));
+  lines.push('Tomorrow’s calendar was not checked. Work outside Relay may not appear in its records.');
+  return lines.join('\n');
+}
+
+module.exports = { planToday, closeDay };
