@@ -1269,6 +1269,7 @@ class AskController {
       return Promise.race([Promise.resolve(p), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('too slow')), ms); })]).finally(() => clearTimeout(timer));
     };
     const g = this.googleApiIfConnected();
+    if (!g) missing.push('google-calendar', 'mail');
     const school = require('./school');
     const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
       within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
@@ -1281,7 +1282,7 @@ class AskController {
         if (!page.ok) return { problem: school.schoolProblem(page.reason) };
         const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => this.askOnce(prompt, system));
         return assignments ? { assignments, truncated: page.truncated } : { problem: school.schoolProblem('extract-failed') };
-      })(), 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : undefined
+      })(), 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : { problem: 'School assignments are not configured in briefing settings.' }
     ]);
     if (!cfg.city) missing.push('weather');
     else if (!weather) missing.push('weather-unavailable');
