@@ -33,11 +33,13 @@ function awayWords(ms) {
 function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], events = [], battery = null } = {}) {
   const away = Math.max(0, now - lockedAt);
   const lines = [];
-  const done = history.filter((h) => (h.finishedAt ?? h.ts) >= lockedAt && (h.finishedAt ?? h.ts) <= now && h.text && ['done', 'failed'].includes(h.status));
+  const done = history.filter((h) => (h.finishedAt ?? h.ts) >= lockedAt && (h.finishedAt ?? h.ts) <= now && h.text && ['done', 'failed', 'missed'].includes(h.status));
   const ok = done.filter((h) => h.status === 'done');
   const bad = done.filter((h) => h.status === 'failed');
+  const missed = done.filter((h) => h.status === 'missed');
   if (ok.length) lines.push(ok.length === 1 ? `Finished while you were away: ${clip(ok[0].text.replace(/^Agent: /, ''))}.` : `${plural(ok.length, 'thing', 'things')} finished while you were away, including ${clip(ok[0].text.replace(/^Agent: /, ''), 40)}.`);
   if (bad.length) lines.push(bad.length === 1 ? `One did not work: ${clip(bad[0].text.replace(/^Agent: /, ''))}.` : `${bad.length} did not work.`);
+  if (missed.length) lines.push(missed.length === 1 ? `One scheduled task was missed: ${clip(missed[0].text.replace(/^Scheduled: /, ''))}.` : `${missed.length} scheduled tasks were missed.`);
   const next = events.filter((e) => e.start >= now - 5 * 60000 && e.start - now <= 3 * 3600e3).sort((a, b) => a.start - b.start)[0];
   if (next) { const min = Math.round((next.start - now) / 60000); lines.push(min <= 0 ? `${clip(next.title, 50)} is starting now.` : min < 60 ? `${clip(next.title, 50)} starts in ${plural(min, 'minute', 'minutes')}.` : `Next up: ${clip(next.title, 50)} at ${clock(next.start)}.`); }
   if (battery?.present && battery.onBattery && !battery.charging && battery.percent <= 20) lines.push(`The battery is at ${battery.percent} percent.`);
