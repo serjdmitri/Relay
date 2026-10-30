@@ -742,6 +742,7 @@ const PAGES = {
         return row;
       })(),
       toggleRow('Listen for “Hey Jarvis”', 'Relay listens on this Mac for your wake phrase, so you can start without a key. With the default phrase, “Jarvis, wake up” also works. Nothing is recorded or sent anywhere; the words are read and thrown away. The orange microphone dot stays on while it listens, and it uses some battery.', 'settings.wake.enabled'),
+      toggleRow('Two claps before the wake phrase', 'Experimental: clap twice, then say the wake phrase within five seconds. Uses the same microphone; background noise can affect detection. The keyboard shortcut still works.', 'settings.wake.requireClaps'),
       (() => {
         const row = h(`<div class="row"><div class="grow"><div class="t">Wake phrase</div><div class="d">Two or three clear words work best, like “hey jarvis” or “hey relay”.</div></div><input class="field" style="width:200px" value="${esc((S.settings.wake && S.settings.wake.phrase) || 'hey jarvis')}"></div>`);
         $('input', row).onchange = (e) => { const v = e.target.value.trim().toLowerCase(); if (v) relay.set('settings.wake.phrase', v); };

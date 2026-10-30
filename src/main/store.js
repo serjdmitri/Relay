@@ -32,7 +32,7 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
-    wake: { enabled: false, phrase: 'hey jarvis', apps: [] }, // listen for a wake phrase while Relay is idle (on-device). apps: only while one of these is in front; empty means always
+    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false }, // on-device wake phrase; optionally require two claps immediately beforehand
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
     briefing: { city: '', name: '', units: 'f' }, // the morning briefing: where to get the weather for (a city name), what to call you, f or c

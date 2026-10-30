@@ -17,6 +17,25 @@ function distance(a, b) {
 // Speech recognition mishears names, so a long word may be one letter off ("jarvus", "jervis").
 const same = (heard, want) => heard === want || (want.length >= 5 && heard.length >= 4 && distance(heard, want) <= 1);
 
+// A conservative two-impulse gate over the existing, on-device microphone level.
+// Levels are sampled about 20 times per second, so a real microphone check is needed.
+class ClapGate {
+  constructor() { this.reset(); }
+  reset() { this.high = false; this.first = null; this.until = 0; }
+  level(value, now) {
+    const high = Number(value) >= 0.55;
+    if (!high) { this.high = false; return false; }
+    if (this.high) return false;
+    this.high = true;
+    if (this.first !== null && now - this.first >= 120 && now - this.first <= 900) {
+      this.first = null; this.until = now + 5000; return true;
+    }
+    this.first = now;
+    return false;
+  }
+  ready(now) { return this.until > 0 && now <= this.until; }
+}
+
 // Does the text end with (or contain, near its end) the wake phrase? "Hey Jarvis" also matches "okay jarvis" and "hi jarvis".
 function heardWake(text, phrase) {
   const heard = clean(text).split(' ').filter(Boolean).slice(-12);
@@ -62,8 +81,15 @@ class WakeWord {
     this.retry = null;
     this.errors = 0;
     this.lastWake = 0;
+    this.claps = new ClapGate();
+    this.lastPartial = '';
+    this.clapPrefix = '';
     this.onPartial = (text) => this.partial(text);
     speech.on('partial', this.onPartial);
+    speech.on('level', (level) => {
+      if (!this.armed || !this.getConfig().requireClaps) return;
+      if (this.claps.level(level, Date.now())) this.clapPrefix = clean(this.lastPartial);
+    });
   }
 
   get wanted() {
@@ -111,6 +137,9 @@ class WakeWord {
     this.clearTimer(this.retry);
     if (!this.armed) return;
     this.armed = false;
+    this.claps.reset();
+    this.lastPartial = '';
+    this.clapPrefix = '';
     try { this.speech.cancel(); } catch {}
     this.onArmed(false);
   }
@@ -118,7 +147,15 @@ class WakeWord {
   partial(text) {
     if (!this.armed) return;
     const c = this.getConfig();
-    if (!heardWake(text, c.phrase)) return;
+    this.lastPartial = text;
+    let candidate = text;
+    if (c.requireClaps) {
+      if (!this.claps.ready(Date.now())) return;
+      const current = clean(text);
+      if (this.clapPrefix && !current.startsWith(`${this.clapPrefix} `)) return;
+      candidate = this.clapPrefix ? current.slice(this.clapPrefix.length).trim() : current;
+    }
+    if (!heardWake(candidate, c.phrase)) return;
     if (Date.now() - this.lastWake < 1500) return;
     this.lastWake = Date.now();
     this.disarm();
@@ -126,4 +163,4 @@ class WakeWord {
   }
 }
 
-module.exports = { WakeWord, heardWake, clean };
+module.exports = { WakeWord, ClapGate, heardWake, clean };
