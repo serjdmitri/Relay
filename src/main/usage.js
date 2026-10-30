@@ -36,4 +36,9 @@ function usageLine(u) {
   return parts.join(' · ');
 }
 
-module.exports = { add, tokens, modelName, seconds, usageLine };
+// A Claude plan limit must never be presented as a Codex or other provider's limit.
+function limitForModel(model, claudeLimit) {
+  return /^(?:claude(?:-|$)|haiku(?:-|$)|sonnet(?:-|$)|opus(?:-|$))/i.test(String(model || '')) ? claudeLimit : null;
+}
+
+module.exports = { add, tokens, modelName, seconds, usageLine, limitForModel };

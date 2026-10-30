@@ -23,3 +23,11 @@ test('the usage line shows what is known and leaves out the rest', () => {
 test('usage adds up across steps and keeps the latest model', () => {
   assert.deepEqual(add(add(null, { in: 10, out: 2, model: 'a' }), { in: 5, out: 1, model: 'b' }), { in: 15, out: 3, model: 'b' });
 });
+
+test('Claude plan utilization is not attributed to Codex or other models', () => {
+  const { limitForModel } = require('../src/main/usage');
+  const rate = { type: 'five_hour', util: 0.96 };
+  assert.equal(limitForModel('claude-sonnet-5-5', rate), rate);
+  assert.equal(limitForModel('sonnet', rate), rate);
+  for (const model of ['codex', 'gpt-4o', 'ollama', '']) assert.equal(limitForModel(model, rate), null);
+});
