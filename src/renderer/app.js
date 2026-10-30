@@ -729,6 +729,12 @@ const PAGES = {
     ask.append(
       look,
       (() => {
+        const selected = S.settings.assistantVisual === 'orb' ? 'orb' : 'reactor';
+        const row = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Assistant visual</div><div class="seg">${[['reactor', 'Reactor'], ['orb', 'Orb']].map(([v, l]) => `<button data-v="${v}" class="${selected === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Choose the assistant shown while Relay listens, works, and greets you. This applies to the Jarvis look.</div></div>`);
+        row.onclick = (e) => e.target.dataset.v && relay.set('settings.assistantVisual', e.target.dataset.v);
+        return row;
+      })(),
+      (() => {
         const hwc = S.settings.homework || {};
         const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Homework helper</div><div class="d">Select an assignment (or open it on screen) and say “outline this essay”, “walk me through this problem”, “give me a template for this assignment”, “check my answer”, “give me feedback on my essay” or “do this assignment”. Results are saved in Documents/Relay Homework as a Word file or PDF, and code as a folder. Use it only where your teacher allows AI help, and use what it makes to learn, not just to hand in. Say “use this as my writing sample” with some of your own writing selected so drafts sound like you.</div></div>
           <div style="flex-basis:100%;display:flex;gap:8px;margin-top:8px;align-items:center"><span class="d" style="margin:0">Save as</span><div class="select" style="margin:0"><span id="hwfname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="hwfmt"><option value="docx">Word</option><option value="pdf">PDF</option><option value="md">Plain text</option></select></div></div>
