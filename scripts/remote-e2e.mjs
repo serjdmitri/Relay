@@ -53,6 +53,7 @@ try {
   await page.waitForFunction(() => document.getElementById('reply').textContent.includes('Hello from earlier'));
   ok('the last answer is shown', true);
   ok('connected dot is on', await page.evaluate(() => document.getElementById('conn').className.includes('on')) || (await page.waitForFunction(() => document.getElementById('conn').className.includes('on'), null, { timeout: 4000 }).then(() => true).catch(() => false)));
+  await page.click('#kbd');
   await page.fill('#text', 'make a note called groceries');
   await page.press('#text', 'Enter');
   await page.waitForFunction(() => document.getElementById('status').textContent === 'PROCESSING');
