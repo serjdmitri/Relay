@@ -1271,6 +1271,7 @@ class AskController {
     const g = this.googleApiIfConnected();
     if (!g) missing.push('google-calendar', 'mail');
     const school = require('./school');
+    const schoolProvider = this.store.get('settings.model.provider');
     const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
       within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
       within(this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
@@ -1280,7 +1281,11 @@ class AskController {
       cfg.schoolUrl ? within((async () => {
         const page = await school.readSchoolPage(this.bridge, cfg.schoolUrl);
         if (!page.ok) return { problem: school.schoolProblem(page.reason) };
-        const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => this.askOnce(prompt, system));
+        if (this.store.get('settings.model.provider') !== schoolProvider) return { problem: 'The selected model changed while reading school assignments. Run the briefing again.' };
+        const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => {
+          if (this.store.get('settings.model.provider') !== schoolProvider) throw new Error('model changed');
+          return this.askOnce(prompt, system);
+        });
         return assignments ? { assignments, truncated: page.truncated } : { problem: school.schoolProblem('extract-failed') };
       })(), 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : { problem: 'School assignments are not configured in briefing settings.' }
     ]);
