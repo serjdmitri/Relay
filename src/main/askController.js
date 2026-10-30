@@ -2836,7 +2836,7 @@ class AskController {
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && this.voiceAsk && res.status === 'done' && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
+    if (this.store.get('settings.speakReplies') && this.voiceAsk && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     clearTimeout(this.holdTimer);
