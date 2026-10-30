@@ -141,7 +141,7 @@ class Speaker {
     const wanted = tts.engine;
     const engine = this.engineFor(tts);
     if (wanted !== 'system' && engine === 'system') {
-      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs')) return { ok: false, message: 'Cloud voices are paused while the local Ollama model is selected.' };
+      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs')) return { ok: false, message: 'Cloud voices are paused while Relay uses a local model.' };
       return { ok: false, message: wanted === 'kokoro' ? 'The on-device voice is not downloaded yet.' : `Add your ${cloud.NAMES[wanted] || wanted} key first.` };
     }
     if (engine === 'system') { await this.speakSystem(speakable(text), { voice, rate }); return { ok: true }; }

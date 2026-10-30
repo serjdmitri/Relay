@@ -931,7 +931,7 @@ app.whenReady().then(() => {
   kokoro = new KokoroVoice({ dir: path.join(app.getPath('userData'), 'voices', 'kokoro'), onProgress: () => broadcast() });
   speaker = new Speaker({
     kokoro,
-    getLocalOnly: () => store.get('settings.model.provider') === 'ollama',
+    getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
     getTts: () => {
       const t = store.get('settings.tts');
       return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) } };
@@ -1197,7 +1197,7 @@ app.whenReady().then(() => {
   }, 60000);
   connectivity = new Connectivity({
     probe: () => Promise.any(['https://api.anthropic.com', 'https://www.apple.com/library/test/success.html'].map((u) => fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).then(() => true))).catch(() => false),
-    onChange: (online) => { ask.offline = !online; broadcast(); }
+    onChange: (online) => { ask.offline = !online; if (!online && flagsMod.isOn(store.get('settings'), 'offline')) speaker?.stop(); broadcast(); }
   });
   setInterval(() => { if (flagsMod.isOn(store.get('settings'), 'offline')) connectivity.check(); else if (ask.offline) { ask.offline = false; connectivity.online = true; } }, 30000);
 
