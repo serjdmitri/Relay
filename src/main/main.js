@@ -152,7 +152,7 @@ function publicState() {
     voiceProblem,
     kokoro: kokoro.status(),
     presetInfo: PRESETS,
-    history: d.history.slice(0, 200),
+    history: d.history.filter((h) => h.status !== 'resolved').slice(0, 200),
     actions: (() => { const can = ask?.undos?.ids(); return d.actions.slice(0, 300).map((a) => (can && can.has(a.id) ? { ...a, undoable: true } : a)); })(),
     recap: ask?.recapData?.() || null,
     stats: store.stats(),

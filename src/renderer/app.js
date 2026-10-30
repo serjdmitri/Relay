@@ -172,7 +172,8 @@ const mark = (status) => status === 'done'
   : `<svg class="mark" viewBox="0 0 24 24"><path d="M12 3L22 20H2z" fill="#ff9f0a" stroke="#ff9f0a" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v5M12 16.5v.01" stroke="#2a2a2a" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 
 function requestRow(x) {
-  return `<div class="req">${mark(x.status)}<div style="flex:1;min-width:0"><div class="tt"><span>${esc(x.text)}</span><span class="when">${timeAgo(x.ts)}</span></div><div class="rp">${esc(x.status === 'stopped' ? 'Stopped at your request. Any earlier actions may already have happened.' : x.reply || '')}</div>${x.usageText ? `<div class="when" style="margin-top:3px">${esc(x.usageText)}</div>` : ''}</div></div>`;
+  const label = x.status === 'unknown' ? 'Outcome unknown — check before trying again. ' : x.status === 'missed' ? 'Missed. ' : '';
+  return `<div class="req">${mark(x.status)}<div style="flex:1;min-width:0"><div class="tt"><span>${esc(x.text)}</span><span class="when">${timeAgo(x.ts)}</span></div><div class="rp">${esc(label + (x.status === 'stopped' ? 'Stopped at your request. Any earlier actions may already have happened.' : x.reply || ''))}</div>${x.usageText ? `<div class="when" style="margin-top:3px">${esc(x.usageText)}</div>` : ''}</div></div>`;
 }
 
 const allowed = '<span class="allowed" style="display:inline-flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#4cc2ff"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#1d1d1d" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Allowed</span>';
