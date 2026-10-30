@@ -335,6 +335,7 @@ async function welcomeBack(lockedAt, lastWelcome) {
     new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out))))),
     ask.briefingText({ includeGreeting: false }).catch(() => '')
   ]);
+  if (!welcome.canDeliverWelcome({ locked: !!ask.lockWatch?.locked, meeting: !!ask.meeting?.active, state: ask.state })) return false;
   const w = welcome.buildWelcome({ name: cfg.name || 'Sir', lockedAt, now: Date.now(), history: store.get('history') || [], events: day, battery });
   const lines = briefing && w.lines[0] === 'Nothing needs your attention.' ? [briefing] : [...w.lines, ...(briefing ? [briefing] : [])];
   const spoken = briefing ? `${w.spoken.replace(/ Nothing needs your attention\.$/, '')} ${briefing}` : w.spoken;

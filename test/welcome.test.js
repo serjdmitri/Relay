@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldGreet, buildWelcome, awayWords, greetingFor, briefingCard } = require('../src/main/welcome');
+const { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard } = require('../src/main/welcome');
 
 const T = Date.parse('2026-06-10T12:00:00');
 const MIN = 60000;
@@ -30,7 +30,7 @@ test('what finished while you were away, what failed, the next meeting and a low
     events: [{ title: 'Robotics meeting', start: T + 25 * MIN }, { title: 'Dentist', start: T + 5 * 3600e3 }],
     battery: { present: true, onBattery: true, charging: false, percent: 14 }
   });
-  assert.match(w.spoken, /^Good afternoon, Sir\. You were away about 45 minutes\. 2 things finished while you were away, including research swerve drives\./);
+  assert.match(w.spoken, /^Good afternoon, Sir\. You were away about 45 minutes\. One did not work: email Dana\./);
   assert.match(w.spoken, /One did not work: email Dana\./);
   assert.match(w.spoken, /Robotics meeting starts in 25 minutes\./);
   assert.ok(!/before I left/.test(w.spoken) && !/Dentist/.test(w.spoken));
@@ -79,8 +79,16 @@ test('briefing card puts failed and missed work before meetings and completed wo
 test('the spoken version keeps to the top three items; the banner has all of them', () => {
   const w = buildWelcome({ lockedAt: T - 10 * MIN, now: T, history: [{ text: 'a', status: 'done', ts: T - 5 * MIN }, { text: 'b', status: 'failed', ts: T - 4 * MIN }], events: [{ title: 'Standup', start: T + MIN * 10 }], battery: { present: true, onBattery: true, charging: false, percent: 9 } });
   assert.equal(w.lines.length, 4);
-  assert.ok(!/battery/.test(w.spoken));
+  assert.ok(!/Finished while|finished while/.test(w.spoken), 'urgent items are spoken before completed work');
   assert.match(w.lines.join(' '), /battery/);
+});
+
+test('unlock greeting does not interrupt work, a meeting, or a re-locked Mac', () => {
+  assert.equal(canDeliverWelcome({ state: 'idle' }), true);
+  assert.equal(canDeliverWelcome({ state: 'done' }), true);
+  for (const state of ['working', 'listening', 'input', 'confirm', 'finishing']) assert.equal(canDeliverWelcome({ state }), false);
+  assert.equal(canDeliverWelcome({ locked: true }), false);
+  assert.equal(canDeliverWelcome({ meeting: true }), false);
 });
 
 test('plain wording for long absences and a meeting later today', () => {
