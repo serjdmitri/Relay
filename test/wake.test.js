@@ -13,6 +13,20 @@ test('heardWake matches the phrase, its greeting variants and one-letter mishear
   assert.ok(heardWake('I said hey Jarvis now', 'hey jarvis'));
 });
 
+test('the default Jarvis phrase also accepts an explicit wake-up request', () => {
+  for (const text of ['Jarvis wake up', 'Jarvis, wake up!', 'jarvus wake up please']) assert.equal(heardWake(text, 'hey jarvis'), true, text);
+  for (const text of ['jarvis wake', 'wake up jarvis', 'jarvis wake down']) assert.equal(heardWake(text, 'hey jarvis'), false, text);
+  assert.equal(heardWake('jarvis wake up', 'hey computer'), false, 'a custom wake phrase is not broadened');
+});
+
+test('a wake-up request activates the listener through the normal wake path', async () => {
+  const r = rig();
+  await r.w.refresh();
+  r.speech.emit('partial', 'Jarvis wake up');
+  assert.deepEqual(r.woke, ['Jarvis wake up']);
+  assert.equal(r.w.armed, false);
+});
+
 function rig(over = {}) {
   const speech = new EventEmitter();
   const log = [];

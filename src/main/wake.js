@@ -22,6 +22,13 @@ function heardWake(text, phrase) {
   const heard = clean(text).split(' ').filter(Boolean).slice(-12);
   const want = clean(phrase).split(' ').filter(Boolean);
   if (!want.length || !heard.length) return false;
+  // The default Jarvis phrase also accepts the explicit "Jarvis, wake up".
+  // Custom phrases are left alone, and the complete wake-up wording is required.
+  if (want.join(' ') === 'hey jarvis') {
+    for (let i = 0; i + 2 < heard.length; i++) {
+      if (same(heard[i], 'jarvis') && heard[i + 1] === 'wake' && heard[i + 2] === 'up') return true;
+    }
+  }
   const greeting = GREETINGS.has(want[0]);
   const name = greeting ? want.slice(1) : want;
   if (!name.length) return false;
