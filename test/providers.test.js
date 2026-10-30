@@ -32,7 +32,7 @@ test('ollama: converts tool history to wire format and parses tool calls', async
   let body;
   const p = new OllamaProvider({
     url: 'http://127.0.0.1:11434/', model: 'qwen2.5:14b',
-    fetchImpl: async (url, init) => { body = JSON.parse(init.body); assert.equal(url, 'http://127.0.0.1:11434/api/chat'); return ok({ message: { content: '', tool_calls: [{ function: { name: 'open_app', arguments: { name: 'Finder' } } }] } }); }
+    fetchImpl: async (url, init) => { body = JSON.parse(init.body); assert.equal(init.redirect, 'error'); assert.equal(url, 'http://127.0.0.1:11434/api/chat'); return ok({ message: { content: '', tool_calls: [{ function: { name: 'open_app', arguments: { name: 'Finder' } } }] } }); }
   });
   const messages = [
     { role: 'user', content: [{ type: 'text', text: 'open notes' }] },
@@ -49,7 +49,14 @@ test('ollama: converts tool history to wire format and parses tool calls', async
   assert.deepEqual(r.toolCalls[0].input, { name: 'Finder' });
 });
 
+test('ollama refuses remote addresses and embedded credentials', () => {
+  for (const url of ['https://example.com', 'http://192.168.1.5:11434', 'http://localhost.example.com', 'http://user:pass@localhost:11434', 'http://localhost:11434/?key=secret']) {
+    assert.throws(() => new OllamaProvider({ url, model: 'm' }), /loopback/);
+  }
+  for (const url of ['http://127.0.0.1:11434', 'http://localhost:11434', 'http://[::1]:11434']) assert.doesNotThrow(() => new OllamaProvider({ url, model: 'm' }));
+});
+
 test('ollama: unreachable server gives a readable error', async () => {
-  const p = new OllamaProvider({ url: 'http://x', model: 'm', fetchImpl: async () => { throw new Error('ECONNREFUSED'); } });
+  const p = new OllamaProvider({ url: 'http://127.0.0.1:11434', model: 'm', fetchImpl: async () => { throw new Error('ECONNREFUSED'); } });
   await assert.rejects(() => p.step({ system: '', messages: [], tools }), /Cannot reach Ollama/);
 });
