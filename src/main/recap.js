@@ -15,7 +15,7 @@ const CHANGES = {
   clipboard_write: ['put text on the clipboard', 'put text on the clipboard', 0], set_volume: ['changed the volume', 'changed the volume', 0], toggle_dark_mode: ['switched dark mode', 'switched dark mode', 0],
   run_applescript: ['ran a script', 'ran scripts', 2], run_shell: ['ran a command', 'ran commands', 2], drive_apply: ['tidied files', 'tidied files', 1], drive_make: ['made a file', 'made files', 0], drive_undo: ['put files back', 'put files back', 0],
   sheet_append: ['added a line to a Google Sheet', 'added lines to Google Sheets', 1], notion_create: ['created a Notion page', 'created Notion pages', 0], notion_append: ['added to a Notion page', 'added to Notion pages', 0],
-  schedule_task: ['scheduled something', 'scheduled things', 0], start_background_agent: ['started a background agent', 'started background agents', 0], remember: ['remembered something about you', 'remembered things about you', 0], forget_memory: ['forgot something', 'forgot things', 0],
+  schedule_task: ['scheduled something', 'scheduled things', 0], start_background_agent: ['started a background agent', 'started background agents', 0], remember: ['remembered something about you', 'remembered things about you', 0], forget_memory: ['forgot something', 'forgot things', 0], save_daily_report: ['saved a daily report', 'saved daily reports', 0],
   firefox_click: ['clicked in Firefox', 'clicked in Firefox', 1], firefox_type: ['typed in Firefox', 'typed in Firefox', 1], firefox_navigate: ['browsed in Firefox', 'browsed in Firefox', 0]
 };
 
