@@ -1272,21 +1272,21 @@ class AskController {
     const cfg = this.store.get('settings.briefing') || {};
     const now = new Date();
     const missing = [];
-    const within = (p, ms = 7000) => {
+    const within = (fn, ms = 7000) => {
       let timer;
-      return Promise.race([Promise.resolve(p), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('too slow')), ms); })]).finally(() => clearTimeout(timer));
+      return Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('too slow')), ms); })]).finally(() => clearTimeout(timer));
     };
     const g = this.googleApiIfConnected();
     if (!g) missing.push('google-calendar', 'mail');
     const school = require('./school');
     const schoolProvider = this.store.get('settings.model.provider');
     const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
-      within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
-      within(this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
-      g ? within(g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
-      g ? within(g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
-      cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
-      cfg.schoolUrl ? within((async () => {
+      within(() => this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
+      within(() => this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
+      g ? within(() => g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
+      g ? within(() => g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
+      cfg.city ? within(() => fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
+      cfg.schoolUrl ? within(async () => {
         const page = await school.readSchoolPage(this.bridge, cfg.schoolUrl);
         if (!page.ok) return { problem: school.schoolProblem(page.reason) };
         if (this.store.get('settings.model.provider') !== schoolProvider) return { problem: 'The selected model changed while reading school assignments. Run the briefing again.' };
@@ -1295,7 +1295,7 @@ class AskController {
           return this.askOnce(prompt, system);
         });
         return assignments ? { assignments, truncated: page.truncated } : { problem: school.schoolProblem('extract-failed') };
-      })(), 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : { problem: 'School assignments are not configured in briefing settings.' }
+      }, 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : { problem: 'School assignments are not configured in briefing settings.' }
     ]);
     if (!cfg.city) missing.push('weather');
     else if (!weather) missing.push('weather-unavailable');
