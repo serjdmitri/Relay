@@ -156,7 +156,7 @@ final class Mic: @unchecked Sendable {
   private let output: AVAudioFormat
   private let continuation: AsyncStream<AnalyzerInput>.Continuation
   private let device: AudioDeviceID?
-  private var lastLevel = Date.distantPast
+  private var levelWindow = LevelWindow()
   private var observer: NSObjectProtocol?
   private var running = false
   private var useDefault = false // set when the chosen device would not start
@@ -272,14 +272,15 @@ final class Mic: @unchecked Sendable {
   private func receive(_ buffer: AVAudioPCMBuffer) {
     seen += 1
     if seen == 1 || seen % 50 == 0 { debug("buffer #\(seen) frames=\(buffer.frameLength) format=\(buffer.format)") }
-    // level for the pill's waveform
-    if Date().timeIntervalSince(lastLevel) > 0.05, let ch = buffer.floatChannelData?[0] {
-      lastLevel = Date()
+    // Measure every buffer so brief claps are not lost between level updates.
+    if let ch = buffer.floatChannelData?[0] {
       var sum: Float = 0
       let n = Int(buffer.frameLength)
       for i in 0..<n { sum += ch[i] * ch[i] }
       let rms = n > 0 ? (sum / Float(n)).squareRoot() : 0
-      emit(["event": "level", "value": min(1, rms * 6)])
+      if let level = levelWindow.push(rms: rms, now: Date.timeIntervalSinceReferenceDate) {
+        emit(["event": "level", "value": level])
+      }
     }
 
     if converter == nil || converterInput != buffer.format {

@@ -5,7 +5,7 @@ cd "$(dirname "$0")/../native"
 [ "$(uname)" = "Darwin" ] || { echo "Run this on your Mac."; exit 1; }
 command -v swiftc >/dev/null || { echo "swiftc not found. Install Xcode or the command line tools: xcode-select --install"; exit 1; }
 mkdir -p build
-swiftc -O -swift-version 5 -parse-as-library relay-speech.swift -o build/relay-speech \
+swiftc -O -swift-version 5 -parse-as-library relay-speech.swift level-window.swift -o build/relay-speech \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker speech-Info.plist
 echo "Built native/build/relay-speech"
 # The glass behind the pill (needs macOS 26 to draw real glass; falls back to blur on older systems).
