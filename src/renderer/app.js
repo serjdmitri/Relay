@@ -58,7 +58,9 @@ function ready() {
 function renderSidebar() {
   const r = ready();
   const sb = $('#sidebar');
+  const scrollTop = $('.sidebar-nav', sb)?.scrollTop || 0;
   sb.innerHTML = '';
+  const navigation = h('<div class="sidebar-nav"></div>');
   for (const group of NAV) {
     const nav = h('<nav class="nav"></nav>');
     for (const [id, name] of group) {
@@ -66,9 +68,10 @@ function renderSidebar() {
       item.onclick = () => go(id);
       nav.append(item);
     }
-    sb.append(nav);
+    navigation.append(nav);
   }
-  sb.append(h('<div class="spacer"></div>'));
+  sb.append(navigation);
+  navigation.scrollTop = scrollTop;
   for (const [id, label] of [['claude', 'Claude'], ['codex', 'Codex']]) {
     const data = S?.providerUsage?.[id] || {};
     const limit = data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${Math.round(data.limit.util * 100)}% used (reported ${timeAgo(data.limit.ts)})` : 'Account limit unavailable';

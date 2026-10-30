@@ -140,6 +140,8 @@ a, .link { color: var(--link); cursor: default; }
 .nav-item.active .icon-box { background: var(--accent); --bc: var(--accent); box-shadow: none; }
 .icon-box svg { width: 16px; height: 16px; }
 .spacer { flex: 1; }
+.sidebar-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.usage-menu, .status-card { flex: none; }
 .usage-menu { color: var(--muted); background: rgba(var(--w), .05); border-radius: 8px; padding: 5px 9px; margin-bottom: 5px; font-size: 11px; }
 .usage-menu summary { cursor: pointer; color: var(--text); font-weight: 600; }
 .usage-menu div { margin-top: 5px; line-height: 1.3; overflow-wrap: anywhere; }
