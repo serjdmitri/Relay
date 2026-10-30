@@ -70,11 +70,12 @@ function speakable(text) {
 class Speaker {
   // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
   // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
-  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), kokoro = null, fetchFn = (...a) => fetch(...a), onProblem = null } = {}) {
+  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, fetchFn = (...a) => fetch(...a), onProblem = null } = {}) {
     this.spawnFn = spawnFn;
     this.exec = exec;
     this.log = log;
     this.getTts = getTts;
+    this.getLocalOnly = getLocalOnly;
     this.kokoro = kokoro;
     this.fetchFn = fetchFn;
     this.onProblem = onProblem; // called with a sentence when a better voice failed and the system voice took over
@@ -102,6 +103,7 @@ class Speaker {
   // Which engine will speak, and why not the one chosen (a missing key, a voice not downloaded).
   engineFor(tts, lang = 'en') {
     const e = tts.engine;
+    if (this.getLocalOnly() && (e === 'openai' || e === 'elevenlabs')) return 'system';
     if (e === 'kokoro' && lang && lang !== 'en') return 'system'; // the on-device voice here is English only
     if (e === 'openai' || e === 'elevenlabs') return tts[e] && tts[e].key ? e : 'system';
     if (e === 'kokoro') return this.kokoro && this.kokoro.installed() ? 'kokoro' : 'system';
@@ -139,6 +141,7 @@ class Speaker {
     const wanted = tts.engine;
     const engine = this.engineFor(tts);
     if (wanted !== 'system' && engine === 'system') {
+      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs')) return { ok: false, message: 'Cloud voices are paused while the local Ollama model is selected.' };
       return { ok: false, message: wanted === 'kokoro' ? 'The on-device voice is not downloaded yet.' : `Add your ${cloud.NAMES[wanted] || wanted} key first.` };
     }
     if (engine === 'system') { await this.speakSystem(speakable(text), { voice, rate }); return { ok: true }; }
