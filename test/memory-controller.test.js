@@ -48,6 +48,23 @@ test('local recall and forgetting do not claim to change the read-only vault or 
   assert.match((await c.runMemory({ type: 'forget', query: 'tea' })).reply, /Sentient OS and files in Desktop\/memory were not changed/);
 });
 
+test('direct recall uses the vault only when enabled and a cloud model is selected', async () => {
+  const { c, data } = make();
+  let modelCalls = 0;
+  c.finish = (_entry, result) => result;
+  c.runRequest = async (prompt) => { modelCalls++; assert.match(prompt, /read-only Sentient OS index/); return { status: 'done', reply: 'Vault read.' }; };
+  data['settings.sentient.enabled'] = true;
+  data['settings.model.provider'] = 'ollama';
+  assert.match((await c.recallMemory({})).reply, /does not include Sentient OS/);
+  assert.equal(modelCalls, 0);
+  data['settings.model.provider'] = 'claude';
+  assert.equal((await c.recallMemory({})).reply, 'Vault read.');
+  assert.equal(modelCalls, 1);
+  data['settings.sentient.enabled'] = false;
+  await c.recallMemory({});
+  assert.equal(modelCalls, 1);
+});
+
 test('with memory switched off nothing is shown to the model', () => {
   const { c, data } = make();
   c.rememberFact('I am vegetarian');
