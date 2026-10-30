@@ -158,6 +158,26 @@ test('school page is not sent to a new provider when the selection changes while
   assert.equal(sent, 0);
 });
 
+test('stopping a briefing while the school page loads prevents a later model call', async () => {
+  const c = Object.create(AskController.prototype);
+  const url = 'https://school.myschoolapp.com/lms-assignment/assignment-center/student';
+  let release, sent = 0;
+  Object.assign(c, {
+    store: { get: (key) => key === 'settings.briefing' ? { schoolUrl: url } : null },
+    mac: { calendarEvents: async () => 'No events.', remindersDue: async () => 'No reminders due.' },
+    googleApiIfConnected: () => null,
+    bridge: { isConnected: () => true, call: (method) => method === 'tabs.list' ? Promise.resolve([{ id: 5, url }]) : new Promise((resolve) => { release = () => resolve({ url, text: 'Essay due Friday' }); }) },
+    askOnce: async () => { sent++; return '[]'; }
+  });
+  const abort = new AbortController();
+  const pending = c.briefingFacts({ signal: abort.signal });
+  while (!release) await new Promise((resolve) => setImmediate(resolve));
+  abort.abort(); release();
+  const facts = await pending;
+  assert.match(facts.school.problem, /stopped before sending/);
+  assert.equal(sent, 0);
+});
+
 test('briefing identifies disconnected sources rather than treating them as empty', async () => {
   const c = Object.create(AskController.prototype);
   Object.assign(c, {

@@ -1268,7 +1268,7 @@ class AskController {
   }
 
   // "Good morning": the weather, the calendar (this Mac's and Google's), what is due and the important unread email, as one short spoken summary.
-  async briefingFacts({ includeGreeting = true } = {}) {
+  async briefingFacts({ includeGreeting = true, signal } = {}) {
     const cfg = this.store.get('settings.briefing') || {};
     const now = new Date();
     const missing = [];
@@ -1280,6 +1280,7 @@ class AskController {
     if (!g) missing.push('google-calendar', 'mail');
     const school = require('./school');
     const schoolProvider = this.store.get('settings.model.provider');
+    const schoolDeadline = Date.now() + 15000;
     const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
       within(() => this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
       within(() => this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
@@ -1289,8 +1290,10 @@ class AskController {
       cfg.schoolUrl ? within(async () => {
         const page = await school.readSchoolPage(this.bridge, cfg.schoolUrl);
         if (!page.ok) return { problem: school.schoolProblem(page.reason) };
+        if (signal?.aborted || Date.now() >= schoolDeadline) return { problem: 'School assignment check stopped before sending the page to a model.' };
         if (this.store.get('settings.model.provider') !== schoolProvider) return { problem: 'The selected model changed while reading school assignments. Run the briefing again.' };
         const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => {
+          if (signal?.aborted || Date.now() >= schoolDeadline) throw new Error('school check stopped');
           if (this.store.get('settings.model.provider') !== schoolProvider) throw new Error('model changed');
           return this.askOnce(prompt, system);
         });
@@ -1329,7 +1332,7 @@ class AskController {
   async dailyPlanCommand(close = false, requestId = null) {
     const abort = new AbortController();
     this.abort = abort;
-    const facts = await this.briefingFacts({ includeGreeting: false });
+    const facts = await this.briefingFacts({ includeGreeting: false, signal: abort.signal });
     if (close && !abort.signal.aborted) facts.tomorrow = await this.tomorrowCalendar(facts.now);
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
