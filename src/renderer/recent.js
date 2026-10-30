@@ -14,7 +14,9 @@ const ago = (ts) => {
 };
 
 function render(history) {
-  const items = (history || []).filter((h) => h.text && !/^Checking your progress$/.test(h.text)).slice(0, MAX);
+  // This menu repeats requests: never turn an uncertain scheduled action into an
+  // accidental second attempt. Its outcome remains available in History.
+  const items = (history || []).filter((h) => h.text && !['unknown', 'missed', 'resolved'].includes(h.status) && !/^Checking your progress$/.test(h.text)).slice(0, MAX);
   list.replaceChildren();
   count.textContent = items.length ? `${items.length}` : '';
   if (!items.length) {
