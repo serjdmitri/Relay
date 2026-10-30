@@ -45,6 +45,27 @@ class RemoteServer {
     this.server = null;
   }
 
+  revokeDevice(id) {
+    for (const c of this.clients) if (c.device.id === id) { this.clients.delete(c); c.res.end(); }
+    for (const [requestId, resolve] of this.waiters) if (resolve.deviceId === id) {
+      this.waiters.delete(requestId);
+      resolve({ status: 'revoked' });
+    }
+  }
+
+  deviceActive(device) {
+    return this.devices.list().some((entry) => entry.id === device.id && entry.hash === device.hash);
+  }
+
+  waitForAnswer(id, device) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { if (this.waiters.delete(id)) resolve({ id, status: 'working', reply: 'Still working on it. Ask again in a moment.' }); }, this.waitMs ?? 110000);
+      const complete = (result) => { clearTimeout(timer); resolve(result); };
+      complete.deviceId = device.id;
+      this.waiters.set(id, complete);
+    });
+  }
+
   // Everything you want the phones to see goes through here.
   broadcast(event) {
     if (event.type === 'result' && event.id && this.waiters.has(event.id)) { this.waiters.get(event.id)({ id: event.id, reply: event.reply, status: event.status }); this.waiters.delete(event.id); } // the waiter's own timer is cleared by it
@@ -113,12 +134,10 @@ class RemoteServer {
       // wait can be true, or the text "true" / "1" (a Shortcut's JSON body has no easy way to write a real boolean)
       if (!(b?.wait === true || /^(true|1|yes)$/i.test(String(b?.wait ?? '')))) return this.json(res, 200, { id: await this.control.ask(text, device, id) });
       // wait: hold the answer back until the request is done, so one call can carry a whole question and answer (iPhone Shortcuts).
-      const answer = new Promise((resolve) => {
-        const timer = setTimeout(() => { if (this.waiters.delete(id)) resolve({ id, status: 'working', reply: 'Still working on it. Ask again in a moment.' }); }, this.waitMs ?? 110000);
-        this.waiters.set(id, (r) => { clearTimeout(timer); resolve(r); });
-      });
+      const answer = this.waitForAnswer(id, device);
       await this.control.ask(text, device, id);
-      return this.json(res, 200, await answer);
+      const result = await answer;
+      return result.status === 'revoked' || !this.deviceActive(device) ? this.json(res, 401, { error: 'Not paired.' }) : this.json(res, 200, result);
     }
     // Something shared from the phone's share sheet (a photo, a PDF, a web address, some text) with what to do with it: base64 in "data".
     if (p === '/api/send' && req.method === 'POST') {
@@ -127,13 +146,11 @@ class RemoteServer {
       const id = crypto.randomUUID();
       const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || '') }, device, id); return r; };
       if (!(b.wait === true || /^(true|1|yes)$/i.test(String(b.wait ?? '')))) { const r = await start(); return r?.ok ? this.json(res, 200, { id }) : this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
-      const answer = new Promise((resolve) => {
-        const timer = setTimeout(() => { if (this.waiters.delete(id)) resolve({ id, status: 'working', reply: 'Still working on it. Ask again in a moment.' }); }, this.waitMs ?? 110000);
-        this.waiters.set(id, (r) => { clearTimeout(timer); resolve(r); });
-      });
+      const answer = this.waitForAnswer(id, device);
       const r = await start();
-      if (!r?.ok) { this.waiters.delete(id); return this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
-      return this.json(res, 200, await answer);
+      if (!r?.ok) { const complete = this.waiters.get(id); this.waiters.delete(id); complete?.({ status: 'failed' }); return this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
+      const result = await answer;
+      return result.status === 'revoked' || !this.deviceActive(device) ? this.json(res, 401, { error: 'Not paired.' }) : this.json(res, 200, result);
     }
     if (p === '/api/holos' && req.method === 'GET') return this.json(res, 200, { holos: this.control.holos?.() || [] });
     const hm = p.match(/^\/api\/holos\/([\w-]{8,64})\/model$/);

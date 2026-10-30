@@ -74,6 +74,31 @@ test('events stream the current status and what is broadcast', async () => {
   s.stop();
 });
 
+test('unpairing closes the phone stream and denies a pending answer', async () => {
+  const { s, base, post, pairing } = await make();
+  try {
+    pairing.start();
+    const { token } = await (await post('/api/pair', { code: '424242', name: 'phone' })).json();
+    const device = s.devices.find(token);
+    const stream = await fetch(base + '/api/events', { headers: { authorization: `Bearer ${token}` } });
+    const reader = stream.body.getReader();
+    await reader.read(); // initial status
+    let started;
+    const ready = new Promise((resolve) => { started = resolve; });
+    s.control.ask = async (_text, _device, id) => { started(); return id; };
+    const pending = post('/api/ask', { text: 'check email', wait: true }, token);
+    await ready;
+    assert.equal(s.waiters.size, 1);
+    s.devices.remove(device.id);
+    s.revokeDevice(device.id);
+    assert.equal((await reader.read()).done, true);
+    assert.equal((await pending).status, 401);
+    assert.equal(s.clients.size, 0);
+    assert.equal(s.waiters.size, 0);
+    assert.equal((await fetch(base + '/api/state', { headers: { authorization: `Bearer ${token}` } })).status, 401);
+  } finally { s.stop(); }
+});
+
 test('an ask that waits answers in the same call, for an iPhone Shortcut', async () => {
   const { s, base, post, pairing } = await make();
   // a stand-in Mac that answers a moment after it is asked, using the id the server gave it
