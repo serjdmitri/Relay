@@ -90,6 +90,32 @@ test('a plugin that can act or run commands always asks first', async () => {
   m.stopAll();
 });
 
+test('approval expires and staged plugin modifications are rejected before installation', async () => {
+  let now = 1000;
+  const { m, root } = mgr({ now: () => now });
+  const source = makePlugin();
+  const staged = await m.inspect(source);
+  fs.writeFileSync(path.join(m.pending.get(staged.token).dir, 'index.js'), 'changed');
+  await assert.rejects(() => m.install(staged.token), /changed after inspection/);
+  assert.equal(fs.existsSync(path.join(root, 'echo-plugin')), false);
+  const expired = await m.inspect(source);
+  now += 30 * 60000;
+  await assert.rejects(() => m.install(expired.token), /approval expired/);
+  assert.equal(fs.existsSync(path.join(root, 'echo-plugin')), false);
+});
+
+test('a link or uninspected metadata added to a staged plugin is rejected', async () => {
+  const { m } = mgr();
+  const source = makePlugin();
+  for (const kind of ['link', 'metadata']) {
+    const inspected = await m.inspect(source);
+    const dir = m.pending.get(inspected.token).dir;
+    if (kind === 'link') fs.symlinkSync('/etc/passwd', path.join(dir, 'link'));
+    else fs.mkdirSync(path.join(dir, '.git'));
+    await assert.rejects(() => m.install(inspected.token), /link|metadata/);
+  }
+});
+
 test('a plugin changed on disk after approval is not used, and a disabled one is not either', async () => {
   const { m, root } = mgr();
   await m.install((await m.inspect(makePlugin())).token);

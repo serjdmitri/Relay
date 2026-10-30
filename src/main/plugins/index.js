@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { parseManifest, describePermissions, manifestHash, diffManifests, validPluginName } = require('./manifest');
-const { parseSource, inspectDir, fetchGithub } = require('./install');
+const { parseSource, inspectDir, fingerprint, fetchGithub } = require('./install');
 const { PluginProcess } = require('./host');
 
 const PENDING_MS = 30 * 60000;
@@ -45,7 +45,7 @@ class PluginManager {
       const have = this.records().find((r) => r.name === m.name);
       let diff = [];
       if (have) { const old = parseManifest(fs.readFileSync(path.join(this.root, m.name, 'plugin.json'), 'utf8')); if (old.ok) diff = diffManifests(old.manifest, m); }
-      this.pending.set(token, { base, dir, manifest: m, hash, sha, source: src.local ? { local: src.local } : { owner: src.owner, repo: src.repo, ref: src.ref || '' }, at: this.now() });
+      this.pending.set(token, { base, dir, manifest: m, hash, contentHash: fingerprint(dir, info.files), sha, source: src.local ? { local: src.local } : { owner: src.owner, repo: src.repo, ref: src.ref || '' }, at: this.now() });
       return { token, name: m.name, version: m.version, description: m.description, permissions: describePermissions(m), tools: m.tools.map((t) => t.name), files: info.files.length, bytes: info.total, sha, update: !!have, installedVersion: have?.version || '', changes: diff, sameAsInstalled: !!have && have.hash === hash && (!sha || have.sha === sha) };
     } catch (e) { fs.rmSync(base, { recursive: true, force: true }); throw e; }
   }
@@ -55,6 +55,11 @@ class PluginManager {
     const p = this.pending.get(token);
     if (!p) throw new Error('That plugin was not inspected, or the approval expired. Look at it again.');
     this.pending.delete(token);
+    try {
+      if (this.now() - p.at >= PENDING_MS) throw new Error('That approval expired. Inspect the plugin again.');
+      const info = inspectDir(p.dir);
+      if (fingerprint(p.dir, info.files) !== p.contentHash) throw new Error('The plugin changed after inspection. Inspect it again before approving.');
+    } catch (error) { fs.rmSync(p.base, { recursive: true, force: true }); throw error; }
     const m = p.manifest;
     this.stopOne(m.name);
     const to = path.join(this.root, m.name);

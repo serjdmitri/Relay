@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const crypto = require('crypto');
 const { parseManifest } = require('./manifest');
 
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -25,15 +26,22 @@ function scanDir(dir) {
   let total = 0;
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-      if (e.name === '.git') continue;
+      if (e.name === '.git') throw new Error('The plugin contains a Git metadata directory.');
       const p = path.join(d, e.name);
       if (e.isSymbolicLink()) throw new Error(`The plugin contains a link (${path.relative(dir, p)}), which could point outside its folder.`);
       if (e.isDirectory()) walk(p);
-      else { const size = fs.statSync(p).size; total += size; files.push({ path: path.relative(dir, p), size }); if (files.length > MAX_FILES || total > MAX_BYTES) throw new Error('The plugin is too big (over 500 files or 20 MB).'); }
+      else { if (!e.isFile()) throw new Error('The plugin contains a special file.'); const size = fs.statSync(p).size; total += size; files.push({ path: path.relative(dir, p), size }); if (files.length > MAX_FILES || total > MAX_BYTES) throw new Error('The plugin is too big (over 500 files or 20 MB).'); }
     }
   };
   walk(dir);
   return { files, total };
+}
+
+// Fingerprint the complete inspected copy, including names, sizes and file contents.
+function fingerprint(dir, files) {
+  const hashes = files.map((f) => [f.path, f.size, crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f.path))).digest('hex')]);
+  hashes.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  return crypto.createHash('sha256').update(JSON.stringify(hashes)).digest('hex');
 }
 
 function inspectDir(dir) {
@@ -65,4 +73,4 @@ async function fetchGithub({ owner, repo, ref }, into, { fetchFn = fetch, extrac
   return sha;
 }
 
-module.exports = { parseSource, scanDir, inspectDir, fetchGithub, MAX_BYTES };
+module.exports = { parseSource, scanDir, inspectDir, fingerprint, fetchGithub, MAX_BYTES };
