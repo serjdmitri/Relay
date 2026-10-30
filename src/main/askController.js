@@ -2803,7 +2803,7 @@ class AskController {
     const usageText = used ? usage.usageLine({ ...used, limit: this.freshRate() }) : '';
     this.lastUsage = used ? { id: entry.id, used } : null;
     this.emitResult({ id: entry.remote || null, reply, status: res.status });
-    this.store.addHistory({ ...entry, status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
+    this.store.addHistory({ ...entry, finishedAt: Date.now(), status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
     this.store.set('lastReply', reply);
     if (Date.now() - entry.ts > 60000 && !entry.remote && entry.text) this.onProactive?.({ type: 'job', title: String(entry.text).slice(0, 60), status: res.status === 'done' ? 'done' : 'failed', id: entry.id });
     if (res.status === 'done' && reply && entry.text) {

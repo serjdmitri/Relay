@@ -46,6 +46,18 @@ test('the greeting follows local time at each day and night boundary', () => {
   assert.equal(greetingFor(local(9), 'Alex'), 'Good morning, Alex.');
 });
 
+test('the briefing includes work started before locking if it finished while away', () => {
+  const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [
+    { text: 'long task', status: 'done', ts: T - 60 * MIN, finishedAt: T - 5 * MIN },
+    { text: 'old task', status: 'done', ts: T - 60 * MIN, finishedAt: T - 31 * MIN },
+    { text: 'future task', status: 'done', ts: T - 10 * MIN, finishedAt: T + MIN },
+    { text: 'older version entry', status: 'done', ts: T - 2 * MIN },
+  ] });
+  assert.match(w.lines.join(' '), /2 things finished/);
+  assert.match(w.lines.join(' '), /long task/);
+  assert.doesNotMatch(w.lines.join(' '), /old task|future task/);
+});
+
 test('the spoken version keeps to the top three items; the banner has all of them', () => {
   const w = buildWelcome({ lockedAt: T - 10 * MIN, now: T, history: [{ text: 'a', status: 'done', ts: T - 5 * MIN }, { text: 'b', status: 'failed', ts: T - 4 * MIN }], events: [{ title: 'Standup', start: T + MIN * 10 }], battery: { present: true, onBattery: true, charging: false, percent: 9 } });
   assert.equal(w.lines.length, 4);
