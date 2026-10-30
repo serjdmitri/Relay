@@ -205,6 +205,11 @@ class HandControl {
     return this.captured || this.holos.holoNear(pt, 230) || null;
   }
 
+  claimedByOther(h) {
+    const owner = h && this.claims.get(`holo:${h.id}`);
+    return !!owner && owner !== this;
+  }
+
   local(h, pt) {
     return { x: Math.round(pt.x - (h.disp?.x || 0)), y: Math.round(pt.y - (h.disp?.y || 0)) };
   }
@@ -311,7 +316,7 @@ class HandControl {
       }
       this.ringState(e.held ? 'held' : 'open');
       const h = this.target(pt);
-      if (h) { const now = this.now(); if (now - this.lastMoveSent >= 16) { this.lastMoveSent = now; this.send(h, 'mouseMove', pt, this.captured ? { modifiers: ['leftButtonDown'] } : {}); } }
+      if (h && !this.claimedByOther(h)) { const now = this.now(); if (now - this.lastMoveSent >= 16) { this.lastMoveSent = now; this.send(h, 'mouseMove', pt, this.captured ? { modifiers: ['leftButtonDown'] } : {}); } }
       return;
     }
     if (e.type === 'grab') {
@@ -347,19 +352,20 @@ class HandControl {
       return;
     }
     if (e.type === 'release') { this.ringState('open'); this.release({ throwAtEdge: true }); return; }
-    if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (h) { this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; } // a pinch held on a hologram turns it; drawing needs the other hand to be a fist
+    if (e.type === 'pinchdown') { const h = this.target(pt); this.ringState('pinch'); if (h && !this.claimedByOther(h)) { this.claim = `holo:${h.id}`; this.claims.set(this.claim, this); this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); } return; } // a pinch held on a hologram turns it; drawing needs the other hand to be a fist
     if (e.type === 'pinchup') { this.ringState('open'); this.release(); return; }
     if (e.type === 'click') {
       this.ringState('click');
       setTimeout(() => this.ringState('open'), 220);
       const h = this.target(pt);
-      if (h) { this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); }
+      if (h && !this.claimedByOther(h)) { this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); }
       return;
     }
-    if (e.type === 'point') { const h = this.holos.holoNear(pt, 330); if (h) { this.ringState('click'); setTimeout(() => this.ringState('open'), 300); this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); } return; }
+    if (e.type === 'point') { const h = this.holos.holoNear(pt, 330); if (h && !this.claimedByOther(h)) { this.ringState('click'); setTimeout(() => this.ringState('open'), 300); this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); } return; }
     if (e.type === 'swipe') {
       const panel = this.floatingAt(pt);
-      if (panel && !this.claims.has(panel.key)) {
+      if (panel && this.claims.has(panel.key)) return;
+      if (panel) {
         this.stopGlide(panel.key);
         const b = this.display(), origin = panel.position();
         const x = Math.max(b.x, Math.min(b.x + b.width - (origin.width || 100), origin.x + (e.dir === 'right' ? 1 : -1) * b.width * 0.15));
@@ -370,7 +376,7 @@ class HandControl {
       const h = this.holos.holoNear(pt, 330); if (h) this.holos.step(h.id, e.dir === 'right' ? 1 : -1); return;
     }
     if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
-    if (e.type === 'thumbdown') { const panel = this.floatingAt(pt); if (panel && !this.claims.has(panel.key)) { this.stopGlide(panel.key); panel.close(); return; } const h = this.holos.holoNear(pt, 330); if (h) this.holos.close(h.id); return; }
+    if (e.type === 'thumbdown') { const panel = this.floatingAt(pt); if (panel) { if (!this.claims.has(panel.key)) { this.stopGlide(panel.key); panel.close(); } return; } const h = this.holos.holoNear(pt, 330); if (h && !this.claimedByOther(h)) this.holos.close(h.id); return; }
     if (e.type === 'mic') {
       const choice = this.shortcut();
       if (choice !== 'listen') { this.onShortcut(choice); return; }
