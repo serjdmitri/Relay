@@ -51,4 +51,17 @@ async function extractSchoolAssignments(text, ask) {
   return found;
 }
 
-module.exports = { schoolUrl, readSchoolPage, extractSchoolAssignments };
+function schoolProblem(reason) {
+  return ({
+    'invalid-url': 'The school assignment link in General settings is invalid. Use the HTTPS assignment-center link.',
+    'browser-disconnected': 'I could not check school assignments because the Relay Firefox extension is not connected.',
+    'tab-not-open': 'I could not check school assignments. Open your school assignment center in signed-in Firefox.',
+    'page-changed': 'The school page changed or redirected. Sign in and open the assignment center again.',
+    'not-ready': 'The school assignment page is not ready. Sign in and let it finish loading.',
+    'read-failed': 'I could not read the school assignment page in Firefox.',
+    'extract-failed': 'I could not reliably identify assignments from the school page. Check the page directly.',
+    timeout: 'The school assignment check took too long. Check the page directly.'
+  })[reason] || 'I could not check school assignments. Check the school page directly.';
+}
+
+module.exports = { schoolUrl, readSchoolPage, extractSchoolAssignments, schoolProblem };

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { schoolUrl, readSchoolPage, extractSchoolAssignments } = require('../src/main/school');
+const { schoolUrl, readSchoolPage, extractSchoolAssignments, schoolProblem } = require('../src/main/school');
 
 const url = 'https://school.myschoolapp.com/lms-assignment/assignment-center/student';
 test('school source accepts only HTTPS assignment-center URLs without credentials or sensitive query strings', () => {
@@ -32,4 +32,13 @@ test('assignment extraction accepts only literal titles and due dates from the p
   assert.equal(await extractSchoolAssignments(text, async () => '[{"title":"Made up","due":"Friday"}]'), null);
   assert.equal(await extractSchoolAssignments(text, async () => '[{"title":"Essay","due":"tomorrow"}]'), null);
   assert.equal(await extractSchoolAssignments(text, async () => 'not JSON'), null);
+});
+
+test('school errors tell the user what prevented the check', () => {
+  assert.match(schoolProblem('invalid-url'), /link.*invalid/i);
+  assert.match(schoolProblem('browser-disconnected'), /Firefox extension is not connected/);
+  assert.match(schoolProblem('tab-not-open'), /Open.*assignment center/);
+  assert.match(schoolProblem('not-ready'), /Sign in/);
+  assert.match(schoolProblem('extract-failed'), /could not reliably identify/i);
+  assert.match(schoolProblem('timeout'), /took too long/);
 });

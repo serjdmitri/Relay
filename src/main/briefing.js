@@ -63,6 +63,7 @@ function buildBriefing(f) {
     out.push(`${due.length === 1 ? 'One reminder is' : `${due.length} reminders are`} due: ${list(due.slice(0, 4).map((d) => d.title))}${due.length > 4 ? ', and more' : ''}${overdue.length ? `, ${overdue.length === due.length ? 'overdue' : `${overdue.length} of them overdue`}` : ''}.`);
   } else if (!(f.missing || []).includes('reminders')) out.push(f.school !== undefined ? 'No reminders are due.' : 'Nothing is due.');
   if (f.school === null) out.push('I could not check school assignments. Open your assignment center in signed-in Firefox and check the connection.');
+  else if (f.school?.problem) out.push(f.school.problem);
   else if (f.school) {
     const items = f.school.assignments;
     if (items.length) out.push(`School assignments visible: ${list(items.slice(0, 4).map((a) => `${a.title}${a.due ? `, due ${a.due}` : ''}`))}${items.length > 4 ? ', and more' : ''}. Check the school page for the full list.`);

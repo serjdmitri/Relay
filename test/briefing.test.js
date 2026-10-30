@@ -126,5 +126,5 @@ test('controller reads the configured school page and includes validated assignm
   });
   assert.match(await c.briefingText(), /School assignments visible: Essay, due Friday/);
   c.bridge.isConnected = () => false;
-  assert.match(await c.briefingText(), /could not check school assignments/);
+  assert.match(await c.briefingText(), /Firefox extension is not connected/);
 });

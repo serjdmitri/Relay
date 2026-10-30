@@ -1264,10 +1264,10 @@ class AskController {
       cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
       cfg.schoolUrl ? within((async () => {
         const page = await school.readSchoolPage(this.bridge, cfg.schoolUrl);
-        if (!page.ok) return null;
+        if (!page.ok) return { problem: school.schoolProblem(page.reason) };
         const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => this.askOnce(prompt, system));
-        return assignments && { assignments, truncated: page.truncated };
-      })(), 15000).catch(() => null) : undefined
+        return assignments ? { assignments, truncated: page.truncated } : { problem: school.schoolProblem('extract-failed') };
+      })(), 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : undefined
     ]);
     if (!cfg.city) missing.push('weather');
     else if (!weather) missing.push('weather-unavailable');
