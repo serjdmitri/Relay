@@ -49,4 +49,13 @@ test('stopping an in-flight plan prevents saving and save errors are reported', 
   const result = await c.dailyPlanCommand();
   assert.equal(result.status, 'failed');
   assert.match(result.reply, /could not save/);
+  const actions = [];
+  c.store = { addAction: (action) => actions.push(action) };
+  c.outputExport = () => '/some/desktop/memory/plan.txt';
+  const saved = await c.dailyPlanCommand(false, 'request-1');
+  assert.equal(saved.status, 'done');
+  assert.equal(actions[0].requestId, 'request-1');
+  assert.equal(actions[0].result, 'Saved to Desktop/memory/plan.txt');
+  c.store.addAction = () => { throw new Error('log failed'); };
+  assert.match((await c.dailyPlanCommand()).reply, /Saved locally.*could not record/s);
 });

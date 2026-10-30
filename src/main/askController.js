@@ -1296,17 +1296,22 @@ class AskController {
     return buildBriefing(await this.briefingFacts(options));
   }
 
-  async dailyPlanCommand(close = false) {
+  async dailyPlanCommand(close = false, requestId = null) {
     const abort = new AbortController();
     this.abort = abort;
     const facts = await this.briefingFacts({ includeGreeting: false });
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
+    let saved;
+    try { saved = this.outputExport(close ? 'Close the day' : 'Plan today', plan); }
+    catch {
+      return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
+    }
     try {
-      this.outputExport(close ? 'Close the day' : 'Plan today', plan);
+      this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'save_daily_report', input: { report: close ? 'Close the day' : 'Plan today' }, result: `Saved to Desktop/memory/${path.basename(saved)}`, ok: true, ts: Date.now() });
       return { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 };
     } catch {
-      return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
+      return { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory, but I could not record the save in the activity log.`, actions: 1 };
     }
   }
 
@@ -1757,10 +1762,10 @@ class AskController {
           return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
-          return this.finish(entry, await this.dailyPlanCommand());
+          return this.finish(entry, await this.dailyPlanCommand(false, entry.id));
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?close (?:the|my) day[.!?]*$/i.test(effective.trim())) {
-          return this.finish(entry, await this.dailyPlanCommand(true));
+          return this.finish(entry, await this.dailyPlanCommand(true, entry.id));
         }
         if (!opts.shown && !opts.scheduled) {
           const dc = devices.parseDeviceCommand(effective);
