@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { exportMemory } = require('../src/main/memoryExport');
+const { exportMemory, exportOutput } = require('../src/main/memoryExport');
 
 test('explicit memories create private, dated import files without overwriting', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-memory-export-'));
@@ -15,4 +15,14 @@ test('explicit memories create private, dated import files without overwriting',
   assert.throws(() => exportMemory(dir, 'another memory', opts), /EEXIST/);
   assert.throws(() => exportMemory(dir, 'my password is secret', { ...opts, id: 'secret' }), /cannot be exported/);
   assert.equal(fs.readdirSync(dir).length, 1);
+});
+
+test('daily output is local, private, dated and never overwrites an existing file', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-output-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const opts = { now: new Date('2026-10-30T12:00:00Z'), id: 'test-1' };
+  const file = exportOutput(dir, 'Plan today', '1. Study for the quiz', opts);
+  assert.match(fs.readFileSync(file, 'utf8'), /Relay local output: Plan today[\s\S]*Study for the quiz/);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  assert.throws(() => exportOutput(dir, 'Plan today', 'another plan', opts), /EEXIST/);
 });

@@ -1739,6 +1739,17 @@ class AskController {
           // in another language the same facts are said by the model, which answers in the language it was asked in
           return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
         }
+        if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
+          const facts = await this.briefingFacts({ includeGreeting: false });
+          if (this.abort?.signal.aborted) return this.finish(entry, { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 });
+          const plan = require('./dailyPlan').planToday(facts);
+          try {
+            this.outputExport('Plan today', plan);
+            return this.finish(entry, { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 });
+          } catch {
+            return this.finish(entry, { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 });
+          }
+        }
         if (!opts.shown && !opts.scheduled) {
           const dc = devices.parseDeviceCommand(effective);
           if (dc) return this.finish(entry, await this.devicesCommand(dc));
