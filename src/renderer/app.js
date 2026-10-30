@@ -930,11 +930,14 @@ const PAGES = {
     $('#vprev', vrow).onclick = () => relay.previewVoice(vsel.value, S.settings.voiceRate);
     vcard.append(vrow);
     const jrow = h('<div class="row"><div class="grow"><div class="t" style="font-weight:600">Sound like Jarvis</div><div class="d">A calm British male voice, and replies read aloud. With the on-device voice installed it uses George; otherwise Daniel (download his Premium or Enhanced version for the best sound).</div></div><button class="btn" id="jset">Use it</button></div>');
-    $('#jset', jrow).onclick = () => {
-      relay.set('settings.voice', 'jarvis');
-      relay.set('settings.speakReplies', true);
-      if (S.kokoro && S.kokoro.installed) { relay.set('settings.tts.engine', 'kokoro'); relay.set('settings.tts.kokoro.voice', 'bm_george'); }
-      relay.previewVoice('jarvis', S.settings.voiceRate);
+    $('#jset', jrow).onclick = async () => {
+      const useKokoro = !!S.kokoro?.installed;
+      const rate = S.settings.voiceRate;
+      await relay.set('settings.voice', 'jarvis');
+      await relay.set('settings.speakReplies', true);
+      if (useKokoro) await relay.set('settings.tts.kokoro.voice', 'bm_george');
+      await relay.set('settings.tts.engine', useKokoro ? 'kokoro' : 'system');
+      await relay.previewVoice('jarvis', rate);
     };
     vcard.append(jrow);
     const softOn = ((S.settings.voices && S.settings.voices.quiet && S.settings.voices.quiet.volume) ?? 0.55) < 1;
