@@ -1587,10 +1587,10 @@ class AskController {
 
   async submit(raw, { voice = false } = {}) {
     const text = String(raw || '').trim();
-    this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
-    if (this.runningTask && this.state === 'working') return this.enqueue(text); // typed or re-asked while one is running
+    if (this.runningTask && this.state === 'working') return this.enqueue(text, { voice }); // preserve the input method while queued
     if (this.state !== 'input') return;
+    this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
 
     if (!this.store.get('settings.actEnabled')) {
       this.state = 'idle';
@@ -1599,7 +1599,7 @@ class AskController {
       await this.mac.typeText(text).catch(() => {});
       return;
     }
-    await this.handleText(text);
+    await this.handleText(text, { voice });
   }
 
   // opts.shown: what to show and record instead of the text itself, for requests Relay makes on its own.
@@ -1620,6 +1620,7 @@ class AskController {
     this.currentRemote = opts.remote || null; // where this request came from, so a risky question can be asked there too
     if (!opts.drain) { this.queue = []; this.tasks = []; }
     if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
+    else if (typeof opts.voice === 'boolean') this.voiceAsk = opts.voice;
     if (!opts.shown) {
       const waiting = opts.drain && opts.drain !== true ? opts.drain : null; // a task that was already on the list
       this.runningTask = waiting || { id: crypto.randomUUID(), text, status: 'running' };
@@ -2834,7 +2835,7 @@ class AskController {
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && res.status === 'done' && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
+    if (this.store.get('settings.speakReplies') && this.voiceAsk && res.status === 'done' && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     clearTimeout(this.holdTimer);

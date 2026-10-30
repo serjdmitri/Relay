@@ -812,7 +812,7 @@ const PAGES = {
       toggleRow('Clipboard history', 'Remembers the text you copy, so you can ask “what did I copy earlier?”. Kept only in memory (never saved to disk, gone when Relay quits), for a day. Never kept: anything a password manager marks as secret, or that looks like a password, key, card or social security number. Say “clear my clipboard history” any time.', 'settings.clipboardHistory.enabled'),
       toggleRow('Workshop mode', 'For teaching younger students: Relay speaks slowly and calmly, keeps answers short and simple, and can show holograms of how attacks and defences work (“show me how phishing works”: phishing, man in the middle, DDoS, SQL injection, password hashing, encryption, firewalls). Say “workshop mode” to turn it on, “end workshop mode” to turn it off.', 'settings.workshop.enabled'),
       toggleRow('Tidy my Downloads each evening', 'Around 9 PM Relay looks at new files in Downloads and shows where each would go (pictures, PDFs, documents…). Nothing moves until you say “apply the plan”, nothing is ever deleted, and you can undo it.', 'settings.downloadsTidy.enabled'),
-      toggleRow('Speak replies', 'Reads each answer aloud.', 'settings.speakReplies'),
+      toggleRow('Speak replies', 'Reads answers to spoken requests aloud. Typed requests stay silent.', 'settings.speakReplies'),
       toggleRow('Liquid glass pill', "Draws the pill with your Mac's real see-through glass. Off: a plain dark pill.", 'settings.glass')
     );
     c.append(ask);
