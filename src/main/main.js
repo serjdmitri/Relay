@@ -958,6 +958,19 @@ app.whenReady().then(() => {
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
+  let scheduleStorageFailed = false;
+  const tickSchedules = (canRun) => {
+    try {
+      const result = ask.scheduler.tick(canRun);
+      scheduleStorageFailed = false;
+      return result;
+    } catch (error) {
+      console.error('Could not save scheduled request state:', error);
+      if (!scheduleStorageFailed && Notification.isSupported()) new Notification({ title: 'Scheduled requests paused', body: 'Relay could not save scheduled request state. Check available disk space and access to Relay’s data folder.' }).show();
+      scheduleStorageFailed = true;
+      return { due: [], missed: [] };
+    }
+  };
   const notifyMissedSchedules = (missed) => {
     for (const s of missed) {
       const message = missedMessage(s);
@@ -975,7 +988,7 @@ app.whenReady().then(() => {
   powerMonitor.on('unlock-screen', () => {
     lockWatch.set(false);
     // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
-    const { missed } = ask.scheduler.tick(false);
+    const { missed } = tickSchedules(false);
     notifyMissedSchedules(missed);
     if (missed.length) broadcast();
     welcomeBack(lockedAt, lastWelcome).then((did) => { if (did) lastWelcome = Date.now(); }).catch(() => {});
@@ -1195,7 +1208,7 @@ app.whenReady().then(() => {
   ask.onOpenRecap = () => openMain('recap');
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
-    const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
+    const { due, missed } = tickSchedules(ask.canRunScheduled());
     notifyMissedSchedules(missed);
     for (const s of due) {
       ask.activeScheduledId = s.runId;
