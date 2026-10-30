@@ -105,6 +105,31 @@ test('a plugin changed on disk after approval is not used, and a disabled one is
   assert.equal(m.list().length, 0);
 });
 
+test('plugin removal rejects paths outside its installed plugin directory', () => {
+  const { m, root } = mgr();
+  const outside = fs.mkdtempSync(path.join(path.dirname(root), 'relay-plugin-victim-'));
+  try {
+    fs.writeFileSync(path.join(outside, 'keep.txt'), 'keep');
+    assert.throws(() => m.remove(`../${path.basename(outside)}`), /not installed/);
+    assert.throws(() => m.remove('unregistered-plugin'), /not installed/);
+    assert.equal(fs.readFileSync(path.join(outside, 'keep.txt'), 'utf8'), 'keep');
+    assert.equal(m.manifestOf('../outside').ok, false);
+  } finally { fs.rmSync(outside, { recursive: true, force: true }); }
+});
+
+test('a previously exposed plugin tool cannot run after permissions change or it is disabled', async () => {
+  const { m, root } = mgr();
+  await m.install((await m.inspect(makePlugin())).token);
+  const say = m.tools().find((tool) => tool.name.endsWith('__say'));
+  assert.match(await say.run({ text: 'before' }), /echo/);
+  fs.writeFileSync(path.join(root, 'echo-plugin', 'plugin.json'), JSON.stringify(manifest({ permissions: { shell: true } })));
+  await assert.rejects(() => say.run({ text: 'after' }), /changed since approval/);
+  fs.writeFileSync(path.join(root, 'echo-plugin', 'plugin.json'), JSON.stringify(manifest()));
+  m.setEnabled('echo-plugin', false);
+  await assert.rejects(() => say.run({ text: 'disabled' }), /disabled or has changed/);
+  m.stopAll();
+});
+
 test('a plugin that dies is started once more; one that hangs times out', async () => {
   const { m } = mgr();
   await m.install((await m.inspect(makePlugin())).token);

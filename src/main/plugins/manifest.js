@@ -73,4 +73,4 @@ function diffManifests(a, b) {
   return out;
 }
 
-module.exports = { parseManifest, describePermissions, manifestHash, diffManifests };
+module.exports = { parseManifest, describePermissions, manifestHash, diffManifests, validPluginName: (name) => typeof name === 'string' && NAME.test(name) };

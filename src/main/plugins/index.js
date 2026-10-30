@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { parseManifest, describePermissions, manifestHash, diffManifests } = require('./manifest');
+const { parseManifest, describePermissions, manifestHash, diffManifests, validPluginName } = require('./manifest');
 const { parseSource, inspectDir, fetchGithub } = require('./install');
 const { PluginProcess } = require('./host');
 
@@ -77,6 +77,7 @@ class PluginManager {
   }
 
   manifestOf(name) {
+    if (!validPluginName(name)) return { ok: false, errors: ['Invalid plugin name.'] };
     try { return parseManifest(fs.readFileSync(path.join(this.root, name, 'plugin.json'), 'utf8')); } catch { return { ok: false, errors: ['The plugin folder is missing.'] }; }
   }
 
@@ -86,6 +87,7 @@ class PluginManager {
   }
 
   remove(name) {
+    if (!validPluginName(name) || !this.records().some((r) => r.name === name)) throw new Error('That plugin is not installed.');
     this.stopOne(name);
     fs.rmSync(path.join(this.root, name), { recursive: true, force: true });
     this.save(this.records().filter((r) => r.name !== name));
@@ -106,11 +108,15 @@ class PluginManager {
   stopAll() { for (const n of [...this.procs.keys()]) this.stopOne(n); }
 
   async proc(name) {
+    const record = this.records().find((r) => r.name === name && r.enabled);
+    const current = this.manifestOf(name);
+    if (!record || !current.ok || current.manifest.name !== name || manifestHash(current.manifest) !== record.hash) {
+      this.stopOne(name);
+      throw new Error('This plugin is disabled or has changed since approval. Review it before use.');
+    }
     let p = this.procs.get(name);
     if (p && !p.exited) return p;
-    const parsed = this.manifestOf(name);
-    if (!parsed.ok) throw new Error(`The plugin ${name} is damaged: ${parsed.errors.join(' ')}`);
-    p = new PluginProcess({ dir: path.join(this.root, name), manifest: parsed.manifest, ...(this.spawnFn ? { spawnFn: this.spawnFn } : {}), sandbox: this.sandbox });
+    p = new PluginProcess({ dir: path.join(this.root, name), manifest: current.manifest, ...(this.spawnFn ? { spawnFn: this.spawnFn } : {}), sandbox: this.sandbox });
     this.procs.set(name, p);
     try { await p.start(); } catch (e) { this.procs.delete(name); p.stop(); throw e; }
     return p;
