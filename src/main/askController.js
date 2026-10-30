@@ -1091,18 +1091,20 @@ class AskController {
 
   // A spoken or typed memory command ("remember that...", "forget...", "what do you remember"), handled without the model.
   async runMemory(cmd) {
+    const vaultNote = ' Sentient OS and files in Desktop/memory were not changed.';
     if (cmd.type === 'remember') return { ...this.rememberFact(cmd.fact), actions: 0 };
-    if (cmd.type === 'forget') return { ...this.forgetFact(cmd.query), actions: 0 };
+    if (cmd.type === 'forget') { const result = this.forgetFact(cmd.query); return { ...result, reply: result.reply + vaultNote, actions: 0 }; }
     if (cmd.type === 'recall') {
       const list = this.store.get('memories') || [];
-      return { status: 'done', actions: 0, reply: list.length ? `I remember ${list.length} thing${list.length === 1 ? '' : 's'}: ${list.slice(0, 5).map((f) => f.text).join('; ')}${list.length > 5 ? '; and more in Settings > Memory' : ''}.` : "I don't remember anything yet. Say \"remember that…\" to tell me something." };
+      const local = list.length ? `Relay locally remembers ${list.length} thing${list.length === 1 ? '' : 's'}: ${list.slice(0, 5).map((f) => f.text).join('; ')}${list.length > 5 ? '; and more in Settings > Memory' : ''}.` : 'Relay has no local memories yet. Say "remember that…" to tell me something.';
+      return { status: 'done', actions: 0, reply: `${local} This list does not include Sentient OS.` };
     }
     if (cmd.type === 'forget-all') {
-      if (!(this.store.get('memories') || []).length) return { status: 'done', actions: 0, reply: 'There was nothing to forget.' };
+      if (!(this.store.get('memories') || []).length) return { status: 'done', actions: 0, reply: `There was nothing in Relay’s local memory to forget.${vaultNote}` };
       if (!(await this.askConfirm({ question: 'Forget everything Relay remembers about you?' }))) return { status: 'done', actions: 0, reply: 'Okay, I kept it all.' };
       this.store.set('memories', []);
       this.onChange();
-      return { status: 'done', actions: 0, reply: 'Forgot everything.' };
+      return { status: 'done', actions: 0, reply: `Forgot everything in Relay’s local memory.${vaultNote}` };
     }
     return { status: 'failed', actions: 0, reply: 'I did not understand that.' };
   }
