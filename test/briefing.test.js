@@ -128,3 +128,16 @@ test('controller reads the configured school page and includes validated assignm
   c.bridge.isConnected = () => false;
   assert.match(await c.briefingText(), /Firefox extension is not connected/);
 });
+
+test('briefing identifies disconnected sources rather than treating them as empty', async () => {
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, {
+    store: { get: () => ({}) },
+    mac: { calendarEvents: async () => 'No events.', remindersDue: async () => 'No reminders due.' },
+    googleApiIfConnected: () => null
+  });
+  const text = await c.briefingText();
+  assert.match(text, /School assignments are not configured/);
+  assert.match(text, /could not check Google calendar and email/);
+  assert.doesNotMatch(text, /No important unread email/);
+});
