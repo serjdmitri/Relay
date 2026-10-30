@@ -1173,7 +1173,11 @@ app.whenReady().then(() => {
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
-    for (const s of missed) if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}` }).show();
+    for (const s of missed) {
+      const message = `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}`;
+      store.addHistory({ id: require('crypto').randomUUID(), text: `Scheduled: ${s.text}`, status: 'missed', reply: message, ts: s.next, finishedAt: Date.now() });
+      if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: message }).show();
+    }
     for (const s of due) ask.runScheduled(s);
     if (due.length || missed.length) broadcast();
     // Each evening: say what Relay did today and what can be undone. Only when something changed or failed; a click opens the list.

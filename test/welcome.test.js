@@ -58,6 +58,12 @@ test('the briefing includes work started before locking if it finished while awa
   assert.doesNotMatch(w.lines.join(' '), /old task|future task/);
 });
 
+test('missed scheduled work is reported as missed, never as completed', () => {
+  const w = buildWelcome({ lockedAt: T - 30 * MIN, now: T, history: [{ text: 'Scheduled: check homework', status: 'missed', ts: T - 20 * MIN, finishedAt: T - MIN }] });
+  assert.match(w.spoken, /One scheduled task was missed: check homework/);
+  assert.doesNotMatch(w.spoken, /Finished while/);
+});
+
 test('the spoken version keeps to the top three items; the banner has all of them', () => {
   const w = buildWelcome({ lockedAt: T - 10 * MIN, now: T, history: [{ text: 'a', status: 'done', ts: T - 5 * MIN }, { text: 'b', status: 'failed', ts: T - 4 * MIN }], events: [{ title: 'Standup', start: T + MIN * 10 }], battery: { present: true, onBattery: true, charging: false, percent: 9 } });
   assert.equal(w.lines.length, 4);
