@@ -302,6 +302,9 @@ const PAGES = {
     const daily = h('<div class="card"><div class="routine"><div class="rn"><span>Plan today</span><button class="btn" id="run-daily-plan">Run</button></div><div class="note">Suggest up to three priorities from checked reminders, school and calendar; save a local copy in Desktop/memory.</div></div></div>');
     $('#run-daily-plan', daily).onclick = () => relay.ask.open('plan today');
     c.append(daily);
+    const closeDay = h('<div class="card"><div class="routine"><div class="rn"><span>Close the day</span><button class="btn" id="run-close-day">Run</button></div><div class="note">Review Relay activity and possible carryovers; save a local report in Desktop/memory.</div></div></div>');
+    $('#run-close-day', closeDay).onclick = () => relay.ask.open('close the day');
+    c.append(closeDay);
     c.append(h(`<div class="section-title" style="margin-top:0"><span>Routines</span><span style="display:flex;gap:8px"><button class="btn" id="rec">${icon('record')}Record</button><button class="btn" id="new">${icon('plus')}New Routine</button></span></div>`));
     $('#rec', c).onclick = () => relay.ask.open('start a routine');
     $('#new', c).onclick = () => editRoutine({ name: '', steps: [] });
