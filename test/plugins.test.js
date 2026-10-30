@@ -185,7 +185,9 @@ test('the sandbox profile denies the network unless declared, and only declared 
   assert.match(p, /\(deny network\*\)/);
   assert.ok(!/allow network/.test(p));
   assert.match(p, /allow file-write\* \(subpath "\/Users\/me\/Documents\/notes"\)/);
-  assert.ok(!/Pictures/.test(p));
+  assert.match(p, /allow file-read\* \(subpath "\/Users\/me\/Pictures"\)/);
+  assert.doesNotMatch(p, /allow file-write\* \(subpath "\/Users\/me\/Pictures"\)/);
+  assert.match(p, /deny file-read\* file-write\* \(subpath "\/Users\/me"\)/);
   assert.match(p, /deny file-read\* .*Keychains/);
   const net = buildProfile({ ...m, permissions: { ...m.permissions, network: ['a.example.com'] } }, '/r/echo', { home: '/Users/me', tmp: '/tmp' });
   assert.match(net, /allow network\*/);
@@ -193,4 +195,25 @@ test('the sandbox profile denies the network unless declared, and only declared 
   assert.deepEqual(wrap('P', ['node', 'index.js'], false), { file: 'node', args: ['index.js'] });
   assert.equal(manifestHash(m), manifestHash(parseManifest(manifest({ permissions: m.permissions })).manifest));
   assert.ok(diffManifests(m, m).length === 0);
+});
+
+test('macOS sandbox denies undeclared home reads while allowing approved folders', { skip: process.platform !== 'darwin' }, (t) => {
+  const { execFileSync } = require('node:child_process');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'relay-sandbox-test-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const home = path.join(root, 'home');
+  const plugin = path.join(home, 'plugin');
+  const approved = path.join(home, 'approved');
+  const temp = path.join(root, 'temp');
+  for (const dir of [plugin, approved, temp]) fs.mkdirSync(dir, { recursive: true });
+  const hidden = path.join(home, 'private.txt');
+  fs.writeFileSync(hidden, 'private');
+  fs.writeFileSync(path.join(approved, 'allowed.txt'), 'allowed');
+  fs.writeFileSync(path.join(plugin, 'plugin.txt'), 'plugin');
+  const m = parseManifest(manifest({ permissions: { files: [{ path: approved, mode: 'read' }] } })).manifest;
+  const profile = buildProfile(m, plugin, { home, tmp: temp });
+  const cat = (file) => execFileSync('/usr/bin/sandbox-exec', ['-p', profile, '/bin/cat', file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(cat(path.join(plugin, 'plugin.txt')), 'plugin');
+  assert.equal(cat(path.join(approved, 'allowed.txt')), 'allowed');
+  assert.throws(() => cat(hidden), /Operation not permitted/);
 });

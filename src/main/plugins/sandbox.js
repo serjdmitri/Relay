@@ -10,10 +10,13 @@ const expand = (p, home) => (p.startsWith('~/') ? path.join(home, p.slice(2)) : 
 
 function buildProfile(manifest, dir, { home = os.homedir(), tmp = os.tmpdir() } = {}) {
   const p = manifest.permissions;
-  const lines = ['(version 1)', '(allow default)', '(deny network*)', `(deny file-write* (subpath ${q(home)}))`, `(deny file-read* (subpath ${q(path.join(home, 'Library/Keychains'))}) (subpath ${q(path.join(home, '.ssh'))}) (subpath ${q(path.join(home, 'Library/Messages'))}) (subpath ${q(path.join(home, 'Library/Application Support/Relay'))}))`];
+  const lines = ['(version 1)', '(allow default)', '(deny network*)', `(deny file-read* file-write* (subpath ${q(home)}))`, `(deny file-read* (subpath ${q(path.join(home, 'Library/Keychains'))}) (subpath ${q(path.join(home, '.ssh'))}) (subpath ${q(path.join(home, 'Library/Messages'))}) (subpath ${q(path.join(home, 'Library/Application Support/Relay'))}))`];
   if (p.network.length) lines.push('(allow network*)');
-  lines.push(`(allow file-write* (subpath ${q(dir)}) (subpath ${q(tmp)}))`);
-  for (const f of p.files) if (f.mode === 'write') lines.push(`(allow file-write* (subpath ${q(expand(f.path, home))}))`);
+  lines.push(`(allow file-read* file-write* (subpath ${q(dir)}) (subpath ${q(tmp)}))`);
+  for (const f of p.files) {
+    lines.push(`(allow file-read* (subpath ${q(expand(f.path, home))}))`);
+    if (f.mode === 'write') lines.push(`(allow file-write* (subpath ${q(expand(f.path, home))}))`);
+  }
   return lines.join('\n');
 }
 
