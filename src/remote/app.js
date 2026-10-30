@@ -2,8 +2,11 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const KEY = 'relay-remote-token';
-  let token = localStorage.getItem(KEY) || '';
-  let speakOn = localStorage.getItem('relay-remote-speak') !== '0';
+  const saved = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+  const save = (key, value) => { try { localStorage.setItem(key, value); return true; } catch { return false; } };
+  const remove = (key) => { try { localStorage.removeItem(key); } catch {} };
+  let token = saved(KEY) || '';
+  let speakOn = saved('relay-remote-speak') !== '0';
   let mode = 'idle'; // idle | listening | working | speaking
   let serverState = 'idle';
   let waiting = null; // the id of a request this phone sent, until its result comes
@@ -31,14 +34,15 @@
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'That did not work.');
       token = j.token;
-      localStorage.setItem(KEY, token);
-      start();
+      const savedPairing = save(KEY, token);
+      await start();
+      if (!savedPairing) line('This browser could not save the pairing. You may need to pair again next time.', true);
     } catch (e) { $('pairerr').textContent = e.message; }
   };
 
   function unpair(callServer = true) {
     token = '';
-    localStorage.removeItem(KEY);
+    remove(KEY);
     stream?.abort();
     show('pair');
   }
@@ -141,9 +145,10 @@
   setQuick((() => { try { return localStorage.getItem('relay-remote-quick') !== '0'; } catch { return true; } })());
 
   // The keyboard button: held upright, the phone's own keyboard (a bar at the bottom); turned sideways, the full-screen hologram keyboard. Both show what you typed at the top.
-  const landscape = () => window.matchMedia('(orientation: landscape)').matches;
+  const orientation = window.matchMedia('(orientation: landscape)');
+  const landscape = () => orientation.matches && typeof window.HoloKeyboard === 'function';
   const kbState = (on) => { $('kbd').setAttribute('aria-pressed', String(on)); document.body.classList.toggle('kbopen', on && kb.isOpen); };
-  const kb = window.HoloKeyboard({ onSend: (t) => { kbState(false); ask(t); }, onClose: () => kbState(false) });
+  const kb = typeof window.HoloKeyboard === 'function' ? window.HoloKeyboard({ onSend: (t) => { kbState(false); ask(t); }, onClose: () => kbState(false) }) : { isOpen: false, open() {}, close() {} };
   const typing = () => kb.isOpen || !$('bar').hidden;
   function showTyping(on) {
     if (landscape()) {
@@ -157,7 +162,8 @@
     kbState(on);
   }
   $('kbd').onclick = () => showTyping(!typing());
-  window.matchMedia('(orientation: landscape)').addEventListener('change', () => showTyping(false)); // turning the phone closes whichever keyboard was open
+  if (orientation.addEventListener) orientation.addEventListener('change', () => showTyping(false));
+  else orientation.addListener?.(() => showTyping(false)); // older Safari
   $('bar').onsubmit = (e) => { e.preventDefault(); const v = $('text').value.trim(); $('text').value = ''; showTyping(false); if (v) ask(v); };
 
   // What was asked stays at the top while the answer comes, and above the answer after it.
@@ -371,7 +377,7 @@
 
   $('gear').onclick = () => { $('menu').hidden = !$('menu').hidden; };
   $('speak').checked = speakOn;
-  $('speak').onchange = () => { speakOn = $('speak').checked; localStorage.setItem('relay-remote-speak', speakOn ? '1' : '0'); if (!speakOn) speechSynthesis?.cancel?.(); };
+  $('speak').onchange = () => { speakOn = $('speak').checked; save('relay-remote-speak', speakOn ? '1' : '0'); if (!speakOn) window.speechSynthesis?.cancel?.(); };
   $('stop').onclick = () => { api('/api/stop', {}).catch(() => {}); waiting = null; setMode('idle'); line('Stopped', true); $('menu').hidden = true; };
   $('unpair').onclick = () => { if (confirm('Unpair this phone?')) unpair(); };
   $('support').textContent = canTalk ? (window.isSecureContext ? 'Hold the reactor to talk.' : 'Hold the reactor to talk. If it says the microphone is blocked, this address is not secure enough: use the Tailscale https link, or type.') : 'This browser has no speech recognition. Open Relay in Safari to hold and talk, or type and use the keyboard microphone.';
@@ -395,5 +401,6 @@
     const say = new URLSearchParams(location.search).get('say');
     if (say) { history.replaceState(null, '', location.pathname); ask(say.slice(0, 300)); }
   }
+  $('boot-warning').hidden = true;
   if (token) start(); else show('pair');
 })();
