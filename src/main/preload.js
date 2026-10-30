@@ -147,6 +147,7 @@ contextBridge.exposeInMainWorld('relay', {
   runningApps: () => invoke('apps:running'),
   removeVocab: (t) => invoke('vocab:remove', t),
   clearHistory: () => invoke('history:clear'),
+  acknowledgeUnknown: (id) => invoke('history:acknowledge-unknown', id),
   deleteDictation: (id) => invoke('dictation:delete', id),
   clearDictation: () => invoke('dictation:clear'),
   setShortcut: (name, def) => invoke('shortcut:set', name, def),

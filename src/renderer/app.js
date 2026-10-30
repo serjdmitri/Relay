@@ -173,7 +173,7 @@ const mark = (status) => status === 'done'
 
 function requestRow(x) {
   const label = x.status === 'unknown' ? 'Outcome unknown — check before trying again. ' : x.status === 'missed' ? 'Missed. ' : '';
-  return `<div class="req">${mark(x.status)}<div style="flex:1;min-width:0"><div class="tt"><span>${esc(x.text)}</span><span class="when">${timeAgo(x.ts)}</span></div><div class="rp">${esc(label + (x.status === 'stopped' ? 'Stopped at your request. Any earlier actions may already have happened.' : x.reply || ''))}</div>${x.usageText ? `<div class="when" style="margin-top:3px">${esc(x.usageText)}</div>` : ''}</div></div>`;
+  return `<div class="req">${mark(x.status)}<div style="flex:1;min-width:0"><div class="tt"><span>${esc(x.text)}</span><span class="when">${timeAgo(x.ts)}</span></div><div class="rp">${esc(label + (x.status === 'stopped' ? 'Stopped at your request. Any earlier actions may already have happened.' : x.reply || ''))}</div>${x.status === 'unknown' && String(x.id || '').startsWith('scheduled:') ? `<button class="btn" data-ack="${esc(x.id)}" style="margin-top:6px">I checked this</button>` : ''}${x.usageText ? `<div class="when" style="margin-top:3px">${esc(x.usageText)}</div>` : ''}</div></div>`;
 }
 
 const allowed = '<span class="allowed" style="display:inline-flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#4cc2ff"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#1d1d1d" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Allowed</span>';
@@ -248,7 +248,8 @@ const PAGES = {
       c.append(chart);
       c.append(h(`<div class="section-title">Requests<span class="link" id="clr">Clear…</span></div>`));
       $('#clr', c).onclick = () => { if (confirm('Clear all request, dictation and action history?')) relay.clearHistory(); };
-      c.append(h(`<div class="card">${S.history.length ? S.history.map(requestRow).join('') : '<div class="empty">No requests yet.</div>'}</div>`));
+      const requests = h(`<div class="card">${S.history.length ? S.history.map(requestRow).join('') : '<div class="empty">No requests yet.</div>'}</div>`);
+      c.append(requests);
     } else if (historyTab === 'dictation') {
       c.append(h('<div class="section-title" style="margin-top:0">Dictation<span class="link" id="clr">Clear…</span></div>'));
       $('#clr', c).onclick = () => { if (confirm('Clear all dictation history? Requests and actions are kept.')) relay.clearDictation(); };
@@ -1389,6 +1390,12 @@ window.addEventListener('keydown', (e) => {
   relay.setShortcut(capturing.key, { code: e.code, mods });
   setCapturing(null);
 }, true);
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-ack]');
+  if (!button) return;
+  const result = await relay.acknowledgeUnknown(button.dataset.ack);
+  if (!result?.ok) alert('This task is still running or is no longer awaiting review.');
+});
 window.addEventListener('keyup', (e) => {
   if (!capturing) return;
   if (capturing.mod && e.code === capturing.mod) {

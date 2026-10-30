@@ -9,6 +9,14 @@ const PARTS = { morning: [8, 0], afternoon: [14, 0], evening: [18, 0], night: [2
 const MISSED_MS = 45 * 60 * 1000; // late by more than this (the Mac was asleep or Relay was closed): skipped, not run out of the blue
 const missedMessage = (s) => `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}`;
 
+function acknowledgeUnknown(store, id, activeId) {
+  if (typeof id !== 'string' || !id.startsWith('scheduled:') || id === activeId) return false;
+  const entry = (store.get('history') || []).find((h) => h.id === id && h.status === 'unknown');
+  if (!entry) return false;
+  store.updateHistory(id, { status: 'resolved', reply: 'Outcome reviewed by the user; the result was not verified by Relay.' });
+  return true;
+}
+
 const pad = (n) => String(n).padStart(2, '0');
 const clockText = (h, m) => `${h % 12 === 0 ? 12 : h % 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`;
 
@@ -202,4 +210,4 @@ class Scheduler {
   }
 }
 
-module.exports = { parseScheduleCommand, parseRepeating, parseOnce, nextRun, describe, Scheduler, MISSED_MS, missedMessage };
+module.exports = { parseScheduleCommand, parseRepeating, parseOnce, nextRun, describe, Scheduler, MISSED_MS, missedMessage, acknowledgeUnknown };
