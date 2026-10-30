@@ -132,7 +132,8 @@ const CHECKS = [
       if (bad.length) return fail(`${bad.map((p) => p.name).join(', ')} ${bad.length === 1 ? 'is' : 'are'} damaged or missing: ${bad[0].error}`);
       const changed = (m.list || []).filter((p) => p.enabled && p.changed);
       if (changed.length) return warn(`${changed.map((p) => p.name).join(', ')} changed since you approved ${changed.length === 1 ? 'it' : 'them'}, so ${changed.length === 1 ? 'it is' : 'they are'} not used. Install again to approve the change.`);
-      return ok(`${(m.list || []).length} installed. ${m.sandbox ? 'Each runs in a sandbox.' : 'The macOS sandbox is not available, so only your approval limits them.'}`);
+      if (!m.sandbox) return warn(`${(m.list || []).length} installed. The macOS sandbox is unavailable: plugins can access files and network beyond their declared permissions.`);
+      return ok(`${(m.list || []).length} installed. The macOS sandbox limits access on a best-effort basis; declared network access is not restricted to specific hosts.`);
     }
   },
   {

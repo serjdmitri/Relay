@@ -24,6 +24,12 @@ test('everything fine is all ok', async () => {
   assert.equal(d.worst(rs), 'ok');
 });
 
+test('Doctor warns when enabled plugins have no macOS sandbox', async () => {
+  const result = by(await d.runChecks({ ...good, plugins: () => ({ on: true, list: [], sandbox: false }) }), 'plugins');
+  assert.equal(result.status, 'warn');
+  assert.match(result.cause, /beyond their declared permissions/);
+});
+
 test('a missing permission fails with a button to the right settings pane', async () => {
   const rs = await d.runChecks({ ...good, perms: () => ({ accessibility: false, screen: true, mic: true }) });
   const r = by(rs, 'perm-accessibility');

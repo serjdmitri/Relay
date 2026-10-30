@@ -50,11 +50,11 @@ function describePermissions(m) {
   const lines = [];
   if (p.shell) lines.push({ warn: true, text: 'Can run commands on your Mac.' });
   if (p.shell && p.network.length) lines.push({ warn: true, text: 'Can run commands AND reach the internet: it could send things from your Mac out.' });
-  if (p.acts) lines.push({ warn: true, text: 'Can change things (send, create, delete). Relay asks you before each of those.' });
+  if (p.acts) lines.push({ warn: true, text: 'Declares that it can change things (send, create, delete). Relay asks before calling its tools.' });
   if (p.screen) lines.push({ warn: true, text: 'Can read what is on your screen.' });
   for (const f of p.files) lines.push({ warn: f.mode === 'write', text: `${f.mode === 'write' ? 'Can read and change' : 'Can read'} files in ${f.path}.` });
-  if (p.network.length) lines.push({ warn: false, text: `Can reach the internet: ${p.network.join(', ')}.` });
-  if (!lines.length) lines.push({ warn: false, text: 'Asks for no special access. It only gets what you ask it.' });
+  if (p.network.length) lines.push({ warn: true, text: `Requests network access for ${p.network.join(', ')}. The sandbox cannot limit access to those hosts; it can reach other network addresses too.` });
+  if (!lines.length) lines.push({ warn: false, text: 'Declares no special permissions. The sandbox is best effort and does not restrict every system resource.' });
   return lines;
 }
 
