@@ -116,6 +116,24 @@ test('a link or uninspected metadata added to a staged plugin is rejected', asyn
   }
 });
 
+test('a failed plugin update restores the previous version', async () => {
+  const { m, root, data } = mgr();
+  await m.install((await m.inspect(makePlugin())).token);
+  const update = await m.inspect(makePlugin({ version: '2.0.0' }));
+  const rename = fs.renameSync;
+  try {
+    fs.renameSync = (from, to) => {
+      if (path.basename(from) === 'replacement' && to === path.join(root, 'echo-plugin')) throw new Error('simulated disk failure');
+      return rename(from, to);
+    };
+    await assert.rejects(() => m.install(update.token), /simulated disk failure/);
+  } finally { fs.renameSync = rename; }
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'echo-plugin', 'plugin.json'))).version, '1.0.0');
+  assert.equal(data.plugins[0].version, '1.0.0');
+  assert.match(await m.tools().find((t) => t.name.endsWith('__say')).run({ text: 'still working' }), /echo/);
+  m.stopAll();
+});
+
 test('a plugin changed on disk after approval is not used, and a disabled one is not either', async () => {
   const { m, root } = mgr();
   await m.install((await m.inspect(makePlugin())).token);
