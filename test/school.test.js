@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { schoolUrl, readSchoolPage } = require('../src/main/school');
+const { schoolUrl, readSchoolPage, extractSchoolAssignments } = require('../src/main/school');
 
 const url = 'https://school.myschoolapp.com/lms-assignment/assignment-center/student';
 test('school source accepts only HTTPS assignment-center URLs without credentials or sensitive query strings', () => {
@@ -23,4 +23,13 @@ test('missing browser, tab and login are disclosed without claiming an empty lis
   assert.equal((await readSchoolPage({ isConnected: () => true, call: async () => [] }, url)).reason, 'tab-not-open');
   const b = { isConnected: () => true, call: async (method) => method === 'tabs.list' ? [{ id: 1, url }] : { url, text: 'Sign in to continue' } };
   assert.equal((await readSchoolPage(b, url)).reason, 'not-ready');
+});
+
+test('assignment extraction accepts only literal titles and due dates from the page', async () => {
+  const text = 'Essay\nDue Friday\nLab\nDue Monday';
+  const ask = async () => JSON.stringify([{ title: 'Essay', due: 'Friday' }, { title: 'Lab', due: '' }]);
+  assert.deepEqual(await extractSchoolAssignments(text, ask), [{ title: 'Essay', due: 'Friday' }, { title: 'Lab', due: '' }]);
+  assert.equal(await extractSchoolAssignments(text, async () => '[{"title":"Made up","due":"Friday"}]'), null);
+  assert.equal(await extractSchoolAssignments(text, async () => '[{"title":"Essay","due":"tomorrow"}]'), null);
+  assert.equal(await extractSchoolAssignments(text, async () => 'not JSON'), null);
 });
