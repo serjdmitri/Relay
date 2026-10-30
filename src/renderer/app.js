@@ -1159,7 +1159,7 @@ const PAGES = {
         $('#pyes', out).onclick = async () => { const res = await relay.pluginInstall(r.token); if (res.ok) { out.hidden = true; $('#pin', add).value = ''; } else out.append(h(`<div class="row"><div class="d warn">${esc(res.error)}</div></div>`)); };
       };
       c.append(add, out);
-      c.append(h('<div class="d" style="margin:4px 4px 14px">A plugin runs as its own program with only what you approve here. Anything it returns is treated as data, never as instructions, and after a plugin has answered, sending, deleting and running commands always ask you first.</div>'));
+      c.append(h('<div class="d" style="margin:4px 4px 14px">Plugins run as programs on your Mac. Their sandbox is best effort and may be unavailable; check its status in Doctor. Network permission permits access beyond the listed hosts. Only install plugins you trust. Plugin output is treated as data, and Relay asks before its own sending, deleting and command tools after reading it.</div>'));
     }
     if (S.settings.flags?.imessage) {
       c.append(h('<div class="section-title">Command Relay by text</div>'));

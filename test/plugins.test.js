@@ -47,11 +47,12 @@ test('a manifest is checked and rebuilt from known fields only', () => {
 
 test('permissions are described in plain words, with the risky ones marked', () => {
   const none = describePermissions(parseManifest(manifest()).manifest);
-  assert.match(none[0].text, /no special access/);
+  assert.match(none[0].text, /no special permissions/);
   const risky = describePermissions(parseManifest(manifest({ permissions: { shell: true, network: ['a.example.com'], files: [{ path: '~/Documents/x', mode: 'write' }] } })).manifest);
   assert.ok(risky[0].warn && /run commands/.test(risky[0].text));
   assert.ok(risky.some((l) => /AND reach the internet/.test(l.text)));
   assert.ok(risky.some((l) => /read and change files in ~\/Documents\/x/.test(l.text) && l.warn));
+  assert.ok(risky.some((l) => /other network addresses/.test(l.text) && l.warn));
 });
 
 test('sources: GitHub links, owner/repo, folders; and links inside a plugin are refused', () => {
