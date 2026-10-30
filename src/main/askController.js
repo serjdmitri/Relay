@@ -1250,18 +1250,28 @@ class AskController {
     const cfg = this.store.get('settings.briefing') || {};
     const now = new Date();
     const missing = [];
-    const within = (p, ms = 7000) => Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error('too slow')), ms))]);
+    const within = (p, ms = 7000) => {
+      let timer;
+      return Promise.race([Promise.resolve(p), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('too slow')), ms); })]).finally(() => clearTimeout(timer));
+    };
     const g = this.googleApiIfConnected();
-    const [mac, due, gev, mail, weather] = await Promise.all([
+    const school = require('./school');
+    const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
       within(this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
       within(this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
       g ? within(g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
       g ? within(g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
-      cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null
+      cfg.city ? within(fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
+      cfg.schoolUrl ? within((async () => {
+        const page = await school.readSchoolPage(this.bridge, cfg.schoolUrl);
+        if (!page.ok) return null;
+        const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => this.askOnce(prompt, system));
+        return assignments && { assignments, truncated: page.truncated };
+      })(), 15000).catch(() => null) : undefined
     ]);
     if (!cfg.city) missing.push('weather');
     else if (!weather) missing.push('weather-unavailable');
-    return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, includeGreeting });
+    return buildBriefing({ now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, includeGreeting });
   }
 
   // The same for every request: the time, front app and running apps travel with each request instead.

@@ -25,6 +25,14 @@ test('unavailable sources are disclosed instead of being reported clear', () => 
   assert.doesNotMatch(text, /calendar is clear|Nothing is due|No important unread email/);
 });
 
+test('school briefing reports visible assignments or an honest unavailable message', () => {
+  const text = buildBriefing({ includeGreeting: false, school: { assignments: [{ title: 'Essay', due: 'Friday' }] } });
+  assert.match(text, /School assignments visible: Essay, due Friday/);
+  assert.match(text, /Check the school page for the full list/);
+  assert.match(buildBriefing({ school: null }), /could not check school assignments/);
+  assert.doesNotMatch(buildBriefing({ school: { assignments: [] } }), /no assignments|nothing.*assignment/i);
+});
+
 test('the briefing says each part that there is, in a sensible order, and leaves out what is not set up', () => {
   const now = new Date(2026, 9, 27, 7, 30);
   const text = buildBriefing({
@@ -104,4 +112,19 @@ test('the controller gathers every source at once, and a source that fails is on
   assert.match(text, /One important unread email: Coach about Practice moved\./);
   assert.doesNotMatch(text, /Nothing is due/, 'reminders could not be read, which is not the same as nothing due');
   assert.match(text, /Set your city/);
+});
+
+test('controller reads the configured school page and includes validated assignments', async () => {
+  const c = Object.create(AskController.prototype);
+  const url = 'https://school.myschoolapp.com/lms-assignment/assignment-center/student';
+  Object.assign(c, {
+    store: { get: (key) => key === 'settings.briefing' ? { schoolUrl: url } : null },
+    mac: { calendarEvents: async () => 'No events.', remindersDue: async () => 'No reminders due.' },
+    googleApiIfConnected: () => null,
+    bridge: { isConnected: () => true, call: async (method) => method === 'tabs.list' ? [{ id: 5, url }] : { url, text: 'Essay due Friday' } },
+    askOnce: async () => '[{"title":"Essay","due":"Friday"}]'
+  });
+  assert.match(await c.briefingText(), /School assignments visible: Essay, due Friday/);
+  c.bridge.isConnected = () => false;
+  assert.match(await c.briefingText(), /could not check school assignments/);
 });

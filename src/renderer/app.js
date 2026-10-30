@@ -807,6 +807,12 @@ const PAGES = {
         return row;
       })(),
       (() => {
+        const b = S.settings.briefing || {};
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">School assignments in briefing</div><div class="d">Paste your Blackbaud assignment-center link, then keep that page open and signed in in Firefox with the Relay extension connected. Relay sends the visible page text to your selected model to identify assignments; check the school page for the complete list. Clear the link to turn this off.</div></div><input class="field" id="schoolurl" style="flex-basis:100%;margin-top:8px" placeholder="https://your-school.myschoolapp.com/lms-assignment/assignment-center/student" value="${esc(b.schoolUrl || '')}"></div>`);
+        $('#schoolurl', row).onchange = (e) => relay.set('settings.briefing.schoolUrl', e.target.value.trim().slice(0, 500));
+        return row;
+      })(),
+      (() => {
         const r = (S.settings.robotics || {});
         const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Robotics log sheet</div><div class="d">Say “log this, drifted left on the ramp” and Relay adds a line (time, note) to this Google Sheet. Paste the sheet's link. Needs a connected Google account. Also: “what devices are connected”, “what's on my SD card”, and “start the match day checklist”.</div></div><input class="field" id="rsheet" style="width:230px" placeholder="Google Sheet link" value="${r.sheetId ? 'Sheet set (ends ' + esc(r.sheetId.slice(-6)) + ')' : ''}"></div>`);
         $('#rsheet', row).onchange = (e) => { const m = e.target.value.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/); relay.set('settings.robotics.sheetId', m ? m[1] : ''); };
