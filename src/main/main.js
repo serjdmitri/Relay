@@ -945,6 +945,13 @@ app.whenReady().then(() => {
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
+  const recordMissedSchedules = (missed) => {
+    for (const s of missed) {
+      const message = `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}`;
+      store.addHistory({ id: require('crypto').randomUUID(), text: `Scheduled: ${s.text}`, status: 'missed', reply: message, ts: s.next, finishedAt: Date.now() });
+      if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: message }).show();
+    }
+  };
   ask.cardPanel = cardPanel;
   ask.assistPanel = assistPanel;
   // Is the Mac locked: the phone page shows it as a padlock. macOS tells us when it locks and unlocks; a slow check catches the rest.
@@ -955,6 +962,10 @@ app.whenReady().then(() => {
   powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); });
   powerMonitor.on('unlock-screen', () => {
     lockWatch.set(false);
+    // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
+    const { missed } = ask.scheduler.tick(false);
+    recordMissedSchedules(missed);
+    if (missed.length) broadcast();
     welcomeBack(lockedAt, lastWelcome).then((did) => { if (did) lastWelcome = Date.now(); }).catch(() => {});
     lockedAt = 0;
   });
@@ -1173,11 +1184,7 @@ app.whenReady().then(() => {
   ask.onAgentDone = (a) => { if (Notification.isSupported() && a.status !== 'stopped') new Notification({ title: a.status === 'done' ? 'Agent finished' : 'Agent stopped with a problem', body: `${a.task.slice(0, 80)}: ${a.result.slice(0, 160)}`, silent: true }).show(); };
   setInterval(() => {
     const { due, missed } = ask.scheduler.tick(ask.canRunScheduled());
-    for (const s of missed) {
-      const message = `"${s.text}" was missed while the Mac was asleep or Relay was closed.${s.repeat === 'once' ? ' Schedule it again if you still want it to run.' : ' It will run at its next scheduled time.'}`;
-      store.addHistory({ id: require('crypto').randomUUID(), text: `Scheduled: ${s.text}`, status: 'missed', reply: message, ts: s.next, finishedAt: Date.now() });
-      if (Notification.isSupported()) new Notification({ title: 'Missed a scheduled request', body: message }).show();
-    }
+    recordMissedSchedules(missed);
     for (const s of due) ask.runScheduled(s);
     if (due.length || missed.length) broadcast();
     // Each evening: say what Relay did today and what can be undone. Only when something changed or failed; a click opens the list.
