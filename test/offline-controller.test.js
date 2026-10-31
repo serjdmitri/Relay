@@ -9,7 +9,7 @@ let AskController;
 try { ({ AskController } = require('../src/main/askController')); } finally { Module._load = real; }
 function rig(offline = true) {
   const c = Object.create(AskController.prototype);
-  Object.assign(c, { offline, store: { get: (k) => (k === 'settings' ? { flags: { offline: true } } : k === 'settings.model' ? { ollamaUrl: 'http://127.0.0.1:1', ollamaModel: 'm' } : undefined) } });
+  Object.assign(c, { offline, push() {}, store: { get: (k) => (k === 'settings' ? { flags: { offline: true } } : k === 'settings.model' ? { ollamaUrl: 'http://127.0.0.1:1', ollamaModel: 'm' } : undefined) } });
   return c;
 }
 
