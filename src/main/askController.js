@@ -1332,7 +1332,8 @@ class AskController {
     const since = now.getTime() - 24 * 60 * 60 * 1000;
     const history = this.store.get('history');
     const unfinished = (Array.isArray(history) ? history : []).filter((h) => h.ts >= since && h.ts <= now.getTime() && ['failed', 'stopped'].includes(h.status) && h.text).slice(0, 3).map((h) => ({ text: h.text, status: h.status }));
-    return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, unfinished, includeGreeting };
+    const memories = this.store.get('settings.memory') === false ? [] : this.store.get('memories');
+    return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, unfinished, memories: Array.isArray(memories) ? memories : [], includeGreeting };
   }
 
   async briefingText(options = {}) {

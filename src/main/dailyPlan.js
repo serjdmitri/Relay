@@ -22,6 +22,9 @@ function planToday(facts) {
   const lines = selected.length ? selected.map((item, i) => `${i + 1}. ${item.title} — ${item.source}, ${item.detail}.`) : ['No priorities could be identified from the checked sources.'];
   const unavailable = [...(facts.missing || []), ...(facts.school?.problem ? ['school'] : [])];
   if (unavailable.length) lines.push(`Sources unavailable or not configured: ${unavailable.join(', ')}.`);
+  const { isSecret } = require('./memory');
+  const context = (facts.memories || []).map((m) => String(m.text || '').trim()).filter((text) => text && !isSecret(text) && /\b(?:school|class|course|assignment|homework|study|work|project|deadline|exam)\b/i.test(text)).slice(0, 3);
+  if (context.length) lines.push(`Saved local context (user-stated; check whether still current): ${context.join('; ')}.`);
   return `Suggested priorities for today:\n${lines.join('\n')}`;
 }
 
