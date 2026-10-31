@@ -193,6 +193,20 @@ test('stopping a morning briefing does not produce or translate a late answer', 
   assert.equal(translations, 0);
 });
 
+test('morning briefing records source availability without message contents', async () => {
+  const c = Object.create(AskController.prototype);
+  const actions = [];
+  c.store = { addAction: (action) => actions.push(action) };
+  c.briefingFacts = async () => ({ now: new Date(), missing: ['mail'], school: { problem: 'School not connected.' }, mail: [{ subject: 'Private subject' }] });
+  c.finish = (_entry, result) => result;
+  c.requestLanguage = () => 'en';
+  await c.runBriefingCommand('brief me', { id: 'request-1' });
+  assert.equal(actions[0].requestId, 'request-1');
+  assert.match(actions[0].result, /email/);
+  assert.match(actions[0].result, /School not connected/);
+  assert.doesNotMatch(actions[0].result, /Private subject/);
+});
+
 test('briefing identifies disconnected sources rather than treating them as empty', async () => {
   const c = Object.create(AskController.prototype);
   Object.assign(c, {
