@@ -12,8 +12,8 @@ const { PluginProcess } = require('./host');
 const PENDING_MS = 30 * 60000;
 
 class PluginManager {
-  constructor({ store, root, tmp = os.tmpdir(), fetchFn = fetch, spawnFn, sandbox = false, extract, onUse = () => {}, now = Date.now }) {
-    Object.assign(this, { store, root, tmp, fetchFn, spawnFn, sandbox, extract, onUse, now });
+  constructor({ store, root, tmp = os.tmpdir(), fetchFn = fetch, spawnFn, sandbox = false, extract, onUse = () => {}, onEvent = () => {}, now = Date.now }) {
+    Object.assign(this, { store, root, tmp, fetchFn, spawnFn, sandbox, extract, onUse, onEvent, now });
     this.pending = new Map();
     this.procs = new Map();
     this.restarts = new Map();
@@ -111,6 +111,7 @@ class PluginManager {
     const parsed = this.manifestOf(name);
     if (!parsed.ok) throw new Error(`The plugin ${name} is damaged: ${parsed.errors.join(' ')}`);
     p = new PluginProcess({ dir: path.join(this.root, name), manifest: parsed.manifest, ...(this.spawnFn ? { spawnFn: this.spawnFn } : {}), sandbox: this.sandbox });
+    p.onEvent = (e) => this.onEvent?.(name, e);
     this.procs.set(name, p);
     try { await p.start(); } catch (e) { this.procs.delete(name); p.stop(); throw e; }
     return p;

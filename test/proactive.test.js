@@ -76,3 +76,14 @@ test('offline, plain conversation goes to the local model and anything that need
   for (const t of ['open Safari and search for pizza', 'send a text to Dana', 'remind me at 9', 'turn off the wifi', 'play some music', 'delete that file']) assert.equal(needsInternet(t), true, t);
   for (const t of ['what is a derivative', 'explain how a swerve drive works', 'who wrote Othello', 'give me a synonym for happy']) assert.equal(needsInternet(t), false, t);
 });
+
+test('a new file in a watched folder is a quiet banner, spoken only when you chose to hear everything important', () => {
+  const e = { type: 'folder', title: 'Downloads', name: 'report.pdf' };
+  assert.equal(P.textFor(e), 'New in Downloads: report.pdf.');
+  assert.equal(P.scoreEvent(e), 0.5);
+  assert.equal(new P.Alerts({ now: () => noon }).decide(e, { mode: 'silent-urgent' }).how, 'pill');
+  assert.equal(new P.Alerts({ now: () => noon }).decide(e, { mode: 'speak' }).how, 'speak');
+  const a = new P.Alerts({ now: () => noon });
+  assert.equal(a.decide(e, { mode: 'speak' }).how, 'speak');
+  assert.equal(a.decide({ ...e, name: 'other.pdf' }, { mode: 'speak' }).how, 'speak', 'a second file in the same folder is a new event');
+});

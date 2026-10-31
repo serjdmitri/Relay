@@ -1024,6 +1024,11 @@ const PAGES = {
       $('#pqf', bx).onchange = (e) => relay.set('settings.proactive.quiet.from', Number(e.target.value));
       $('#pqt', bx).onchange = (e) => relay.set('settings.proactive.quiet.to', Number(e.target.value));
       $('#pqo', bx).onclick = () => relay.set('settings.proactive.quiet.on', !pr.quiet?.on);
+      const wf = pr.folders || [];
+      const wrow = h(`<div class="row"><div class="grow"><div class="t">Watch folders</div><div class="d">${wf.length ? wf.map((f) => esc(f)).join('<br>') : 'Relay tells you when a new file appears in a folder you add (up to 5).'}</div></div><button class="btn" id="pwa">Add a folder</button>${wf.length ? '<button class="btn" id="pwc">Clear</button>' : ''}</div>`);
+      $('#pwa', wrow).onclick = () => relay.watchFolder();
+      if (wf.length) $('#pwc', wrow).onclick = () => relay.set('settings.proactive.folders', []);
+      bx.append(wrow);
       c.append(bx);
     }
     if (S.settings.flags?.offline) {
