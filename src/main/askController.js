@@ -2712,6 +2712,13 @@ class AskController {
     return { ...r, model: 'codex' };
   }
 
+  // The phone page answers the question the Mac is asking: the first answer wins (pendingConfirm clears itself).
+  remoteConfirm(yes) {
+    if (!this.pendingConfirm) return false;
+    this.pendingConfirm(!!yes);
+    return true;
+  }
+
   askConfirm(q) {
     return new Promise((resolve) => {
       this.state = 'confirm';

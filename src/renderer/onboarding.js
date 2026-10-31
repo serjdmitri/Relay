@@ -149,6 +149,9 @@ const SCREENS = {
       <div class="suggest"><span>“Show me my Downloads folder”</span><span>“What apps do I have open?”</span><span>“Open Notes”</span></div><div id="live" class="note" style="margin-top:18px;min-height:22px;font-size:16px"></div>`;
     const done = S.history.length > startHistory;
     if (done) $('#live').innerHTML = `<span class="ok">Worked:</span> ${esc(S.history[0].reply)}`;
+    // The last look: Relay checks itself and says what, if anything, still needs a fix (the same checks as Settings > Doctor).
+    $('#stage').insertAdjacentHTML('beforeend', '<div id="doc" class="note" style="margin-top:10px;font-size:15px">Checking that everything is set up…</div>');
+    relay.doctorRun().then((r) => { if ($('#doc')) $('#doc').textContent = r.summary; }).catch(() => { if ($('#doc')) $('#doc').textContent = ''; });
     footer({ next: done ? 'Finish' : 'Skip for Now', nextFn: () => relay.finishOnboarding() });
   }
 };

@@ -167,6 +167,7 @@ class RemoteServer {
       if (!['lesson-delete', 'inferred-approve', 'inferred-delete'].includes(action) || !body.id) return this.json(res, 400, { error: 'Not allowed.' });
       return this.json(res, 200, this.control.memoryAct?.(action, String(body.id)) || { ok: false });
     }
+    if (p === '/api/confirm' && req.method === 'POST') { const b = await this.body(req).catch(() => null); return this.json(res, 200, { ok: !!this.control.confirm?.(b?.yes === true) }); }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });

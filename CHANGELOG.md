@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.35.0
+
+The features that were "not built" in 0.34.0, written with the least code that does the job. Unit-tested and checked in headless browsers; the folder watcher, the plugin events and the phone buttons have not run against a real Mac or phone.
+
+- **Speak up: watched folders and plugin events.** Settings > Speak up on its own > Watch folders: add up to 5 folders and Relay tells you when a new file appears in one (a quiet banner; spoken only in "speak everything important"). A plugin can also tell Relay something happened: it sends the notification `notifications/relay/event` with a `title` and an `importance` from 0 to 1, and it goes through the same loudness rules as any other event.
+- **Answer a question from your phone.** When the Mac asks Allow or Cancel, the phone page now shows the question with Allow and Cancel buttons; the first answer, from the Mac or the phone, wins. (Texts still answer questions for requests that came by text; the Mac does not text you its own questions.)
+- **Spanish:** the labels of the newest settings (Watch folders, Add a folder, Clear, What changed, Run now, Drop, Holograms and hands, Privacy and so on) are translated. Long descriptions stay English.
+- **A video of a model coming apart.** A new Record a video button in the hologram menu records about 5 seconds of the model pulling apart and going back together and saves an MP4 in Downloads/Relay 3D (a WebM if the MP4 recorder is not available).
+- **Compare two things in 3D.** "Compare A and B" now puts them side by side in one hologram (the model is told to show A, then add B next to it). Not tried against the live model.
+- **First run ends with a check.** The last welcome screen runs Doctor and says what, if anything, still needs a fix.
+- **Photo-made models: what did not work.** I tried to cut a one-piece photo model into real parts by its creases and by its colours, on the real cached models (a TRELLIS.2 model and Stable Fast 3D models). It cannot be done that way: their surfaces are smooth and their colours blend, so everything merges into one piece. I removed that code (about 200 lines). Pulling a photo model apart still cuts it into 5 chunks by position, and models over 250,000 triangles (TRELLIS.2) can now be pulled apart at all (they could not before). Real parts need a part-aware generator, and no free one is running.
+
 ## 0.34.0
 
 Built by the cloud session; unit-tested only. **None of it has run on a real Mac**: if Relay does not open, run `npm start` in the repo and send the first error. The experimental features are all off by default: turn them on one at a time in Settings > Doctor > Experimental, and run Doctor first.

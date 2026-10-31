@@ -202,3 +202,16 @@ test('the phone can list, approve and delete what Relay learned, but not edit it
   assert.deepEqual(acted, [['lesson-delete', 'l1'], ['inferred-approve', 'i1']]);
   s.stop();
 });
+
+test('/api/confirm lets a paired phone answer the Mac\'s question; nobody else', async () => {
+  const { s, post, pairing } = await make();
+  const got = [];
+  s.control.confirm = (yes) => { got.push(yes); return true; };
+  assert.equal((await post('/api/confirm', { yes: true })).status, 401);
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'iPhone' })).json();
+  assert.equal((await post('/api/confirm', { yes: true }, token)).status, 200);
+  assert.equal((await post('/api/confirm', { yes: 'no' }, token)).status, 200);
+  assert.deepEqual(got, [true, false], 'only a real true is a yes');
+  s.stop();
+});

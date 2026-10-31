@@ -75,7 +75,7 @@ function registerHoloIpc(mgr) {
     const res = (r) => { mgr.finishSave(of(e), r); return r; };
     try {
       if (!d || !(d.bytes instanceof Uint8Array || Buffer.isBuffer(d.bytes)) || d.bytes.length < 84 || d.bytes.length > 200 * 1024 * 1024) return res({ ok: false, error: 'Nothing to save.' });
-      const ext = ['stl', '3mf', 'step'].includes(d.ext) ? d.ext : 'stl';
+      const ext = ['stl', '3mf', 'step', 'mp4', 'webm'].includes(d.ext) ? d.ext : 'stl';
       const dir = path.join(app.getPath('downloads'), 'Relay 3D');
       fs.mkdirSync(dir, { recursive: true });
       const file = uniquePath((p) => fs.existsSync(p), dir, d.name, ext);

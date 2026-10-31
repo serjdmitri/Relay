@@ -87,3 +87,14 @@ test('an old request held for review can be run or dropped from the Mac', async 
   assert.ok(sent.some((s) => s[1] === 'did lock my mac'));
   assert.deepEqual(await svc.releaseReview('zzz', true), { ok: false });
 });
+
+test('the phone page can answer a question the Mac is asking, the first answer wins, and with nothing waiting it does nothing', async () => {
+  const { hub } = service();
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, { hub, inbound: null, currentRemote: null, win: { setFocusable() {} }, push() {}, reveal() {}, sound() {}, statusChanged() {}, unattended: false });
+  assert.equal(c.remoteConfirm(true), false, 'nothing is waiting');
+  const p = c.askConfirm({ question: 'Send it?' });
+  assert.equal(c.remoteConfirm(true), true);
+  assert.equal(await p, true);
+  assert.equal(c.remoteConfirm(false), false, 'already answered');
+});

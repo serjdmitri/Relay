@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('relay', {
   pluginRemove: (name) => invoke('plugins:remove', name),
   pluginUpdateCheck: (name) => invoke('plugins:update-check', name),
   notesAdd: () => invoke('notes:add'),
+  watchFolder: () => invoke('proactive:add-folder'),
   notesRemove: (p) => invoke('notes:remove', p),
   notesIndex: (p) => invoke('notes:index', p),
   doctorRun: () => invoke('doctor:run'),

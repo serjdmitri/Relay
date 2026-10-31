@@ -96,11 +96,14 @@
     $('status').textContent = { idle: 'IDLE', listening: 'LISTENING', working: 'PROCESSING', speaking: 'SPEAKING' }[m];
     $('status').classList.toggle('busy', m === 'working');
   }
+  for (const [id, yes] of [['askyes', true], ['askno', false]]) $(id).onclick = () => { $('ask').hidden = true; api('/api/confirm', { yes }).catch(() => {}); };
   function line(text, dim) { $('line').textContent = text || ''; $('line').classList.toggle('dim', !!dim); }
 
   function applyStatus(s) {
     if ('locked' in s) setLocked(!!s.locked);
     serverState = s.state || 'idle';
+    $('ask').hidden = serverState !== 'confirm' || !s.question;
+    $('askq').textContent = s.question || '';
     $('tasks').replaceChildren(...(s.tasks || []).map((t) => { const li = document.createElement('li'); li.className = t.status; li.textContent = t.text; return li; }));
     $('agents').replaceChildren(...(s.agents || []).filter((a) => a.status === 'running').map((a) => { const d = document.createElement('div'); d.className = 'ag'; const b = document.createElement('b'); b.textContent = a.task; const sp = document.createElement('span'); sp.textContent = `${a.step}…`; d.append(b, sp); return d; }));
     if (mode === 'listening' || mode === 'speaking') return;
