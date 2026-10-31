@@ -51,6 +51,13 @@ test('plan proposes reviewing a failed request without claiming it remains unres
   assert.doesNotMatch(text, /Already done/);
 });
 
+test('planning includes relevant user-stated context but never turns it into a task', () => {
+  const text = planToday({ now: new Date(), memories: [{ text: 'I prefer to study after lunch' }, { text: 'I like cats' }, { text: 'My school password is fake' }] });
+  assert.match(text, /Saved local context \(user-stated; check whether still current\): I prefer to study after lunch/);
+  assert.match(text, /No priorities could be identified/);
+  assert.doesNotMatch(text, /cats|password/);
+});
+
 test('stopping an in-flight plan prevents saving and save errors are reported', async () => {
   const Module = require('node:module');
   const original = Module._load;
