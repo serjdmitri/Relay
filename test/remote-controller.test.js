@@ -44,7 +44,7 @@ test('a spoken request on the Mac still speaks and tells the phone with no id', 
   await tick();
   await c.release();
   assert.deepEqual(c.results, [{ id: null, reply: 'did open notes', status: 'done' }]);
-  assert.deepEqual(c.spoken, ['did open notes, Sir. Anything else, Sir?']);
+  assert.deepEqual(c.spoken, ['Opening Notes, Sir.', 'did open notes, Sir. Anything else, Sir?']);
 });
 
 test('a phone request while something runs joins the list and keeps its id', async () => {

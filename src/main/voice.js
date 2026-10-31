@@ -203,16 +203,24 @@ class Speaker {
 
   async speakSystem(say, { voice, rate, volume = 1, lang = 'en' }) {
     const token = this.token;
-    const name = await this.resolve(voice, lang);
-    if (token !== this.token) return;
-    const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
-    const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
-    this.child = child;
+    this.busy = true;
     this.setTalking(true);
-    child.on('exit', () => { if (this.child === child) { this.child = null; this.setTalking(false); } });
-    child.on('error', (e) => { this.log.error?.('say:', e.message); if (this.child === child) { this.child = null; this.setTalking(false); } });
-    child.stdin.on('error', () => {});
-    child.stdin.end(volume < 1 ? `[[volm ${volume}]] ${say}` : say); // [[volm]] is the system voice's own loudness command
+    try {
+      const name = await this.resolve(voice, lang);
+      if (token !== this.token) return;
+      const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
+      const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
+      this.child = child;
+      await new Promise((resolve) => {
+        const done = () => { if (this.child === child) this.child = null; resolve(); };
+        child.once('exit', done);
+        child.once('error', (e) => { this.log.error?.('say:', e.message); done(); });
+        child.stdin.on('error', () => {});
+        child.stdin.end(volume < 1 ? `[[volm ${volume}]] ${say}` : say);
+      });
+    } finally {
+      if (token === this.token) { this.busy = false; this.setTalking(false); }
+    }
   }
 
   setTalking(on) {

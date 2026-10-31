@@ -20,7 +20,7 @@ test('spoken answers and failures are spoken, while typed requests and stopped w
     });
     c.finish({ id: 'x', text: 'hello', ts: Date.now() }, { status, reply: 'Hello, Sir.' });
     clearTimeout(c.doneTimer);
-    assert.deepEqual(spoken, byVoice && status !== 'stopped' ? [status === 'done' ? 'Hello, Sir. Anything else, Sir?' : 'Hello, Sir.'] : [], `${status}, voice=${byVoice}`);
+    assert.deepEqual(spoken, byVoice && status !== 'stopped' ? ['Hello, Sir. Anything else, Sir?'] : [], `${status}, voice=${byVoice}`);
   }
 });
 
@@ -41,4 +41,17 @@ test('a follow-up containing a request is not mistaken for a bare no', () => {
   assert.equal(followUpAnswer('No, open Notes'), null);
   assert.equal(followUpAnswer('no thank you'), 'no');
   assert.equal(spokenReply('Opened Notes.', true), 'Opened Notes, Sir. Anything else, Sir?');
+});
+
+test('wake greeting finishes before the microphone opens and can be dismissed', async () => {
+  for (const dismissed of [false, true]) {
+    const calls = [];
+    const c = Object.create(AskController.prototype);
+    Object.assign(c, { state: 'idle', wake: { disarm: () => calls.push('disarm'), refresh() {}, canListen: () => false },
+      store: { get: k => k === 'settings.speakReplies' ? true : {} },
+      speaker: { speak: async text => { calls.push(text); if (dismissed) c.state = 'idle'; } },
+      listen: async () => calls.push('listen') });
+    await c.wakeTriggered();
+    assert.deepEqual(calls, dismissed ? ['disarm', 'Yes, Sir.'] : ['disarm', 'Yes, Sir.', 'listen']);
+  }
 });
