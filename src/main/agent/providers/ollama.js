@@ -3,6 +3,7 @@
 
 class OllamaProvider {
   constructor({ url, model, fetchImpl = fetch }) {
+    if (/(?:^|:)cloud$/i.test(String(model || '').trim())) throw new Error('Ollama cloud models cannot be used as a local model. Choose a downloaded model.');
     let address;
     try { address = new URL(url); } catch { throw new Error('Ollama needs a valid local address.'); }
     if (!['http:', 'https:'].includes(address.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(address.hostname) || address.username || address.password || address.search || address.hash) {

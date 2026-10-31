@@ -920,7 +920,9 @@ class AskController {
         host.stop();
       }
     }
-    const { provider, vision } = this.buildProvider();
+    let provider, vision;
+    try { ({ provider, vision } = this.buildProvider()); }
+    catch (e) { return { status: 'failed', reply: e.message, actions: 0 }; }
     return runAgent({ text: prompt, tools: this.agentTools(vision), system, signal, confirm, onEvent, provider, maxSteps: 40 });
   }
 
@@ -2770,7 +2772,7 @@ class AskController {
     try {
       const res = await new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
       return { status: 'done', reply: (res.text || '').trim() || 'I have no answer for that offline.', actions: 0 };
-    } catch { return { status: 'done', reply: 'I am offline and no local model is running. Start Ollama to chat without the internet.', actions: 0 }; }
+    } catch (e) { return { status: 'done', reply: /cloud models cannot be used/.test(e.message) ? e.message : 'I am offline and no local model is running. Start Ollama to chat without the internet.', actions: 0 }; }
   }
 
   // Said aloud in the chosen voice, outside a request (for things Relay brings up on its own).
@@ -2834,7 +2836,9 @@ class AskController {
         if (session) this.keepConversation(session, result);
       }
     }
-    const { provider, vision } = this.buildProvider();
+    let provider, vision;
+    try { ({ provider, vision } = this.buildProvider()); }
+    catch (e) { return { status: 'failed', reply: e.message, actions: 0 }; }
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
