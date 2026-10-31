@@ -313,7 +313,7 @@ function layoutHud() {
   root.setProperty('--k', String(k));
   const cornerK = 0.27;
   const cx = 28 + (540 * cornerK) / 2 + 8;
-  const cy = 64 + (540 * cornerK) / 2;
+  const cy = innerHeight - 64 - (540 * cornerK) / 2;
   root.setProperty('--tx', `${cx - innerWidth / 2}px`);
   root.setProperty('--ty', `${cy - (innerHeight / 2 - 40)}px`);
   root.setProperty('--ck', String(cornerK));
