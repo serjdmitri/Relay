@@ -49,11 +49,17 @@ try {
     await app.evaluate(() => global.__relay.ask.close());
   }
   const before = fs.readdirSync(path.join(tmp, 'memory')).length;
-  const scheduled = await app.evaluate(() => global.__relay.ask.runScheduled({ text: 'plan today' }));
+  const scheduled = await app.evaluate(() => {
+    const { ask, store } = global.__relay;
+    ask.activeScheduledId = 'scheduled:test:1';
+    store.addHistory({ id: ask.activeScheduledId, text: 'Scheduled: plan today', status: 'unknown', ts: Date.now() });
+    return ask.runScheduled({ text: 'plan today' });
+  });
   assert.equal(scheduled.status, 'done');
   assert.equal(fs.readdirSync(path.join(tmp, 'memory')).length, before + 1);
-  const history = await app.evaluate(() => global.__relay.store.get('history').map(({ text, status }) => ({ text, status })));
-  assert.ok(history.some(item => item.text === 'Scheduled: plan today' && item.status === 'done'));
+  const history = await app.evaluate(() => global.__relay.store.get('history').map(({ id, text, status }) => ({ id, text, status })));
+  assert.equal(history.filter(item => item.id === 'scheduled:test:1' && item.status === 'done').length, 1);
+  assert.equal(history.filter(item => item.text === 'Scheduled: plan today').length, 1);
   console.log('Both Routines buttons and a scheduled plan saved isolated reports using fake source data.');
 } finally {
   if (app) await app.close();
