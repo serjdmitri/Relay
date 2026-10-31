@@ -49,6 +49,21 @@ function shouldFollowUp(ctx) {
   return !!(ctx.enabled && ctx.byVoice && ctx.state === 'done' && !ctx.speaking && !ctx.suspended && (ctx.chain || 0) < max);
 }
 
+// Only a bare answer to the follow-up question is special; "no, open Notes"
+// is a request and must never be discarded as a dismissal.
+function followUpAnswer(text) {
+  const s = norm(text).replace(/\b(?:sir|jarvis)\b/g, '').replace(/\s+/g, ' ').trim();
+  if (/^(?:no|nope|no thanks|no thank you|nothing|nothing else|that's all|that is all)$/.test(s)) return 'no';
+  if (/^(?:yes|yeah|yep|sure|yes please)$/.test(s)) return 'yes';
+  return null;
+}
+
+function spokenReply(reply, askAgain) {
+  let text = String(reply || '').trim();
+  if (text && !/\bsir\b/i.test(text)) text = `${text.replace(/[.!?]+$/, '')}, Sir.`;
+  return askAgain ? `${text} Anything else, Sir?`.trim() : text;
+}
+
 // Does "Hey Jarvis" listen with this app in front? apps: a list of app names, empty meaning everywhere.
 function wakeAllowedIn(apps, front) {
   const list = (Array.isArray(apps) ? apps : String(apps || '').split(',')).map((a) => norm(a)).filter(Boolean);
@@ -57,4 +72,4 @@ function wakeAllowedIn(apps, front) {
   return !!f && list.some((a) => f === a || f.startsWith(a) || a.startsWith(f));
 }
 
-module.exports = { heardStop, interruption, shouldFollowUp, wakeAllowedIn, STOP_WORDS };
+module.exports = { heardStop, interruption, shouldFollowUp, followUpAnswer, spokenReply, wakeAllowedIn, STOP_WORDS };
