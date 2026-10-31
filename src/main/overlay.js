@@ -1,5 +1,6 @@
 const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
+const { execFile } = require('child_process');
 const { displayAt, normalizeStrokes, strokesBox, lastBurst } = require('./overlayGeometry');
 
 // Everything Relay draws over your screen, one click-through window per display:
@@ -17,13 +18,15 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false, getRecentRect = () => null, borderBin = null }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
     this.getName = getName; // the name shown in the reactor's core
     this.getVisual = getVisual;
     this.getBorder = getBorder;
     this.getBlur = getBlur;
+    this.getRecentRect = getRecentRect;
+    this.borderBin = borderBin;
     this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
     this.wins = new Map(); // display id -> { win, display, shapes, card, halo, buddy, haloTimer }
     this.buddyState = null;
@@ -233,6 +236,8 @@ class Overlay {
   // msg uses the same fields as the pill ({ state, mode, partial, level, label, text, reply, status, ... }) or { hide: true }.
   hud(msg) {
     if (msg.hide) {
+      clearInterval(this.borderTimer);
+      this.borderTimer = null;
       this.hudState = {};
       const e = this.hudEntry;
       this.hudInteractive(false);
@@ -252,10 +257,30 @@ class Overlay {
       this.hudEntry.hud = true;
       clearTimeout(this.hudEntry.hudTimer);
       this.refresh(this.hudEntry);
+      this.refreshBorder();
+      this.borderTimer = setInterval(() => this.refreshBorder(), 1000);
+      this.borderTimer.unref?.();
     }
     this.setHudBlur(this.hudEntry, this.getBlur());
     this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName(), visual: this.getVisual() === 'orb' ? 'orb' : 'reactor', border: this.getBorder() !== false } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
+  }
+
+  refreshBorder() {
+    const entry = this.hudEntry;
+    if (!entry || this.borderBusy) return;
+    const publish = (geometry = {}) => {
+      if (this.hudEntry !== entry) return;
+      const origin = this.origin(entry);
+      const local = r => r && ({ x: r.x - origin.x, y: r.y - origin.y, width: r.width, height: r.height });
+      this.send(entry, { type: 'hud-border', notches: (geometry.notches || []).map(local), tuckr: (geometry.tuckr || []).map(local), recent: local(this.getRecentRect()) });
+    };
+    if (!this.borderBin) return publish();
+    this.borderBusy = true;
+    execFile(this.borderBin, ['border-geometry'], { timeout: 2000, maxBuffer: 16384 }, (err, out) => {
+      this.borderBusy = false;
+      try { publish(err ? {} : JSON.parse(out)); } catch { publish(); }
+    });
   }
 
   setHudBlur(entry, on) {

@@ -11,7 +11,7 @@ try { ({ Overlay } = require('../src/main/overlay')); } finally { Module._load =
 test('HUD blur is optional, follows settings and is removed when HUD hides', () => {
   let enabled = false;
   const effects = [];
-  const entry = { win: { isDestroyed: () => false, setVibrancy: (value) => effects.push(value) } };
+  const entry = { win: { isDestroyed: () => false, getBounds: () => ({ x: 0, y: 0 }), setVibrancy: (value) => effects.push(value) } };
   const overlay = new Overlay({ isEnabled: () => true, getBlur: () => enabled });
   overlay.entry = () => entry;
   overlay.refresh = () => {};

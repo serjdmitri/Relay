@@ -115,6 +115,30 @@ let args = CommandLine.arguments
 guard args.count >= 2 else { fail("usage: relay-ax find|list|press <app> ... | ocr <png> <text> | focused") }
 
 switch args[1] {
+case "border-geometry":
+    // Only geometry is returned; window titles and screen contents never leave this process.
+    let mainTop = NSScreen.screens.first?.frame.maxY ?? 0
+    var notches: [[String: Double]] = []
+    if #available(macOS 12.0, *) {
+        for s in NSScreen.screens {
+            guard s.safeAreaInsets.top > 0, let left = s.auxiliaryTopLeftArea, let right = s.auxiliaryTopRightArea else { continue }
+            let width = right.minX - left.maxX
+            if width > 0 {
+                notches.append(["x": left.maxX, "y": mainTop - s.frame.maxY, "width": width, "height": s.safeAreaInsets.top])
+            }
+        }
+    }
+    let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+    let tuckr = windows.compactMap { w -> [String: Double]? in
+        guard let owner = w[kCGWindowOwnerName as String] as? String, owner.lowercased().contains("tuckr"),
+              let b = w[kCGWindowBounds as String] as? [String: Any],
+              let x = (b["X"] as? NSNumber)?.doubleValue, let y = (b["Y"] as? NSNumber)?.doubleValue,
+              let width = (b["Width"] as? NSNumber)?.doubleValue, let height = (b["Height"] as? NSNumber)?.doubleValue,
+              width > 60, height > 30 else { return nil }
+        return ["x": x, "y": y, "width": width, "height": height]
+    }
+    let result: [String: Any] = ["notches": notches, "tuckr": tuckr]
+    if let data = try? JSONSerialization.data(withJSONObject: result), let json = String(data: data, encoding: .utf8) { print(json) }
 case "hand-drag":
     let trustOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     guard AXIsProcessTrustedWithOptions(trustOptions) else { fail("Allow Relay’s hand-drag helper in System Settings > Privacy & Security > Accessibility, then try again.") }

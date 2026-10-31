@@ -16,6 +16,38 @@ let raf = 0;
 const note = $('note');
 let noteTimer = 0;
 
+// Trace only geometry supplied by the local Mac helper. A panel touching an
+// edge becomes a detour in that edge; detached Tuckr windows get an outline.
+let borderGeometry = {};
+function drawHudBorder(m = borderGeometry) {
+  borderGeometry = m;
+  const w = innerWidth, h = innerHeight;
+  const valid = r => r && [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0;
+  const top = [...(m.notches || []), ...(m.tuckr || [])].filter(r => valid(r) && r.y <= 2 && r.y + r.height > 0 && r.x < w && r.x + r.width > 0)
+    .map(r => ({ a: Math.max(1, r.x), b: Math.min(w - 1, r.x + r.width), depth: Math.min(h - 1, r.y + r.height) })).sort((a, b) => a.a - b.a);
+  const merged = [];
+  for (const r of top) { const p = merged[merged.length - 1]; if (p && r.a <= p.b) { p.b = Math.max(p.b, r.b); p.depth = Math.max(p.depth, r.depth); } else merged.push(r); }
+  let d = 'M1 1';
+  for (const r of merged) {
+    const c = Math.max(0, Math.min(12, (r.b - r.a) / 4, (r.depth - 1) / 2));
+    d += ` H${r.a} V${r.depth - c} Q${r.a} ${r.depth} ${r.a + c} ${r.depth} H${r.b - c} Q${r.b} ${r.depth} ${r.b} ${r.depth - c} V1`;
+  }
+  d += ` H${w - 1} V${h - 1} H1`;
+  const recent = m.recent;
+  if (valid(recent) && recent.x <= 1 && recent.x + recent.width > 0 && recent.y < h && recent.y + recent.height > 0) {
+    const a = Math.max(1, recent.y), b = Math.min(h - 1, recent.y + recent.height), right = Math.min(w - 1, recent.x + recent.width);
+    const c = Math.max(0, Math.min(22, (b - a) / 3, (right - 1) / 3));
+    d += ` V${b} H${right - c} Q${right} ${b} ${right} ${b - c} V${a + c} Q${right} ${a} ${right - c} ${a} H1`;
+  }
+  d += ' V1';
+  for (const r of m.tuckr || []) if (valid(r) && r.y > 2 && r.x < w && r.y < h && r.x + r.width > 0 && r.y + r.height > 0) {
+    const x = Math.max(1, r.x), y = Math.max(1, r.y), right = Math.min(w - 1, r.x + r.width), bottom = Math.min(h - 1, r.y + r.height);
+    d += ` M${x} ${y} H${right} V${bottom} H${x} Z`;
+  }
+  document.querySelectorAll('#hudborder path').forEach(p => p.setAttribute('d', d));
+}
+addEventListener('resize', () => drawHudBorder());
+
 function frame(now) {
   // when pointing, the buddy waits to the lower left of the target so it never covers the label on the right
   const goal = flyTo && flyTo.until > now ? (jarvis ? { x: flyTo.x + 2, y: flyTo.y + 2 } : { x: flyTo.x - 30, y: flyTo.y + 30 }) : cursor && (jarvis ? { x: cursor.x + 24, y: cursor.y + 26 } : { x: cursor.x + 15, y: cursor.y + 17 });
@@ -373,7 +405,11 @@ window.relay.onOverlay((m) => {
       break;
     case 'hud':
       layoutHud();
+      drawHudBorder();
       window.Hud.apply(m.hide ? { hide: true } : m.state);
+      break;
+    case 'hud-border':
+      drawHudBorder(m);
       break;
     case 'hud-focus':
       window.Hud.focusInput();
