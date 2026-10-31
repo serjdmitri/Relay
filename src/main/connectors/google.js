@@ -211,8 +211,17 @@ class GoogleApi {
     const end = new Date(start);
     end.setDate(end.getDate() + days); // local calendar days can be 23 or 25 hours
     for (const a of this.pick(email)) {
-      const j = await this.call(a, 'GET', `https://www.googleapis.com/calendar/v3/calendars/primary/events?${new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '50' })}`);
-      for (const e of j.items || []) out.push({ account: a.email, id: e.id, title: e.summary || '(no title)', start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date, where: e.location || '' });
+      let token = '';
+      const seen = new Set();
+      do {
+        const params = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '50' });
+        if (token) params.set('pageToken', token);
+        const j = await this.call(a, 'GET', `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`);
+        for (const e of j.items || []) out.push({ account: a.email, id: e.id, title: e.summary || '(no title)', start: e.start?.dateTime || e.start?.date, end: e.end?.dateTime || e.end?.date, where: e.location || '' });
+        token = j.nextPageToken || '';
+        if (token && (seen.has(token) || seen.size >= 10)) throw new Error('Google Calendar returned too many or repeated pages; results may be incomplete.');
+        if (token) seen.add(token);
+      } while (token);
     }
     return out.sort((x, y) => String(x.start).localeCompare(String(y.start)));
   }
