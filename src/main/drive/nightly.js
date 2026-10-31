@@ -52,16 +52,18 @@ function planDownloads({ fs, home, folder, now = Date.now(), minAgeHours = 3, de
 
 // Is it time to run tonight's? cfg: { enabled, hour, minute, lastRun: 'YYYY-MM-DD' }. Runs once a day, any time after the set time (a Mac that was
 // asleep at nine still gets it when it wakes), but not more than 14 hours late.
-function nightlyDue(cfg, now = new Date()) {
-  if (!cfg?.enabled) return false;
-  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  if (cfg.lastRun === day) return false;
+function nightlyDay(cfg, now = new Date()) {
+  if (!cfg?.enabled) return null;
   const at = new Date(now);
   at.setHours(cfg.hour ?? 21, cfg.minute ?? 0, 0, 0);
+  if (at > now) at.setDate(at.getDate() - 1);
+  const day = dayKey(at);
+  if (cfg.lastRun === day) return null;
   const late = now - at;
-  return late >= 0 && late < 14 * 3600 * 1000;
+  return late >= 0 && late < 14 * 3600 * 1000 ? day : null;
 }
 
 const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const nightlyDue = (cfg, now = new Date()) => nightlyDay(cfg, now) !== null;
 
-module.exports = { planDownloads, nightlyDue, dayKey, DEST };
+module.exports = { planDownloads, nightlyDue, nightlyDay, dayKey, DEST };

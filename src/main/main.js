@@ -28,7 +28,7 @@ const { PresenceControl } = require('./presence');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
-const { nightlyDue, dayKey } = require('./drive/nightly');
+const { nightlyDue, nightlyDay, dayKey } = require('./drive/nightly');
 const uiText = require('../renderer/ui-es');
 const { AssistPanel } = require('./assistPanel');
 const { LockWatch } = require('./lockState');
@@ -1225,8 +1225,10 @@ app.whenReady().then(() => {
     if (due.length || missed.length) broadcast();
     // Each evening: say what Relay did today and what can be undone. Only when something changed or failed; a click opens the list.
     const rc = store.get('settings.recap');
-    if (nightlyDue(rc)) {
-      store.set('settings.recap.lastRun', dayKey(new Date()));
+    // The recap reads today's activity, so do not label yesterday's missed
+    // recap as today after midnight; wait for the next scheduled evening.
+    if (nightlyDue(rc) && nightlyDay(rc) === dayKey(new Date())) {
+      store.set('settings.recap.lastRun', nightlyDay(rc));
       const r = ask.recapData();
       if (!r.empty && (r.changed || r.failed) && Notification.isSupported()) {
         const n = new Notification({ title: 'Relay today', body: r.spoken.replace(/ The list is in History, under Actions\.$/, '') });
@@ -1237,7 +1239,7 @@ app.whenReady().then(() => {
     // Each evening: look at Downloads and show where the new files would go. Only when Relay is free; it moves nothing without a yes.
     const dt = store.get('settings.downloadsTidy');
     if (nightlyDue(dt) && ask.canRunScheduled()) {
-      store.set('settings.downloadsTidy.lastRun', dayKey(new Date()));
+      store.set('settings.downloadsTidy.lastRun', nightlyDay(dt));
       ask.drive.proposeDownloads().then((r) => {
         if (r.moves && Notification.isSupported()) new Notification({ title: 'Downloads tidy-up', body: `${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads could be sorted. The plan is on screen: say “apply the plan” or “skip the plan”.`, silent: true }).show();
       }).catch(() => {});

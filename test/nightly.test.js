@@ -3,7 +3,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { planDownloads, nightlyDue, dayKey } = require('../src/main/drive/nightly');
+const { planDownloads, nightlyDue, nightlyDay, dayKey } = require('../src/main/drive/nightly');
+
+test('a missed nightly task can run after midnight once for its original night', () => {
+  const cfg = { enabled: true, hour: 21, minute: 0 };
+  const afterMidnight = new Date(2026, 9, 31, 1);
+  assert.equal(nightlyDay(cfg, afterMidnight), '2026-10-30');
+  assert.equal(nightlyDue({ ...cfg, lastRun: '2026-10-30' }, afterMidnight), false);
+  assert.equal(nightlyDay({ ...cfg, lastRun: '2026-10-30' }, new Date(2026, 9, 31, 21)), '2026-10-31');
+  assert.equal(nightlyDay(cfg, new Date(2026, 9, 31, 12)), null);
+});
 const { Drive } = require('../src/main/drive');
 const { parseQuick, runQuick } = require('../src/main/quick');
 
