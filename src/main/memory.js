@@ -63,4 +63,4 @@ function memoryContext(list, budget = 2400) {
   return lines.length ? `What the user has told Relay to remember (use it when it helps; do not recite it):\n${lines.join('\n')}` : '';
 }
 
-module.exports = { parseMemory, isSecret, addFact, removeFacts, memoryContext, MAX_FACTS };
+module.exports = { parseMemory, isSecret, addFact, removeFacts, memoryContext, clean, MAX_LEN, MAX_FACTS };
