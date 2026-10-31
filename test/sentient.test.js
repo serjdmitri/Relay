@@ -67,6 +67,11 @@ test('Relay exposes vault tools only when enabled and not using the local model'
   assert.equal(controller.connectorTools().some((tool) => tool.name.startsWith('sentient_')), false);
   await assert.rejects(index.run({}), /unavailable in local model mode/);
   values['settings.model.provider'] = 'claude';
+  controller.offline = true;
+  values.settings = { flags: { offline: true } };
+  assert.equal(controller.connectorTools().some((tool) => tool.name.startsWith('sentient_')), false);
+  await assert.rejects(index.run({}), /disabled or unavailable/);
+  controller.offline = false;
   values['settings.memory'] = false;
   assert.equal(controller.connectorTools().some((tool) => tool.name.startsWith('sentient_')), false);
 });
