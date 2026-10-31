@@ -1336,13 +1336,29 @@ class AskController {
   }
 
   async briefingText(options = {}) {
-    return buildBriefing(await this.briefingFacts(options));
+    const facts = await this.briefingFacts(options);
+    if (!options.signal?.aborted) options.onFacts?.(facts);
+    return buildBriefing(facts);
+  }
+
+  recordBriefingSources(facts, requestId, report) {
+    const missing = new Set(facts.missing || []);
+    const status = [
+      ['Mac calendar', !missing.has('calendar')], ['Google calendar', !missing.has('google-calendar')],
+      ['Reminders', !missing.has('reminders')], ['email', !missing.has('mail')],
+      ['weather', !missing.has('weather') && !missing.has('weather-unavailable')],
+      ['school', !!facts.school && !facts.school.problem]
+    ];
+    const unavailable = status.filter(([, ok]) => !ok).map(([name]) => name);
+    const checked = status.filter(([, ok]) => ok).map(([name]) => name);
+    const detail = `Checked: ${checked.join(', ') || 'none'}. Unavailable or not configured: ${unavailable.join(', ') || 'none'}.${facts.school?.problem ? ` School: ${facts.school.problem}` : ''}${facts.tomorrow?.missing?.length ? ` Tomorrow unavailable: ${facts.tomorrow.missing.join(', ')}.` : ''}`;
+    this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
   }
 
   async runBriefingCommand(request, entry) {
     const abort = new AbortController();
     this.abort = abort;
-    const text = await untilStopped(this.briefingText({ signal: abort.signal }), abort.signal);
+    const text = await untilStopped(this.briefingText({ signal: abort.signal, onFacts: (facts) => { try { this.recordBriefingSources(facts, entry.id, 'Morning briefing'); } catch { /* the briefing still completes */ } } }), abort.signal);
     if (abort.signal.aborted) return this.finish(entry, { status: 'stopped', reply: 'Stopped the briefing.', actions: 0 });
     return this.requestLanguage(request) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
   }
@@ -1378,17 +1394,7 @@ class AskController {
       return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
     }
     try {
-      const missing = new Set(facts.missing || []);
-      const status = [
-        ['Mac calendar', !missing.has('calendar')], ['Google calendar', !missing.has('google-calendar')],
-        ['Reminders', !missing.has('reminders')], ['email', !missing.has('mail')],
-        ['weather', !missing.has('weather') && !missing.has('weather-unavailable')],
-        ['school', !!facts.school && !facts.school.problem]
-      ];
-      const unavailable = status.filter(([, ok]) => !ok).map(([name]) => name);
-      const checked = status.filter(([, ok]) => ok).map(([name]) => name);
-      const detail = `Checked: ${checked.join(', ') || 'none'}. Unavailable or not configured: ${unavailable.join(', ') || 'none'}.${facts.school?.problem ? ` School: ${facts.school.problem}` : ''}${facts.tomorrow?.missing?.length ? ` Tomorrow unavailable: ${facts.tomorrow.missing.join(', ')}.` : ''}`;
-      this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report: close ? 'Close the day' : 'Plan today' }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
+      this.recordBriefingSources(facts, requestId, close ? 'Close the day' : 'Plan today');
       this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'save_daily_report', input: { report: close ? 'Close the day' : 'Plan today' }, result: `Saved to Desktop/memory/${path.basename(saved)}`, ok: true, ts: Date.now() });
       return { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 };
     } catch {
