@@ -1526,7 +1526,14 @@ class AskController {
   // The phrase was heard: chime, then listen for the request. It ends by itself when the user stops talking.
   async wakeTriggered() {
     if (this.state !== 'idle' && this.state !== 'done') return;
+    this.wake?.disarm();
+    if (this.store.get('settings.speakReplies') && this.speaker) {
+      this.state = 'waking';
+      await this.speaker.speak('Yes, Sir.', profileFor('reply', this.store.get('settings') || {}));
+      if (this.state !== 'waking') return; // dismissed while the greeting was spoken
+    }
     await new Promise((r) => setTimeout(r, 150)); // let the listening session close before a new one opens
+    if (!['idle', 'done', 'waking'].includes(this.state)) return;
     await this.listen('ask', false, { auto: true });
   }
 
@@ -1926,6 +1933,16 @@ class AskController {
         }
         if (opts.shown) return this.runRequest(effective, entry);
         this.lastRequestText = effective;
+        // Speak an honest progress message before opening an app. Wait for it
+        // to finish so the final result cannot cut the sentence in half.
+        const opening = parseQuick(effective);
+        if (this.voiceAsk && !opts.remote && !opts.scheduled && this.store.get('settings.speakReplies') && opening?.type === 'open-app' && this.speaker) {
+          const controller = new AbortController();
+          this.abort = controller;
+          await this.speaker.speak(`Opening ${opening.name}, Sir.`, profileFor('reply', this.store.get('settings') || {}));
+          if (controller.signal.aborted || this.state !== 'working') return this.finish(entry, { status: 'stopped', reply: 'Stopped.', actions: 0 });
+          if (this.abort === controller) this.abort = null;
+        }
         const quick = await this.tryQuick(effective, entry);
         return quick || this.runRequest(effective, entry);
       }
@@ -2995,8 +3012,8 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
-    const askAgain = res.status === 'done' && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false && (this.followChain || 0) < 5;
-    this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
+    const askAgain = ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false && (this.followChain || 0) < 5;
+    this.followFor = ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote ? entry.id : null;
     this.awaitingFollowAnswer = !!askAgain;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
     if (this.store.get('settings.speakReplies') && this.voiceAsk && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(spokenReply(reply, askAgain), { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
