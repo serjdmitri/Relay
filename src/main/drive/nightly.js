@@ -66,4 +66,15 @@ function nightlyDay(cfg, now = new Date()) {
 const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const nightlyDue = (cfg, now = new Date()) => nightlyDay(cfg, now) !== null;
 
-module.exports = { planDownloads, nightlyDue, nightlyDay, dayKey, DEST };
+async function runNightlyProposal(drive, record) {
+  try {
+    const result = await drive.proposeDownloads();
+    record({ ok: true, result: result.moves ? `Prepared a reviewable Downloads plan for ${result.moves} files; no files moved.` : 'No Downloads changes proposed.' });
+    return result;
+  } catch {
+    record({ ok: false, result: 'Could not prepare the Downloads tidy-up. No files were moved.' });
+    return null;
+  }
+}
+
+module.exports = { planDownloads, nightlyDue, nightlyDay, dayKey, runNightlyProposal, DEST };
