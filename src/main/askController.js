@@ -1312,6 +1312,14 @@ class AskController {
     return buildBriefing(await this.briefingFacts(options));
   }
 
+  async runBriefingCommand(request, entry) {
+    const abort = new AbortController();
+    this.abort = abort;
+    const text = await this.briefingText({ signal: abort.signal });
+    if (abort.signal.aborted) return this.finish(entry, { status: 'stopped', reply: 'Stopped the briefing.', actions: 0 });
+    return this.requestLanguage(request) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
+  }
+
   async tomorrowCalendar(now) {
     const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() + 1);
     const end = new Date(start); end.setDate(end.getDate() + 1);
@@ -1791,9 +1799,7 @@ class AskController {
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
         }
         if (!opts.shown && parseBriefingCommand(effective)) {
-          const text = await this.briefingText();
-          // in another language the same facts are said by the model, which answers in the language it was asked in
-          return this.requestLanguage(effective) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
+          return this.runBriefingCommand(effective, entry);
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
           return this.finish(entry, await this.dailyPlanCommand(false, entry.id));

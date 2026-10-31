@@ -178,6 +178,21 @@ test('stopping a briefing while the school page loads prevents a later model cal
   assert.equal(sent, 0);
 });
 
+test('stopping a morning briefing does not produce or translate a late answer', async () => {
+  const c = Object.create(AskController.prototype);
+  let release, translations = 0;
+  c.briefingText = ({ signal }) => new Promise((resolve) => { release = () => { assert.equal(signal.aborted, true); resolve('Late briefing'); }; });
+  c.requestLanguage = () => 'es';
+  c.runRequest = () => { translations++; };
+  c.finish = (_entry, result) => result;
+  const pending = c.runBriefingCommand('brief me', {});
+  c.abort.abort();
+  release();
+  const result = await pending;
+  assert.equal(result.status, 'stopped');
+  assert.equal(translations, 0);
+});
+
 test('briefing identifies disconnected sources rather than treating them as empty', async () => {
   const c = Object.create(AskController.prototype);
   Object.assign(c, {
