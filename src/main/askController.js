@@ -1070,12 +1070,26 @@ class AskController {
     if (mem.isSecret(fact)) return { status: 'failed', reply: "I don't keep passwords, card numbers or other secrets." };
     const { list, added } = mem.addFact(this.store.get('memories') || [], fact, { id: crypto.randomUUID() });
     if (added) {
+      if (this.memoryExport) list[0].exportPending = true;
       this.store.set('memories', list);
       this.onChange();
       if (this.memoryExport) {
         try { this.memoryExport(list[0].text); }
         catch { return { status: 'done', reply: 'I saved that in Relay, but could not create its import file in Desktop/memory.' }; }
+        delete list[0].exportPending;
+        this.store.set('memories', list);
         return { status: 'done', reply: 'I saved that in Relay and made a text file in Desktop/memory for Sentient OS import.' };
+      }
+    }
+    if (!added && this.memoryExport) {
+      const pending = list.find((item) => item.exportPending && item.text.toLowerCase() === String(fact).trim().replace(/[.!\s]+$/, '').toLowerCase());
+      if (pending) {
+        try { this.memoryExport(pending.text); }
+        catch { return { status: 'done', reply: 'That memory is in Relay, but I still could not create its import file in Desktop/memory.' }; }
+        delete pending.exportPending;
+        this.store.set('memories', list);
+        this.onChange();
+        return { status: 'done', reply: 'I made the missing text file in Desktop/memory for Sentient OS import.' };
       }
     }
     return { status: 'done', reply: added ? "Okay, I'll remember that." : 'I already knew that.' };
