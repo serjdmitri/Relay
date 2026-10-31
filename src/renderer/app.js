@@ -1327,7 +1327,7 @@ const PAGES = {
       $('#savekey', box).onclick = async () => { await relay.setApiKey($('#key', box).value); $('#key', box).value = ''; };
       $('#mname', box).onchange = (e) => relay.set('settings.model.anthropicModel', e.target.value.trim());
     } else if (m.provider === 'ollama') {
-      box.append(h(`<div style="display:flex;flex-direction:column;gap:12px"><div><div class="note" style="margin-bottom:6px">Ollama address</div><input class="field" id="ourl" value="${esc(m.ollamaUrl)}"></div>
+      box.append(h(`<div class="note">Use a downloaded model. For local-only privacy, also disable cloud features in Ollama and restart it; Relay cannot verify how your Ollama server is configured.</div><div style="display:flex;flex-direction:column;gap:12px"><div><div class="note" style="margin-bottom:6px">Ollama address</div><input class="field" id="ourl" value="${esc(m.ollamaUrl)}"></div>
         <div><div class="note" style="margin-bottom:6px">Model (needs tool support; a vision model such as qwen2.5vl lets Relay see the screen)</div><input class="field" id="omodel" value="${esc(m.ollamaModel)}"></div></div>`));
       $('#ourl', box).onchange = (e) => relay.set('settings.model.ollamaUrl', e.target.value.trim());
       $('#omodel', box).onchange = (e) => relay.set('settings.model.ollamaModel', e.target.value.trim());

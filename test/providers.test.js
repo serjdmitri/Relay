@@ -56,6 +56,11 @@ test('ollama refuses remote addresses and embedded credentials', () => {
   for (const url of ['http://127.0.0.1:11434', 'http://localhost:11434', 'http://[::1]:11434']) assert.doesNotThrow(() => new OllamaProvider({ url, model: 'm' }));
 });
 
+test('ollama local mode rejects the documented cloud model tag', () => {
+  for (const model of ['gemma4:cloud', 'model:CLOUD', 'cloud']) assert.throws(() => new OllamaProvider({ url: 'http://127.0.0.1:11434', model }), /cloud models/);
+  assert.doesNotThrow(() => new OllamaProvider({ url: 'http://127.0.0.1:11434', model: 'gemma4:4b' }));
+});
+
 test('ollama: unreachable server gives a readable error', async () => {
   const p = new OllamaProvider({ url: 'http://127.0.0.1:11434', model: 'm', fetchImpl: async () => { throw new Error('ECONNREFUSED'); } });
   await assert.rejects(() => p.step({ system: '', messages: [], tools }), /Cannot reach Ollama/);
