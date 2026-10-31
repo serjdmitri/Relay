@@ -60,6 +60,11 @@ test('direct recall uses the vault only when enabled and a cloud model is select
   data['settings.model.provider'] = 'claude';
   assert.equal((await c.recallMemory({})).reply, 'Vault read.');
   assert.equal(modelCalls, 1);
+  c.offline = true;
+  data.settings = { flags: { offline: true } };
+  assert.match((await c.recallMemory({})).reply, /does not include Sentient OS/);
+  assert.equal(modelCalls, 1);
+  c.offline = false;
   data['settings.sentient.enabled'] = false;
   await c.recallMemory({});
   assert.equal(modelCalls, 1);
