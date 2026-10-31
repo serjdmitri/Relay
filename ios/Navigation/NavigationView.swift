@@ -12,7 +12,7 @@ struct NavigationView: View {
             Text("JARVIS NAVIGATION").font(.headline).foregroundStyle(.cyan)
             HStack {
                 TextField("Destination", text: $destinationText).textFieldStyle(.roundedBorder)
-                Button("Route") { Task { await model.findRoute(to: destinationText, from: origin) } }
+                Button("Search") { Task { await model.search(for: destinationText, near: origin) } }
                     .disabled(model.loading)
             }
             Map {
@@ -40,6 +40,23 @@ struct NavigationView: View {
                 Button("End route") { model.cancel() }
             } else {
                 Text(model.status).font(.caption)
+                if !model.matches.isEmpty {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(Array(model.matches.enumerated()), id: \.offset) { _, place in
+                                Button {
+                                    Task { await model.route(to: place, from: origin) }
+                                } label: {
+                                    VStack(alignment: .leading) {
+                                        Text(place.name ?? "Unnamed place")
+                                        if let address = place.placemark.title { Text(address).font(.caption) }
+                                    }.frame(maxWidth: .infinity, alignment: .leading)
+                                }.disabled(model.loading)
+                            }
+                        }
+                    }.frame(maxHeight: 160)
+                }
+                if model.loading { Button("Cancel") { model.cancel() } }
             }
         }
         .padding()
