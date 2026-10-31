@@ -24,6 +24,10 @@ test('secrets are not kept', () => {
   assert.equal(isSecret('my wifi password is hunter2'), true);
   assert.equal(isSecret('my card number is 4111 1111 1111 1111'), true);
   assert.equal(isSecret('my ssn is 123-45-6789'), true);
+  assert.equal(isSecret('sk-proj-' + 'a'.repeat(30)), true);
+  assert.equal(isSecret('ghp_' + 'b'.repeat(36)), true);
+  assert.equal(isSecret('-----BEGIN PRIVATE KEY-----'), true);
+  assert.equal(isSecret('eyJ' + 'a'.repeat(15) + '.' + 'b'.repeat(15) + '.' + 'c'.repeat(15)), true);
   assert.equal(isSecret('I am vegetarian'), false);
   assert.equal(isSecret('my phone number is 305 555 0100'), false);
 });
