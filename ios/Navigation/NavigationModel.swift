@@ -8,6 +8,7 @@ import SwiftUI
 final class NavigationModel: ObservableObject {
     @Published private(set) var route: MKRoute?
     @Published private(set) var destination: MKMapItem?
+    @Published private(set) var matches: [MKMapItem] = []
     @Published private(set) var status = "Choose a destination."
     @Published private(set) var loading = false
     private var requestID = UUID()
@@ -17,12 +18,36 @@ final class NavigationModel: ObservableObject {
         loading = false
         route = nil
         destination = nil
+        matches = []
         status = "Choose a destination."
     }
 
-    func findRoute(to query: String, from origin: CLLocationCoordinate2D) async {
+    func search(for query: String, near origin: CLLocationCoordinate2D) async {
         let destinationText = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !destinationText.isEmpty else { status = "Enter a destination."; return }
+        let id = UUID()
+        requestID = id
+        loading = true
+        route = nil
+        destination = nil
+        matches = []
+        status = "Searching for places…"
+        defer { if requestID == id { loading = false } }
+        do {
+            let search = MKLocalSearch.Request()
+            search.naturalLanguageQuery = destinationText
+            search.region = MKCoordinateRegion(center: origin, latitudinalMeters: 50_000, longitudinalMeters: 50_000)
+            let results = try await MKLocalSearch(request: search).start()
+            guard requestID == id else { return }
+            matches = Array(results.mapItems.prefix(10))
+            status = matches.isEmpty ? "No matching place found." : "Choose a destination."
+        } catch {
+            guard requestID == id else { return }
+            status = "Could not search for places. Check your connection and try again."
+        }
+    }
+
+    func route(to place: MKMapItem, from origin: CLLocationCoordinate2D) async {
         let id = UUID()
         requestID = id
         loading = true
@@ -31,12 +56,6 @@ final class NavigationModel: ObservableObject {
         status = "Finding a route…"
         defer { if requestID == id { loading = false } }
         do {
-            let search = MKLocalSearch.Request()
-            search.naturalLanguageQuery = destinationText
-            search.region = MKCoordinateRegion(center: origin, latitudinalMeters: 50_000, longitudinalMeters: 50_000)
-            let results = try await MKLocalSearch(request: search).start()
-            guard requestID == id else { return }
-            guard let place = results.mapItems.first else { status = "No matching place found."; return }
             let request = MKDirections.Request()
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: origin))
             request.destination = place
@@ -46,6 +65,7 @@ final class NavigationModel: ObservableObject {
             guard let found = response.routes.first else { status = "No driving route found."; return }
             destination = place
             route = found
+            matches = []
             status = "Route preview ready."
         } catch {
             guard requestID == id else { return }
