@@ -43,7 +43,7 @@ test('the briefing says each part that there is, in a sensible order, and leaves
   assert.match(text, /^Good morning, Sergey\. It is 78 degrees and partly cloudy in Hollywood, a high of 86 and a low of 74, with a 60 percent chance of rain, so take an umbrella\./);
   assert.match(text, /2 events still ahead: Calc quiz at 9:15 AM and Robotics meeting at 3 PM; all day: Spirit day\./);
   assert.match(text, /2 reminders are due: Pay dues and AP Lit essay, 1 of them overdue\./);
-  assert.match(text, /One important unread email: Ms\. Rivera about Scholarship deadline\.$/);
+  assert.match(text, /Recent important unread email from the last two days includes: Ms\. Rivera about Scholarship deadline\. Check your inbox for the full list\.$/);
   assert.ok(text.indexOf('weather') < 0 && text.indexOf('degrees') < text.indexOf('calendar'), 'weather first, then the calendar');
   const bare = buildBriefing({ now, missing: ['weather'] });
   assert.equal(bare, 'Good morning. Your calendar is clear today. Nothing is due. Set your city in Settings and I will add the weather.');
@@ -122,7 +122,7 @@ test('the controller gathers every source at once, and a source that fails is on
   const text = await c.briefingText();
   assert.match(text, /^Good (morning|afternoon|evening), Sergey\./);
   assert.match(text, /one event still ahead: Dentist at \d/, 'the same event from the Mac and Google is said once');
-  assert.match(text, /One important unread email: Coach about Practice moved\./);
+  assert.match(text, /Recent important unread email from the last two days includes: Coach about Practice moved\./);
   assert.doesNotMatch(text, /Nothing is due/, 'reminders could not be read, which is not the same as nothing due');
   assert.match(text, /Set your city/);
 });
