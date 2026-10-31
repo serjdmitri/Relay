@@ -42,7 +42,7 @@ const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
 const { BargeIn } = require('./barge');
-const { shouldFollowUp } = require('./conversation');
+const { shouldFollowUp, mayCloseAnswer } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
@@ -1325,7 +1325,10 @@ class AskController {
     this.followTimer = setTimeout(() => {
       const cfg = this.store.get('settings.followUp') || {};
       const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz || this.checklist ? 0 : this.followChain });
-      if (!ok) return;
+      if (!ok) { // no follow-up after all (and nothing still being said): the reactor can go
+        if (!this.speaker?.speaking && this.followFor && !this.holdAnswer && !this.holdForHolos) { this.followFor = null; if (this.state === 'done') this.close(); }
+        return;
+      }
       this.followFor = null;
       this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : this.holdAnswer ? 25000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
     }, delay);
@@ -2800,8 +2803,8 @@ class AskController {
     this.holdForHolos = !!this.holos?.hasUnpinned();
     if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
     this.doneTimer = setTimeout(() => {
-      if (this.state === 'done') this.close();
-    }, Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes
+      if (mayCloseAnswer({ state: this.state, speaking: !!this.speaker?.speaking, followPending: !!this.followFor })) this.close();
+    }, Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes (not while it is still speaking or about to listen for your reply)
     return res;
   }
 
