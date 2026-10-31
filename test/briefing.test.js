@@ -187,8 +187,8 @@ test('stopping a morning briefing does not produce or translate a late answer', 
   c.finish = (_entry, result) => result;
   const pending = c.runBriefingCommand('brief me', {});
   c.abort.abort();
-  release();
   const result = await pending;
+  release();
   assert.equal(result.status, 'stopped');
   assert.equal(translations, 0);
 });
