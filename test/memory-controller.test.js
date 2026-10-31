@@ -90,7 +90,7 @@ test('new explicit memories are queued once and export failure is disclosed', ()
   assert.match(c.rememberFact('I prefer coffee').reply, /saved that in Relay, but could not create/);
   assert.equal(c.store.get('memories')[0].exportPending, true);
   c.memoryExport = (fact) => saved.push(fact);
-  assert.match(c.rememberFact('I prefer coffee').reply, /made the missing text file/);
+  assert.match(c.rememberFact('  I   prefer  coffee. ').reply, /made the missing text file/);
   assert.equal(c.store.get('memories')[0].exportPending, undefined);
   assert.equal(c.rememberFact('I prefer coffee').reply, 'I already knew that.');
   assert.deepEqual(saved, ['I prefer tea', 'I prefer coffee']);

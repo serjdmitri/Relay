@@ -1092,7 +1092,8 @@ class AskController {
       }
     }
     if (!added && this.memoryExport) {
-      const pending = list.find((item) => item.exportPending && item.text.toLowerCase() === String(fact).trim().replace(/[.!\s]+$/, '').toLowerCase());
+      const normalized = mem.clean(fact).slice(0, mem.MAX_LEN).toLowerCase();
+      const pending = list.find((item) => item.exportPending && item.text.toLowerCase() === normalized);
       if (pending) {
         try { this.memoryExport(pending.text); }
         catch { return { status: 'done', reply: 'That memory is in Relay, but I still could not create its import file in Desktop/memory.' }; }
