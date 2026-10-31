@@ -1368,6 +1368,17 @@ class AskController {
       return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
     }
     try {
+      const missing = new Set(facts.missing || []);
+      const status = [
+        ['Mac calendar', !missing.has('calendar')], ['Google calendar', !missing.has('google-calendar')],
+        ['Reminders', !missing.has('reminders')], ['email', !missing.has('mail')],
+        ['weather', !missing.has('weather') && !missing.has('weather-unavailable')],
+        ['school', !!facts.school && !facts.school.problem]
+      ];
+      const unavailable = status.filter(([, ok]) => !ok).map(([name]) => name);
+      const checked = status.filter(([, ok]) => ok).map(([name]) => name);
+      const detail = `Checked: ${checked.join(', ') || 'none'}. Unavailable or not configured: ${unavailable.join(', ') || 'none'}.${facts.school?.problem ? ` School: ${facts.school.problem}` : ''}${facts.tomorrow?.missing?.length ? ` Tomorrow unavailable: ${facts.tomorrow.missing.join(', ')}.` : ''}`;
+      this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report: close ? 'Close the day' : 'Plan today' }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
       this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'save_daily_report', input: { report: close ? 'Close the day' : 'Plan today' }, result: `Saved to Desktop/memory/${path.basename(saved)}`, ok: true, ts: Date.now() });
       return { status: 'done', reply: `${plan}\nSaved locally in Desktop/memory for your review.`, actions: 1 };
     } catch {
