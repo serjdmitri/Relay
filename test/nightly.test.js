@@ -3,7 +3,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { planDownloads, nightlyDue, nightlyDay, dayKey } = require('../src/main/drive/nightly');
+const { planDownloads, nightlyDue, nightlyDay, dayKey, runNightlyProposal } = require('../src/main/drive/nightly');
+
+test('nightly proposal records success and failure without exposing error contents', async () => {
+  const records = [];
+  assert.equal((await runNightlyProposal({ proposeDownloads: async () => ({ moves: 2 }) }, (r) => records.push(r))).moves, 2);
+  assert.match(records[0].result, /no files moved/);
+  assert.equal(await runNightlyProposal({ proposeDownloads: async () => { throw new Error('private detail'); } }, (r) => records.push(r)), null);
+  assert.equal(records[1].ok, false);
+  assert.doesNotMatch(records[1].result, /private detail/);
+});
 
 test('a missed nightly task can run after midnight once for its original night', () => {
   const cfg = { enabled: true, hour: 21, minute: 0 };
