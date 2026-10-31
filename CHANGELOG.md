@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.35.1
+
+- **The reactor stays while Relay talks, and while it waits for your reply.** It used to fade after a few seconds even if Relay was still speaking, so the follow-up listening happened with the reactor gone. Now it stays through the speech and the follow-up listening, then goes. Unit-tested (the rule that decides when it may close); not tried by voice on a real Mac.
+
 ## 0.35.0
 
 The features that were "not built" in 0.34.0, written with the least code that does the job. Unit-tested and checked in headless browsers; the folder watcher, the plugin events and the phone buttons have not run against a real Mac or phone.

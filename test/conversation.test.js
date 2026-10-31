@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { heardStop, interruption, shouldFollowUp, wakeAllowedIn } = require('../src/main/conversation');
+const { heardStop, interruption, shouldFollowUp, wakeAllowedIn, mayCloseAnswer } = require('../src/main/conversation');
 const { jobFor, profileFor, pickJarvis, LONG_REPLY } = require('../src/main/voiceProfile');
 const { pickVoice } = require('../src/main/voice');
 
@@ -140,4 +140,11 @@ test('the speaker uses the loudness and voice it is given: system voice gets a v
   assert.equal(made[0].voice, 'bm_george');
   assert.equal(made[0].rate, 'slower');
   assert.deepEqual(calls.find((c) => c.cmd === 'afplay').args.slice(0, 2), ['-v', '0.5']);
+});
+
+test('the reactor stays while Relay is still speaking and while it is about to listen for your reply', () => {
+  assert.equal(mayCloseAnswer({ state: 'done', speaking: true, followPending: false }), false);
+  assert.equal(mayCloseAnswer({ state: 'done', speaking: false, followPending: true }), false);
+  assert.equal(mayCloseAnswer({ state: 'listening', speaking: false, followPending: false }), false);
+  assert.equal(mayCloseAnswer({ state: 'done', speaking: false, followPending: false }), true);
 });
