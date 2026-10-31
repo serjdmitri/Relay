@@ -205,3 +205,13 @@ test('schedules can be removed by words, turned off, and cleared', () => {
   sch.clear();
   assert.equal(sch.items.length, 0);
 });
+test('scheduled outcome records the actual result and leaves uncertain runs unchanged', () => {
+  const { recordScheduledOutcome } = require('../src/main/schedule');
+  const updates = [];
+  const store = { updateHistory: (id, patch) => updates.push({ id, ...patch }) };
+  for (const status of ['done', 'failed', 'stopped']) assert.equal(recordScheduledOutcome(store, 'run', { status }, 123), true);
+  assert.deepEqual(updates.map((item) => item.status), ['done', 'failed', 'stopped']);
+  assert.match(updates[1].reply, /^Failed/);
+  assert.equal(recordScheduledOutcome(store, 'run', null, 123), false);
+  assert.equal(updates.length, 3);
+});

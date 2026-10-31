@@ -51,7 +51,7 @@ const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { McpRemote } = require('./connectors/mcp');
 const { connectAccount: connectGoogle } = require('./connectors/google');
-const { Scheduler, describe: describeSchedule, parseScheduleCommand, missedMessage, acknowledgeUnknown } = require('./schedule');
+const { Scheduler, describe: describeSchedule, parseScheduleCommand, missedMessage, acknowledgeUnknown, recordScheduledOutcome } = require('./schedule');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
@@ -1219,7 +1219,7 @@ app.whenReady().then(() => {
     for (const s of due) {
       ask.activeScheduledId = s.runId;
       Promise.resolve().then(() => ask.runScheduled(s)).then((result) => {
-        if (result && ['done', 'failed', 'stopped'].includes(result.status)) store.updateHistory(s.runId, { status: 'resolved', reply: 'Outcome recorded in request history.', finishedAt: Date.now() });
+        recordScheduledOutcome(store, s.runId, result);
       }).catch(() => {}).finally(() => { if (ask.activeScheduledId === s.runId) ask.activeScheduledId = null; broadcast(); }); // an uncertain outcome remains visible and is never automatically retried
     }
     if (due.length || missed.length) broadcast();
