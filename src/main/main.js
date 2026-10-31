@@ -1242,6 +1242,7 @@ app.whenReady().then(() => {
       store.set('settings.downloadsTidy.lastRun', nightlyDay(dt));
       runNightlyProposal(ask.drive, ({ ok, result }) => { store.addAction({ id: crypto.randomUUID(), tool: 'nightly_downloads_plan', input: {}, result, ok, ts: Date.now() }); broadcast(); }).then((r) => {
         if (!r && Notification.isSupported()) new Notification({ title: 'Downloads tidy-up could not run', body: 'Relay could not prepare the plan. No files were moved.', silent: true }).show();
+        if (r?.logFailed && Notification.isSupported()) new Notification({ title: 'Downloads activity not recorded', body: 'Relay checked Downloads but could not write the activity log.', silent: true }).show();
         if (r?.moves && Notification.isSupported()) new Notification({ title: 'Downloads tidy-up', body: `${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads could be sorted. The plan is on screen: say “apply the plan” or “skip the plan”.`, silent: true }).show();
       }).catch(() => {});
     }
