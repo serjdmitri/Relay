@@ -67,10 +67,14 @@ test('stopping an in-flight plan prevents saving and save errors are reported', 
   release({ now: new Date() });
   assert.equal(saves, 0);
   c.briefingFacts = async () => ({ now: new Date() });
+  const failedActions = [];
+  c.store = { addAction: (action) => failedActions.push(action) };
   c.outputExport = () => { throw new Error('disk unavailable'); };
   const result = await c.dailyPlanCommand();
   assert.equal(result.status, 'failed');
   assert.match(result.reply, /could not save/);
+  assert.equal(failedActions[0].ok, false);
+  assert.match(failedActions[0].result, /Could not save/);
   const actions = [];
   c.store = { addAction: (action) => actions.push(action) };
   c.outputExport = () => '/some/desktop/memory/plan.txt';

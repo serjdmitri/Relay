@@ -1374,6 +1374,7 @@ class AskController {
     let saved;
     try { saved = this.outputExport(close ? 'Close the day' : 'Plan today', plan); }
     catch {
+      try { this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'save_daily_report', input: { report: close ? 'Close the day' : 'Plan today' }, result: 'Could not save the report in Desktop/memory.', ok: false, ts: Date.now() }); } catch { /* the reply still reports the save failure */ }
       return { status: 'failed', reply: `${plan}\nI could not save the plan locally.`, actions: 0 };
     }
     try {
