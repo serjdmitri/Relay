@@ -20,6 +20,25 @@ test('spoken answers and failures are spoken, while typed requests and stopped w
     });
     c.finish({ id: 'x', text: 'hello', ts: Date.now() }, { status, reply: 'Hello, Sir.' });
     clearTimeout(c.doneTimer);
-    assert.deepEqual(spoken, byVoice && status !== 'stopped' ? ['Hello, Sir.'] : [], `${status}, voice=${byVoice}`);
+    assert.deepEqual(spoken, byVoice && status !== 'stopped' ? [status === 'done' ? 'Hello, Sir. Anything else, Sir?' : 'Hello, Sir.'] : [], `${status}, voice=${byVoice}`);
   }
+});
+
+test('yes listens again and no closes only during a spoken follow-up', async () => {
+  for (const [text, expected] of [['no thank you', 'close'], ['yes', 'listen'], ['open Notes', 'command']]) {
+    const c = Object.create(AskController.prototype);
+    const calls = [];
+    Object.assign(c, { state: 'input', awaitingFollowAnswer: true, runningTask: null,
+      store: { get: () => true }, close: () => calls.push('close'),
+      listen: () => calls.push('listen'), handleText: () => calls.push('command') });
+    await c.submit(text, { voice: true });
+    assert.deepEqual(calls, [expected]);
+  }
+});
+
+test('a follow-up containing a request is not mistaken for a bare no', () => {
+  const { followUpAnswer, spokenReply } = require('../src/main/conversation');
+  assert.equal(followUpAnswer('No, open Notes'), null);
+  assert.equal(followUpAnswer('no thank you'), 'no');
+  assert.equal(spokenReply('Opened Notes.', true), 'Opened Notes, Sir. Anything else, Sir?');
 });

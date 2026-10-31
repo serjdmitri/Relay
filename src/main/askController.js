@@ -46,7 +46,7 @@ const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
 const { BargeIn } = require('./barge');
-const { shouldFollowUp } = require('./conversation');
+const { shouldFollowUp, followUpAnswer, spokenReply } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
@@ -1700,6 +1700,9 @@ class AskController {
 
   close() {
     clearTimeout(this.doneTimer);
+    clearTimeout(this.followTimer);
+    this.followFor = null;
+    this.awaitingFollowAnswer = false;
     clearTimeout(this.holdTimer);
     this.holdAnswer = false;
     this.holdForHolos = false;
@@ -1730,6 +1733,12 @@ class AskController {
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
     if (this.runningTask && this.state === 'working') return this.enqueue(text, { voice }); // preserve the input method while queued
     if (this.state !== 'input') return;
+    if (voice && this.awaitingFollowAnswer) {
+      this.awaitingFollowAnswer = false;
+      const answer = followUpAnswer(text);
+      if (answer === 'no') return this.close();
+      if (answer === 'yes') return this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: 10000 });
+    }
     this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
 
     if (!this.store.get('settings.actEnabled')) {
@@ -2986,9 +2995,11 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
+    const askAgain = res.status === 'done' && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false && (this.followChain || 0) < 5;
     this.followFor = res.status === 'done' && this.voiceAsk && !entry.remote ? entry.id : null;
+    this.awaitingFollowAnswer = !!askAgain;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && this.voiceAsk && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(reply, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
+    if (this.store.get('settings.speakReplies') && this.voiceAsk && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(spokenReply(reply, askAgain), { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     clearTimeout(this.holdTimer);
@@ -3000,7 +3011,7 @@ class AskController {
     this.holdForHolos = !!this.holos?.hasUnpinned();
     if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
     this.doneTimer = setTimeout(() => {
-      if (this.state === 'done') this.close();
+      if (this.state === 'done' && !this.followFor && !this.speaker?.speaking) this.close();
     }, Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes
     return res;
   }
