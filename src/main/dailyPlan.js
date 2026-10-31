@@ -2,10 +2,21 @@
 function planToday(facts) {
   const items = [];
   for (const r of facts.due || []) if (r.title) items.push({ title: r.title, source: 'Reminders', rank: r.overdue ? 0 : 1, detail: r.overdue ? 'overdue' : 'due today' });
-  for (const a of facts.school?.assignments || []) if (a.title) items.push({ title: a.title, source: 'School', rank: 2, detail: a.due ? `due ${a.due}` : 'due date not identified' });
+  for (const a of facts.school?.assignments || []) if (a.title) {
+    // Only sort exact ISO calendar dates; preserve the page's wording and do
+    // not guess the meaning of relative or locale-dependent dates.
+    const due = String(a.due || '').trim();
+    const m = due.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    let date = Infinity;
+    if (m) {
+      const parsed = new Date(`${due}T00:00:00Z`);
+      if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === due) date = parsed.getTime();
+    }
+    items.push({ title: a.title, source: 'School', rank: 2, date, detail: due ? `due ${due}` : 'due date not identified' });
+  }
   for (const h of facts.unfinished || []) if (h.text && ['failed', 'stopped'].includes(h.status)) items.push({ title: `Review: ${String(h.text).replace(/\s+/g, ' ').slice(0, 100)}`, source: 'Relay history', rank: 3, detail: `${h.status}; check its latest status` });
   for (const e of facts.events || []) if (e.title && (!e.start || e.start >= facts.now)) items.push({ title: e.title, source: 'Calendar', rank: 4, detail: e.start ? `at ${e.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : 'all day or time unavailable' });
-  items.sort((a, b) => a.rank - b.rank);
+  items.sort((a, b) => a.rank - b.rank || (a.date ?? Infinity) - (b.date ?? Infinity));
   const seen = new Set();
   const selected = items.filter((item) => { const key = item.title.toLowerCase().trim(); if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 3);
   const lines = selected.length ? selected.map((item, i) => `${i + 1}. ${item.title} — ${item.source}, ${item.detail}.`) : ['No priorities could be identified from the checked sources.'];

@@ -12,6 +12,14 @@ test('plan proposes at most three sourced priorities, with overdue reminders fir
   assert.match(result, /Sources unavailable or not configured: mail/);
 });
 
+test('school items with unambiguous dates are ordered by deadline without guessing other dates', () => {
+  const text = planToday({ now: new Date(), school: { assignments: [
+    { title: 'Unknown date', due: 'Friday' }, { title: 'Later', due: '2026-11-20' }, { title: 'Sooner', due: '2026-11-02' }, { title: 'Invalid', due: '2026-02-30' }
+  ] } });
+  assert.match(text, /1\. Sooner[\s\S]*2\. Later[\s\S]*3\. Unknown date/);
+  assert.doesNotMatch(text, /4\./);
+});
+
 test('close of day uses recorded successes and unfinished requests without claiming unrelated work', () => {
   const now = new Date('2026-10-30T18:00:00');
   const text = closeDay({ facts: { now, due: [{ title: 'Essay' }], missing: ['mail'] }, actions: [{ ts: now.getTime(), tool: 'notes_create', ok: true }, { ts: now.getTime(), tool: 'gmail_send', ok: false }], history: [{ ts: now.getTime(), status: 'failed', text: 'Check the assignment' }] });
