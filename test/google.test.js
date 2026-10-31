@@ -111,6 +111,14 @@ test('calendar query includes the whole local day across daylight-saving transit
   }
 });
 
+test('calendar follows pages and rejects repeated page tokens', async () => {
+  let count = 0;
+  const { g } = api({ '/events?': () => json(++count === 1 ? { items: [{ id: 'one', summary: 'First', start: { date: '2026-10-26' } }], nextPageToken: 'next' } : { items: [{ id: 'two', summary: 'Second', start: { date: '2026-10-27' } }] }) });
+  assert.deepEqual((await g.calEvents(null, 2)).map(e => e.title), ['First', 'Second']);
+  const loop = api({ '/events?': { items: [], nextPageToken: 'repeat' } });
+  await assert.rejects(loop.g.calEvents(null, 1), /repeated pages/);
+});
+
 test('sending asks first; reading does not', () => {
   const t = Object.fromEntries(googleTools({}).map((x) => [x.name, x]));
   assert.match(t.gmail_send.confirm({ to: 'a@b.c', subject: 'Hello', account: 'me@gmail.com' }), /Send "Hello" to a@b\.c from me@gmail\.com/);
