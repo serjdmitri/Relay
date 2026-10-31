@@ -67,14 +67,17 @@ const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,
 const nightlyDue = (cfg, now = new Date()) => nightlyDay(cfg, now) !== null;
 
 async function runNightlyProposal(drive, record) {
+  let result;
   try {
-    const result = await drive.proposeDownloads();
-    record({ ok: true, result: result.moves ? `Prepared a reviewable Downloads plan for ${result.moves} files; no files moved.` : 'No Downloads changes proposed.' });
-    return result;
+    result = await drive.proposeDownloads();
   } catch {
-    record({ ok: false, result: 'Could not prepare the Downloads tidy-up. No files were moved.' });
+    try { record({ ok: false, result: 'Could not prepare the Downloads tidy-up. No files were moved.' }); } catch { /* caller still receives failure */ }
     return null;
   }
+  let logFailed = false;
+  try { record({ ok: true, result: result.moves ? `Prepared a reviewable Downloads plan for ${result.moves} files; no files moved.` : 'No Downloads changes proposed.' }); }
+  catch { logFailed = true; }
+  return { ...result, logFailed };
 }
 
 module.exports = { planDownloads, nightlyDue, nightlyDay, dayKey, runNightlyProposal, DEST };

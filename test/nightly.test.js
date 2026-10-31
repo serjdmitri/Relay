@@ -12,6 +12,10 @@ test('nightly proposal records success and failure without exposing error conten
   assert.equal(await runNightlyProposal({ proposeDownloads: async () => { throw new Error('private detail'); } }, (r) => records.push(r)), null);
   assert.equal(records[1].ok, false);
   assert.doesNotMatch(records[1].result, /private detail/);
+  const prepared = await runNightlyProposal({ proposeDownloads: async () => ({ moves: 2 }) }, () => { throw new Error('log unavailable'); });
+  assert.equal(prepared.moves, 2);
+  assert.equal(prepared.logFailed, true);
+  assert.equal(await runNightlyProposal({ proposeDownloads: async () => { throw new Error('failed'); } }, () => { throw new Error('log unavailable'); }), null);
 });
 
 test('a missed nightly task can run after midnight once for its original night', () => {
