@@ -4,6 +4,9 @@
 const MAX_FACTS = 150;
 const MAX_LEN = 240;
 const SECRET = /pass(?:word|code)|\bpin\b|api[ -]?key|secret|token|\bssn\b|social security|credit card|debit card|card number|cvv|routing number|account number|\b(?:\d[ -]?){13,19}\b|\b\d{3}-\d{2}-\d{4}\b/i;
+// Common unlabeled credential formats. This is a precaution, not a complete
+// secret scanner: arbitrary passwords cannot be reliably recognized as text.
+const SECRET_FORMAT = /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----|\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|gh[opusr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/;
 
 const clean = (t) => String(t).replace(/\s+/g, ' ').trim().replace(/[.!\s]+$/, '');
 const PREFIX = String.raw`^(?:(?:hey |ok |okay )?(?:relay|jarvis)[, ]+)?(?:please )?`;
@@ -28,7 +31,7 @@ function parseMemory(text) {
   return null;
 }
 
-const isSecret = (fact) => SECRET.test(fact);
+const isSecret = (fact) => SECRET.test(fact) || SECRET_FORMAT.test(fact);
 
 // Adds a fact unless it is already there (or a longer version of it is). Returns { list, added }.
 function addFact(list, fact, { id = Math.random().toString(36).slice(2), now = Date.now() } = {}) {
