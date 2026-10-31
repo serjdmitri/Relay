@@ -69,8 +69,8 @@ function buildBriefing(f) {
     if (items.length) out.push(`School assignments visible: ${list(items.slice(0, 4).map((a) => `${a.title}${a.due ? `, due ${a.due}` : ''}`))}${items.length > 4 ? ', and more' : ''}. Check the school page for the full list.`);
     else out.push('I could not identify any incomplete assignments from the visible school page. Check the page for the full list.');
   }
-  if (f.mail && f.mail.length) out.push(`${f.mail.length === 1 ? 'One important unread email' : `${f.mail.length} important unread emails`}: ${list(f.mail.slice(0, 3).map((m) => `${String(m.from).replace(/<.*$/, '').replace(/"/g, '').trim() || 'someone'} about ${String(m.subject || 'no subject').slice(0, 60)}`))}.`);
-  else if (f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email.');
+  if (f.mail && f.mail.length) out.push(`Recent important unread email from the last two days includes: ${list(f.mail.slice(0, 3).map((m) => `${String(m.from).replace(/<.*$/, '').replace(/"/g, '').trim() || 'someone'} about ${String(m.subject || 'no subject').slice(0, 60)}`))}. Check your inbox for the full list.`);
+  else if (f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email was found from the last two days.');
   if (f.unfinished?.length) out.push(`Recent Relay requests that failed or were stopped and may need attention: ${list(f.unfinished.map((h) => String(h.text).replace(/\s+/g, ' ').slice(0, 100)))}. Check History for their latest status.`);
   const miss = (f.missing || []).filter((m) => m === 'weather');
   if (miss.length) out.push('Set your city in Settings and I will add the weather.');
