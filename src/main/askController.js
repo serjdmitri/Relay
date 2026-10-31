@@ -1780,7 +1780,7 @@ class AskController {
       const hc = parseHandsCommand(text);
       if (hc) return this.finish({ id: crypto.randomUUID(), text, status: 'working', reply: '', ts: Date.now() }, { status: 'done', reply: await this.onHands(hc), actions: 0 });
     }
-    const entry = { id: crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
+    const entry = { id: (opts.scheduled && this.activeScheduledId) || crypto.randomUUID(), text: opts.shown || (opts.scheduled ? `Scheduled: ${text}` : text), status: 'working', reply: '', ts: Date.now(), ...(opts.remote ? { remote: opts.remote } : {}) };
     // While a guide is up, "next", "back" and "stop" are for the guide, not for the music or the model.
     // While a quiz runs, "next", "got it" and whatever you say are for the quiz, not for the music or the model.
     if (this.quiz && !opts.shown && !opts.scheduled) {
@@ -2944,7 +2944,9 @@ class AskController {
     const usageText = used ? usage.usageLine({ ...used, limit: usage.limitForModel(used.model, this.freshRate()) }) : '';
     this.lastUsage = used ? { id: entry.id, used } : null;
     this.emitResult({ id: entry.remote || null, reply, status: res.status });
-    this.store.addHistory({ ...entry, finishedAt: Date.now(), status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) });
+    const historyEntry = { ...entry, finishedAt: Date.now(), status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) };
+    if (this.activeScheduledId && entry.id === this.activeScheduledId) this.store.updateHistory(entry.id, historyEntry);
+    else this.store.addHistory(historyEntry);
     this.store.set('lastReply', reply);
     if (Date.now() - entry.ts > 60000 && !entry.remote && entry.text) this.onProactive?.({ type: 'job', title: String(entry.text).slice(0, 60), status: res.status === 'done' ? 'done' : 'failed', id: entry.id });
     if (res.status === 'done' && reply && entry.text) {
