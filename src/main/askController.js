@@ -1097,17 +1097,18 @@ class AskController {
 
   forgetFact(query) {
     const { list, removed } = mem.removeFacts(this.store.get('memories') || [], query);
-    if (!removed.length) return { status: 'done', reply: "I don't have anything about that." };
+    const note = ' Sentient OS and files in Desktop/memory were not changed.';
+    if (!removed.length) return { status: 'done', reply: `I don't have anything about that in Relay’s local memory.${note}` };
     this.store.set('memories', list);
     this.onChange();
-    return { status: 'done', reply: removed.length === 1 ? 'Forgot it.' : `Forgot ${removed.length} things.` };
+    return { status: 'done', reply: `${removed.length === 1 ? 'Forgot it.' : `Forgot ${removed.length} things.`}${note}` };
   }
 
   // A spoken or typed memory command ("remember that...", "forget...", "what do you remember"), handled without the model.
   async runMemory(cmd) {
     const vaultNote = ' Sentient OS and files in Desktop/memory were not changed.';
     if (cmd.type === 'remember') return { ...this.rememberFact(cmd.fact), actions: 0 };
-    if (cmd.type === 'forget') { const result = this.forgetFact(cmd.query); return { ...result, reply: result.reply + vaultNote, actions: 0 }; }
+    if (cmd.type === 'forget') return { ...this.forgetFact(cmd.query), actions: 0 };
     if (cmd.type === 'recall') {
       const list = this.store.get('memories') || [];
       const local = list.length ? `Relay locally remembers ${list.length} thing${list.length === 1 ? '' : 's'}: ${list.slice(0, 5).map((f) => f.text).join('; ')}${list.length > 5 ? '; and more in Settings > Memory' : ''}.` : 'Relay has no local memories yet. Say "remember that…" to tell me something.';

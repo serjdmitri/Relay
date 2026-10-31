@@ -23,7 +23,7 @@ test('remember, recall and forget work through the controller, without the model
   assert.match(c.memoryText(), /my sister is Anna/);
   assert.match((await c.runMemory({ type: 'forget', query: 'sister' })).reply, /^Forgot it\. Sentient OS/);
   assert.equal(data.memories.length, 0);
-  assert.match((await c.runMemory({ type: 'forget', query: 'sister' })).reply, /^I don't have anything about that\. Sentient OS/);
+  assert.match((await c.runMemory({ type: 'forget', query: 'sister' })).reply, /^I don't have anything about that in Relay’s local memory\. Sentient OS/);
 });
 
 test('secrets are refused, and forgetting everything asks first', async () => {
@@ -46,6 +46,8 @@ test('local recall and forgetting do not claim to change the read-only vault or 
   assert.match((await c.runMemory({ type: 'forget-all' })).reply, /Sentient OS and files in Desktop\/memory were not changed/);
   c.rememberFact('I like tea');
   assert.match((await c.runMemory({ type: 'forget', query: 'tea' })).reply, /Sentient OS and files in Desktop\/memory were not changed/);
+  c.rememberFact('I like tea');
+  assert.match(c.forgetFact('tea').reply, /Sentient OS and files in Desktop\/memory were not changed/);
 });
 
 test('direct recall uses the vault only when enabled and a cloud model is selected', async () => {
