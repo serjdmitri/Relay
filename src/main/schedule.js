@@ -219,4 +219,11 @@ class Scheduler {
   }
 }
 
-module.exports = { parseScheduleCommand, parseRepeating, parseOnce, nextRun, describe, Scheduler, MISSED_MS, missedMessage, acknowledgeUnknown };
+function recordScheduledOutcome(store, id, result, now = Date.now()) {
+  if (!result || !['done', 'failed', 'stopped'].includes(result.status)) return false;
+  const messages = { done: 'Completed; see the request history for details.', failed: 'Failed; see the request history for details.', stopped: 'Stopped; see the request history for details.' };
+  store.updateHistory(id, { status: result.status, reply: messages[result.status], finishedAt: now });
+  return true;
+}
+
+module.exports = { parseScheduleCommand, parseRepeating, parseOnce, nextRun, describe, Scheduler, MISSED_MS, missedMessage, acknowledgeUnknown, recordScheduledOutcome };
