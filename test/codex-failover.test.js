@@ -14,9 +14,9 @@ function rig({ codexUsable = true, setting = true, claude = [] } = {}) {
   const data = { 'settings.model': { provider: 'claude', claudeModel: 'auto' }, 'settings.failover.codex': setting, 'settings.failover.until': 0 };
   const c = Object.create(AskController.prototype);
   let t = 1_761_000_000_000;
-  const asks = [], codexRuns = [];
+  const asks = [], codexRuns = [], updates = [];
   Object.assign(c, {
-    store: { get: (k) => data[k], set: (k, v) => { data[k] = v; }, addAction() {} }, onChange() {}, push() {}, streamText() {}, forceTier: null, abort: new AbortController(),
+    store: { get: (k) => data[k], set: (k, v) => { data[k] = v; }, addAction() {} }, onChange() {}, push(update) { updates.push(update); }, streamText() {}, forceTier: null, abort: new AbortController(),
     appsP: Promise.resolve([]), lastApps: [], mac: { listApps: async () => [] }, requestContext: () => 'CTX', claudeSystem: () => 'SYS', makeTools: () => [{ name: 'open_app' }], followUpContext: () => '',
     failover: new Failover({ now: () => t, load: () => data['settings.failover.until'], save: (v) => { data['settings.failover.until'] = v; } }), mcp: { start: async () => {} }, askConfirm: async () => true
   });
@@ -28,7 +28,7 @@ function rig({ codexUsable = true, setting = true, claude = [] } = {}) {
   codexCli.findCodex = async () => '/bin/codex';
   codexCli.codexStatus = async () => ({ installed: true, signedIn: codexUsable, method: 'chatgpt', usable: codexUsable });
   codexCli.runCodex = async (o) => { codexRuns.push({ text: o.text, tools: o.tools.map((x) => x.name), hasConfirm: typeof o.confirm === 'function' }); return { status: 'done', reply: 'Codex did it.', actions: 1, usage: { in: 1, out: 1, model: 'codex' } }; };
-  const out = { c, data, asks, codexRuns, tick: (ms) => { t += ms; } };
+  const out = { c, data, asks, codexRuns, updates, tick: (ms) => { t += ms; } };
   rigs.push(out);
   return out;
 }
@@ -40,6 +40,8 @@ test('when Claude is out of usage Codex finishes the request and the switch is d
   const first = await r.c.execute('open notes', 'req1');
   assert.deepEqual([first.status, first.reply, first.model], ['done', 'Using Codex because Claude reached its usage limit. Codex did it.', 'codex']);
   assert.equal(r.codexRuns.length, 1);
+  assert.ok(r.updates.some((update) => update.label === 'Using Claude'));
+  assert.ok(r.updates.some((update) => update.label === 'Using Codex (Claude usage limit)'));
   assert.match(r.codexRuns[0].text, /^CTX\n\nRequest: open notes$/);
   assert.deepEqual(r.codexRuns[0].tools, ['open_app']);
   assert.equal(r.codexRuns[0].hasConfirm, true, 'confirmations still apply');

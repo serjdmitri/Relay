@@ -2795,6 +2795,7 @@ class AskController {
   // No internet (and "Offline mode" on): plain conversation goes to a local Ollama model with no tools; anything that needs the Mac or the web waits.
   async executeOffline(text) {
     if (needsInternet(text)) return { status: 'done', reply: 'That needs the internet, and I am offline right now. Ask me again when the connection is back.', actions: 0 };
+    this.push({ label: 'Using Ollama offline' });
     const m = this.store.get('settings.model');
     try {
       const res = await new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
@@ -2811,6 +2812,8 @@ class AskController {
     const runningApps = await Promise.race([this.appsP || this.mac.listApps().catch(() => []), new Promise((r) => setTimeout(() => r(this.lastApps), 500))]);
     const model = this.store.get('settings.model');
     const signedIn = model.provider === 'claude';
+    const providerLabel = model.provider === 'ollama' ? 'Ollama on this Mac' : model.provider === 'claude' ? 'Claude' : model.provider === 'custom' ? 'custom model provider' : String(model.provider || 'model').replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 30);
+    this.push({ label: `Using ${providerLabel || 'model'}` });
     const confirm = (q) => this.askConfirm(q);
     const signal = this.abort.signal;
     const onEvent = (e) => {
