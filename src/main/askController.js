@@ -131,6 +131,14 @@ async function fastFrontmost() {
 }
 
 // States: idle | listening | finishing | input | working | confirm | done
+async function untilStopped(promise, signal) {
+  if (signal.aborted) return null;
+  let stopped;
+  const cancelled = new Promise((resolve) => { stopped = () => resolve(null); signal.addEventListener('abort', stopped, { once: true }); });
+  try { return await Promise.race([promise, cancelled]); }
+  finally { signal.removeEventListener('abort', stopped); }
+}
+
 class AskController {
   constructor({ store, bridge, overlay, speech, speaker, timers, glass, axBin = null, onChange }) {
     this.store = store;
@@ -1333,7 +1341,7 @@ class AskController {
   async runBriefingCommand(request, entry) {
     const abort = new AbortController();
     this.abort = abort;
-    const text = await this.briefingText({ signal: abort.signal });
+    const text = await untilStopped(this.briefingText({ signal: abort.signal }), abort.signal);
     if (abort.signal.aborted) return this.finish(entry, { status: 'stopped', reply: 'Stopped the briefing.', actions: 0 });
     return this.requestLanguage(request) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
   }
@@ -1358,8 +1366,8 @@ class AskController {
   async dailyPlanCommand(close = false, requestId = null) {
     const abort = new AbortController();
     this.abort = abort;
-    const facts = await this.briefingFacts({ includeGreeting: false, signal: abort.signal });
-    if (close && !abort.signal.aborted) facts.tomorrow = await this.tomorrowCalendar(facts.now);
+    const facts = await untilStopped(this.briefingFacts({ includeGreeting: false, signal: abort.signal }), abort.signal);
+    if (close && !abort.signal.aborted) facts.tomorrow = await untilStopped(this.tomorrowCalendar(facts.now), abort.signal);
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
     let saved;

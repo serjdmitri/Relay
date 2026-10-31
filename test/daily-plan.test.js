@@ -63,8 +63,8 @@ test('stopping an in-flight plan prevents saving and save errors are reported', 
   c.outputExport = () => saves++;
   const pending = c.dailyPlanCommand();
   c.abort.abort();
-  release({ now: new Date() });
   assert.equal((await pending).status, 'stopped');
+  release({ now: new Date() });
   assert.equal(saves, 0);
   c.briefingFacts = async () => ({ now: new Date() });
   c.outputExport = () => { throw new Error('disk unavailable'); };
