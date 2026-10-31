@@ -67,10 +67,13 @@
   #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s ease; }
   :root { --k: 1; --tx: 0px; --ty: 0px; --ck: .27; }
   #hud.on { opacity: 1; }
-  #hud.frame::after { content: ""; position: fixed; inset: 7px; pointer-events: none; border: 1px solid rgba(0,212,255,.45); border-radius: 14px; box-shadow: inset 0 0 18px rgba(0,170,235,.16), 0 0 10px rgba(0,185,255,.25); background: linear-gradient(#00d4ff,#00d4ff) left top/54px 2px no-repeat, linear-gradient(#00d4ff,#00d4ff) left top/2px 54px no-repeat, linear-gradient(#00d4ff,#00d4ff) right top/54px 2px no-repeat, linear-gradient(#00d4ff,#00d4ff) right top/2px 54px no-repeat, linear-gradient(#00d4ff,#00d4ff) left bottom/54px 2px no-repeat, linear-gradient(#00d4ff,#00d4ff) left bottom/2px 54px no-repeat, linear-gradient(#00d4ff,#00d4ff) right bottom/54px 2px no-repeat, linear-gradient(#00d4ff,#00d4ff) right bottom/2px 54px no-repeat; }
+  #hud.frame::after { content: ""; position: fixed; inset: 0; pointer-events: none; border: 1px solid rgba(0,212,255,.55); box-shadow: inset 0 0 22px rgba(0,180,245,.26), inset 0 0 6px rgba(0,212,255,.30); }
   #hudR { position: absolute; left: 50%; top: calc(50% - 40px); width: 810px; height: 810px; margin: -405px 0 0 -405px; transform-origin: 50% 50%; transform: scale(var(--k));
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); will-change: transform; }
-  #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)); }
+  #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
+  #hud.corner #hudR::before, #hud.corner #hudR::after { content: ""; position: absolute; inset: 23%; border: 2px solid rgba(0,212,255,.6); border-radius: 50%; box-shadow: 0 0 22px rgba(0,212,255,.5), inset 0 0 18px rgba(0,212,255,.25); pointer-events: none; }
+  #hud.corner #hudR::before { transform: translateY(-36px) scale(.88); }
+  #hud.corner #hudR::after { transform: translateY(36px) scale(1.1); }
   /* the glow is part of the scaled picture, so at .27 it would shrink to a thread: widen it by the same factor to keep the same glow as the big one */
   #hud.dropping #hudc { filter: drop-shadow(0 0 14px rgba(76, 194, 255, 1)) drop-shadow(0 0 60px rgba(76, 194, 255, .8)); }
   #hud.corner #hudc { filter: drop-shadow(0 0 17px rgba(0, 212, 255, .85)) drop-shadow(0 0 70px rgba(0, 160, 230, .55)) drop-shadow(0 6px 17px rgba(0, 12, 28, .8)); }
@@ -106,7 +109,8 @@
   @keyframes taskpulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
   @keyframes taskin { from { opacity: 0; transform: translateX(-14px); } }
   #hud.corner #hudline, #hud.corner #hudsub { display: none; }
-  #hud.corner #hudT { left: 196px; top: 72px; margin-left: 0; width: 460px; text-align: left; text-shadow: 0 1px 3px rgba(0, 8, 20, .95), 0 0 10px rgba(0, 8, 20, .75), 0 0 22px rgba(0, 8, 20, .5); }
+  #hud.corner #hudT { left: 196px; top: auto; bottom: 72px; margin-left: 0; width: min(460px, calc(100vw - 210px)); text-align: left; text-shadow: 0 1px 3px rgba(0, 8, 20, .95), 0 0 10px rgba(0, 8, 20, .75), 0 0 22px rgba(0, 8, 20, .5); }
+  @media (prefers-reduced-motion: reduce) { #hudR, #hudT { transition-duration: .01ms !important; } }
   #hudstatus { font: 700 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; color: #00d4ff; }
   #hudwave { display: block; width: 288px; height: 30px; margin: 10px auto 12px; }
   #hud.corner #hudwave { display: none !important; }
