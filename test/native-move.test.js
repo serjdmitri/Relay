@@ -1,0 +1,31 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+test('native macOS move never replaces an existing file or folder', { skip: process.platform !== 'darwin' }, (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-native-move-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bin = path.join(dir, 'relay-move');
+  const source = path.join(__dirname, '../native/relay-move.swift');
+  const built = spawnSync('swiftc', ['-O', '-swift-version', '5', source, '-o', bin], { encoding: 'utf8', timeout: 30000 });
+  assert.equal(built.status, 0, built.stderr || built.error?.message);
+  const run = (from, to) => spawnSync(bin, [from, to], { timeout: 3000 });
+  const from = path.join(dir, 'original.txt');
+  const taken = path.join(dir, 'taken.txt');
+  fs.writeFileSync(from, 'original'); fs.writeFileSync(taken, 'existing');
+  assert.equal(run(from, taken).status, 17);
+  assert.equal(fs.readFileSync(from, 'utf8'), 'original');
+  assert.equal(fs.readFileSync(taken, 'utf8'), 'existing');
+  const target = path.join(dir, 'new name.txt');
+  assert.equal(run(from, target).status, 0);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'original');
+  const a = path.join(dir, 'folder-a'); const b = path.join(dir, 'folder-b');
+  fs.mkdirSync(a); fs.mkdirSync(b);
+  fs.writeFileSync(path.join(a, 'source'), 'a'); fs.writeFileSync(path.join(b, 'existing'), 'b');
+  assert.equal(run(a, b).status, 17);
+  assert.equal(fs.readFileSync(path.join(a, 'source'), 'utf8'), 'a');
+  assert.equal(fs.readFileSync(path.join(b, 'existing'), 'utf8'), 'b');
+});
