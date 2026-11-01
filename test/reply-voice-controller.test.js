@@ -54,6 +54,30 @@ test('replaying a reply uses the selected voice and does not rearm follow-up', (
   assert.equal(c.speakLastReply(), false);
 });
 
+test('completed short answers close after speech, but not while an answer is held', () => {
+  const c = Object.create(AskController.prototype), calls = [];
+  Object.assign(c, { state: 'done', holdAnswer: false, holdForHolos: false, followFor: null, speaker: { speaking: true }, close: () => calls.push('close') });
+  c.closeDoneWhenReady();
+  assert.deepEqual(calls, []);
+  clearTimeout(c.doneTimer);
+  c.speaker.speaking = false;
+  c.closeDoneWhenReady();
+  assert.deepEqual(calls, ['close']);
+  c.holdAnswer = true;
+  c.closeDoneWhenReady();
+  assert.deepEqual(calls, ['close']);
+});
+
+test('disabled follow-up does not leave a pending listener', () => {
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, { voiceAsk: true, state: 'working', queue: [], tasks: [],
+    store: { get: key => key === 'settings.followUp' ? { enabled: false } : key === 'settings.speakReplies' ? false : key === 'settings' ? {} : null, set() {}, addHistory() {} },
+    overlay: { endRequest() {}, workDone() {} }, onChange() {}, push() {}, sound() {}, close() {} });
+  c.finish({ id: 'x', text: 'open Notes', ts: Date.now() }, { status: 'done', reply: 'Opened Notes.' });
+  clearTimeout(c.doneTimer); clearTimeout(c.holdTimer);
+  assert.equal(c.followFor, null);
+});
+
 test('wake greeting finishes before the microphone opens and can be dismissed', async () => {
   for (const dismissed of [false, true]) {
     const calls = [];
