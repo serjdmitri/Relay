@@ -34,6 +34,7 @@
       "package.json"
     ],
     "extraResources": [
+      { "from": "src/main/tts/omni-worker.py", "to": "native/omni-worker.py" },
       {
         "from": "extension/firefox",
         "to": "firefox-extension"

@@ -34,6 +34,7 @@ const { AssistPanel } = require('./assistPanel');
 const { LockWatch } = require('./lockState');
 const { profileFor } = require('./voiceProfile');
 const { KokoroVoice } = require('./tts/kokoro');
+const { OmniVoice } = require('./tts/omnivoice');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
@@ -929,8 +930,10 @@ app.whenReady().then(() => {
     broadcast();
   });
   kokoro = new KokoroVoice({ dir: path.join(app.getPath('userData'), 'voices', 'kokoro'), onProgress: () => broadcast() });
+  const omni = new OmniVoice({ python: path.join(app.getPath('userData'), 'omnivoice', 'venv', 'bin', 'python'), worker: app.isPackaged ? path.join(process.resourcesPath, 'native', 'omni-worker.py') : path.join(__dirname, 'tts', 'omni-worker.py') });
+  app.once('before-quit', () => omni.stop());
   speaker = new Speaker({
-    kokoro,
+    kokoro, omni,
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
     getTts: () => {
       const t = store.get('settings.tts');
