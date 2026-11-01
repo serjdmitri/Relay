@@ -72,6 +72,22 @@ test('what must not be touched is skipped with the reason: protected places, pro
   assert.ok(!proj.includes('undefined'));
 });
 
+test('renaming cannot create a hidden or protected package destination', () => {
+  const { home, w } = sandbox();
+  const hidden = w('Downloads/one.txt', 'one');
+  const packaged = w('Downloads/two.txt', 'two');
+  const plan = buildPlan({ moves: [
+    { from: hidden, to: path.join(home, 'Documents/.hidden') },
+    { from: packaged, to: path.join(home, 'Documents/Protected.app') }
+  ] }, { fs, home });
+  assert.equal(plan.moves.length, 0);
+  assert.equal(plan.skipped.length, 2);
+  assert.match(plan.skipped[0].reason, /hidden/);
+  assert.match(plan.skipped[1].reason, /package/);
+  assert.equal(fs.readFileSync(hidden, 'utf8'), 'one');
+  assert.equal(fs.readFileSync(packaged, 'utf8'), 'two');
+});
+
 test('files to get rid of go to the Trash (a move that can be undone), only when listed, and never anything protected', async () => {
   const { home, w } = sandbox();
   const old = w('Downloads/old.zip');

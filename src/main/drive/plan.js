@@ -80,6 +80,8 @@ function buildPlan(raw, { fs, home }) {
     if (folder === from || folder.startsWith(from + path.sep)) { skipped.push({ path: m?.from, reason: 'It cannot go inside itself.' }); continue; }
     const name = m?.to && !m?.to_folder ? path.basename(String(m.to)) : path.basename(from);
     const dest = path.join(folder, name);
+    const badDest = pathProblem(dest, home);
+    if (badDest) { skipped.push({ path: m?.from, reason: `Destination: ${badDest}` }); continue; }
     if (dest === from) { skipped.push({ path: m?.from, reason: 'It is already there.' }); continue; }
     const finalDest = freeName(dest, taken, fs);
     taken.add(finalDest);
