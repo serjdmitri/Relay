@@ -77,7 +77,7 @@ test('password check: only a 5 character hash prefix leaves, the password is for
     const clean = make({ clip: 'k7#Qm2$zV9@LpX4wH' });
     global.fetch = async () => ({ ok: true, text: async () => '0000000000000000000000000000000000A:3\r\n' });
     const ok = await clean.c.securityCheck({ type: 'breach' });
-    assert.match(ok.reply, /not in any known breach\. It looks strong\./);
+    assert.match(ok.reply, /not found in the checked breach database\. It looks strong\. This does not prove it is safe/);
     assert.match(ok.reply, /cleared it from your clipboard/);
     assert.deepEqual(clean.state.written, [' ']);
     global.fetch = async () => { throw new Error('offline'); };
