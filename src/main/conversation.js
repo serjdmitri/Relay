@@ -45,8 +45,7 @@ function interruption(heard, spoken, { mode = 'talk', minWords = 3 } = {}) {
 
 // Should Relay open the microphone again after this answer? ctx: { enabled, byVoice, state, speaking, suspended, chain, now }.
 function shouldFollowUp(ctx) {
-  const max = 5; // a conversation, not a loop: after five in a row it waits for you to start it again
-  return !!(ctx.enabled && ctx.byVoice && ctx.state === 'done' && !ctx.speaking && !ctx.suspended && (ctx.chain || 0) < max);
+  return !!(ctx.enabled && ctx.byVoice && ctx.state === 'done' && !ctx.speaking && !ctx.suspended);
 }
 
 // Only a bare answer to the follow-up question is special; "no, open Notes"
