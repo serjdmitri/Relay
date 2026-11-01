@@ -73,8 +73,10 @@ function showWelcomeReactor(overlay, greeting, { setTimer = setTimeout, duration
   if (!overlay || overlay.hudEntry) return false;
   const token = `welcome-${++nextWelcomeToken}`;
   overlay.hud({ state: 'done', status: 'done', reply: greeting, welcomeToken: token, reset: true, tasks: [] });
-  const timer = setTimer(() => { if (overlay.hudState?.welcomeToken === token) overlay.hud({ hide: true }); }, duration);
-  timer?.unref?.();
+  if (duration != null) {
+    const timer = setTimer(() => { if (overlay.hudState?.welcomeToken === token) overlay.hud({ hide: true }); }, duration);
+    timer?.unref?.();
+  }
   return true;
 }
 
