@@ -3028,7 +3028,7 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
-    const askAgain = ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false && (this.followChain || 0) < 5;
+    const askAgain = ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false;
     this.followFor = ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote ? entry.id : null;
     this.awaitingFollowAnswer = !!askAgain;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });

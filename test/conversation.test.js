@@ -23,10 +23,11 @@ test('talking over Relay is told apart from Relay\'s own voice', () => {
   assert.equal(interruption('the next stop is four hundred metres on', 'The next stop is four hundred metres on the left.'), null, 'Relay saying the word stop is not the person');
 });
 
-test('follow-up listening: only after a spoken ask, once it has finished, and not forever', () => {
+test('follow-up listening: only after a spoken ask and once it has finished', () => {
   const ok = { enabled: true, byVoice: true, state: 'done', speaking: false, suspended: false, chain: 0 };
   assert.equal(shouldFollowUp(ok), true);
-  for (const bad of [{ enabled: false }, { byVoice: false }, { state: 'working' }, { speaking: true }, { suspended: true }, { chain: 5 }]) assert.equal(shouldFollowUp({ ...ok, ...bad }), false, JSON.stringify(bad));
+  for (const bad of [{ enabled: false }, { byVoice: false }, { state: 'working' }, { speaking: true }, { suspended: true }]) assert.equal(shouldFollowUp({ ...ok, ...bad }), false, JSON.stringify(bad));
+  assert.equal(shouldFollowUp({ ...ok, chain: 8 }), true, 'long conversations continue until the user stops or the listening window times out');
 });
 
 test('the wake phrase can be limited to some apps, and is everywhere when none are named', () => {
