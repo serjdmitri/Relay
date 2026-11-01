@@ -333,7 +333,7 @@
       level = 0;
       line = msg.stream ? (msg.stream.length > 230 ? `…${msg.stream.slice(-228)}` : msg.stream) : `${msg.label || 'Working'}…`; // the answer as it is written, when it comes in pieces
       sub = msg.text || '';
-      setMode(visual === 'reactor' ? 'corner' : 'center'); // the reactor tilts into the corner until the answer is ready
+      setMode('center'); // stay facing the user while the request runs
       if (!busySince) busySince = Date.now();
     } else if (s === 'done') {
       status = msg.status && msg.status !== 'done' ? 'ATTENTION' : 'COMPLETE';
