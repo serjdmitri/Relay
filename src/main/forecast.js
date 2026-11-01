@@ -10,9 +10,19 @@ async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
   const [name, ...parts] = String(place || '').split(',').map((x) => x.trim());
   if (!name) return null;
   const get = async (url) => { const r = await fetchFn(url, { signal }); if (!r.ok) throw new Error('Weather service unavailable'); return r.json(); };
-  const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name, count: '10', language: 'en', format: 'json' })}`);
-  const hint = parts.join(' ').toLowerCase();
-  const p = (geo.results || []).find((x) => !hint || `${x.admin1 || ''} ${x.country || ''} ${x.country_code || ''}`.toLowerCase().includes(hint));
+  const search = async (city, hint, exact) => {
+    // Common speech-to-text spelling; never silently replace arbitrary city names.
+    const normalized = /^moskow$/i.test(city) ? 'Moscow' : city;
+    const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: normalized, count: '10', language: 'en', format: 'json' })}`);
+    return (geo.results || []).find((x) => (!exact || String(x.name || '').toLowerCase() === normalized.toLowerCase()) && (!hint || `${x.admin1 || ''} ${x.country || ''} ${x.country_code || ''}`.toLowerCase().includes(hint.toLowerCase())));
+  };
+  let p = await search(name, parts.join(' '), false);
+  // Dictation usually omits commas: try city followed by its region or country,
+  // longest city name first, and require an exact city and region match.
+  if (!p && !parts.length) {
+    const words = name.split(/\s+/);
+    for (let i = words.length - 1; i > 0 && !p; i--) p = await search(words.slice(0, i).join(' '), words.slice(i).join(' '), true);
+  }
   if (!p || p.feature_code === 'PCLI' || !Number.isFinite(p.latitude) || !Number.isFinite(p.longitude)) return null;
   const params = new URLSearchParams({ latitude: String(p.latitude), longitude: String(p.longitude), current: 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code', hourly: 'temperature_2m', daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max', temperature_unit: units === 'c' ? 'celsius' : 'fahrenheit', wind_speed_unit: units === 'c' ? 'kmh' : 'mph', timezone: 'auto', forecast_days: '7' });
   const data = await get(`https://api.open-meteo.com/v1/forecast?${params}`);

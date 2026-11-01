@@ -23,3 +23,15 @@ test('forecast identifies the matching location and does not invent missing days
   assert.equal(await forecast('Russia', { fetchFn: async () => ({ ok: true, json: async () => ({ results: [{ name: 'Russia', country: 'Russia', feature_code: 'PCLI', latitude: 60, longitude: 90 }] }) }) }), null, 'a whole country needs a city');
   await assert.rejects(forecast('Paris', { fetchFn: async () => ({ ok: false }) }));
 });
+
+test('spoken city and country without a comma can correct the Moscow transcription', async () => {
+  const calls = [];
+  const fetchFn = async (url) => {
+    const u = new URL(url); calls.push(u);
+    if (u.hostname.startsWith('geocoding')) return { ok: true, json: async () => ({ results: u.searchParams.get('name') === 'Moscow' ? [{ name: 'Moscow', country: 'Russia', latitude: 55, longitude: 37 }] : [] }) };
+    return { ok: true, json: async () => ({ daily: { time: ['2026-11-01'], temperature_2m_max: [40], temperature_2m_min: [30] } }) };
+  };
+  const result = await forecast('moskow russia', { fetchFn });
+  assert.equal(result.location, 'Moscow, Russia');
+  assert.equal(calls[1].searchParams.get('name'), 'Moscow');
+});
