@@ -50,6 +50,13 @@ test('the breach check sends only 5 characters of the hash, compares the rest he
   assert.equal(await pwnedCount('x', { fetchFn: async () => ({ ok: false, status: 503 }) }), -1);
 });
 
+test('an empty or malformed breach response is unavailable, not a clean result', async () => {
+  for (const body of ['', 'service unavailable', '1E4C9B93F3F0682250B6CF8331B7EE68FD8:not-a-number', '1E4C9B93F3F0682250B6CF8331B7EE68FD8:42\ninvalid']) {
+    const fetchFn = async () => ({ ok: true, text: async () => body });
+    assert.equal(await pwnedCount('password', { fetchFn }), -1, body);
+  }
+});
+
 test('strength is rough but honest: short or patterned is weak, long and mixed is strong', () => {
   assert.equal(strength('hunter2').label, 'weak');
   assert.equal(strength('password1').label, 'weak');

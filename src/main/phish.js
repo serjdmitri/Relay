@@ -131,11 +131,15 @@ async function pwnedCount(password, { fetchFn = fetch, signal } = {}) {
   const res = await fetchFn(`https://api.pwnedpasswords.com/range/${h.slice(0, 5)}`, { headers: { 'Add-Padding': 'true', 'User-Agent': 'Relay-password-check' }, signal });
   if (!res.ok) return -1;
   const suffix = h.slice(5);
-  for (const line of (await res.text()).split(/\r?\n/)) {
-    const [s, n] = line.trim().split(':');
-    if (s === suffix) return Number(n) || 0;
+  const lines = (await res.text()).split(/\r?\n/).filter((line) => line.trim());
+  if (!lines.length) return -1;
+  let count = 0;
+  for (const line of lines) {
+    const match = /^([0-9A-F]{35}):(\d+)$/.exec(line.trim());
+    if (!match || !Number.isSafeInteger(Number(match[2]))) return -1;
+    if (match[1] === suffix) count = Number(match[2]);
   }
-  return 0;
+  return count;
 }
 
 // A rough strength check that needs no network (not a promise of security).

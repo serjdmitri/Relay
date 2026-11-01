@@ -2497,7 +2497,7 @@ class AskController {
     this.clipHistory?.forget(pw);
     let cleared = '';
     try { if ((await this.mac.clipboardRead()).trim() === pw) { this.clipHistory?.ignore(''); await this.mac.clipboardWrite(' '); cleared = ' I cleared it from your clipboard.'; } } catch { /* the clipboard stays as it was */ }
-    if (n < 0) return { status: 'failed', reply: `I could not reach the breach database. Offline, it looks ${st.label} (${st.length} characters).${cleared}`, actions: 0 };
+    if (n < 0) return { status: 'failed', reply: `I could not complete the breach check. Offline, it looks ${st.label} (${st.length} characters).${cleared}`, actions: 0 };
     if (n > 0) return { status: 'done', reply: `That password has appeared ${n.toLocaleString('en-US')} ${n === 1 ? 'time' : 'times'} in known data breaches. Do not use it anywhere, and change it where you do.${cleared}`, actions: 0 };
     return { status: 'done', reply: `That password was not found in the checked breach database. It looks ${st.label}${st.label === 'weak' || st.label === 'fair' ? ': make it longer, with unrelated words' : ''}. This does not prove it is safe, and reusing it across sites increases risk.${cleared}`, actions: 0 };
   }
