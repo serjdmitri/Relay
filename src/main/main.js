@@ -586,7 +586,7 @@ function registerIpc() {
     const st = await codesign();
     const offlineOn = flagsMod.isOn(store.get('settings'), 'offline');
     const ollamaUp = offlineOn ? await fetch(`${store.get('settings.model.ollamaUrl')}/api/tags`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false) : null;
-    const free = await new Promise((res) => execFile('/bin/df', ['-m', app.getPath('userData')], { timeout: 2000 }, (e, out) => res(e ? null : Number(String(out).trim().split('\n').pop().trim().split(/\s+/)[3]) || null)));
+    const free = await new Promise((res) => execFile('/bin/df', ['-m', app.getPath('userData')], { timeout: 2000 }, (e, out) => res(e ? null : doctor.parseFreeMb(out))));
     return {
       claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
       failoverOn: () => store.get('settings.failover.codex') !== false,

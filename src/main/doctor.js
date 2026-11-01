@@ -12,6 +12,16 @@ const warn = (cause, fix) => ({ status: 'warn', cause, ...(fix ? { fix } : {}) }
 const fail = (cause, fix) => ({ status: 'fail', cause, ...(fix ? { fix } : {}) });
 const pane = (name) => ({ id: `pane-${name}`, label: `Open ${PANE_LABEL[name] || name} settings`, size: 'big', action: { type: 'pane', name } });
 
+// `df -m` reports available megabytes in the fourth column, including zero.
+function parseFreeMb(output) {
+  const rows = String(output || '').trim().split('\n');
+  if (rows.length < 2) return null;
+  const value = rows.at(-1).trim().split(/\s+/)[3];
+  if (!/^\d+$/.test(value || '')) return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) ? number : null;
+}
+
 // How the running app is signed, from `codesign -dv --verbose=2` output: adhoc | local (the "Relay Local Signing" certificate) | developer | unknown.
 function parseSigning(output) {
   const t = String(output || '');
@@ -156,6 +166,7 @@ const CHECKS = [
     id: 'store', title: 'Saved settings', run: (env) => {
       const s = env.storeInfo?.() || {};
       if (s.error) return fail(`Settings could not be read: ${s.error}`);
+      if (s.freeMb == null) return warn('Settings are readable, but free disk space could not be checked.');
       if (s.freeMb != null && s.freeMb < 200) return warn(`Only ${s.freeMb} MB of disk space is free.`);
       return ok(s.freeMb != null ? `${s.freeMb} MB free` : 'Readable');
     }
@@ -261,4 +272,4 @@ function summarize(results) {
   return `${order.length} thing${order.length === 1 ? ' needs' : 's need'} a look. ${first}${more}`;
 }
 
-module.exports = { parseDoctorCommand, summarize, CHECKS, runChecks, worst, fixPolicy, scrub, buildReport, issueUrl, parseSigning, REPO };
+module.exports = { parseDoctorCommand, summarize, CHECKS, runChecks, worst, fixPolicy, scrub, buildReport, issueUrl, parseSigning, parseFreeMb, REPO };
