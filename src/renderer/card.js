@@ -5,6 +5,8 @@ const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 
 function render(c) {
   root.replaceChildren();
+  root.classList.toggle('weather', c.kind === 'weather');
+  if (c.kind === 'weather') { renderWeather(c); return; }
   root.classList.toggle('noimg', !(c.kind === 'entity' && c.image));
   if (c.kind === 'entity' && c.image) {
     const hero = mk('div', 'hero');
@@ -49,6 +51,66 @@ function render(c) {
     body.append(ls);
   }
   root.append(body);
+}
+
+function renderWeather(c) {
+  const close = mk('button', 'weather-close', '×');
+  close.setAttribute('aria-label', 'Close forecast');
+  close.onclick = () => relay.cardClose();
+  root.append(close);
+  const box = mk('div', 'weather-inner');
+  box.append(mk('div', 'weather-kicker', 'WEATHER  /  OPEN-METEO'));
+  box.append(mk('h1', 'weather-title', c.location || 'Forecast'));
+  box.append(mk('div', 'weather-source', 'Local forecast · Open-Meteo'));
+  const main = mk('div', 'weather-main');
+  const now = c.current || {};
+  const hero = mk('div', 'weather-hero');
+  hero.append(mk('div', 'weather-symbol', weatherSymbol(now.code)));
+  const temp = mk('div', 'weather-tempbox');
+  temp.append(mk('div', 'weather-temp', Number.isFinite(now.temperature) ? `${Math.round(now.temperature)}°` : '—'));
+  temp.append(mk('div', 'weather-condition', now.conditions || 'Current conditions unavailable'));
+  temp.append(mk('div', 'weather-feels', Number.isFinite(now.feels) ? `Feels like ${Math.round(now.feels)}°${String(c.units || '').toUpperCase()}` : 'Feels like unavailable'));
+  hero.append(temp); main.append(hero);
+  const metrics = mk('div', 'weather-metrics');
+  const time = (v) => typeof v === 'string' && v.includes('T') ? v.split('T')[1] : '—';
+  for (const [label, value] of [['HUMIDITY', Number.isFinite(now.humidity) ? `${now.humidity}%` : '—'], ['WIND', Number.isFinite(now.wind) ? `${Math.round(now.wind)} ${c.units === 'c' ? 'km/h' : 'mph'}` : '—'], ['UV MAX', Number.isFinite(now.uv) ? String(now.uv) : '—'], ['SUNRISE', time(now.sunrise)], ['SUNSET', time(now.sunset)]]) {
+    const el = mk('div', 'weather-metric'); el.append(mk('span', '', label), mk('strong', '', value)); metrics.append(el);
+  }
+  main.append(metrics); box.append(main);
+  const hourly = (c.hourly || []).filter((h) => Number.isFinite(h.temperature));
+  if (hourly.length > 1) {
+    const graph = mk('div', 'weather-graph');
+    graph.append(mk('div', 'weather-graph-label', 'NEXT HOURS  /  TEMPERATURE'));
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 700 70'); svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Hourly temperature trend');
+    const vals = hourly.map((h) => h.temperature); const min = Math.min(...vals); const range = Math.max(1, Math.max(...vals) - min);
+    const points = hourly.map((h, i) => `${i * 700 / (hourly.length - 1)},${60 - (h.temperature - min) / range * 45}`).join(' ');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', points); line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#40d8ff'); line.setAttribute('stroke-width', '3');
+    svg.append(line); graph.append(svg);
+    const labels = mk('div', 'weather-hour-labels');
+    for (const h of [hourly[0], hourly[Math.floor(hourly.length / 2)], hourly.at(-1)]) labels.append(mk('span', '', `${String(h.time).split('T')[1] || ''} · ${Math.round(h.temperature)}°`));
+    graph.append(labels); box.append(graph);
+  }
+  const strip = mk('div', 'weather-days');
+  (c.days || []).forEach((d, i) => {
+    const day = mk('div', `weather-day${i === 0 ? ' today' : ''}`);
+    const date = new Date(`${d.date}T12:00:00Z`);
+    const label = i === 0 ? 'TODAY' : Number.isFinite(date.getTime()) ? date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toUpperCase() : d.date;
+    day.append(mk('div', 'weather-day-label', label), mk('div', 'weather-day-icon', weatherSymbol(d.code)), mk('div', 'weather-day-condition', d.conditions || 'Unavailable'), mk('div', 'weather-day-temps', `${Math.round(d.high)}°  /  ${Math.round(d.low)}°`), mk('div', 'weather-day-rain', Number.isFinite(d.rain) ? `${d.rain}% precipitation` : 'Precipitation —'));
+    strip.append(day);
+  });
+  box.append(strip); root.append(box);
+}
+
+function weatherSymbol(code) {
+  if (code === 0 || code === 1) return '☀';
+  if (code === 2) return '⛅';
+  if ([3, 45, 48].includes(code)) return '☁';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return '❄';
+  if ([95, 96, 99].includes(code)) return 'ϟ';
+  return Number.isFinite(code) ? '☂' : '—';
 }
 
 // scrollHeight is the card's full height even when the window is still too short to show it all
