@@ -974,10 +974,11 @@ const PAGES = {
     const ecard = h('<div class="card"></div>');
     if (S.settings.model.provider === 'ollama') c.append(h('<div class="note">Ollama is selected: cloud voices are paused and Relay uses a voice on this Mac. Other connected services may still use the internet.</div>'));
     else c.append(h('<div class="note">If Relay falls back to a local model while offline, cloud voices pause and an on-device voice is used.</div>'));
-    const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['omnivoice', 'OmniVoice'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
     const eseg = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Voice engine</div><div class="seg">${ENGINES.map(([v, l]) => `<button data-v="${v}" class="${T.engine === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">${{
       system: 'The voice chosen above. Free and instant.',
       kokoro: 'A natural voice that runs on this Mac. Free, no key, and your replies never leave your Mac. Apple Silicon only.',
+      omnivoice: 'A British voice generated locally on this Mac. The first reply may take longer while the model loads.',
       openai: 'Natural voices from OpenAI, using your own OpenAI API key. OpenAI bills your account; Relay takes nothing.',
       elevenlabs: 'Some of the most human-sounding voices, using your own ElevenLabs key. ElevenLabs bills your account; Relay takes nothing.'
     }[T.engine] || ''}</div></div>`);

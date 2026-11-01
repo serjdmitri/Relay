@@ -70,13 +70,14 @@ function speakable(text) {
 class Speaker {
   // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
   // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
-  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, fetchFn = (...a) => fetch(...a), onProblem = null } = {}) {
+  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null } = {}) {
     this.spawnFn = spawnFn;
     this.exec = exec;
     this.log = log;
     this.getTts = getTts;
     this.getLocalOnly = getLocalOnly;
     this.kokoro = kokoro;
+    this.omni = omni;
     this.fetchFn = fetchFn;
     this.onProblem = onProblem; // called with a sentence when a better voice failed and the system voice took over
     this.child = null;
@@ -107,6 +108,7 @@ class Speaker {
     if (e === 'kokoro' && lang && lang !== 'en') return 'system'; // the on-device voice here is English only
     if (e === 'openai' || e === 'elevenlabs') return tts[e] && tts[e].key ? e : 'system';
     if (e === 'kokoro') return this.kokoro && this.kokoro.installed() ? 'kokoro' : 'system';
+    if (e === 'omnivoice') return this.omni && this.omni.installed() ? 'omnivoice' : 'system';
     return 'system';
   }
 
@@ -160,7 +162,7 @@ class Speaker {
 
   // Makes and plays a reply with one engine. Throws when the engine fails.
   async speakWith(engine, tts, say, rate, token, signal, { volume = 1, kokoroVoice } = {}) {
-    const make = (piece) => (engine === 'kokoro'
+    const make = (piece) => (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal }) : engine === 'kokoro'
       ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate })
       : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
     const pieces = cloud.sentences(say);
