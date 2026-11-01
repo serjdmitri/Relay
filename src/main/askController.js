@@ -113,7 +113,7 @@ function compatProvider(m) {
 function encryptKey(key) {
   if (!key) return '';
   if (safeStorage.isEncryptionAvailable()) return safeStorage.encryptString(key).toString('base64');
-  return 'plain:' + key;
+  throw new Error('macOS secure storage is unavailable. Unlock your keychain and try again; Relay did not save the secret.');
 }
 
 const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { timeout: 1500 }, (e, out) => (e ? reject(e) : resolve(String(out).trim()))));

@@ -740,8 +740,9 @@ function registerIpc() {
   });
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
   ipcMain.handle('connectors:google:client', (_e, clientId, secret) => {
+    const encrypted = String(secret || '').trim() ? encryptKey(String(secret).trim()) : null;
     store.set('settings.connectors.google.clientId', String(clientId || '').trim());
-    if (String(secret || '').trim()) store.set('settings.connectors.google.clientSecretEnc', encryptKey(String(secret).trim()));
+    if (encrypted) store.set('settings.connectors.google.clientSecretEnc', encrypted);
     broadcast();
   });
   ipcMain.handle('connectors:google:connect', async () => {

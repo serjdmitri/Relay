@@ -529,7 +529,7 @@ const PAGES = {
   connectors(c) {
     const C = S.connectors || { notion: {}, google: { accounts: [] }, apps: {} };
     C.apps = C.apps || {};
-    c.append(h('<div class="lead">Connect the services you choose on this Mac. Relay can send retrieved information to your selected AI provider to answer a request; check the active provider before using sensitive information. Credentials are stored on this Mac using system encryption when available. Background agents can use connected services too.</div>'));
+    c.append(h('<div class="lead">Connect the services you choose on this Mac. Relay can send retrieved information to your selected AI provider to answer a request; check the active provider before using sensitive information. New credentials require macOS secure storage; older credentials may have been saved without it. Background agents can use connected services too.</div>'));
 
     // Notion
     c.append(h('<div class="section-title" style="margin-top:0">Notion</div>'));
@@ -558,7 +558,7 @@ const PAGES = {
     g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay connects directly to Google using your own OAuth app. Information retrieved for a request may also be sent to your selected AI provider. One time: in console.cloud.google.com make a project, turn on the Gmail, Google Calendar, Google Drive and Google Sheets APIs (accounts connected before Drive and Sheets were added need to be removed and connected again), set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
     g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">If your external OAuth app remains in Testing, Google may expire its access after seven days; reconnect the account if it stops working. School or work accounts may also require administrator approval.</div>'));
     const cr = h(`<div class="field-row" style="margin-bottom:10px"><input class="field" id="gid" placeholder="Client ID" value="${esc(C.google.clientId || '')}"><input class="field" id="gsec" type="password" placeholder="${C.google.hasSecret ? 'Client secret saved (paste to replace)' : 'Client secret'}"><button class="btn" id="gsave" style="height:28px">Save</button></div>`);
-    $('#gsave', cr).onclick = () => relay.setGoogleClient($('#gid', cr).value, $('#gsec', cr).value).then(() => { $('#gsec', cr).value = ''; });
+    $('#gsave', cr).onclick = () => relay.setGoogleClient($('#gid', cr).value, $('#gsec', cr).value).then(() => { $('#gsec', cr).value = ''; }).catch(() => alert('Could not save credentials. Check that macOS secure storage is available and try again.'));
     g.append(cr);
     for (const email of C.google.accounts) {
       const row = h(`<div class="row" style="padding:6px 0;min-height:36px"><div class="grow"><div class="t">${esc(email)}</div><div class="d">Gmail, Calendar, Drive and Sheets connected</div></div><button class="btn" data-rm="${esc(email)}">Remove</button></div>`);
@@ -582,7 +582,7 @@ const PAGES = {
       ap.append(h(`<div class="row" style="padding:0;min-height:36px"><div class="grow"><div class="t">Connected to ${esc(C.apps.url)}</div><div class="d">${C.apps.count} tools. Relay can look things up and, after asking you, send, create and change. It never deletes.</div></div><button class="btn" id="aout">Disconnect</button></div>`));
       $('#aout', ap).onclick = () => relay.clearApps();
     } else {
-      ap.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Composio reaches Gmail, Slack, GitHub, Linear, Google Sheets and other apps you connect there. In Composio, make a Tool Router session or MCP server, and copy its <b>MCP URL</b> and your <b>API key</b>. Paste them here (other compatible MCP servers over HTTPS may work too). Relay stores the key on this Mac using system encryption when available. Review the permissions each connected app requests.</div>'));
+      ap.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Composio reaches Gmail, Slack, GitHub, Linear, Google Sheets and other apps you connect there. In Composio, make a Tool Router session or MCP server, and copy its <b>MCP URL</b> and your <b>API key</b>. Paste them here (other compatible MCP servers over HTTPS may work too). New keys require macOS secure storage. Review the permissions each connected app requests.</div>'));
       const row = h('<div class="field-row"><input class="field" id="aurl" placeholder="MCP URL (https://…)"><input class="field" id="akey" type="password" placeholder="API key"><button class="btn primary" id="aset" style="height:28px">Connect</button></div>');
       const go = async () => {
         const btn = $('#aset', row); btn.textContent = 'Checking…';
@@ -670,7 +670,7 @@ const PAGES = {
     c.append(card);
     // Better 3D from photos: a free Hugging Face token unlocks the stronger generators (TRELLIS), which need more free GPU time than anonymous use allows.
     const hf = h(`<div class="row"><div class="grow"><div class="t">Hugging Face token (optional)</div><div class="d">${S.hasHfToken ? 'Saved on this Mac (encrypted with your Keychain). Photo models now try the sharper TRELLIS generators first.' : 'Without it Relay uses Stable Fast 3D, which is fast but blobby. A free account\'s token at huggingface.co/settings/tokens (a “read” token) gives enough free GPU time for TRELLIS: much cleaner shapes and textures, about a minute each. Only the public photo is sent.'}</div></div><input class="field" type="password" style="width:200px" placeholder="${S.hasHfToken ? 'Paste to replace' : 'hf_…'}"><button class="btn">Save</button><button class="btn" id="hftest">Test it</button></div><div class="note" id="hfout" style="margin:0 14px 10px;line-height:1.5"></div>`);
-    $('button', hf).onclick = async () => { const r = await relay.setHfToken($('input', hf).value); if (r && !r.ok) alert(r.error); else $('input', hf).value = ''; };
+    $('button', hf).onclick = async () => { try { const r = await relay.setHfToken($('input', hf).value); if (r && !r.ok) alert(r.error); else $('input', hf).value = ''; } catch { alert('Could not save the token. Check macOS secure storage and try again.'); } };
     $('#hftest', hf).onclick = async () => {
       const out = $('#hfout', hf), btn = $('#hftest', hf);
       btn.disabled = true; btn.textContent = 'Testing… (up to two minutes)';
@@ -1003,7 +1003,7 @@ const PAGES = {
       const has = S.hasTtsKeys && S.hasTtsKeys[engine];
       const row = h(`<div class="row"><div class="grow"><div class="t">${name} key</div><div class="d">${has ? 'Saved on this Mac (encrypted with your Keychain).' : `Needed. <span class="link" data-get>Get one</span>`}</div></div><input class="field" type="password" style="width:200px" placeholder="${has ? '••••••••••••' : 'Paste your key'}"><button class="btn">Save</button></div>`);
       $('[data-get]', row) && ($('[data-get]', row).onclick = () => relay.openExternal(url));
-      $('button', row).onclick = async () => { const v = $('input', row).value.trim(); if (v) { await relay.setTtsKey(engine, v); } };
+      $('button', row).onclick = async () => { const v = $('input', row).value.trim(); if (v) { try { await relay.setTtsKey(engine, v); } catch { alert('Could not save the key. Check macOS secure storage and try again.'); } } };
       return row;
     };
     if (T.engine === 'openai') {
@@ -1341,7 +1341,7 @@ const PAGES = {
     if (m.provider === 'anthropic') {
       box.append(h(`<div style="display:flex;flex-direction:column;gap:12px"><div><div class="note" style="margin-bottom:6px">Anthropic API key ${S.hasKey ? '<span class="ok">· saved in your Keychain</span>' : ''}</div><div class="field-row"><input class="field" id="key" type="password" placeholder="${S.hasKey ? '••••••••••••' : 'sk-ant-…'}"><button class="btn" id="savekey" style="height:28px">Save</button></div></div>
         <div><div class="note" style="margin-bottom:6px">Model</div><input class="field" id="mname" value="${esc(m.anthropicModel)}"></div></div>`));
-      $('#savekey', box).onclick = async () => { await relay.setApiKey($('#key', box).value); $('#key', box).value = ''; };
+      $('#savekey', box).onclick = async () => { try { await relay.setApiKey($('#key', box).value); $('#key', box).value = ''; } catch { alert('Could not save the key. Check macOS secure storage and try again.'); } };
       $('#mname', box).onchange = (e) => relay.set('settings.model.anthropicModel', e.target.value.trim());
     } else if (m.provider === 'ollama') {
       box.append(h(`<div class="note">Use a downloaded model. For local-only privacy, also disable cloud features in Ollama and restart it; Relay cannot verify how your Ollama server is configured.</div><div style="display:flex;flex-direction:column;gap:12px"><div><div class="note" style="margin-bottom:6px">Ollama address</div><input class="field" id="ourl" value="${esc(m.ollamaUrl)}"></div>
@@ -1356,7 +1356,7 @@ const PAGES = {
         <div><div class="note" style="margin-bottom:6px">Model</div><input class="field" id="pmodel" value="${esc(ps.model || '')}"></div>
         <div class="note">${id === 'openai' ? 'This uses the OpenAI API, which is billed separately from a ChatGPT subscription. ' : ''}${info.vision ? '' : 'Relay treats this model as text only, so it will not take screenshots. '}Model names change: if the test fails, check the name in the service docs.</div>
         <div style="display:flex;gap:10px;align-items:center"><button class="btn" id="ptest">Test</button><span id="pres">${modelTest}</span></div></div>`));
-      $('#psave', box).onclick = async () => { await relay.setPresetKey(id, $('#pkey', box).value); $('#pkey', box).value = ''; };
+      $('#psave', box).onclick = async () => { try { await relay.setPresetKey(id, $('#pkey', box).value); $('#pkey', box).value = ''; } catch { alert('Could not save the key. Check macOS secure storage and try again.'); } };
       $('#pmodel', box).onchange = (e) => relay.set(`settings.model.presets.${id}.model`, e.target.value.trim());
       if (id === 'custom') $('#purl', box).onchange = (e) => relay.set('settings.model.presets.custom.url', e.target.value.trim());
       $('#ptest', box).onclick = async () => {
