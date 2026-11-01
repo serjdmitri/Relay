@@ -2848,6 +2848,16 @@ class AskController {
   // Said aloud in the chosen voice, outside a request (for things Relay brings up on its own).
   speakText(text) { this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en' }); }
 
+  // Replaying an answer must not restart an earlier hands-free conversation.
+  speakLastReply() {
+    const text = this.store.get('lastReply');
+    if (!text || !this.speaker) return false;
+    clearTimeout(this.followTimer);
+    this.followFor = null;
+    this.speaker.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: detectLanguage(text)?.lang || 'en' });
+    return true;
+  }
+
   async execute(text, requestId) {
     if (this.offline && flagsMod.isOn(this.store.get('settings'), 'offline')) return this.executeOffline(text);
     // Use the list fetched while you were talking; never wait long for it.

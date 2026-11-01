@@ -242,6 +242,7 @@ function rebuildTray() {
     { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: (item) => setHands(item.checked) },
     { label: 'Show Hand View (top right)', type: 'checkbox', checked: !!store.get('settings.hands.preview'), enabled: !!store.get('settings.hands.enabled'), click: (item) => setHandsPreview(item.checked) },
     { label: 'Stop Speaking', enabled: !!speaker?.speaking, click: () => ask.interruptSpeech() },
+    { label: 'Speak Last Reply', enabled: !!last, click: () => ask.speakLastReply() },
     { label: 'Copy Last Reply', enabled: !!last, click: () => clipboard.writeText(last) },
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
