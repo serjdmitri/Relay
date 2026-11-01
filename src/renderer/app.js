@@ -529,7 +529,7 @@ const PAGES = {
   connectors(c) {
     const C = S.connectors || { notion: {}, google: { accounts: [] }, apps: {} };
     C.apps = C.apps || {};
-    c.append(h('<div class="lead">Let Relay read and write in the services you use. Each one is connected by you, on this Mac, and the secrets are kept encrypted here. Reading is free; sending an email always asks you first. Background agents can use them too.</div>'));
+    c.append(h('<div class="lead">Connect the services you choose on this Mac. Relay can send retrieved information to your selected AI provider to answer a request; check the active provider before using sensitive information. Credentials are stored on this Mac using system encryption when available. Background agents can use connected services too.</div>'));
 
     // Notion
     c.append(h('<div class="section-title" style="margin-top:0">Notion</div>'));
@@ -555,7 +555,8 @@ const PAGES = {
     // Google
     c.append(h('<div class="section-title">Gmail, Google Calendar, Drive and Sheets</div>'));
     const g = h('<div class="card" style="padding:14px"></div>');
-    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay signs in to Google with your own app, so nothing goes through anyone else. One time: in console.cloud.google.com make a project, turn on the Gmail, Google Calendar, Google Drive and Google Sheets APIs (accounts connected before Drive and Sheets were added need to be removed and connected again), set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
+    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay connects directly to Google using your own OAuth app. Information retrieved for a request may also be sent to your selected AI provider. One time: in console.cloud.google.com make a project, turn on the Gmail, Google Calendar, Google Drive and Google Sheets APIs (accounts connected before Drive and Sheets were added need to be removed and connected again), set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
+    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">If your external OAuth app remains in Testing, Google may expire its access after seven days; reconnect the account if it stops working. School or work accounts may also require administrator approval.</div>'));
     const cr = h(`<div class="field-row" style="margin-bottom:10px"><input class="field" id="gid" placeholder="Client ID" value="${esc(C.google.clientId || '')}"><input class="field" id="gsec" type="password" placeholder="${C.google.hasSecret ? 'Client secret saved (paste to replace)' : 'Client secret'}"><button class="btn" id="gsave" style="height:28px">Save</button></div>`);
     $('#gsave', cr).onclick = () => relay.setGoogleClient($('#gid', cr).value, $('#gsec', cr).value).then(() => { $('#gsec', cr).value = ''; });
     g.append(cr);
@@ -581,7 +582,7 @@ const PAGES = {
       ap.append(h(`<div class="row" style="padding:0;min-height:36px"><div class="grow"><div class="t">Connected to ${esc(C.apps.url)}</div><div class="d">${C.apps.count} tools. Relay can look things up and, after asking you, send, create and change. It never deletes.</div></div><button class="btn" id="aout">Disconnect</button></div>`));
       $('#aout', ap).onclick = () => relay.clearApps();
     } else {
-      ap.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Composio reaches Gmail, Slack, GitHub, Linear, Google Sheets and hundreds of other apps with the logins you already set up there. In Composio, make a Tool Router session or MCP server, and copy its <b>MCP URL</b> and your <b>API key</b>. Paste them here (any other MCP server over https works too). The key is kept encrypted on this Mac, and Relay asks you before anything is sent or changed. Anything that deletes is refused.</div>'));
+      ap.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Composio reaches Gmail, Slack, GitHub, Linear, Google Sheets and other apps you connect there. In Composio, make a Tool Router session or MCP server, and copy its <b>MCP URL</b> and your <b>API key</b>. Paste them here (other compatible MCP servers over HTTPS may work too). Relay stores the key on this Mac using system encryption when available. Review the permissions each connected app requests.</div>'));
       const row = h('<div class="field-row"><input class="field" id="aurl" placeholder="MCP URL (https://…)"><input class="field" id="akey" type="password" placeholder="API key"><button class="btn primary" id="aset" style="height:28px">Connect</button></div>');
       const go = async () => {
         const btn = $('#aset', row); btn.textContent = 'Checking…';
