@@ -60,7 +60,7 @@ test('a chosen folder gets a reviewable plan with no file moves', async () => {
   w('Documents/Loose/photo.png');
   w('Documents/Loose/mystery.xyz');
   const cards = [];
-  const d = new Drive({ fs, home, exec: async () => '', cards: { show: async (c) => cards.push(c) }, trashItem: async () => {} });
+  const d = new Drive({ fs, home, move: (from, to) => { if (fs.existsSync(to)) throw new Error('destination exists'); fs.renameSync(from, to); }, exec: async () => '', cards: { show: async (c) => cards.push(c) }, trashItem: async () => {} });
   const result = await d.suggestFolder({ folder: '~/Documents/Loose' });
   assert.match(result, /Nothing has been moved yet/);
   assert.match(result, /Organized\/PDFs/);
@@ -82,7 +82,7 @@ test('it is due once a day after the set time, not before, not twice, and not fa
 
 function driveOn(home) {
   const cards = []; const trashed = []; let logged = [];
-  const d = new Drive({ fs, home, exec: async () => '', cards: { show: async (c) => { cards.push(c); }, hide: () => cards.push('hidden') }, trashItem: async (p) => { trashed.push(p); }, log: { read: () => logged, write: (l) => { logged = l; } } });
+  const d = new Drive({ fs, home, move: (from, to) => { if (fs.existsSync(to)) throw new Error('destination exists'); fs.renameSync(from, to); }, exec: async () => '', cards: { show: async (c) => { cards.push(c); }, hide: () => cards.push('hidden') }, trashItem: async (p) => { trashed.push(p); }, log: { read: () => logged, write: (l) => { logged = l; } } });
   return { d, cards, trashed };
 }
 

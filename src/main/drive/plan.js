@@ -103,7 +103,7 @@ function buildPlan(raw, { fs, home }) {
 }
 
 // Carries out a plan: folders are made, files moved (never over anything), the Trash gets what was asked. Returns what was done.
-async function applyPlan(plan, { fs, trashItem, home }) {
+async function applyPlan(plan, { fs, trashItem, home, move }) {
   const done = [];
   const failed = [];
   for (const m of plan.moves) {
@@ -111,7 +111,8 @@ async function applyPlan(plan, { fs, trashItem, home }) {
       if (home && (hasSymlink(m.from, fs, home) || hasSymlink(m.folder, fs, home))) throw new Error('A path now contains a symbolic link.');
       if (fs.existsSync(m.to)) throw new Error('Something appeared at the destination.');
       fs.mkdirSync(path.dirname(m.to), { recursive: true });
-      fs.renameSync(m.from, m.to); // a move: if it is on another drive this throws, and nothing is copied or removed
+      if (typeof move !== 'function') throw new Error('Safe file moving is unavailable.');
+      move(m.from, m.to);
       done.push({ from: m.from, to: m.to });
     } catch (e) { failed.push({ path: m.from, reason: e.code === 'EXDEV' ? 'That is on another drive; Relay does not move across drives.' : e.message }); }
   }
@@ -123,7 +124,7 @@ async function applyPlan(plan, { fs, trashItem, home }) {
 }
 
 // Puts a finished plan's moves back where they were (never over anything that is there now).
-function undoMoves(entry, { fs, home }) {
+function undoMoves(entry, { fs, home, move }) {
   const back = [];
   const left = [];
   for (const d of [...entry.done].reverse()) {
@@ -132,7 +133,8 @@ function undoMoves(entry, { fs, home }) {
       if (!fs.existsSync(d.to)) { left.push({ path: d.to, reason: 'It is no longer there.' }); continue; }
       if (fs.existsSync(d.from)) { left.push({ path: d.to, reason: 'Something is in its old place now.' }); continue; }
       fs.mkdirSync(path.dirname(d.from), { recursive: true });
-      fs.renameSync(d.to, d.from);
+      if (typeof move !== 'function') throw new Error('Safe file moving is unavailable.');
+      move(d.to, d.from);
       back.push(d);
     } catch (e) { left.push({ path: d.to, reason: e.message }); }
   }

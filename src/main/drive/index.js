@@ -13,8 +13,8 @@ const NIGHTLY_TTL = 20 * 60 * 60 * 1000; // tonight's tidy-up waits until tomorr
 
 class Drive {
   // fs, exec(file, args) -> stdout, cards: { show(card), hide() }, thumb(path) -> data URL | null, trashItem(path), reveal(path), open(path), log: { read(), write(list) }
-  constructor({ fs, home, exec, cards, thumb = async () => null, trashItem, reveal = () => {}, open = () => {}, log = { read: () => [], write: () => {} } }) {
-    Object.assign(this, { fs, home, exec, cards, thumb, trashItem, reveal, open, log });
+  constructor({ fs, home, exec, cards, thumb = async () => null, trashItem, move, reveal = () => {}, open = () => {}, log = { read: () => [], write: () => {} } }) {
+    Object.assign(this, { fs, home, exec, cards, thumb, trashItem, move, reveal, open, log });
     this.plans = new Map();
   }
 
@@ -86,7 +86,7 @@ class Drive {
     if (!plan) return 'There is no such plan (it may be old). Use drive_propose again.';
     if (Date.now() - plan.createdAt > (plan.ttl || PLAN_TTL)) { this.plans.delete(plan_id); return 'That plan is too old. Use drive_propose again so the user sees it fresh.'; }
     this.plans.delete(plan_id);
-    const res = await applyPlan(plan, { fs: this.fs, home: this.home, trashItem: this.trashItem });
+    const res = await applyPlan(plan, { fs: this.fs, home: this.home, trashItem: this.trashItem, move: this.move });
     this.cards?.hide?.();
     const list = [...(this.log.read() || []), { id: res.id, ts: res.ts, done: res.done, trashed: res.trashed }].slice(-30);
     this.log.write(list);
@@ -120,7 +120,7 @@ class Drive {
     const list = this.log.read() || [];
     const last = id ? list.find((e) => e.id === id) : list.at(-1);
     if (!last || !(last.done?.length || last.made?.length)) return 'There is nothing to undo.';
-    const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs, home: this.home });
+    const { back, left } = undoMoves({ done: last.done || [] }, { fs: this.fs, home: this.home, move: this.move });
     const gone = [];
     for (const m of last.made || []) {
       try { if (pathProblem(m, this.home) || hasSymlink(m, this.fs, this.home)) { left.push({ path: m, reason: 'A path is protected or contains a symbolic link.' }); continue; } if (!this.fs.existsSync(m)) { left.push({ path: m, reason: 'It is no longer there.' }); continue; } await this.trashItem(m); gone.push(m); } catch (e) { left.push({ path: m, reason: e.message }); }
