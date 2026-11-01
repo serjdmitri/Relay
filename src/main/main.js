@@ -585,7 +585,17 @@ function registerIpc() {
   const doctorEnv = async () => {
     const st = await codesign();
     const offlineOn = flagsMod.isOn(store.get('settings'), 'offline');
-    const ollamaUp = offlineOn ? await fetch(`${store.get('settings.model.ollamaUrl')}/api/tags`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok).catch(() => false) : null;
+    const ollamaStatus = offlineOn ? await (async () => {
+      try {
+        const provider = new OllamaProvider({ url: store.get('settings.model.ollamaUrl'), model: store.get('settings.model.ollamaModel') });
+        const response = await fetch(`${provider.url}/api/tags`, { signal: AbortSignal.timeout(1500), redirect: 'error' });
+        if (!response.ok) return { ollama: false, modelInstalled: null };
+        const data = await response.json();
+        const normalize = (name) => { const n = String(name || '').trim(); return n.includes(':') ? n : `${n}:latest`; };
+        const modelInstalled = Array.isArray(data.models) ? data.models.some((m) => normalize(m.name || m.model) === normalize(provider.model)) : null;
+        return { ollama: true, modelInstalled };
+      } catch { return { ollama: false, modelInstalled: null }; }
+    })() : { ollama: null, modelInstalled: null };
     const free = await new Promise((res) => execFile('/bin/df', ['-m', app.getPath('userData')], { timeout: 2000 }, (e, out) => res(e ? null : doctor.parseFreeMb(out))));
     return {
       claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
@@ -596,7 +606,7 @@ function registerIpc() {
       storeInfo: () => ({ freeMb: free }),
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
       toolMisses: () => ({ on: flagsMod.isOn(store.get('settings'), 'toolCategories'), recent: (store.get('toolMisses') || []).filter((x) => Date.now() - x.ts < 86400e3) }),
-      offline: () => ({ on: offlineOn, online: connectivity ? connectivity.online : true, ollama: ollamaUp }),
+      offline: () => ({ on: offlineOn, online: connectivity ? connectivity.online : null, ...ollamaStatus }),
       notes: () => ({ on: flagsMod.isOn(store.get('settings'), 'folderQa'), folders: notesSvc?.status() || [], noEmbed: !!notesSvc?.noEmbed }),
       plugins: () => ({ on: flagsMod.isOn(store.get('settings'), 'plugins'), list: pluginMgr?.list() || [], sandbox: !!pluginMgr?.sandbox }),
       imessage: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), fullDisk: fullDisk(), ...(inbound?.status() || {}) }),
