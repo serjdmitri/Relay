@@ -72,6 +72,7 @@
   #hudborder path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
   #hudborder .glow { stroke: rgba(0,212,255,.5); stroke-width: 10; filter: blur(8px); }
   #hudborder .edge { stroke: rgba(80,225,255,.8); stroke-width: 1.3; }
+  #hudborder .detail { stroke: rgba(115,239,255,.95); stroke-width: 2.4; stroke-dasharray: 72 20 8 14 170 28; }
   #hudR { position: absolute; left: 50%; top: calc(50% - 40px); width: 810px; height: 810px; margin: -405px 0 0 -405px; transform-origin: 50% 50%; transform: scale(var(--k));
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); will-change: transform; }
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
@@ -217,7 +218,7 @@
 <div id="agents"></div><div id="buddy"><div id="note"></div><svg id="ptr" viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/><circle class="armdot" cx="12.5" cy="12.5" r="2.2"/></svg><svg id="reticle" viewBox="-50 -50 100 100" aria-hidden="true"><g class="a"><circle r="47"/></g><g class="b"><circle r="39"/></g><g class="t"><circle r="32"/></g><g class="c"><circle r="24"/></g><circle class="core" r="14"/><circle class="dot" r="3"/><path class="ok" d="M-9 1 l6.5 6.5 l12 -13"/></svg><div class="spin"></div><div class="orb"><div class="bars"><i></i><i></i><i></i></div></div>
   <svg class="chk" viewBox="0 0 30 30"><path d="M8.5 15.5l4.2 4.2 8.8-9.4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 <div id="pen"><svg viewBox="0 0 15 15" aria-hidden="true"><path d="M1.2 1.2 L13.4 5.6 L7.9 7.9 L5.6 13.4 Z"/></svg></div>
-<div id="hud" class="center"><div id="hudbg"></div><svg id="hudborder" aria-hidden="true"><path class="glow"></path><path class="edge"></path></svg><div id="hudR"><canvas id="hudc"></canvas></div><ul id="hudtasks"></ul><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><input id="hudin" type="text" placeholder="Type a request" autocomplete="off" spellcheck="false"><div id="hudbtns"><button id="hudno">Cancel</button><button id="hudyes" class="yes">Allow</button></div><div id="hudsub"></div></div></div>
+<div id="hud" class="center"><div id="hudbg"></div><svg id="hudborder" aria-hidden="true"><path class="glow"></path><path class="edge"></path><path class="detail"></path></svg><div id="hudR"><canvas id="hudc"></canvas></div><ul id="hudtasks"></ul><div id="hudT"><div id="hudstatus"></div><canvas id="hudwave"></canvas><div id="hudline"></div><input id="hudin" type="text" placeholder="Type a request" autocomplete="off" spellcheck="false"><div id="hudbtns"><button id="hudno">Cancel</button><button id="hudyes" class="yes">Allow</button></div><div id="hudsub"></div></div></div>
 <div id="card"></div>
 <script src="hud.js"></script>
 <script src="overlay.js"></script>

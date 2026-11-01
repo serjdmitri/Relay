@@ -60,6 +60,7 @@ function followUpAnswer(text) {
 
 function spokenReply(reply, askAgain) {
   let text = String(reply || '').trim();
+  text = text.replace(/^Opened ([^.!?]+)[.!]?$/i, 'I have opened $1 for you.');
   if (text && !/\bsir\b/i.test(text)) text = `${text.replace(/[.!?]+$/, '')}, Sir.`;
   return askAgain ? `${text} Anything else, Sir?`.trim() : text;
 }
