@@ -19,6 +19,23 @@ test('the daily briefing can follow an existing unlock greeting without repeatin
   assert.match(text, /Set your city/);
 });
 
+test('forecast cancellation does not show a late card or report a network failure', async () => {
+  const c = Object.create(AskController.prototype);
+  const originalFetch = global.fetch;
+  let shown = false;
+  Object.assign(c, { store: { get: () => ({}) }, cardPanel: { show: async () => { shown = true; } } });
+  global.fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+  });
+  try {
+    const pending = c.forecastCommand({ place: 'Paris, France' });
+    c.abort.abort();
+    const result = await pending;
+    assert.equal(result.status, 'stopped');
+    assert.equal(shown, false);
+  } finally { global.fetch = originalFetch; }
+});
+
 test('unavailable sources are disclosed instead of being reported clear', () => {
   const text = buildBriefing({ now: new Date(2026, 9, 27, 9), includeGreeting: false, missing: ['calendar', 'google-calendar', 'reminders', 'mail', 'weather-unavailable'] });
   assert.match(text, /could not check Mac calendar, Google calendar, reminders, email and weather/);
