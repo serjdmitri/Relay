@@ -4,7 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { shellBlocked, scriptBlocked, pathProblem } = require('../src/main/drive/guard');
-const { buildPlan, applyPlan, undoMoves, MAX_MOVES } = require('../src/main/drive/plan');
+const { buildPlan, applyPlan: apply, undoMoves: undo, MAX_MOVES } = require('../src/main/drive/plan');
+const move = (from, to) => { if (fs.existsSync(to)) throw new Error('destination exists'); fs.renameSync(from, to); };
+const applyPlan = (plan, opts) => apply(plan, { ...opts, move });
+const undoMoves = (entry, opts) => undo(entry, { ...opts, move });
 
 test('nothing that deletes is allowed through, in a command or a script', () => {
   for (const bad of ['rm -rf ~/Downloads/old', 'sudo rm file', 'ls && rm a.txt', 'find . -name "*.tmp" -delete', 'find ~ -exec rm {} \;', 'xargs rm < list', 'rmdir x', 'unlink a', 'shred -u a', 'truncate -s 0 a', 'diskutil eraseDisk APFS x disk2', 'dd if=/dev/zero of=/tmp/a', 'git clean -fdx', 'git reset --hard', 'python3 -c "import os; os.remove(1)"', 'node -e "fs.rmSync(p)"', 'osascript -e \'tell app "Finder" to empty trash\'', 'echo hi; /bin/rm a'])
@@ -88,6 +91,21 @@ test('renaming cannot create a hidden or protected package destination', () => {
   assert.equal(fs.readFileSync(packaged, 'utf8'), 'two');
 });
 
+test('moves and undo fail closed when safe moving is unavailable', async () => {
+  const { home, w } = sandbox();
+  const source = w('Downloads/item.txt', 'original');
+  const plan = buildPlan({ moves: [{ from: source, to_folder: '~/Documents/Sorted' }] }, { fs, home });
+  const result = await apply(plan, { fs, home, trashItem: async () => {} });
+  assert.equal(result.done.length, 0);
+  assert.match(result.failed[0].reason, /Safe file moving is unavailable/);
+  assert.equal(fs.readFileSync(source, 'utf8'), 'original');
+  const dest = w('Documents/Sorted/item.txt', 'moved');
+  fs.unlinkSync(source);
+  const restored = undo({ done: [{ from: source, to: dest }] }, { fs, home });
+  assert.equal(restored.back.length, 0);
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'moved');
+});
+
 test('files to get rid of go to the Trash (a move that can be undone), only when listed, and never anything protected', async () => {
   const { home, w } = sandbox();
   const old = w('Downloads/old.zip');
@@ -121,7 +139,7 @@ const { scanFolder, describeScan, findFiles, kindOf } = require('../src/main/dri
 
 function driveOn(home, over = {}) {
   const cards = []; const trashed = []; let logged = [];
-  const d = new Drive({ fs, home, exec: async () => '', cards: { show: async (c) => { cards.push(c); }, hide: () => cards.push('hidden') }, trashItem: async (p) => { trashed.push(p); }, log: { read: () => logged, write: (l) => { logged = l; } }, ...over });
+  const d = new Drive({ fs, home, move, exec: async () => '', cards: { show: async (c) => { cards.push(c); }, hide: () => cards.push('hidden') }, trashItem: async (p) => { trashed.push(p); }, log: { read: () => logged, write: (l) => { logged = l; } }, ...over });
   return { d, cards, trashed, log: () => logged };
 }
 

@@ -28,7 +28,7 @@ test('drive undo can reverse one chosen entry, not only the last', async () => {
   const w = (rel) => { const p = path.join(home, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, 'x'); return p; };
   const a = w('Downloads/a.pdf'), b = w('Downloads/b.png');
   let log = [];
-  const d = new Drive({ fs, home, exec: async () => '', cards: { show: async () => {}, hide: () => {} }, trashItem: async () => {}, log: { read: () => log, write: (l) => { log = l; } } });
+  const d = new Drive({ fs, home, move: (from, to) => { if (fs.existsSync(to)) throw new Error('destination exists'); fs.renameSync(from, to); }, exec: async () => '', cards: { show: async () => {}, hide: () => {} }, trashItem: async () => {}, log: { read: () => log, write: (l) => { log = l; } } });
   const p1 = (await d.propose({ moves: [{ from: a, to_folder: '~/Documents/Docs' }] })).match(/Plan ([0-9a-f-]{36})/)[1];
   await d.apply({ plan_id: p1 });
   const firstId = d.lastLogId;
