@@ -264,7 +264,7 @@ class AskController {
     this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
-      if (this.state === 'listening') this.push({ partial: text });
+      if (this.state === 'listening' && this.commandMicReady) this.push({ partial: text });
     });
     speech.on('level', (v) => {
       this.checkAutoEnd(v);
@@ -1567,6 +1567,7 @@ class AskController {
 
   async listen(mode, held, opts = {}) {
     this.reactorIdle = false;
+    this.commandMicReady = false;
     if (this.meeting?.active) return this.notice('Meeting notes are using the microphone. Say “Jarvis, end the meeting”, or use the menu bar, first.', 'failed');
     this.wake?.disarm(); // the microphone is needed for this
     this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null, noSpeechMs: opts.noSpeechMs || 7000 } : null;
@@ -1599,6 +1600,7 @@ class AskController {
     try {
       if (!mic) throw new Error('Microphone access is off. Turn it on in Permissions.');
       await mic;
+      if (this.state === 'listening') this.commandMicReady = true;
     } catch (e) {
       return this.listenFailed(e);
     }

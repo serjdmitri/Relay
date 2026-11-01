@@ -371,6 +371,7 @@ actor Engine {
   private var resultTask: Task<String, Error>?
   private var activeAnalyzer: SpeechAnalyzer?
   private var latest = ""
+  private var recognitionGeneration = 0
 
   func setVocabulary(_ words: [String]) { vocabulary = words }
 
@@ -454,12 +455,13 @@ actor Engine {
     let (stream, continuation) = AsyncStream.makeStream(of: AnalyzerInput.self, bufferingPolicy: .bufferingNewest(64))
     self.continuation = continuation
     latest = ""
+    recognitionGeneration += 1
+    let generation = recognitionGeneration
     resultTask = Task {
       var acc = Accumulator()
       for try await result in p.transcriber.results {
         acc.receive(String(result.text.characters), isFinal: result.isFinal)
-        emit(["event": "partial", "text": acc.text])
-        await self.setLatest(acc.text)
+        await self.publishPartial(acc.text, generation: generation)
       }
       return acc.text
     }
@@ -477,7 +479,11 @@ actor Engine {
     }
   }
 
-  private func setLatest(_ t: String) { latest = t }
+  private func publishPartial(_ t: String, generation: Int) {
+    guard generation == recognitionGeneration else { return }
+    latest = t
+    emit(["event": "partial", "text": t])
+  }
 
   func stop() async throws -> String {
     guard let mic, let continuation, let analyzer = activeAnalyzer, let resultTask else { return "" }
@@ -501,6 +507,8 @@ actor Engine {
   func cancel() async { await teardown(cancel: true) }
 
   private func teardown(cancel: Bool) async {
+    recognitionGeneration += 1
+    latest = ""
     mic?.stop()
     mic = nil
     continuation?.finish()
