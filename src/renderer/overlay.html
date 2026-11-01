@@ -76,6 +76,8 @@
   #hudR { position: absolute; left: 50%; top: calc(50% - 40px); width: 810px; height: 810px; margin: -405px 0 0 -405px; transform-origin: 50% 50%; transform: scale(var(--k));
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); transform-style: preserve-3d; will-change: transform; }
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
+  #hud.on.center #hudR { animation: reactor-assemble .8s cubic-bezier(.22,.9,.3,1) both; }
+  @keyframes reactor-assemble { from { transform: scale(calc(var(--k) * .65)) perspective(1000px) rotateX(65deg) rotateZ(-20deg); opacity: .3; } to { transform: scale(var(--k)) perspective(1000px) rotateX(0) rotateZ(0); opacity: 1; } }
   #hudR::before, #hudR::after { content: ""; position: absolute; inset: 23%; border: 2px solid rgba(0,212,255,.6); border-radius: 50%; box-shadow: 0 0 22px rgba(0,212,255,.5), inset 0 0 18px rgba(0,212,255,.25); pointer-events: none; opacity: 0; transform: translateY(0) scale(1); transition: transform .8s ease-out, opacity .5s ease-out; }
   #hud.corner #hudR::before { opacity: 1; transform: translateZ(115px) scale(.88); }
   #hud.corner #hudR::after { opacity: 1; transform: translateZ(-115px) scale(1.1); }
@@ -115,7 +117,7 @@
   @keyframes taskin { from { opacity: 0; transform: translateX(-14px); } }
   #hud.corner #hudline, #hud.corner #hudsub { display: none; }
   #hud.corner #hudT { left: 196px; top: auto; bottom: 72px; margin-left: 0; width: min(460px, calc(100vw - 210px)); text-align: left; text-shadow: 0 1px 3px rgba(0, 8, 20, .95), 0 0 10px rgba(0, 8, 20, .75), 0 0 22px rgba(0, 8, 20, .5); }
-  @media (prefers-reduced-motion: reduce) { #hudR, #hudR::before, #hudR::after, #hudT { transition-duration: .01ms !important; } }
+  @media (prefers-reduced-motion: reduce) { #hudR, #hudR::before, #hudR::after, #hudT { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
   #hudstatus { font: 700 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; color: #00d4ff; }
   #hudwave { display: block; width: 288px; height: 30px; margin: 10px auto 12px; }
   #hud.corner #hudwave { display: none !important; }

@@ -27,19 +27,20 @@ function drawHudBorder(m = borderGeometry) {
     .map(r => ({ a: Math.max(1, r.x), b: Math.min(w - 1, r.x + r.width), depth: Math.min(h - 1, r.y + r.height) })).sort((a, b) => a.a - b.a);
   const merged = [];
   for (const r of top) { const p = merged[merged.length - 1]; if (p && r.a <= p.b) { p.b = Math.max(p.b, r.b); p.depth = Math.max(p.depth, r.depth); } else merged.push(r); }
-  let d = 'M1 1';
+  const corner = Math.min(22, w / 4, h / 4);
+  let d = `M1 ${corner} Q1 1 ${corner} 1`;
   for (const r of merged) {
     const c = Math.max(0, Math.min(12, (r.b - r.a) / 4, (r.depth - 1) / 2));
     d += ` H${r.a} V${r.depth - c} Q${r.a} ${r.depth} ${r.a + c} ${r.depth} H${r.b - c} Q${r.b} ${r.depth} ${r.b} ${r.depth - c} V1`;
   }
-  d += ` H${w - 1} V${h - 1} H1`;
+  d += ` H${w - corner} Q${w - 1} 1 ${w - 1} ${corner} V${h - corner} Q${w - 1} ${h - 1} ${w - corner} ${h - 1} H${corner} Q1 ${h - 1} 1 ${h - corner}`;
   const recent = m.recent;
   if (valid(recent) && recent.x <= 1 && recent.x + recent.width > 0 && recent.y < h && recent.y + recent.height > 0) {
     const a = Math.max(1, recent.y), b = Math.min(h - 1, recent.y + recent.height), right = Math.min(w - 1, recent.x + recent.width);
     const c = Math.max(0, Math.min(22, (b - a) / 3, (right - 1) / 3));
     d += ` V${b} H${right - c} Q${right} ${b} ${right} ${b - c} V${a + c} Q${right} ${a} ${right - c} ${a} H1`;
   }
-  d += ' V1';
+  d += ` V${corner}`;
   document.querySelectorAll('#hudborder path').forEach(p => p.setAttribute('d', d));
 }
 addEventListener('resize', () => drawHudBorder());
