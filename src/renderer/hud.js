@@ -283,6 +283,7 @@
     mode = m;
     hud.classList.toggle('center', m === 'center');
     hud.classList.toggle('corner', m === 'corner');
+    hud.classList.toggle('idle-center', m === 'idle-center');
   }
 
   // msg: the pill's fields ({ state, mode, partial, level, label, text, reply, status, askLabel, dictateLabel, preparing })
@@ -306,7 +307,7 @@
     let sub = '';
     let lineClass = '';
     if (s === 'reactor-idle') {
-      status = 'IDLE'; level = 0; setMode('corner'); busySince = 0;
+      status = 'IDLE'; level = 0; setMode(msg.idlePosition === 'corner' ? 'corner' : 'idle-center'); busySince = 0;
     } else if (s === 'listening') {
       const dictating = msg.mode === 'dictate';
       status = dictating ? 'DICTATING' : 'LISTENING';

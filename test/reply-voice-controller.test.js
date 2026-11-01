@@ -59,10 +59,10 @@ test('wake greeting finishes before the microphone opens and can be dismissed', 
 
 test('idle reactor shortcut toggles only when the assistant is idle', () => {
   const c = Object.create(AskController.prototype), events = [];
-  Object.assign(c, { state: 'idle', suspended: false, overlay: { hud: x => events.push(x), buddy() {} } });
+  Object.assign(c, { state: 'idle', suspended: false, store: { get: () => 'center' }, overlay: { hud: x => events.push(x), buddy() {} } });
   c.onShortcut('reactorIdle', 'press');
   c.onShortcut('reactorIdle', 'press');
   c.state = 'working';
   c.onShortcut('reactorIdle', 'press');
-  assert.deepEqual(events, [{ state: 'reactor-idle' }, { hide: true }]);
+  assert.deepEqual(events, [{ state: 'reactor-idle', idlePosition: 'center' }, { hide: true }]);
 });
