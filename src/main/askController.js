@@ -1366,6 +1366,26 @@ class AskController {
     this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
   }
 
+  async forecastCommand(query) {
+    const cfg = this.store.get('settings.briefing') || {};
+    const place = query.place || cfg.city;
+    if (!place) return { status: 'failed', reply: 'Tell me a city, or set your city in briefing settings.', actions: 0 };
+    const abort = new AbortController();
+    this.abort = abort;
+    const timer = setTimeout(() => abort.abort(), 10000);
+    try {
+      const result = await require('./forecast').forecast(place, { units: cfg.units === 'c' ? 'c' : 'f', signal: abort.signal });
+      if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped the forecast.', actions: 0 };
+      if (!result) return { status: 'failed', reply: `I could not find a forecast for ${place}. Try adding a state or country.`, actions: 0 };
+      const unit = result.units.toUpperCase();
+      const items = result.days.map((d) => ({ title: d.date, subtitle: `${d.conditions || 'Conditions unavailable'} · ${Math.round(d.high)}° / ${Math.round(d.low)}° ${unit}`, note: Number.isFinite(d.rain) ? `${d.rain}% chance of rain` : 'Rain chance unavailable', image: null, url: '' }));
+      if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'list', title: `Forecast: ${result.location}`, subtitle: 'Up to seven days · Open-Meteo', summary: '', facts: [], links: [], items, image: null, credit: 'Open-Meteo' });
+      const today = result.days[0];
+      return { status: 'done', reply: `The forecast for ${result.location} starts with ${today.conditions || 'conditions unavailable'}, a high of ${Math.round(today.high)} and a low of ${Math.round(today.low)} degrees ${unit}.`, actions: 0 };
+    } catch { return { status: 'failed', reply: 'I could not complete the forecast. Please try again.', actions: 0 }; }
+    finally { clearTimeout(timer); }
+  }
+
   async runBriefingCommand(request, entry) {
     const abort = new AbortController();
     this.abort = abort;
@@ -1905,6 +1925,10 @@ class AskController {
         }
         if (!opts.shown && parseBriefingCommand(effective)) {
           return this.runBriefingCommand(effective, entry);
+        }
+        if (!opts.shown && !opts.scheduled) {
+          const query = require('./forecast').parseForecast(effective);
+          if (query) return this.finish(entry, await this.forecastCommand(query));
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
           return this.finish(entry, await this.dailyPlanCommand(false, entry.id));
