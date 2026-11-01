@@ -82,7 +82,11 @@ test('password check: only a 5 character hash prefix leaves, the password is for
     assert.deepEqual(clean.state.written, [' ']);
     global.fetch = async () => { throw new Error('offline'); };
     const off = await make({ selected: 'hunter2' }).c.securityCheck({ type: 'breach' });
-    assert.match(off.reply, /could not reach the breach database. Offline, it looks weak/);
+    assert.match(off.reply, /could not complete the breach check. Offline, it looks weak/);
+    global.fetch = async () => ({ ok: true, text: async () => '' });
+    const malformed = await make({ selected: 'hunter2' }).c.securityCheck({ type: 'breach' });
+    assert.equal(malformed.status, 'failed');
+    assert.match(malformed.reply, /could not complete the breach check/);
     const multi = await make({ selected: 'line one\nline two' }).c.securityCheck({ type: 'breach' });
     assert.match(multi.reply, /Copy just the password/);
     assert.match((await make({}).c.securityCheck({ type: 'breach' })).reply, /Copy just the password/);
