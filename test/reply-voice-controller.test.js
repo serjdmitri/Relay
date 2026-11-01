@@ -43,6 +43,17 @@ test('a follow-up containing a request is not mistaken for a bare no', () => {
   assert.equal(spokenReply('Opened Notes.', true), 'I have opened Notes for you, Sir. Anything else, Sir?');
 });
 
+test('replaying a reply uses the selected voice and does not rearm follow-up', () => {
+  const c = Object.create(AskController.prototype), calls = [];
+  Object.assign(c, { followFor: 'old', store: { get: k => k === 'lastReply' ? 'Opened Notes.' : {} }, speaker: { speak: (...args) => calls.push(args) } });
+  assert.equal(c.speakLastReply(), true);
+  assert.equal(c.followFor, null);
+  assert.equal(calls[0][0], 'Opened Notes.');
+  assert.equal(calls[0][1].lang, 'en');
+  c.store.get = () => '';
+  assert.equal(c.speakLastReply(), false);
+});
+
 test('wake greeting finishes before the microphone opens and can be dismissed', async () => {
   for (const dismissed of [false, true]) {
     const calls = [];
