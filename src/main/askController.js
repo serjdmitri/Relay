@@ -264,7 +264,10 @@ class AskController {
     this.guide.onReplan = (info) => this.checkGuide(info);
 
     speech.on('partial', (text) => {
-      if (this.state === 'listening' && this.commandMicReady) this.push({ partial: text });
+      if (this.state === 'listening' && this.commandMicReady) {
+        if (this.autoEnd && String(text || '').trim()) this.autoEnd.recognized = true;
+        this.push({ partial: text });
+      }
     });
     speech.on('level', (v) => {
       this.checkAutoEnd(v);
@@ -1560,9 +1563,9 @@ class AskController {
     const voice = level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
     if (voice) { a.spoke = true; a.lastVoice = now; }
     const pause = Math.max(0.7, Math.min(5, Number(this.store.get('settings.autoSend.silenceSeconds')) || 1.5)) * 1000;
-    if (a.spoke && now - a.lastVoice > pause) { this.autoEnd = null; this.finishListening(); }
+    if (a.spoke && a.recognized && now - a.lastVoice > pause) { this.autoEnd = null; this.finishListening(); }
     else if (!a.spoke && now - a.startedAt > (a.noSpeechMs || 7000)) { this.autoEnd = null; this.cancelAll(); }
-    else if (now - a.startedAt > 25000) { this.autoEnd = null; this.finishListening(); }
+    else if (now - a.startedAt > 25000) { this.autoEnd = null; if (a.recognized) this.finishListening(); else this.cancelAll(); }
   }
 
   async listen(mode, held, opts = {}) {
