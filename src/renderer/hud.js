@@ -302,6 +302,9 @@
     hud.classList.toggle('frame', msg.border !== false);
     if (!on) hud.classList.add('snap'); // appearing from nothing: take its place at once, with no sliding
     const s = msg.state;
+    if (s === 'listening' || s === 'input') {
+      if (shownState !== s) hud.classList.toggle('from-idle', shownState === 'reactor-idle');
+    } else if (s !== 'reactor-idle') hud.classList.remove('from-idle');
     let label = '';
     let line = '';
     let sub = '';
