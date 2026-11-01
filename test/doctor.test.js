@@ -42,6 +42,19 @@ test('Doctor warns when enabled plugins have no macOS sandbox', async () => {
   assert.match(result.cause, /beyond their declared permissions/);
 });
 
+test('offline diagnostics distinguish a responding server from an installed model', async () => {
+  for (const [data, status, message] of [
+    [{ on: true, ollama: false }, 'warn', /could not check Ollama/],
+    [{ on: true, ollama: true, modelInstalled: false }, 'warn', /selected model is not listed/],
+    [{ on: true, ollama: true, modelInstalled: null }, 'warn', /could not verify/],
+    [{ on: true, ollama: true, modelInstalled: true }, 'ok', /ability to answer has not been tested/]
+  ]) {
+    const check = by(await d.runChecks({ ...good, offline: () => data }), 'offline');
+    assert.equal(check.status, status);
+    assert.match(check.cause, message);
+  }
+});
+
 test('a missing permission fails with a button to the right settings pane', async () => {
   const rs = await d.runChecks({ ...good, perms: () => ({ accessibility: false, screen: true, mic: true }) });
   const r = by(rs, 'perm-accessibility');

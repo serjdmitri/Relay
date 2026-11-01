@@ -119,8 +119,11 @@ const CHECKS = [
     id: 'offline', title: 'Offline mode', run: (env) => {
       const m = env.offline?.();
       if (!m || !m.on) return ok('Off.');
-      if (m.ollama === false) return warn('Ollama is not running, so offline Relay can only say it needs the internet. Install Ollama (ollama.com) and start it, then pull the model chosen in Account.');
-      return ok(`${m.online ? 'Online' : 'Offline right now'}; a local model is ready.`);
+      if (m.ollama === false) return warn('Relay could not check Ollama. Make sure it is running and the local address and model in Account are valid.');
+      if (m.ollama !== true) return warn('Ollama has not been checked yet.');
+      if (m.modelInstalled === false) return warn('Ollama is responding, but the selected model is not listed. Download it in Ollama or choose an installed model in Account.');
+      if (m.modelInstalled !== true) return warn('Ollama is responding, but Relay could not verify the selected model.');
+      return ok('Ollama is responding and the selected model is listed. Its ability to answer has not been tested.');
     }
   },
   {
