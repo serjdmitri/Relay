@@ -500,6 +500,12 @@ class AskController {
   // ----- shortcut events -----
   onShortcut(name, kind) {
     if (this.suspended) return;
+    if (name === 'reactorIdle' && kind === 'press') {
+      if (this.state !== 'idle') return;
+      this.reactorIdle = !this.reactorIdle;
+      this.overlay.hud(this.reactorIdle ? { state: 'reactor-idle' } : { hide: true });
+      return;
+    }
     if (name === 'mark') {
       if (kind === 'hold-start' && (this.state === 'idle' || this.state === 'done')) this.overlay.markStart();
       else if (kind === 'hold-end') this.finishMark();
@@ -508,6 +514,7 @@ class AskController {
     // Any of these cuts a spoken reply off mid-sentence, whatever else it then does (see interruptSpeech).
     if (name === 'cancel' || (name === 'type' && kind === 'press')) this.interruptSpeech();
     if (name === 'cancel') {
+      if (this.reactorIdle) { this.reactorIdle = false; this.overlay.hud({ hide: true }); }
       this.cardPanel?.hide(); // Esc closes the reactor; the holograms stay (close them one by one, say "close", or pin the ones to keep through that)
       this.overlay.markCancel();
       if (this.state !== 'idle') this.cancelAll();
@@ -1533,7 +1540,7 @@ class AskController {
       await this.ready;
       if (this.state !== 'waking') return;
       this.reveal({ state: 'listening', mode: 'ask', partial: '' }, 'inactive');
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 120));
       if (this.state !== 'waking') return;
       await this.speaker.speak('Yes, Sir.', profileFor('reply', this.store.get('settings') || {}));
       if (this.state !== 'waking') return; // dismissed while the greeting was spoken
@@ -1558,6 +1565,7 @@ class AskController {
   }
 
   async listen(mode, held, opts = {}) {
+    this.reactorIdle = false;
     if (this.meeting?.active) return this.notice('Meeting notes are using the microphone. Say “Jarvis, end the meeting”, or use the menu bar, first.', 'failed');
     this.wake?.disarm(); // the microphone is needed for this
     this.autoEnd = opts.auto ? { startedAt: Date.now(), spoke: false, lastVoice: 0, floor: null, noSpeechMs: opts.noSpeechMs || 7000 } : null;
@@ -1695,6 +1703,7 @@ class AskController {
 
   // ----- lifecycle -----
   async open({ typed = false, hint = '' } = {}) {
+    this.reactorIdle = false;
     clearTimeout(this.doneTimer);
     if (this.state === 'working' || this.state === 'confirm') return;
     this.speaker?.stop();

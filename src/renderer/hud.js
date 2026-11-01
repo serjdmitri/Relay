@@ -305,7 +305,9 @@
     let line = '';
     let sub = '';
     let lineClass = '';
-    if (s === 'listening') {
+    if (s === 'reactor-idle') {
+      status = 'IDLE'; level = 0; setMode('corner'); busySince = 0;
+    } else if (s === 'listening') {
       const dictating = msg.mode === 'dictate';
       status = dictating ? 'DICTATING' : 'LISTENING';
       level = Math.min(1, (msg.level || 0) * 9);
