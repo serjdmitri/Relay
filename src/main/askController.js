@@ -1372,17 +1372,21 @@ class AskController {
     if (!place) return { status: 'failed', reply: 'Tell me a city, or set your city in briefing settings.', actions: 0 };
     const abort = new AbortController();
     this.abort = abort;
-    const timer = setTimeout(() => abort.abort(), 10000);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; abort.abort(); }, 10000);
     try {
       const result = await require('./forecast').forecast(place, { units: cfg.units === 'c' ? 'c' : 'f', signal: abort.signal });
-      if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped the forecast.', actions: 0 };
+      if (abort.signal.aborted) return timedOut ? { status: 'failed', reply: 'The forecast took too long. Please try again.', actions: 0 } : { status: 'stopped', reply: 'Stopped the forecast.', actions: 0 };
       if (!result) return { status: 'failed', reply: `I could not find a forecast for ${place}. Try adding a state or country.`, actions: 0 };
       const unit = result.units.toUpperCase();
       const items = result.days.map((d) => ({ title: d.date, subtitle: `${d.conditions || 'Conditions unavailable'} · ${Math.round(d.high)}° / ${Math.round(d.low)}° ${unit}`, note: Number.isFinite(d.rain) ? `${d.rain}% chance of rain` : 'Rain chance unavailable', image: null, url: '' }));
       if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'list', title: `Forecast: ${result.location}`, subtitle: 'Up to seven days · Open-Meteo', summary: '', facts: [], links: [], items, image: null, credit: 'Open-Meteo' });
       const today = result.days[0];
       return { status: 'done', reply: `The forecast for ${result.location} starts with ${today.conditions || 'conditions unavailable'}, a high of ${Math.round(today.high)} and a low of ${Math.round(today.low)} degrees ${unit}.`, actions: 0 };
-    } catch { return { status: 'failed', reply: 'I could not complete the forecast. Please try again.', actions: 0 }; }
+    } catch {
+      if (abort.signal.aborted && !timedOut) return { status: 'stopped', reply: 'Stopped the forecast.', actions: 0 };
+      return { status: 'failed', reply: 'I could not complete the forecast. Please try again.', actions: 0 };
+    }
     finally { clearTimeout(timer); }
   }
 
