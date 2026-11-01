@@ -1268,7 +1268,7 @@ app.whenReady().then(() => {
       glass.start();
     });
   }
-  hotkeys = new Hotkeys({ getShortcuts: () => store.get('settings.shortcuts'), onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
+  hotkeys = new Hotkeys({ getShortcuts: () => { const s = store.get('settings.shortcuts'); const used = Object.values(s).some(v => v?.code === 'KeyI' && v.mods?.includes('Alt')); return used ? s : { ...s, reactorIdle: { code: 'KeyI', mods: ['Alt'] } }; }, onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
   hotkeys.onMouse = (down) => { holos?.mouseButton(down); overlay?.dropWatch(down); }; // a file dragged onto a hologram is accepted while the button is held over it
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');

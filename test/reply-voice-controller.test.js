@@ -56,3 +56,13 @@ test('wake greeting finishes before the microphone opens and can be dismissed', 
     assert.deepEqual(calls, dismissed ? ['disarm', 'show', 'Yes, Sir.'] : ['disarm', 'show', 'Yes, Sir.', 'listen']);
   }
 });
+
+test('idle reactor shortcut toggles only when the assistant is idle', () => {
+  const c = Object.create(AskController.prototype), events = [];
+  Object.assign(c, { state: 'idle', suspended: false, overlay: { hud: x => events.push(x), buddy() {} } });
+  c.onShortcut('reactorIdle', 'press');
+  c.onShortcut('reactorIdle', 'press');
+  c.state = 'working';
+  c.onShortcut('reactorIdle', 'press');
+  assert.deepEqual(events, [{ state: 'reactor-idle' }, { hide: true }]);
+});
