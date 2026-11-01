@@ -788,6 +788,15 @@ const PAGES = {
         return row;
       })(),
       toggleRow('Keep listening after an answer', 'After you ask out loud and Relay answers, it listens for a few seconds more, so you can say “and the next one?” without pressing anything.', 'settings.followUp.enabled'),
+      toggleRow('Send after I stop speaking', 'For a tapped voice shortcut, send after a pause. Turn this off in a noisy place and press the shortcut again to send. Holding the shortcut still works.', 'settings.autoSend.enabled'),
+      (() => {
+        const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Voice timing</div><div class="d">Seconds of quiet before sending, and seconds to wait for another command.</div></div><input class="field" id="autoPause" type="number" min="0.7" max="5" step="0.1" style="width:75px"><span class="d">quiet</span><input class="field" id="followWait" type="number" min="3" max="20" step="1" style="width:75px"><span class="d">follow-up</span></div>`);
+        const pause = $('#autoPause', row), wait = $('#followWait', row);
+        pause.value = S.settings.autoSend?.silenceSeconds ?? 1.5; wait.value = S.settings.followUp?.seconds ?? 6;
+        pause.onchange = () => { const v = Number(pause.value); if (Number.isFinite(v)) relay.set('settings.autoSend.silenceSeconds', Math.max(.7, Math.min(5, v))); };
+        wait.onchange = () => { const v = Number(wait.value); if (Number.isFinite(v)) relay.set('settings.followUp.seconds', Math.max(3, Math.min(20, v))); };
+        return row;
+      })(),
       toggleRow('Interrupt by talking', 'While Relay is speaking, say “stop” or just start talking and it stops mid-sentence. Works best with headphones (without them it can hear itself).', 'settings.bargeIn.enabled'),
       (() => {
         const cur = (S.settings.bargeIn && S.settings.bargeIn.mode) || 'talk';

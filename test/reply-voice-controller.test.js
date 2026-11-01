@@ -66,3 +66,12 @@ test('idle reactor shortcut toggles only when the assistant is idle', () => {
   c.onShortcut('reactorIdle', 'press');
   assert.deepEqual(events, [{ state: 'reactor-idle', idlePosition: 'center' }, { hide: true }]);
 });
+
+test('tapped ask uses silence detection unless disabled; holding remains manual', () => {
+  for (const [enabled, kind, auto] of [[true, 'tap', true], [false, 'tap', false], [true, 'hold-start', false]]) {
+    const c = Object.create(AskController.prototype), calls = [];
+    Object.assign(c, { state: 'idle', suspended: false, store: { get: key => key === 'settings.autoSend.enabled' ? enabled : 'tap-or-hold' }, listen: (...a) => calls.push(a) });
+    c.onShortcut('ask', kind);
+    assert.equal(calls[0][2].auto, auto);
+  }
+});

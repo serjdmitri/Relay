@@ -561,7 +561,7 @@ class AskController {
     }
     if (this.state === 'finishing') return;
     if (start) {
-      if (this.state === 'idle' || this.state === 'done') return this.listen(name, kind === 'hold-start');
+      if (this.state === 'idle' || this.state === 'done') return this.listen(name, kind === 'hold-start', { auto: name === 'ask' && kind === 'tap' && this.store.get('settings.autoSend.enabled') !== false });
       if (this.state === 'input' && name === 'ask' && kind === 'tap') return this.requestSubmit();
     }
   }
@@ -1502,7 +1502,7 @@ class AskController {
       const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz || this.checklist ? 0 : this.followChain });
       if (!ok) return;
       this.followFor = null;
-      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : this.holdAnswer ? 25000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
+      this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: this.quiz || this.checklist ? 20000 : Math.max(3, Math.min(20, +cfg.seconds || 6)) * 1000 });
     }, delay);
   }
 
@@ -1559,7 +1559,8 @@ class AskController {
     a.floor = Math.min(a.floor, level) * 0.98 + level * 0.02; // the room's background level
     const voice = level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
     if (voice) { a.spoke = true; a.lastVoice = now; }
-    if (a.spoke && now - a.lastVoice > 1300) { this.autoEnd = null; this.finishListening(); }
+    const pause = Math.max(0.7, Math.min(5, Number(this.store.get('settings.autoSend.silenceSeconds')) || 1.5)) * 1000;
+    if (a.spoke && now - a.lastVoice > pause) { this.autoEnd = null; this.finishListening(); }
     else if (!a.spoke && now - a.startedAt > (a.noSpeechMs || 7000)) { this.autoEnd = null; this.cancelAll(); }
     else if (now - a.startedAt > 25000) { this.autoEnd = null; this.finishListening(); }
   }
@@ -1803,6 +1804,13 @@ class AskController {
     this.overlay.beginRequest();
     this.win.setFocusable(false);
     this.push({ label: 'Thinking', text: opts.shown || text });
+    clearTimeout(this.ackTimer);
+    if (this.voiceAsk && !opts.remote && !opts.scheduled && !opts.shown && this.store.get('settings.speakReplies') && this.speaker) {
+      const task = this.runningTask;
+      this.ackTimer = setTimeout(() => {
+        if (this.runningTask === task && this.state === 'working' && !this.speaker.speaking) Promise.resolve(this.speaker.speak('On it, Sir.', profileFor('quiet', this.store.get('settings') || {}))).catch(() => {});
+      }, 700);
+    }
 
     if (!opts.scheduled) this.unattended = false;
     if (!opts.drain) this.cardPanel?.hide(); // a new request takes the last card away; holograms you have not pinned stay until you close them or pin them
@@ -1948,16 +1956,6 @@ class AskController {
         }
         if (opts.shown) return this.runRequest(effective, entry);
         this.lastRequestText = effective;
-        // Speak an honest progress message before opening an app. Wait for it
-        // to finish so the final result cannot cut the sentence in half.
-        const opening = parseQuick(effective);
-        if (this.voiceAsk && !opts.remote && !opts.scheduled && this.store.get('settings.speakReplies') && opening?.type === 'open-app' && this.speaker) {
-          const controller = new AbortController();
-          this.abort = controller;
-          await this.speaker.speak(`Opening ${opening.name}, Sir.`, profileFor('reply', this.store.get('settings') || {}));
-          if (controller.signal.aborted || this.state !== 'working') return this.finish(entry, { status: 'stopped', reply: 'Stopped.', actions: 0 });
-          if (this.abort === controller) this.abort = null;
-        }
         const quick = await this.tryQuick(effective, entry);
         return quick || this.runRequest(effective, entry);
       }
@@ -2987,6 +2985,7 @@ class AskController {
   }
 
   finish(entry, res) {
+    clearTimeout(this.ackTimer);
     if (this.quizFresh && this.quiz) { this.quizFresh = false; res = { ...res, status: 'done', reply: `${String(res.reply || '').trim().replace(/\s+$/, '')} ${this.quiz.ask()}`.trim() }; } else this.quizFresh = false;
     const reply = res.reply || '';
     const u = res.usage;
