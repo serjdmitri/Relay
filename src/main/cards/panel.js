@@ -51,7 +51,8 @@ class CardPanel {
     if (!this.win || this.win.isDestroyed()) return;
     const wa = d.workArea;
     const h = Math.min(wa.height - 40, Math.max(220, Math.round(height) + 48));
-    this.win.setBounds({ x: wa.x + wa.width - WIDTH - 10, y: wa.y + Math.round((wa.height - h) / 2), width: WIDTH, height: h });
+    const width = this.card?.kind === 'weather' ? Math.min(860, wa.width - 20) : WIDTH;
+    this.win.setBounds({ x: wa.x + wa.width - width - 10, y: wa.y + Math.round((wa.height - h) / 2), width, height: h });
   }
 
   // The page measures itself once it has laid out the card.

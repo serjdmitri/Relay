@@ -6,6 +6,7 @@ test('weather requests preserve the requested location', () => {
   assert.deepEqual(parseForecast('Hey Jarvis, weather in Paris, France?'), { place: 'Paris, France' });
   assert.deepEqual(parseForecast('show me the forecast for London'), { place: 'London' });
   assert.deepEqual(parseForecast('what is the weather'), { place: '' });
+  assert.deepEqual(parseForecast('whats the weather in Moscow'), { place: 'Moscow' });
   assert.equal(parseForecast('email me the weather report'), null);
 });
 
@@ -19,5 +20,6 @@ test('forecast identifies the matching location and does not invent missing days
   assert.match(urls[1], /latitude=48/);
   assert.match(urls[1], /forecast_days=7/);
   assert.equal(await forecast('Paris, Atlantis', { fetchFn: async () => ({ ok: true, json: async () => ({ results: [] }) }) }), null);
+  assert.equal(await forecast('Russia', { fetchFn: async () => ({ ok: true, json: async () => ({ results: [{ name: 'Russia', country: 'Russia', feature_code: 'PCLI', latitude: 60, longitude: 90 }] }) }) }), null, 'a whole country needs a city');
   await assert.rejects(forecast('Paris', { fetchFn: async () => ({ ok: false }) }));
 });
