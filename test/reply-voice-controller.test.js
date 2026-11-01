@@ -86,3 +86,17 @@ test('tapped ask uses silence detection unless disabled; holding remains manual'
     assert.equal(calls[0][2].auto, auto);
   }
 });
+
+test('background noise alone never submits an automatic voice command', () => {
+  const original = Date.now;
+  try {
+    let now = 10000; Date.now = () => now;
+    const c = Object.create(AskController.prototype), calls = [];
+    Object.assign(c, { state: 'listening', store: { get: () => 1.5 }, autoEnd: { startedAt: now, spoke: false, lastVoice: 0, floor: 0 }, finishListening: () => calls.push('send'), cancelAll: () => calls.push('cancel') });
+    c.checkAutoEnd(0.5);
+    now += 2000; c.checkAutoEnd(0);
+    assert.deepEqual(calls, []);
+    now += 24000; c.checkAutoEnd(0);
+    assert.deepEqual(calls, ['cancel']);
+  } finally { Date.now = original; }
+});
