@@ -78,6 +78,7 @@
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
   #hud.idle-center #hudR { transform: scale(var(--k)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
   #hud.on.center #hudR { animation: reactor-assemble .8s cubic-bezier(.22,.9,.3,1) both; }
+  #hud.on.center.from-idle #hudR { animation: none; transition: transform .65s cubic-bezier(.22,.9,.3,1) .2s; }
   @keyframes reactor-assemble { from { transform: scale(calc(var(--k) * .65)) perspective(1000px) rotateX(65deg) rotateZ(-20deg); opacity: .3; } to { transform: scale(var(--k)) perspective(1000px) rotateX(0) rotateZ(0); opacity: 1; } }
   #hudR::before, #hudR::after { content: ""; position: absolute; inset: 23%; border: 2px solid rgba(0,212,255,.6); border-radius: 50%; box-shadow: 0 0 22px rgba(0,212,255,.5), inset 0 0 18px rgba(0,212,255,.25); pointer-events: none; opacity: 0; transform: translateY(0) scale(1); transition: transform .8s ease-out, opacity .5s ease-out; }
   #hud.corner #hudR::before { opacity: 1; transform: translateZ(115px) scale(.88); }
