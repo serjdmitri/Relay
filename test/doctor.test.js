@@ -19,6 +19,18 @@ const good = {
 };
 const by = (rs, id) => rs.find((r) => r.id === id);
 
+test('free disk space preserves zero and reports unavailable readings', async () => {
+  assert.equal(d.parseFreeMb('Filesystem 1M-blocks Used Available Capacity Mounted on\n/dev/disk 1000 1000 0 100% /'), 0);
+  assert.equal(d.parseFreeMb('Filesystem header only'), null);
+  assert.equal(d.parseFreeMb('header\ninvalid'), null);
+  const full = by(await d.runChecks({ ...good, storeInfo: () => ({ freeMb: 0 }) }), 'store');
+  assert.equal(full.status, 'warn');
+  assert.match(full.cause, /Only 0 MB/);
+  const unavailable = by(await d.runChecks({ ...good, storeInfo: () => ({ freeMb: null }) }), 'store');
+  assert.equal(unavailable.status, 'warn');
+  assert.match(unavailable.cause, /could not be checked/);
+});
+
 test('everything fine is all ok', async () => {
   const rs = await d.runChecks(good);
   assert.equal(d.worst(rs), 'ok');
