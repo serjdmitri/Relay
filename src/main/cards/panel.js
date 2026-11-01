@@ -37,6 +37,7 @@ class CardPanel {
   async show(card) {
     const win = this.ensure();
     await this.ready;
+    if (this.card && this.card !== card) this.onDismiss?.(this.card);
     this.card = card;
     const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     this.display = d;
@@ -74,7 +75,9 @@ class CardPanel {
     if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return;
     this.win.webContents.send('card:state', 'hide');
     setTimeout(() => { if (this.win && !this.win.isDestroyed() && !this.card?.live) this.win.hide(); }, 520);
+    const dismissed = this.card;
     this.card = null;
+    if (dismissed) this.onDismiss?.(dismissed);
   }
 
   open(url) {

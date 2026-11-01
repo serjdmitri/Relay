@@ -123,6 +123,14 @@ test('unlock reactor never replaces or dismisses a newer request', () => {
   assert.deepEqual(messages.at(-1), { hide: true });
 });
 
+test('welcome reactor can remain visible until its briefing is dismissed', () => {
+  let timerCalls = 0;
+  const overlay = { hudEntry: null, hudState: {}, hud(msg) { this.hudState = msg; this.hudEntry = {}; } };
+  assert.equal(showWelcomeReactor(overlay, 'Good morning, Sir.', { duration: null, setTimer: () => { timerCalls++; } }), true);
+  assert.equal(timerCalls, 0);
+  assert.match(overlay.hudState.welcomeToken, /^welcome-/);
+});
+
 test('plain wording for long absences and a meeting later today', () => {
   assert.equal(awayWords(25 * MIN), 'about 25 minutes');
   assert.equal(awayWords(3 * 3600e3), 'about 3 hours');

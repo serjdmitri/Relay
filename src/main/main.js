@@ -342,8 +342,12 @@ async function welcomeBack(lockedAt, lastWelcome) {
   const lines = briefing && w.lines[0] === 'Nothing needs your attention.' ? [briefing] : [...w.lines, ...(briefing ? [briefing] : [])];
   const spoken = briefing ? `${w.spoken.replace(/ Nothing needs your attention\.$/, '')} ${briefing}` : w.spoken;
   const card = welcome.briefingCard(w, briefing, cfg.name || 'Sir');
-  if (cfg.show !== false) welcome.showWelcomeReactor(overlay, welcome.greetingFor(Date.now(), cfg.name || 'Sir'));
-  if (cfg.show !== false && card && !ask.meeting?.active && ['idle', 'done'].includes(ask.state) && !cardPanel?.visible && !ask.lockWatch?.locked) cardPanel?.show(card).catch(() => {});
+  const showCard = cfg.show !== false && card && !ask.meeting?.active && ['idle', 'done'].includes(ask.state) && !cardPanel?.visible && !ask.lockWatch?.locked;
+  if (cfg.show !== false) {
+    const shown = welcome.showWelcomeReactor(overlay, welcome.greetingFor(Date.now(), cfg.name || 'Sir'), { duration: showCard ? null : 8000 });
+    if (shown && showCard) card.welcomeToken = overlay.hudState.welcomeToken;
+  }
+  if (showCard) cardPanel?.show(card).catch(() => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); });
   if (cfg.show !== false && Notification.isSupported()) new Notification({ title: welcome.greetingFor(Date.now(), cfg.name || 'Sir'), body: lines.join(' '), silent: true }).show();
   if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(spoken);
   return true;
@@ -913,6 +917,7 @@ app.whenReady().then(() => {
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();
   cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false });
+  cardPanel.onDismiss = (card) => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); };
   assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
   holos = new HoloManager({
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
