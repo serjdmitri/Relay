@@ -1529,6 +1529,12 @@ class AskController {
     this.wake?.disarm();
     if (this.store.get('settings.speakReplies') && this.speaker) {
       this.state = 'waking';
+      this.ensureWindow();
+      await this.ready;
+      if (this.state !== 'waking') return;
+      this.reveal({ state: 'listening', mode: 'ask', partial: '' }, 'inactive');
+      await new Promise((r) => setTimeout(r, 350));
+      if (this.state !== 'waking') return;
       await this.speaker.speak('Yes, Sir.', profileFor('reply', this.store.get('settings') || {}));
       if (this.state !== 'waking') return; // dismissed while the greeting was spoken
     }

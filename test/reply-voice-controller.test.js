@@ -49,9 +49,10 @@ test('wake greeting finishes before the microphone opens and can be dismissed', 
     const c = Object.create(AskController.prototype);
     Object.assign(c, { state: 'idle', wake: { disarm: () => calls.push('disarm'), refresh() {}, canListen: () => false },
       store: { get: k => k === 'settings.speakReplies' ? true : {} },
+      ensureWindow() {}, ready: Promise.resolve(), reveal: () => calls.push('show'),
       speaker: { speak: async text => { calls.push(text); if (dismissed) c.state = 'idle'; } },
       listen: async () => calls.push('listen') });
     await c.wakeTriggered();
-    assert.deepEqual(calls, dismissed ? ['disarm', 'Yes, Sir.'] : ['disarm', 'Yes, Sir.', 'listen']);
+    assert.deepEqual(calls, dismissed ? ['disarm', 'show', 'Yes, Sir.'] : ['disarm', 'show', 'Yes, Sir.', 'listen']);
   }
 });
