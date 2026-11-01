@@ -741,6 +741,12 @@ const PAGES = {
         row.onclick = (e) => e.target.dataset.v && relay.set('settings.assistantVisual', e.target.dataset.v);
         return row;
       })(),
+      (() => {
+        const selected = S.settings.reactorIdlePosition === 'corner' ? 'corner' : 'center';
+        const row = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Idle reactor position</div><div class="seg">${[['center', 'Center'], ['corner', 'Corner']].map(([v, l]) => `<button data-v="${v}" class="${selected === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Press Option-I to show or hide the idle reactor.</div></div>`);
+        row.onclick = (e) => e.target.dataset.v && relay.set('settings.reactorIdlePosition', e.target.dataset.v);
+        return row;
+      })(),
       toggleRow('JARVIS screen border', 'Show a cyan frame at the screen edge while the Jarvis assistant is active.', 'settings.assistantBorder'),
       toggleRow('Blur behind JARVIS', 'Blur the desktop behind the Jarvis assistant while it is active. Uses macOS visual effects.', 'settings.assistantBlur'),
       (() => {

@@ -503,7 +503,7 @@ class AskController {
     if (name === 'reactorIdle' && kind === 'press') {
       if (this.state !== 'idle') return;
       this.reactorIdle = !this.reactorIdle;
-      this.overlay.hud(this.reactorIdle ? { state: 'reactor-idle' } : { hide: true });
+      this.overlay.hud(this.reactorIdle ? { state: 'reactor-idle', idlePosition: this.store.get('settings.reactorIdlePosition') === 'corner' ? 'corner' : 'center' } : { hide: true });
       return;
     }
     if (name === 'mark') {

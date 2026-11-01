@@ -44,6 +44,7 @@ const DEFAULTS = {
     voices: { quiet: { volume: 0.55 }, reading: {} }, // how confirmations and long answers sound (see voiceProfile.js)
     assistantName: 'J.A.R.V.I.S', // the name shown in the middle of the reactor
     assistantVisual: 'reactor', // reactor | orb
+    reactorIdlePosition: 'center', // center | corner
     assistantBorder: true, // show a screen-edge frame with the Jarvis HUD
     assistantBlur: false, // optional macOS vibrancy behind the active assistant
     hfTokenEnc: '', // an optional free Hugging Face token: more free GPU time for the better 3D generators (TRELLIS)
