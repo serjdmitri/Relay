@@ -23,7 +23,7 @@ function drawHudBorder(m = borderGeometry) {
   borderGeometry = m;
   const w = innerWidth, h = innerHeight;
   const valid = r => r && [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0;
-  const top = [...(m.notches || []), ...(m.tuckr || [])].filter(r => valid(r) && r.y <= 2 && r.y + r.height > 0 && r.x < w && r.x + r.width > 0)
+  const top = [...(m.notches || [])].filter(r => valid(r) && r.y <= 2 && r.y + r.height > 0 && r.x < w && r.x + r.width > 0)
     .map(r => ({ a: Math.max(1, r.x), b: Math.min(w - 1, r.x + r.width), depth: Math.min(h - 1, r.y + r.height) })).sort((a, b) => a.a - b.a);
   const merged = [];
   for (const r of top) { const p = merged[merged.length - 1]; if (p && r.a <= p.b) { p.b = Math.max(p.b, r.b); p.depth = Math.max(p.depth, r.depth); } else merged.push(r); }
@@ -40,10 +40,6 @@ function drawHudBorder(m = borderGeometry) {
     d += ` V${b} H${right - c} Q${right} ${b} ${right} ${b - c} V${a + c} Q${right} ${a} ${right - c} ${a} H1`;
   }
   d += ' V1';
-  for (const r of m.tuckr || []) if (valid(r) && r.y > 2 && r.x < w && r.y < h && r.x + r.width > 0 && r.y + r.height > 0) {
-    const x = Math.max(1, r.x), y = Math.max(1, r.y), right = Math.min(w - 1, r.x + r.width), bottom = Math.min(h - 1, r.y + r.height);
-    d += ` M${x} ${y} H${right} V${bottom} H${x} Z`;
-  }
   document.querySelectorAll('#hudborder path').forEach(p => p.setAttribute('d', d));
 }
 addEventListener('resize', () => drawHudBorder());

@@ -40,7 +40,7 @@ test('a follow-up containing a request is not mistaken for a bare no', () => {
   const { followUpAnswer, spokenReply } = require('../src/main/conversation');
   assert.equal(followUpAnswer('No, open Notes'), null);
   assert.equal(followUpAnswer('no thank you'), 'no');
-  assert.equal(spokenReply('Opened Notes.', true), 'Opened Notes, Sir. Anything else, Sir?');
+  assert.equal(spokenReply('Opened Notes.', true), 'I have opened Notes for you, Sir. Anything else, Sir?');
 });
 
 test('wake greeting finishes before the microphone opens and can be dismissed', async () => {
