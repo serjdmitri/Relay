@@ -25,7 +25,7 @@ class AssistPanel {
       webPreferences: { preload: this.preload, contextIsolation: true }
     });
     this.win.setIgnoreMouseEvents(true); // clicks go to what is behind it
-    this.win.setAlwaysOnTop(true, 'screen-saver');
+    this.win.setAlwaysOnTop(true, 'screen-saver', 1);
     this.win.setHiddenInMissionControl?.(true);
     this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.protect();

@@ -18,6 +18,7 @@ const hashOf = (spec) => crypto.createHash('sha256').update(JSON.stringify([spec
 // A request for a panel, cleaned up. Returns { ok, spec } or { ok: false, error }.
 function normalize(raw, { plugins = [] } = {}) {
   const title = String(raw?.title || 'Panel').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Panel';
+  if (raw?.builtin === 'calculator') return { ok: true, spec: { kind: 'custom', builtin: 'calculator', title: 'Calculator', sources: [], hosts: [], html: require('./calculator').HTML } };
   const plugin = String(raw?.plugin || '');
   if (plugin) { // "plugin:name:panelid"
     const [, name, id] = plugin.match(/^plugin:([a-z0-9-]+):([a-z0-9_]+)$/) || [];
@@ -63,13 +64,15 @@ class PanelHub {
 
   list() { return [...this.panels.values()].map((p) => ({ id: p.id, title: p.spec.title, kind: p.spec.kind })); }
 
-  // Opens a panel. Returns { ok, id } or { ok: false, error }. A model-built panel needs your approval the first time (and again if it changes).
+  // Offline panels open directly. New network access requires approval.
   async show(raw) {
     const n = normalize(raw, { plugins: this.getPlugins() });
     if (!n.ok) return n;
+    const existing = n.spec.builtin && [...this.panels.values()].find(p => p.spec.builtin === n.spec.builtin);
+    if (existing) { existing.win.reveal?.(); return { ok: true, id: existing.id }; }
     if (this.panels.size >= MAX_PANELS) return { ok: false, error: `${MAX_PANELS} panels are already open. Close one first.` };
     const spec = n.spec;
-    if (spec.kind === 'custom' && !this.approved(hashOf(spec))) {
+    if (spec.kind === 'custom' && spec.hosts.length && !this.approved(hashOf(spec))) {
       if (!(await this.ask(approvalText(spec), spec))) return { ok: false, error: 'You did not approve the panel.' };
       this.remember(hashOf(spec));
     }
@@ -116,7 +119,7 @@ class PanelHub {
 function parsePanelCommand(text) {
   const t = String(text || '').trim().replace(/[“”"]/g, '').replace(/[.!?]+$/, '').replace(/^(?:hey |ok |okay )?(?:relay|jarvis)[, ]+/i, '').replace(/^please /i, '');
   if (/^(?:close|hide|dismiss|remove|get rid of) (?:the |all |my |these |those )?(?:live )?panels?$/i.test(t)) return { type: 'close' };
-  if (/^(?:show|open|give|put up|bring up) (?:me )?(?:a |the |my )?(?:calculator|calc)(?: panel)?$/i.test(t)) return { type: 'calculator' };
+  if (/^(?:(?:show|open|give|make|create|put up|bring up) (?:me )?)?(?:a |the |my )?(?:calculator|calc)(?: (?:panel|menu|card))?$/i.test(t)) return { type: 'calculator' };
   const m = t.match(/^(?:show|open|give|put up|bring up) (?:me )?(?:a |the |my )?(.+?)(?: panel| stats| monitor)?$/i);
   if (!m || !/\b(?:panel|stats|monitor)\b|^(?:cpu|memory|battery|network|disk)\b/i.test(t)) return null;
   const w = m[1].toLowerCase();

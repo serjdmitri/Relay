@@ -1,6 +1,6 @@
 // A self-contained, offline calculator for a Relay panel. No evaluation of code or external access.
 const HTML = `
-<style>body{font:16px -apple-system;color:#e8f9ff;margin:0}#out{width:100%;box-sizing:border-box;background:#07121b;color:white;border:1px solid #386273;border-radius:7px;text-align:right;font-size:22px;padding:8px;margin-bottom:7px}#keys{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}button{border:1px solid #315a6a;background:#132a38;color:white;border-radius:6px;font-size:16px;padding:8px;cursor:pointer}button:hover{background:#214455}</style>
+<style>body{font:16px -apple-system;color:#e8f9ff;margin:0}#out{width:100%;box-sizing:border-box;background:#07121b;color:white;border:1px solid #386273;border-radius:7px;text-align:right;font-size:22px;padding:8px;margin-bottom:7px}#keys{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}button{border:1px solid #315a6a;background:#132a38;color:white;border-radius:6px;font-size:16px;padding:8px;cursor:pointer}button:hover{background:#214455}button:last-child{grid-column:1/-1}button:focus-visible{outline:2px solid #6fd3ff;outline-offset:1px}</style>
 <input id="out" aria-label="Calculator display" value="0" readonly><div id="keys"></div>
 <script>
 let current='0', saved=null, op=null, fresh=false; const out=document.getElementById('out');

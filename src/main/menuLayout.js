@@ -5,7 +5,10 @@ function arrangeMenus(windows) {
   const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const cols = Math.min(wins.length, Math.max(1, Math.floor(wa.width / 360)));
   const rows = Math.ceil(wins.length / cols), width = Math.min(860, Math.floor((wa.width - 20) / cols)), height = Math.min(720, Math.floor((wa.height - 20) / rows));
-  wins.forEach((w, i) => w.setBounds({ x: wa.x + 10 + i % cols * width, y: wa.y + 10 + Math.floor(i / cols) * height, width: Math.max(320, width - 8), height: Math.max(220, height - 8) }));
+  wins.forEach((w, i) => {
+    const size = w.getBounds(), min = w.getMinimumSize?.() || [220, 140];
+    w.setBounds({ x: wa.x + 10 + i % cols * width, y: wa.y + 10 + Math.floor(i / cols) * height, width: Math.max(min[0], Math.min(size.width, width - 8)), height: Math.max(min[1], Math.min(size.height, height - 8)) });
+  });
 }
 function menusOverlap(windows) {
   const boxes = windows.filter(w => w && !w.isDestroyed() && w.isVisible()).map(w => w.getBounds());

@@ -1997,7 +1997,7 @@ class AskController {
           if (pc) return this.finish(entry, await this.securityCheck(pc));
           const panelCommand = this.panelHub && parsePanelCommand(effective);
           if (panelCommand?.type === 'calculator') {
-            const r = await this.panelHub.show({ title: 'Calculator', html: require('./panels/calculator').HTML });
+            const r = await this.panelHub.show({ builtin: 'calculator' });
             return this.finish(entry, { status: r.ok ? 'done' : 'failed', reply: r.ok ? 'Here is the calculator.' : r.error });
           }
           if (this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels')) {
