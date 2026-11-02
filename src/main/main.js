@@ -67,7 +67,7 @@ const { ModelCache } = require('./models/cache');
 const { RemoteService } = require('./remote/service');
 const { NotionApi } = require('./connectors/notion');
 const { McpRemote } = require('./connectors/mcp');
-const { connectAccount: connectGoogle } = require('./connectors/google');
+const { registerGoogleConnections, publicGoogle } = require('./connectors/googleConnection');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand, missedMessage, acknowledgeUnknown, recordScheduledOutcome } = require('./schedule');
 const perms = require('./permissions');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
@@ -152,7 +152,7 @@ function publicState() {
   const hasHfToken = !!decryptKey(d.settings.hfTokenEnc);
   delete d.settings.hfTokenEnc;
   const cn = d.settings.connectors || {};
-  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { clientId: cn.google?.clientId || '', hasSecret: !!decryptKey(cn.google?.clientSecretEnc), accounts: (cn.google?.accounts || []).map((a) => a.email) }, apps: { connected: !!(cn.apps?.url && decryptKey(cn.apps?.keyEnc)), url: cn.apps?.url ? (() => { try { return new URL(cn.apps.url).host; } catch { return ''; } })() : '', count: cn.apps?.count || 0, headerName: cn.apps?.headerName || 'x-api-key' } };
+  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { ...publicGoogle(cn.google), hasSecret: !!decryptKey(cn.google?.clientSecretEnc) }, apps: { connected: !!(cn.apps?.url && decryptKey(cn.apps?.keyEnc)), url: cn.apps?.url ? (() => { try { return new URL(cn.apps.url).host; } catch { return ''; } })() : '', count: cn.apps?.count || 0, headerName: cn.apps?.headerName || 'x-api-key' } };
   delete d.settings.connectors;
   const hasKeys = {};
   for (const [id, s] of Object.entries(d.settings.model.presets)) {
@@ -861,33 +861,7 @@ function registerIpc() {
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
-  ipcMain.handle('connectors:google:client', (_e, clientId, secret) => {
-    const encrypted = String(secret || '').trim() ? encryptKey(String(secret).trim()) : null;
-    store.set('settings.connectors.google.clientId', String(clientId || '').trim());
-    if (encrypted) store.set('settings.connectors.google.clientSecretEnc', encrypted);
-    broadcast();
-  });
-  ipcMain.handle('connectors:google:connect', async () => {
-    const g = store.get('settings.connectors.google');
-    const secret = decryptKey(g.clientSecretEnc);
-    if (!g.clientId || !secret) return { ok: false, error: 'Save the client ID and secret first.' };
-    try {
-      const r = await connectGoogle({ clientId: g.clientId, clientSecret: secret, openUrl: (u) => shell.openExternal(u) });
-      const rest = (store.get('settings.connectors.google.accounts') || []).filter((a) => a.email.toLowerCase() !== r.email.toLowerCase());
-      store.set('settings.connectors.google.accounts', [...rest, { email: r.email, refreshEnc: encryptKey(r.refreshToken) }]);
-      ask.googleApi = null;
-      broadcast();
-      return { ok: true, email: r.email };
-    } catch (e) { return { ok: false, error: e.message }; }
-  });
-  ipcMain.handle('connectors:google:remove', async (_e, email) => {
-    const list = store.get('settings.connectors.google.accounts') || [];
-    const hit = list.find((a) => a.email === email);
-    store.set('settings.connectors.google.accounts', list.filter((a) => a.email !== email));
-    ask.googleApi = null;
-    if (hit) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decryptKey(hit.refreshEnc))}`, { method: 'POST' }).catch(() => {}); // best effort: take Relay's access away at Google too
-    broadcast();
-  });
+  registerGoogleConnections({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
   // Relay Remote: the phone page, served by Relay on this Mac.
   ipcMain.handle('remote:set', async (_e, patch) => {
     for (const [k, v] of Object.entries(patch || {})) if (['enabled', 'lan'].includes(k)) store.set(`settings.remote.${k}`, !!v);

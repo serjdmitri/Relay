@@ -561,28 +561,7 @@ const PAGES = {
     }
     c.append(n);
 
-    // Google
-    c.append(h('<div class="section-title">Gmail, Google Calendar, Drive and Sheets</div>'));
-    const g = h('<div class="card" style="padding:14px"></div>');
-    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">Relay connects directly to Google using your own OAuth app. Information retrieved for a request may also be sent to your selected AI provider. One time: in console.cloud.google.com make a project, turn on the Gmail, Google Calendar, Google Drive and Google Sheets APIs (accounts connected before Drive and Sheets were added need to be removed and connected again), set up the OAuth consent screen (External, add yourself as a test user), then create an OAuth client of type Desktop app. Paste its client ID and secret here, then connect each Google account you want.</div>'));
-    g.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">If your external OAuth app remains in Testing, Google may expire its access after seven days; reconnect the account if it stops working. School or work accounts may also require administrator approval.</div>'));
-    const cr = h(`<div class="field-row" style="margin-bottom:10px"><input class="field" id="gid" placeholder="Client ID" value="${esc(C.google.clientId || '')}"><input class="field" id="gsec" type="password" placeholder="${C.google.hasSecret ? 'Client secret saved (paste to replace)' : 'Client secret'}"><button class="btn" id="gsave" style="height:28px">Save</button></div>`);
-    $('#gsave', cr).onclick = () => relay.setGoogleClient($('#gid', cr).value, $('#gsec', cr).value).then(() => { $('#gsec', cr).value = ''; }).catch(() => alert('Could not save credentials. Check that macOS secure storage is available and try again.'));
-    g.append(cr);
-    for (const email of C.google.accounts) {
-      const row = h(`<div class="row" style="padding:6px 0;min-height:36px"><div class="grow"><div class="t">${esc(email)}</div><div class="d">Gmail, Calendar, Drive and Sheets connected</div></div><button class="btn" data-rm="${esc(email)}">Remove</button></div>`);
-      row.onclick = (e) => e.target.dataset.rm && confirm(`Remove ${email}?`) && relay.removeGoogle(email);
-      g.append(row);
-    }
-    const add = h(`<div style="margin-top:8px"><button class="btn primary" id="gconn" ${C.google.clientId && C.google.hasSecret ? '' : 'disabled'}>${C.google.accounts.length ? 'Connect another account' : 'Connect a Google account'}</button> <span class="note" id="gstat" style="margin-left:8px"></span></div>`);
-    $('#gconn', add).onclick = async () => {
-      $('#gstat', add).textContent = 'Waiting for Google in your browser…';
-      const r = await relay.connectGoogle();
-      $('#gstat', add).textContent = r.ok ? `Connected ${r.email}` : '';
-      if (!r.ok) alert(r.error);
-    };
-    g.append(add);
-    c.append(g);
+    renderGoogleConnections(c, C.google);
 
     // Composio (or any MCP server)
     c.append(h('<div class="section-title">All your other apps (Composio)</div>'));

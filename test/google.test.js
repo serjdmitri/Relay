@@ -49,8 +49,8 @@ test('the whole sign-in works against a pretend browser and a pretend Google', a
   assert.deepEqual(r, { email: 'new@gmail.com', refreshToken: 'rt' });
 });
 
-test('a wrong state is refused', async () => {
-  await assert.rejects(connectAccount({ clientId: 'c', clientSecret: 's', fetchImpl: async () => json({}), openUrl: async (u) => { const q = new URL(u).searchParams; await new Promise((res) => http.get(`${q.get('redirect_uri')}?code=x&state=WRONG`, (r) => { r.resume(); r.on('end', res); })); } }), /did not match/);
+test('a wrong state cannot complete sign-in and eventually times out', async () => {
+  await assert.rejects(connectAccount({ clientId: 'c', clientSecret: 's', timeoutMs:30, fetchImpl: async () => json({}), openUrl: async (u) => { const q = new URL(u).searchParams; await new Promise((res) => http.get(`${q.get('redirect_uri')}?code=x&state=WRONG`, (r) => { r.resume(); r.on('end', res); })); } }), /timed out/);
 });
 
 test('Gmail search lists headers, read decodes the body, and the token is reused', async () => {
