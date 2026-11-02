@@ -1284,6 +1284,33 @@ const PAGES = {
         const select = row.querySelector('select'); select.value = r.mode; select.disabled = !r.readable;
         select.onchange = async () => { const result = await relay.fileRootMode(r.id, select.value); if (result.error) select.value = r.mode; showAccess(result); };
         row.querySelector('[data-remove]').onclick = async () => showAccess(await relay.removeFileRoot(r.id));
+        const tools = h('<div style="margin-top:10px"><button class="btn" data-preview>Preview organization</button><div data-plan></div><div data-history></div><div class="d" role="status" data-result></div></div>');
+        const report = result => { tools.querySelector('[data-result]').textContent = result.error || `${result.done?.length ?? result.count ?? 0} files moved. ${result.failed?.length || 0} left in place.` + (result.failed?.length ? ' ' + result.failed.map(x => `${x.path}: ${x.reason}`).join(' · ') : ''); };
+        const history = async () => {
+          const target = tools.querySelector('[data-history]'); target.replaceChildren();
+          const entries = await relay.fileHistory(r.id);
+          if (entries.error) return report(entries);
+          for (const entry of entries.slice().reverse()) {
+            const undo = h(`<button class="btn" style="margin-top:8px">Undo ${entry.count} moves · ${esc(new Date(entry.createdAt).toLocaleString())}</button>`);
+            undo.onclick = async () => { undo.disabled = true; report(await relay.undoFiles(entry.id)); await history(); }; target.append(undo);
+          }
+        };
+        const preview = tools.querySelector('[data-preview]'); preview.disabled = r.mode !== 'organize' || !r.writable;
+        preview.onclick = async () => {
+          preview.disabled = true;
+          try {
+            const plan = await relay.previewFiles(r.id); const target = tools.querySelector('[data-plan]'); target.replaceChildren();
+            if (plan.error) return report(plan);
+            target.append(h(`<div class="d" style="margin-top:10px">${plan.moves.length} proposed moves into Organized. Recent files, folders, unknown types and downloads in progress stay in place. ${plan.left} files left alone; ${plan.skipped.length} skipped. Nothing has moved.</div>`));
+            const paths = h('<pre style="max-height:220px;overflow:auto;white-space:pre-wrap;font-size:12px"></pre>');
+            paths.textContent = plan.moves.map(m => `${m.from} → ${m.to}`).concat(plan.skipped.map(m => `Skipped ${m.path}: ${m.reason}`)).join('\n'); target.append(paths);
+            if (plan.moves.length) {
+              const apply = h('<button class="btn primary">Apply these moves</button>');
+              apply.onclick = async () => { apply.disabled = true; report(await relay.applyFiles(plan.id)); target.replaceChildren(); await history(); }; target.append(apply);
+            }
+          } finally { preview.disabled = false; }
+        };
+        row.append(tools); history().catch(e => report({ error: e.message }));
         list.append(row);
       }
       files.querySelector('[data-volumes]').textContent = 'Mounted drives: ' + (data.volumes.map(v => v.name).join(', ') || 'none found') + '. Choose a folder to grant this workspace access; listing a drive grants nothing.';

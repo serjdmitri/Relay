@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const { Store } = require('./store');
 const { DriveAccess } = require('./drive/access');
+const { FileWorkspace } = require('./drive/workspace');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
@@ -362,10 +363,15 @@ async function welcomeBack(lockedAt, lastWelcome) {
 
 function registerIpc() {
   const access = new DriveAccess({ store, home: os.homedir() });
+  const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
   const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
     if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use file access controls.' };
     try { return await run(...args); } catch (err) { return { error: err.message }; }
   });
+  filesIpc('files:preview', id => workspace.preview(id));
+  filesIpc('files:apply', id => workspace.apply(id));
+  filesIpc('files:undo', id => workspace.undo(id));
+  filesIpc('files:history', id => workspace.history(id));
   filesIpc('files:access', () => access.status());
   filesIpc('files:choose', async () => {
     const r = await dialog.showOpenDialog(mainWin, { title: 'Choose a folder for the file workspace', properties: ['openDirectory'] });
