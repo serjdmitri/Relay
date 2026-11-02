@@ -38,7 +38,7 @@ const { OmniVoice } = require('./tts/omnivoice');
 const { Timers, humanDuration } = require('./timers');
 const { Glass } = require('./glass');
 const { RecentPanel } = require('./recent');
-const { CardPanel } = require('./cards/panel');
+const { CardPanel } = require('./cards/manager');
 const { HoloManager } = require('./holo/manager');
 const { Drive } = require('./drive');
 const { HandControl } = require('./hands/control');
@@ -810,10 +810,11 @@ function registerIpc() {
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
   ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
   ipcMain.handle('hands:status', (_e, st) => { hands?.setStatus(st); });
-  ipcMain.handle('card:close', () => cardPanel?.hide());
-  ipcMain.handle('card:open', (_e, url) => cardPanel?.open(url));
-  ipcMain.handle('card:size', (_e, h) => cardPanel?.setSize(h));
-  ipcMain.handle('card:hover', (_e, on) => cardPanel?.setHover(on));
+  ipcMain.handle('card:close', (e) => cardPanel?.forSender(e.sender)?.hide());
+  ipcMain.handle('card:action', (e, action) => cardPanel?.action(e.sender, action));
+  ipcMain.handle('card:open', (e, url) => cardPanel?.forSender(e.sender)?.open(url));
+  ipcMain.handle('card:size', (e, h) => cardPanel?.forSender(e.sender)?.setSize(h));
+  ipcMain.handle('card:hover', (e, on) => cardPanel?.forSender(e.sender)?.setHover(on));
   ipcMain.handle('memory:add', (_e, text) => {
     const r = ask.rememberFact(String(text || ''));
     broadcast();
@@ -930,7 +931,8 @@ app.whenReady().then(() => {
   overlay.watchDisplays();
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();
-  cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false });
+  cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false, getLayouts: () => store.get('menuLayouts') || {}, saveLayouts: layouts => store.set('menuLayouts', layouts) });
+  cardPanel.onRefresh = (card, units) => require('./forecast').forecast(card.location, { units, signal: AbortSignal.timeout(10000) });
   cardPanel.onDismiss = (card) => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); };
   assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
   holos = new HoloManager({
@@ -1147,7 +1149,15 @@ app.whenReady().then(() => {
   pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, sandbox: false });
   ask.plugins = pluginMgr;
   // Live panels
-  panelWins = new PanelWindows({ preload: path.join(__dirname, 'preload.js') });
+  const arrangeOpenMenus = (onlyIfOverlapping = false) => {
+    for (const e of cardPanel.live()) e.manualSize = e.manualMove = true;
+    const layout = require('./menuLayout'), windows = [...cardPanel.live().map(e => e.win), ...panelWins.windows.values()];
+    if (!onlyIfOverlapping || layout.menusOverlap(windows)) layout.arrangeMenus(windows);
+  };
+  panelWins = new PanelWindows({ preload: path.join(__dirname, 'preload.js'), getLayouts: () => store.get('panelWindowLayouts') || {}, saveLayouts: layouts => store.set('panelWindowLayouts', layouts), onArrange: arrangeOpenMenus });
+  cardPanel.onArrange = arrangeOpenMenus;
+  panelWins.onRefresh = id => { const p = panelHub?.panels.get(id); if (p) return panelHub.tick(p); };
+  ask.onResetMenus = () => { store.set('panelWindowLayouts', {}); arrangeOpenMenus(); };
   let batteryNow = { present: false };
   let dashboardCalendar = { events: [], checked: false, updated: 0 }, dashboardBusy = false;
   const dashboard = () => {

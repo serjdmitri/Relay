@@ -70,3 +70,5 @@ relay.onPanel((pid, data) => {
   } else draw(data);
 });
 document.getElementById('x').onclick = () => relay.panelClose(id);
+
+document.getElementById('refresh').onclick = () => relay.panelRefresh(id);

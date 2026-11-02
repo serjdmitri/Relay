@@ -751,6 +751,12 @@ const PAGES = {
       toggleRow('JARVIS screen border', 'Show a cyan frame at the screen edge while the Jarvis assistant is active.', 'settings.assistantBorder'),
       toggleRow('Blur behind JARVIS', 'Blur the desktop behind the Jarvis assistant while it is active. Uses macOS visual effects.', 'settings.assistantBlur'),
       (() => {
+        const value = Math.round((S.settings.menuOpacity ?? .88) * 100);
+        const row = h(`<div class="row"><div class="grow"><div class="t">Menu background opacity</div><div class="d">Lower values show more of the desktop behind menus.</div></div><input aria-label="Menu background opacity" type="range" min="55" max="100" value="${value}"><span>${value}%</span></div>`);
+        const slider = $('input', row); slider.oninput = () => { $('span', row).textContent = `${slider.value}%`; }; slider.onchange = () => relay.set('settings.menuOpacity', Number(slider.value) / 100);
+        return row;
+      })(),
+      (() => {
         const hwc = S.settings.homework || {};
         const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Homework helper</div><div class="d">Select an assignment (or open it on screen) and say “outline this essay”, “walk me through this problem”, “give me a template for this assignment”, “check my answer”, “give me feedback on my essay” or “do this assignment”. Results are saved in Documents/Relay Homework as a Word file or PDF, and code as a folder. Use it only where your teacher allows AI help, and use what it makes to learn, not just to hand in. Say “use this as my writing sample” with some of your own writing selected so drafts sound like you.</div></div>
           <div style="flex-basis:100%;display:flex;gap:8px;margin-top:8px;align-items:center"><span class="d" style="margin:0">Save as</span><div class="select" style="margin:0"><span id="hwfname"></span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="hwfmt"><option value="docx">Word</option><option value="pdf">PDF</option><option value="md">Plain text</option></select></div></div>

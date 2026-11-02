@@ -23,7 +23,7 @@ class CardPanel {
     this.win = new BrowserWindow({
       width: WIDTH, height: 400, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
       resizable: true, minWidth: 320, minHeight: 220, movable: true, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
-      webPreferences: { preload: this.preload, contextIsolation: true }
+      webPreferences: { preload: this.preload, contextIsolation: true, backgroundThrottling: false }
     });
     this.win.setAlwaysOnTop(true, 'screen-saver', -1);
     this.win.on('will-resize', () => { this.manualSize = true; });
@@ -71,7 +71,7 @@ class CardPanel {
 
   arm() {
     clearTimeout(this.timer);
-    if (this.card?.hold) return; // a plan waiting for a yes stays until it is answered
+    if (this.card?.hold || this.pinned) return; // a plan waiting for a yes stays until it is answered
     this.timer = setTimeout(() => this.hide(), this.getHold() ? 10 * 60 * 1000 : SHOW_MS);
   }
 
@@ -79,7 +79,7 @@ class CardPanel {
     clearTimeout(this.timer);
     if (!this.win || this.win.isDestroyed() || !this.win.isVisible()) return;
     this.win.webContents.send('card:state', 'hide');
-    setTimeout(() => { if (this.win && !this.win.isDestroyed() && !this.card?.live) this.win.hide(); }, 520);
+    setTimeout(() => { if (this.win && !this.win.isDestroyed()) this.win.destroy(); }, 520);
     const dismissed = this.card;
     this.card = null;
     if (dismissed) this.onDismiss?.(dismissed);
