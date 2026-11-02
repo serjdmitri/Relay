@@ -598,13 +598,14 @@ function registerIpc() {
     })() : { ollama: null, modelInstalled: null };
     const free = await new Promise((res) => execFile('/bin/df', ['-m', app.getPath('userData')], { timeout: 2000 }, (e, out) => res(e ? null : doctor.parseFreeMb(out))));
     const firewall = await new Promise((res) => execFile('/usr/libexec/ApplicationFirewall/socketfilterfw', ['--getglobalstate'], { timeout: 2000 }, (e, out) => res(e ? null : doctor.parseFirewall(out))));
+    const filevault = await new Promise((res) => execFile('/usr/bin/fdesetup', ['status'], { timeout: 2000 }, (e, out) => res(e ? 'unknown' : doctor.parseFileVault(out))));
     return {
       claude: () => claudeState, codex: () => ask.codexInfo ? { ...ask.codexInfo, checked: true } : { checked: false },
       failoverOn: () => store.get('settings.failover.codex') !== false,
       perms: () => perms.status(), signing: () => st, remote: () => remote?.info(),
       handsEnabled: () => !!store.get('settings.hands.enabled'), presenceEnabled: () => !!store.get('settings.presence.enabled'), browser: () => ({ connected: bridge.isConnected() }),
       hotkeys: () => ({ running: hotkeys.running, error: hotkeys.error }), speech: () => ({ available: speech.available, voiceProblem }),
-      storeInfo: () => ({ freeMb: free }), firewall: () => firewall,
+      storeInfo: () => ({ freeMb: free }), firewall: () => firewall, filevault: () => filevault,
       recentErrors: () => store.get('actions').filter((a) => a.ok === false && Date.now() - a.ts < 86400e3).map((a) => ({ tool: a.tool, error: typeof a.result === 'string' ? a.result : '' })),
       toolMisses: () => ({ on: flagsMod.isOn(store.get('settings'), 'toolCategories'), recent: (store.get('toolMisses') || []).filter((x) => Date.now() - x.ts < 86400e3) }),
       offline: () => ({ on: offlineOn, online: connectivity ? connectivity.online : null, ...ollamaStatus }),
