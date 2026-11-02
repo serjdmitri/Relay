@@ -9,7 +9,7 @@
 @media (prefers-reduced-transparency: reduce) { :root { --menu-blue: #071f35; --menu-glow: #0c436a; } }
 
 .menu-toolbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; background: var(--menu-blue); border-top: 1px solid #42bcdf66; -webkit-app-region: no-drag; }
-.menu-toolbar button { color: #e6f7ff; background: #134f72; border: 1px solid #53bad7; padding: 5px 9px; border-radius: 2px; cursor: pointer; font: inherit; }
-.menu-toolbar button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+.menu-toolbar button, #refresh { color: #e6f7ff; background: #134f72; border: 1px solid #53bad7; padding: 5px 9px; border-radius: 2px; cursor: pointer; font: inherit; }
+.menu-toolbar button:focus-visible, #refresh:focus-visible { outline: 2px solid white; outline-offset: 2px; }
 .menu-toolbar button:disabled { opacity: .6; cursor: wait; }
 .menu-status { color: #ffda9e; font-size: 11px; }

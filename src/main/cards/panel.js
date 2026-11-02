@@ -25,7 +25,7 @@ class CardPanel {
       resizable: true, minWidth: 320, minHeight: 220, movable: true, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
       webPreferences: { preload: this.preload, contextIsolation: true, backgroundThrottling: false }
     });
-    this.win.setAlwaysOnTop(true, 'screen-saver', -1);
+    this.win.setAlwaysOnTop(true, 'screen-saver', 1);
     this.win.on('will-resize', () => { this.manualSize = true; });
     this.win.on('will-move', () => { this.manualMove = true; });
     this.win.setHiddenInMissionControl?.(true);

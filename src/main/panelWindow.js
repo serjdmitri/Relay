@@ -35,14 +35,14 @@ class PanelWindows {
   open({ id, spec }) {
     this.specs.set(id, spec);
     const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-    const n = this.specs.size - 1;
+    const n = this.specs.size - 1, initialHeight = spec.builtin === 'calculator' ? 370 : H;
     const w = new BrowserWindow({
-      x: wa.x + wa.width - W - 24, y: wa.y + wa.height - (n + 1) * (H + 12) - 12 > wa.y ? wa.y + wa.height - (n + 1) * (H + 12) - 12 : wa.y + 24 + n * 30, width: W, height: H, show: false, frame: false, transparent: true,
+      x: wa.x + wa.width - W - 24, y: wa.y + wa.height - (n + 1) * (H + 12) - 12 > wa.y ? wa.y + wa.height - (n + 1) * (H + 12) - 12 : wa.y + 24 + n * 30, width: W, height: initialHeight, show: false, frame: false, transparent: true,
       backgroundColor: '#00000000', hasShadow: false, resizable: true, minWidth: 220, minHeight: 140, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, type: 'panel',
       webPreferences: { preload: this.preload, contextIsolation: true, sandbox: true }
     });
     this.windows.set(id, w);
-    w.setAlwaysOnTop(true, 'screen-saver', -1);
+    w.setAlwaysOnTop(true, 'screen-saver', 1);
     w.setHiddenInMissionControl?.(true);
     w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -57,7 +57,7 @@ class PanelWindows {
       const saved = this.getLayouts()[key];
       if (saved && ['x','y','width','height'].every(k => Number.isFinite(saved[k]))) {
         const area = screen.getDisplayMatching(saved).workArea;
-        const width = Math.min(area.width, Math.max(220, saved.width)), height = Math.min(area.height, Math.max(140, saved.height));
+        const width = Math.min(area.width, Math.max(220, spec.builtin === 'calculator' ? Math.min(420, saved.width) : saved.width)), height = Math.min(area.height, Math.max(140, spec.builtin === 'calculator' ? Math.min(540, saved.height) : saved.height));
         w.setBounds({ width, height, x: Math.max(area.x, Math.min(saved.x, area.x + area.width - width)), y: Math.max(area.y, Math.min(saved.y, area.y + area.height - height)) });
       }
       w.showInactive(); this.onArrange(!!saved);
@@ -65,7 +65,7 @@ class PanelWindows {
     let onClosed = () => {};
     w.on('closed', () => { this.specs.delete(id); this.closers.delete(id); this.windows.delete(id); onClosed(); });
     this.closers.set(id, () => { if (!w.isDestroyed()) w.close(); });
-    return { send: (data) => { if (!w.isDestroyed()) w.webContents.send('panel:data', id, data); }, close: () => { if (!w.isDestroyed()) w.close(); }, onClosed: (fn) => { onClosed = fn; } };
+    return { reveal: () => { if (!w.isDestroyed()) { w.showInactive(); w.moveTop(); } }, send: (data) => { if (!w.isDestroyed()) w.webContents.send('panel:data', id, data); }, close: () => { if (!w.isDestroyed()) w.close(); }, onClosed: (fn) => { onClosed = fn; } };
   }
 }
 

@@ -33,7 +33,7 @@ class StickyPanel {
         x: at.x, y: at.y, width: W, height: H, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: true, minWidth: 160, minHeight: 120,
         minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, type: 'panel', webPreferences: { preload: this.preload, contextIsolation: true }
       });
-      w.setAlwaysOnTop(true, 'floating');
+      w.setAlwaysOnTop(true, 'screen-saver', 1);
       w.setHiddenInMissionControl?.(true);
       w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       w.loadFile(path.join(__dirname, '../renderer/sticky.html'), { query: { id: s.id } });

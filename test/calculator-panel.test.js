@@ -15,3 +15,10 @@ test('the calculator opens as an isolated panel and computes using buttons', () 
   press('C'); press('9'); press('÷'); press('0'); press('=');
   assert.equal(display.value, 'Error');
 });
+
+test('spoken calculator menu requests use the built-in command', () => {
+  for (const text of ['make a calculator menu', 'create a calculator', 'calculator', 'show me the calculator card', 'Hey Jarvis, open my calc panel']) assert.deepEqual(parsePanelCommand(text), { type: 'calculator' }, text);
+  const spec = normalize({ builtin: 'calculator', html: 'untrusted replacement', hosts: ['example.com'] }).spec;
+  assert.equal(spec.html, HTML);
+  assert.deepEqual(spec.hosts, []);
+});

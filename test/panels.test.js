@@ -140,3 +140,16 @@ test('dashboard is an allowed source and uses its injected local data', async ()
   assert.deepEqual(await sampler.sample('dashboard'), data);
   assert.equal(normalize({ title: 'Dashboard', sources: ['dashboard'] }).ok, true);
 });
+
+test('offline menus open directly, built-in calculator retries reuse one window, and network menus still request access', async () => {
+  let approvals = 0;
+  const {h, opened} = hub({ ask: async () => { approvals++; return false; } });
+  const first = await h.show({builtin:'calculator'});
+  assert.equal(first.ok,true);
+  assert.equal((await h.show({builtin:'calculator'})).id,first.id);
+  assert.equal(opened.length,1);
+  assert.equal((await h.show({html:'<p>Local menu</p>'})).ok,true);
+  assert.equal(approvals,0);
+  assert.equal((await h.show({html:'<p>Network</p>',hosts:['example.com']})).ok,false);
+  assert.equal(approvals,1);
+});
