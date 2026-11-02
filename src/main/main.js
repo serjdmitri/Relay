@@ -373,25 +373,33 @@ function syncInbound() {
 async function welcomeBack(lockedAt, lastWelcome) {
   const cfg = store.get('settings.welcome') || {};
   if (!lockedAt || !welcome.shouldGreet({ enabled: cfg.enabled !== false, awayMs: Date.now() - lockedAt, minAwayMs: (cfg.minAwayMin ?? 5) * 60000, minGapMs: (cfg.repeatMin ?? 10) * 60000, sinceLastMs: Date.now() - lastWelcome, busy: !!ask.meeting?.active })) return false;
-  const [day, battery, briefing] = await Promise.all([
-    Promise.race([ask.mac.calendarEvents(1).then(parseCalendar).catch(() => []), new Promise((r) => setTimeout(() => r([]), 2500))]),
-    new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out))))),
-    ask.briefingText({ includeGreeting: false }).catch(() => '')
-  ]);
-  if (!welcome.canDeliverWelcome({ locked: !!ask.lockWatch?.locked, meeting: !!ask.meeting?.active, state: ask.state })) return false;
-  const w = welcome.buildWelcome({ name: cfg.name || 'Sir', lockedAt, now: Date.now(), history: store.get('history') || [], events: day, battery });
-  const lines = briefing && w.lines[0] === 'Nothing needs your attention.' ? [briefing] : [...w.lines, ...(briefing ? [briefing] : [])];
-  const spoken = briefing ? `${w.spoken.replace(/ Nothing needs your attention\.$/, '')} ${briefing}` : w.spoken;
-  const card = welcome.briefingCard(w, briefing, cfg.name || 'Sir');
-  const showCard = cfg.show !== false && card && !ask.meeting?.active && ['idle', 'done'].includes(ask.state) && !cardPanel?.visible && !ask.lockWatch?.locked;
-  if (cfg.show !== false) {
-    const shown = welcome.showWelcomeReactor(overlay, welcome.greetingFor(Date.now(), cfg.name || 'Sir'), { duration: showCard ? null : 8000 });
-    if (shown && showCard) card.welcomeToken = overlay.hudState.welcomeToken;
-  }
-  if (showCard) cardPanel?.show(card).catch(() => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); });
-  if (cfg.show !== false && Notification.isSupported()) new Notification({ title: welcome.greetingFor(Date.now(), cfg.name || 'Sir'), body: lines.join(' '), silent: true }).show();
-  if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(spoken);
-  return true;
+  const name=cfg.name||'Sir',greeting=welcome.greetingFor(Date.now(),name);
+  const requestStamp=(store.get('history')||[])[0]?.id;
+  let welcomeToken,heldByCard=false;
+  const canDeliver=()=>welcome.canDeliverWelcome({locked:!!ask.lockWatch?.locked,meeting:!!ask.meeting?.active,state:ask.state})&&(store.get('history')||[])[0]?.id===requestStamp&&(!welcomeToken||overlay.hudState?.welcomeToken===welcomeToken);
+  return welcome.deliverInStages({canDeliver,
+    begin:()=>{
+      if(cfg.show!==false){const shown=welcome.showWelcomeReactor(overlay,greeting,{duration:null});if(shown)welcomeToken=overlay.hudState.welcomeToken;}
+      return cfg.speak!==false&&!ask.speaker?.speaking?ask.speakText(greeting,{quick:true}):undefined;
+    },
+    collect:async()=>{
+      let facts;
+      const [battery,briefing]=await Promise.all([
+        new Promise(res=>execFile('/usr/bin/pmset',['-g','batt'],{timeout:1500},(e,out)=>res(e?null:require('./panels/sources').parseBattery(String(out))))),
+        ask.briefingText({includeGreeting:false,onFacts:f=>{facts=f;}}).catch(()=>'')
+      ]);
+      return{day:(facts?.events||[]).filter(e=>e.start).map(e=>({...e,start:+e.start})),battery,briefing,facts};
+    },
+    finish:async({day,battery,briefing,facts})=>{
+      const w=welcome.buildWelcome({name,lockedAt,now:Date.now(),history:store.get('history')||[],events:day,battery});
+      const card=welcome.briefingCard(w,briefing,name,facts||{now:new Date(),missing:['briefing sources']});
+      const showCard=cfg.show!==false&&card&&!cardPanel?.visible;
+      if(showCard){if(welcomeToken)card.welcomeToken=welcomeToken;try{await cardPanel?.show(card);heldByCard=!!cardPanel;}catch{}}
+      const details=[...w.priorities.slice(0,3).map(p=>p.text),briefing].filter(Boolean).join(' ');
+      if(cfg.show!==false&&Notification.isSupported())new Notification({title:greeting,body:(card?.sections||[]).flatMap(s=>s.bullets).slice(0,3).join('\n')||'Your briefing is ready.',silent:true}).show();
+      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())ask.speakText(details);
+    }
+  }).finally(()=>{if(!heldByCard&&welcomeToken&&overlay.hudState?.welcomeToken===welcomeToken)overlay.hud({hide:true});});
 }
 
 function registerIpc() {
@@ -1113,6 +1121,8 @@ app.whenReady().then(() => {
     onProblem: (m) => { voiceProblem = m; broadcast(); }
   });
   speaker.prepare(profileFor('quiet', store.get('settings') || {}));
+  const prepareGreeting=()=>speaker.prepare({...profileFor('reply',store.get('settings')||{}),text:welcome.greetingFor(Date.now(),store.get('settings.welcome.name')||'Sir')});
+  prepareGreeting();
   timers = new Timers({
     store,
     onFire: (t) => {
@@ -1241,7 +1251,7 @@ app.whenReady().then(() => {
   ask.lockWatch = lockWatch;
   let lockedAt = 0;
   let lastWelcome = 0;
-  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); });
+  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     lockWatch.set(false);
     // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
