@@ -64,12 +64,23 @@ class CardPanel {
   async action(sender, action) {
     const e = this.forSender(sender); if (!e) return { ok: false };
     if (action === 'pin') { e.pinned = !e.pinned; e.card.pinned = e.pinned; e.arm(); e.win.webContents.send('card:pin', e.pinned); return { ok: true, pinned: e.pinned }; }
+    if (typeof action === 'string' && /^choice:\d$/.test(action)) {
+      const choice = e.card.choices?.[Number(action.slice(7))];
+      if (!choice || e.refreshing) return {ok:false};
+      e.refreshing = true;
+      try {
+        const data = await this.onRefresh?.({location:choice.place,units:e.card.units},e.card.units);
+        if (!data?.days || !e.card || e.win.isDestroyed()) return {ok:false,error:'That location could not be loaded. Try again.'};
+        e.card = {kind:'weather',hold:true,pinned:e.pinned,...data};e.win.webContents.send('card:state','show',e.card);return {ok:true};
+      } catch { return {ok:false,error:'Could not load this forecast. Try again.'}; }
+      finally {e.refreshing=false;}
+    }
     if (!['refresh', 'units'].includes(action) || e.card.kind !== 'weather' || e.refreshing) return { ok: false };
     e.refreshing = true;
     try {
       const data = await this.onRefresh?.(e.card, action === 'units' ? (e.card.units === 'c' ? 'f' : 'c') : e.card.units);
-      if (!data || data.needsCity || !e.card || e.win.isDestroyed()) return { ok: false, error: 'The forecast could not be refreshed.' };
-      e.card = { ...e.card, ...data }; e.win.webContents.send('card:state', 'show', e.card); return { ok: true };
+      if (!data || data.needsCity || data.needsChoice || !e.card || e.win.isDestroyed()) return { ok: false, error: 'The forecast could not be refreshed.' };
+      e.card = { ...e.card, ...data }; if (action === 'units') this.onUnitsChange?.(data.units); e.win.webContents.send('card:state', 'show', e.card); return { ok: true };
     } catch { return { ok: false, error: 'Could not refresh. The previous forecast is still shown.' }; }
     finally { e.refreshing = false; }
   }

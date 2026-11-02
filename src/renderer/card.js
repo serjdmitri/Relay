@@ -138,10 +138,12 @@ function menuToolbar(card) {
   const button = (label, action) => { const b = mk('button', '', label); b.onclick = async () => { b.disabled = true; status.textContent = ''; try { const result = await relay.cardAction(action); if (!result?.ok) status.textContent = result?.error || 'Unavailable'; } catch { status.textContent = 'Could not update this menu.'; } finally { b.disabled = false; } }; bar.append(b); return b; };
   pin.onclick = async () => { const result = await relay.cardAction('pin'); if (result?.ok) { pin.textContent = result.pinned ? 'Unpin' : 'Pin'; pin.setAttribute('aria-pressed', String(result.pinned)); } };
   bar.append(pin);
+  for (const [i,choice] of (card.choices || []).entries()) button(choice.label, `choice:${i}`);
   if (card.kind === 'weather') {
     button('Refresh', 'refresh'); button(card.units === 'c' ? 'Show °F' : 'Show °C', 'units');
     const source = mk('button', '', 'Source ↗'); source.onclick = () => relay.cardOpen('https://open-meteo.com/'); bar.append(source);
   }
-  bar.append(status); root.append(bar);
+  const hint = mk('span', 'menu-hint', 'Drag the title to move · Drag an edge to resize');
+  bar.append(status, hint); root.append(bar);
 }
 relay.onCardPin?.(pinned => { const button = root.querySelector('.menu-pin'); if (button) { button.textContent = pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-pressed', String(pinned)); } });

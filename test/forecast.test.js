@@ -66,3 +66,9 @@ test('fallback geocoding runs concurrently and matches unaccented spoken cities'
   assert.equal((await forecast('Sao Paulo Brazil', { fetchFn })).location, 'São Paulo, Brazil');
   assert.ok(peak > 1, 'independent fallback lookups should overlap');
 });
+
+test('an ambiguous city offers real region choices instead of silently guessing',async()=>{
+ const data={results:[{name:'Hollywood',admin1:'Florida',country:'United States',latitude:26,longitude:-80},{name:'Hollywood',admin1:'California',country:'United States',latitude:34,longitude:-118}]};
+ const result=await forecast('Hollywood',{fetchFn:async()=>({ok:true,json:async()=>data})});
+ assert.equal(result.needsChoice,true);assert.deepEqual(result.choices.map(x=>x.place),['Hollywood, Florida, United States','Hollywood, California, United States']);
+});

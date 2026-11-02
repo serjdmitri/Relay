@@ -1381,6 +1381,11 @@ class AskController {
       const result = await require('./forecast').forecast(place, { units: query.units === 'c' || query.units === 'f' ? query.units : cfg.units === 'c' ? 'c' : 'f', signal: abort.signal });
       if (abort.signal.aborted) return timedOut ? { status: 'failed', reply: 'The forecast took too long. Please try again.', actions: 0 } : { status: 'stopped', reply: 'Stopped the forecast.', actions: 0 };
       if (!result) return { status: 'failed', reply: `I could not find a city forecast for ${place}. Please name a city and, if needed, its state or country.`, actions: 0 };
+      if (result.needsChoice) {
+        const reply = `Which ${place} did you mean? Choose a location in the menu.`;
+        await this.cardPanel?.show({ kind: 'list', hold: true, title: 'Choose a weather location', summary: reply, items: [], facts: [], links: [], ...result });
+        return { status: 'done', reply, actions: 0 };
+      }
       if (result.needsCity) {
         const reply = `Which city in ${result.country} would you like? Weather varies across the country.`;
         if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'list', title: `Weather in ${result.country}`, subtitle: 'Choose a city', summary: reply, items: [], facts: [], links: [], image: null });
