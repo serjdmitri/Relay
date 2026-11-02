@@ -1,7 +1,7 @@
 // Keep a launch-provided phone key out of every child model/tool process.
 const blandLaunchKey = process.env.BLAND_API_KEY || '';
 delete process.env.BLAND_API_KEY;
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor, safeStorage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor, safeStorage, powerSaveBlocker } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -12,6 +12,7 @@ const { StorageWindow } = require('./storageWindow');
 const { NetworkWindow } = require('./networkWindow');
 const { SecurityWindow } = require('./securityWindow');
 const { PrioritiesWindow } = require('./prioritiesWindow');
+const overnightMod = require('./overnight');
 const { gatherFacts } = require('./auditFacts');
 const securityAudit = require('./securityAudit');
 const { Bland } = require('./calls/bland');
@@ -1101,6 +1102,60 @@ app.whenReady().then(() => {
   timers.start();
   // Scheduled requests: checked every 15 seconds. What is due runs when Relay is free; what was missed while the Mac slept is only reported.
   ask.scheduler = new Scheduler({ store });
+  // Overnight tasks: work you handed Relay for the night runs unattended inside the overnight window, one at a time; in the morning a report says what was checked, what was only reported, what failed and what needed you.
+  ask.overnight = new overnightMod.OvernightQueue({ store, settings: () => store.get('settings.overnight') });
+  const clip = (s, n = 300) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const runOvernightTask = async (task) => {
+    const runId = ask.overnight.begin(task);
+    store.addHistory({ id: runId, text: `Overnight: ${task.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: Date.now(), finishedAt: Date.now() });
+    ask.activeScheduledId = runId;
+    const blocker = powerSaveBlocker.start('prevent-app-suspension'); // the Mac may dim its screen, but does not stop Relay midway
+    let result;
+    try { result = await ask.runScheduled({ text: task.text }); } catch (e) { result = { status: 'failed', reply: e.message }; }
+    finally { powerSaveBlocker.stop(blocker); if (ask.activeScheduledId === runId) ask.activeScheduledId = null; }
+    recordScheduledOutcome(store, runId, result);
+    const actions = (store.get('actions') || []).filter((a) => a.requestId === runId);
+    const v = overnightMod.verifyRun(result || {}, actions, { exists: (p) => require('fs').existsSync(p), home: app.getPath('home') });
+    ask.overnight.update(task.id, { status: result?.status === 'done' ? 'done' : result?.status === 'stopped' ? 'stopped' : 'failed', verdict: v.verdict, checks: v.checks, notes: v.notes, reply: clip(result?.reply), finishedAt: Date.now() });
+    broadcast();
+  };
+  const overnightReport = (ids) => {
+    const tasks = ask.overnight.list().filter((t) => ids.includes(t.id));
+    const win = overnightMod.windowBounds(new Date(), ask.overnight.conf());
+    const routines = (store.get('history') || []).filter((h) => /^(?:scheduled|missed):/.test(String(h.id)) && h.ts >= win.start && h.ts <= win.end + 2 * 3600e3).map((h) => ({ text: h.text, status: h.status })).reverse();
+    const report = overnightMod.buildReport(tasks, routines);
+    try { ask.outputExport('Overnight report', report.text); } catch { /* the report is still kept in Relay and can be read by voice */ }
+    ask.overnight.markReported(tasks, report);
+    if (Notification.isSupported()) new Notification({ title: 'Overnight report', body: report.summary.charAt(0).toUpperCase() + report.summary.slice(1) + '. Say "what happened overnight" to hear it.', silent: true }).show();
+    broadcast();
+  };
+  let overnightBusy = false;
+  const overnightTick = async () => {
+    if (overnightBusy) return;
+    overnightBusy = true;
+    try {
+      const st = ask.overnight.next({ canRun: ask.canRunScheduled(), activeRunId: ask.activeScheduledId });
+      let changed = false;
+      for (const t of st.interrupted) { ask.overnight.update(t.id, { status: 'failed', verdict: 'unknown', finishedAt: Date.now(), notes: ['Relay was closed or interrupted before the outcome was confirmed. It was not run again.'] }); changed = true; }
+      if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
+      if (st.run) { await runOvernightTask(st.run); changed = true; }
+      if (!changed && st.report) overnightReport(st.report);
+    } catch (e) { console.error('Overnight tick failed:', e); } finally { overnightBusy = false; }
+  };
+  setInterval(overnightTick, 30000);
+  ask.overnightCommand = (c) => {
+    const conf = ask.overnight.conf(), window = `${conf.from === 0 ? 12 : conf.from > 12 ? conf.from - 12 : conf.from} ${conf.from < 12 ? 'AM' : 'PM'} and ${conf.to === 0 ? 12 : conf.to > 12 ? conf.to - 12 : conf.to} ${conf.to < 12 ? 'AM' : 'PM'}`;
+    if (c.type === 'add') {
+      const r = ask.overnight.add(c.task);
+      if (r.error) return r.error;
+      return `Added to tonight's list (${ask.overnight.queued().length} queued): ${r.task.text}. ${conf.enabled ? `It runs between ${window}, only if the Mac is awake and Relay is open, and nobody can approve questions then, so anything risky is skipped. I'll report in the morning.` : 'Overnight tasks are switched off in Settings, so nothing runs until you turn them on.'}`;
+    }
+    if (c.type === 'list') { const q = ask.overnight.queued(); return q.length ? `Tonight's list: ${q.map((t, i) => `${i + 1}. ${t.text}`).join('; ')}.` : "Tonight's list is empty."; }
+    if (c.type === 'clear') { const n = ask.overnight.clear(); return n ? `Cleared ${n} task${n === 1 ? '' : 's'} from tonight's list.` : "Tonight's list was already empty."; }
+    if (c.type === 'cancel') { const t = ask.overnight.cancel(c.n); return t ? `Removed "${t.text}" from tonight's list.` : `There is no task ${c.n} on tonight's list.`; }
+    const r = (store.get('overnight') || {}).report;
+    return r ? `Last night: ${r.summary}.\n\n${r.text}` : 'There is no overnight report yet.';
+  };
   let scheduleStorageFailed = false;
   const tickSchedules = (canRun) => {
     try {
