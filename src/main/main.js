@@ -935,7 +935,7 @@ app.whenReady().then(() => {
   overlay.watchDisplays();
   restoreToast = new (require('./restoreToast').RestoreToast)(path.join(__dirname, 'preload.js'));
   trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
-  floatingMotion = new (require('./floatingMotion').FloatingMotion)({ area: point => screen.getDisplayNearestPoint(point).bounds, cursor: () => screen.getCursorScreenPoint(), onZone: states => trashTarget.render(states), onThrow: rememberThrow });
+  floatingMotion = new (require('./floatingMotion').FloatingMotion)({ area: point => screen.getDisplayNearestPoint(point).bounds, workArea: point => screen.getDisplayNearestPoint(point).workArea, getSnap: () => store.get('settings.menuSnap') !== false, cursor: () => screen.getCursorScreenPoint(), onZone: states => trashTarget.render(states), onThrow: rememberThrow });
   app.once('before-quit', () => { floatingMotion.stop(); trashTarget.close(); restoreToast.close(); });
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();

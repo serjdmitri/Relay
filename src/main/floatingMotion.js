@@ -9,10 +9,25 @@ function trashGeometry(point, bounds, item = null) {
   return { bounds, radius, inside: pointerDistance <= radius };
 }
 
+// Align nearby edges without resizing or moving unrelated windows.
+function snapRectangle(rect, bounds, threshold = 24, gap = 12) {
+  if (![rect.x,rect.y,rect.width,rect.height].every(Number.isFinite)) return null;
+  let {x,y}=rect;
+  if (rect.width <= bounds.width-gap*2) {
+    if (Math.abs(x-bounds.x)<=threshold) x=bounds.x+gap;
+    else if (Math.abs(x+rect.width-bounds.x-bounds.width)<=threshold) x=bounds.x+bounds.width-gap-rect.width;
+  }
+  if (rect.height <= bounds.height-gap*2) {
+    if (Math.abs(y-bounds.y)<=threshold) y=bounds.y+gap;
+    else if (Math.abs(y+rect.height-bounds.y-bounds.height)<=threshold) y=bounds.y+bounds.height-gap-rect.height;
+  }
+  return {x,y};
+}
+
 // Shared by native mouse drags, hologram drags and hand grabs. Only registered Relay UI can be dismissed.
 class FloatingMotion {
-  constructor({ area, cursor, onZone = () => {}, onThrow = () => {}, now = Date.now, setTimer = setInterval, clearTimer = clearInterval }) {
-    Object.assign(this, { area, cursor, onZone, onThrow, now, setTimer, clearTimer });
+  constructor({ area, workArea = area, getSnap = () => true, cursor, onZone = () => {}, onThrow = () => {}, now = Date.now, setTimer = setInterval, clearTimer = clearInterval }) {
+    Object.assign(this, { area, workArea, getSnap, cursor, onZone, onThrow, now, setTimer, clearTimer });
     this.drags = new Map(); this.glides = new Map(); this.mouseDown = false;
   }
   publish() {
@@ -46,7 +61,7 @@ class FloatingMotion {
     if (cancelled) { d.target.finish?.(); this.publish(); return; }
     if (trashGeometry(d.point, d.bounds, d.target.rect?.() || d.target.position()).inside) { this.dismiss(d.target); this.publish(); return; }
     const v = momentum.velocity(d.trail, this.now());
-    if (!v) { d.target.finish?.(); this.publish(); return; }
+    if (!v) { this.settle(d); this.publish(); return; }
     const g = { ...d, v, frames: 0 };
     g.timer = this.setTimer(() => {
       if (g.target.alive?.() === false || ++g.frames > 140) return this.cancel(key);
@@ -63,14 +78,22 @@ class FloatingMotion {
         if (next.close || trashGeometry(g.point, g.bounds, g.target.rect?.() || g.target.position()).inside) {
           this.clearTimer(g.timer); this.glides.delete(key); this.dismiss(g.target); this.publish(); return;
         }
-        if (Math.hypot(g.v.vx, g.v.vy) < .04) return this.cancel(key);
+        if (Math.hypot(g.v.vx, g.v.vy) < .04) return this.cancel(key, true);
         this.publish();
       } catch { this.cancel(key); }
     }, 16);
     g.timer?.unref?.(); this.glides.set(key, g); this.publish();
   }
-  cancel(key) {
-    const g = this.glides.get(key); if (g) { this.clearTimer(g.timer); this.glides.delete(key); g.target.finish?.(); }
+  settle(d) {
+    const rect=d.target.position();
+    if (this.getSnap() && Number.isFinite(rect.width) && Number.isFinite(rect.height)) {
+      const snapped=snapRectangle(rect,this.workArea(d.point));
+      if (snapped && (snapped.x!==rect.x || snapped.y!==rect.y)) d.target.move(snapped.x,snapped.y);
+    }
+    d.target.finish?.();
+  }
+  cancel(key, snap = false) {
+    const g = this.glides.get(key); if (g) { this.clearTimer(g.timer); this.glides.delete(key); if (snap) this.settle(g); else g.target.finish?.(); }
     this.drags.delete(key); this.publish();
   }
   watchWindow(win, target) {
@@ -86,4 +109,4 @@ class FloatingMotion {
   }
   stop() { for (const key of new Set([...this.drags.keys(), ...this.glides.keys()])) this.cancel(key); }
 }
-module.exports = { FloatingMotion, trashGeometry };
+module.exports = { FloatingMotion, trashGeometry, snapRectangle };
