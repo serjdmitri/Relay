@@ -44,6 +44,7 @@ const sched = require('./schedule');
 const { AgentManager, parseAgentCommand, parseAgentsDashboardCommand } = require('./agents');
 const { parseViewerGuardCommand } = require('./viewerGuard');
 const { parseSelfImproveCommand } = require('./selfImprove');
+const { parseOwnerCommand } = require('./ownerGuard');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -2056,6 +2057,7 @@ class AskController {
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
+          if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
           if (this.selfImproveCommand && parseSelfImproveCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.selfImproveCommand(parseSelfImproveCommand(effective))); }
           if (this.viewerGuardCommand && parseViewerGuardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.viewerGuardCommand(parseViewerGuardCommand(effective))); }
           if (this.openAgentsDashboard && parseAgentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAgentsDashboard()); }

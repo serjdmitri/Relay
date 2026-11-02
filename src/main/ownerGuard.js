@@ -29,7 +29,7 @@ function bestScore(embedding, templates) {
 }
 
 // Keep enrollment samples that add something: the new one is skipped when it is nearly identical to one already kept (a still face makes 12 copies).
-function addSample(samples, embedding, { max = 12, tooSimilar = 0.97 } = {}) {
+function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
   if (!Array.isArray(embedding) || embedding.length !== 128 || embedding.some((x) => !Number.isFinite(x))) return { samples, added: false, why: 'bad' };
   if (samples.length >= max) return { samples, added: false, why: 'full' };
   if (samples.some((s) => cosine(s, embedding) >= tooSimilar)) return { samples, added: false, why: 'similar' };
@@ -103,4 +103,14 @@ function parseOwnerCommand(text) {
   return null;
 }
 
-module.exports = { OwnerGuard, config, cosine, bestScore, addSample, parseOwnerCommand, DEFAULTS };
+// Your enrolled face on disk: only ever encrypted (the Mac's keychain-backed safeStorage, passed in), as { v, enc, count, at }.
+function sealTemplates(templates, encrypt, at = Date.now()) { return { v: 1, enc: encrypt(JSON.stringify({ templates })), count: templates.length, at }; }
+function openTemplates(rec, decrypt) {
+  try {
+    if (!rec || rec.v !== 1 || typeof rec.enc !== 'string') return [];
+    const t = JSON.parse(decrypt(rec.enc)).templates;
+    return Array.isArray(t) ? t.filter((x) => Array.isArray(x) && x.length === 128 && x.every(Number.isFinite)) : [];
+  } catch { return []; }
+}
+
+module.exports = { OwnerGuard, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
