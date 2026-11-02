@@ -9,7 +9,7 @@ function renderGoogleConnections(c,g){
  const box=h('<div class="card" style="padding:16px"><div class="ttl">Choose what Jarvis can use</div><p class="d" style="margin:8px 0">Click Connect, sign in in your browser, and choose the permissions you allow. Google documents and messages retrieved for a request may be sent to your selected AI provider. Fitbit statistics stay in the local stats menu.</p><div data-services></div><div style="display:flex;gap:8px;align-items:center;margin:12px 0"><button class="btn primary" data-connect>Connect with Google</button><button class="btn" data-cancel>Cancel sign-in</button></div><div class="note" data-google-status role="status"></div><div data-accounts></div><details data-setup><summary>App credentials · one-time setup</summary><p class="d" style="margin:8px 0">Create a Desktop app OAuth client in Google Cloud and enable the APIs you select (Google Health API for Fitbit). Sync your Fitbit in its mobile app first. Health permissions are optional and off by default. Import its downloaded JSON file, or enter its client ID and secret below. Credentials stay encrypted on this Mac. Testing-mode apps can require reconnecting after seven days; managed accounts may need administrator approval.</p><button class="btn" data-import>Import Google credentials JSON</button><div class="field-row" style="margin-top:10px"><input class="field" data-id aria-label="Google OAuth client ID" placeholder="Client ID"><input class="field" data-secret type="password" autocomplete="off" aria-label="Google OAuth client secret" placeholder="Client secret"><button class="btn" data-save>Save app credentials</button></div></details></div>');
  const q=s=>box.querySelector(s),status=text=>{connectionMessages.google=text;const el=document.querySelector('[data-google-status]')||q('[data-google-status]');if(el)el.textContent=text;};
  q('[data-id]').value=g.clientId||'';q('[data-secret]').placeholder=g.hasSecret?'Secret saved; paste only to replace':'Client secret';q('[data-setup]').open=!(g.clientId&&g.hasSecret);
- for(const [id,[name,access]]of Object.entries(GOOGLE_SERVICES)){
+ for(const [id,[name,access]]of Object.entries(GOOGLE_SERVICES).sort(([a],[b])=>Number(a==='fitness')-Number(b==='fitness'))){
   const row=h(`<label class="row" style="padding:8px 0"><input type="checkbox" ${googleServices.includes(id)?'checked':''}><span class="grow"><span class="t">${name}</span><span class="d">${access}</span></span></label>`);
   row.querySelector('input').onchange=e=>{googleServices=e.target.checked?[...googleServices,id]:googleServices.filter(s=>s!==id);};q('[data-services]').append(row);
  }
@@ -58,4 +58,19 @@ function renderSchoolConnection(c,savedUrl){
  q('[data-school-save]').onclick=()=>save().then(()=>status('School link saved.')).catch(e=>status(e.message));
  for(const action of['connect','check','assignments'])q('[data-school-'+action+']').onclick=async e=>{busy(true);status(action==='assignments'?'Checking visible assignments with the selected model…':'Checking school connection…');try{await save();const r=await relay.schoolConnection(action);status(r.ok?r.message:r.error);}catch(e){status(e.message||'Could not finish the school check.');}finally{busy(false);}};
  status(connectionMessages.school);c.append(box);
+}
+
+// Status is explicit, timestamped, and scoped to the current configuration; no background probes.
+const connectionHealth=new Map();let checkingConnections=false;
+function renderConnectionHealth(c,C,schoolUrl){
+ const box=h('<div class="card" style="padding:16px;margin-bottom:18px"><div class="ttl">Connection health</div><p class="d">Check access without sending messages or editing files. Saved credentials alone do not prove a connection works. Results last for this app session.</p><button class="btn" data-health-check>Check configured connections</button><div data-health-results role="status" style="white-space:pre-wrap;margin-top:10px"></div></div>');
+ const key=JSON.stringify([C.google?.clientId,C.google?.connections,C.notion?.connected,C.notion?.name,schoolUrl]),out=box.querySelector('[data-health-results]'),button=box.querySelector('button');
+ box.dataset.healthKey=key;out.textContent=connectionHealth.get(key)||'Not checked this session. Reconnect controls and app setup are below.';button.disabled=checkingConnections;
+ button.onclick=async()=>{
+  checkingConnections=true;button.disabled=true;out.textContent='Checking configured connections…';
+  const jobs=(C.google?.accounts||[]).map(email=>async()=>{const r=await relay.googleConnection('check',email);return r.ok?'Google '+email+'\n'+r.checks.map(x=>'  '+x.service+': '+x.status).join('\n'):'Google '+email+': '+(r.error||'could not check');});
+  if(C.notion?.connected)jobs.push(async()=>{const r=await relay.notionConnection('check');return 'Notion: '+(r.ok?r.message:r.error);});
+  if(schoolUrl)jobs.push(async()=>{const r=await relay.schoolConnection('check');return 'School: '+(r.ok?r.message:r.error);});
+  try{const results=await Promise.allSettled(jobs.map(fn=>fn()));const text='Checked '+new Date().toLocaleString()+'\n'+(results.map(r=>r.status==='fulfilled'?r.value:'Check failed; retry or reconnect below.').join('\n\n')||'No configured accounts or school source. Set up a connection below.');connectionHealth.set(key,text);for(const el of[box,document]){const current=el.querySelector('[data-health-results]');if(current?.closest('[data-health-key]')?.dataset.healthKey===key)current.textContent=text;}}finally{checkingConnections=false;button.disabled=false;const b=document.querySelector('[data-health-check]');if(b)b.disabled=false;}
+ };c.append(box);
 }
