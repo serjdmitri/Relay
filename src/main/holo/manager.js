@@ -297,7 +297,7 @@ class HoloManager {
   // ----- moving by the name -----
   motionTarget(h) {
     const original = { title: h.title, items: h.items, options: h.options, pinned: h.pinned, x: h.x, y: h.y, scale: h.scale, solid: h.solid, annotations: h.annotations };
-    return { key: `holo:${h.id}`, alive: () => this.holos.has(h.id) && !h.win.isDestroyed(), undo: () => this.show(original), position: () => ({x:h.x,y:h.y}), move: (x,y) => { h.x=Math.round(x);h.y=Math.round(y);this.place(h);if(!h.win.isDestroyed())h.win.webContents.send('holo:state','pos',this.local(h)); }, finish: () => this.persist(), close: () => this.close(h.id) };
+    return { key: `holo:${h.id}`, rect: () => this.rect(h), alive: () => this.holos.has(h.id) && !h.win.isDestroyed(), undo: () => this.show(original), position: () => ({x:h.x,y:h.y}), move: (x,y) => { h.x=Math.round(x);h.y=Math.round(y);this.place(h);if(!h.win.isDestroyed())h.win.webContents.send('holo:state','pos',this.local(h)); }, finish: () => this.persist(), close: () => this.close(h.id) };
   }
   startDrag(h) {
     this.stopDrag();

@@ -1,10 +1,12 @@
 const momentum = require('./hands/momentum');
 
-function trashGeometry(point, bounds) {
-  const distance = Math.hypot(bounds.x + bounds.width - point.x, bounds.y + bounds.height - point.y);
+function trashGeometry(point, bounds, item = null) {
+  const pointerDistance = Math.hypot(bounds.x + bounds.width - point.x, bounds.y + bounds.height - point.y);
+  const itemDistance = item && Number.isFinite(item.width) && Number.isFinite(item.height) ? Math.hypot(Math.max(0,item.x-bounds.x-bounds.width,bounds.x+bounds.width-item.x-item.width),Math.max(0,item.y-bounds.y-bounds.height,bounds.y+bounds.height-item.y-item.height)) : pointerDistance;
+  const distance = Math.min(pointerDistance, itemDistance);
   const max = Math.min(210, bounds.width / 3, bounds.height / 3);
   const radius = 76 + (max - 76) * Math.max(0, Math.min(1, (350 - distance) / (350 - max)));
-  return { bounds, radius, inside: distance <= radius };
+  return { bounds, radius, inside: pointerDistance <= radius };
 }
 
 // Shared by native mouse drags, hologram drags and hand grabs. Only registered Relay UI can be dismissed.
@@ -16,7 +18,7 @@ class FloatingMotion {
   publish() {
     const states = new Map();
     for (const d of [...this.glides.values(), ...this.drags.values()]) {
-      const state = trashGeometry(d.point, d.bounds);
+      const state = trashGeometry(d.point, d.bounds, d.target.rect?.() || d.target.position());
       states.set(`${d.bounds.x},${d.bounds.y}`, state);
     }
     this.onZone([...states.values()]);
@@ -33,7 +35,7 @@ class FloatingMotion {
     d.trail.push({ ...point, t: this.now() }); d.trail = d.trail.filter(p => this.now() - p.t <= 200);
     this.publish();
   }
-  inTrash(key) { const d=this.drags.get(key); return !!d && trashGeometry(d.point,d.bounds).inside; }
+  inTrash(key) { const d=this.drags.get(key); return !!d && trashGeometry(d.point,d.bounds,d.target.rect?.() || d.target.position()).inside; }
   dismiss(target) {
     if (target.undo) this.onThrow(target.undo);
     target.close();
@@ -42,7 +44,7 @@ class FloatingMotion {
     const d = this.drags.get(key); if (!d) return;
     this.drags.delete(key);
     if (cancelled) { d.target.finish?.(); this.publish(); return; }
-    if (trashGeometry(d.point, d.bounds).inside) { this.dismiss(d.target); this.publish(); return; }
+    if (trashGeometry(d.point, d.bounds, d.target.rect?.() || d.target.position()).inside) { this.dismiss(d.target); this.publish(); return; }
     const v = momentum.velocity(d.trail, this.now());
     if (!v) { d.target.finish?.(); this.publish(); return; }
     const g = { ...d, v, frames: 0 };
@@ -52,7 +54,7 @@ class FloatingMotion {
       g.point = next.point; g.v = next.velocity;
       try {
         g.target.move(g.point.x - g.ax, g.point.y - g.ay);
-        if (next.close || trashGeometry(g.point, g.bounds).inside) {
+        if (next.close || trashGeometry(g.point, g.bounds, g.target.rect?.() || g.target.position()).inside) {
           this.clearTimer(g.timer); this.glides.delete(key); this.dismiss(g.target); this.publish(); return;
         }
         if (Math.hypot(g.v.vx, g.v.vy) < .04) return this.cancel(key);
