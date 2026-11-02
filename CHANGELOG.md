@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.36.3
+
+Everything since 0.36.2: priorities menu, file permission levels, overnight tasks, faster and fallback phone calls, quick answers through Groq, the other Claude session's work (saved skills, the council, Gemini voices, email and notification readers, YouTube voice control, work modes), guided Google sign-in and the weather menu updates. The full test suite passes. Most of it has not been tried on a real Mac, phone call or night.
 
 - **Today's priorities menu.** Say "show my priorities", "what should I do today", "what needs my attention" or "what's most important" and a menu opens with one ranked list from everything the morning briefing already checks: overdue and due reminders, calendar events (one starting within the hour counts as "now"), school assignments, important unread email and requests Relay could not finish, with the weather on top. Items fall under Needs attention now, Today, Coming up and Later; each has a button that opens Calendar, Reminders, the email or your school page. A school due date is ranked only when the page gave an exact date (2026-11-05); anything else is shown as written and not guessed. A source that could not be read (no city set, school page not signed in, no Google connection) is listed as unavailable, never shown as empty. Read-only. The ranking, dates and buttons are unit-tested and the screen was checked in a browser preview with sample data; gathering from your real calendar, reminders, school page and email through the app has not been tried.
 - **Settings switch for security warnings.** Settings now has Security warnings > "Warn me about new security problems" (on by default), the same switch as saying "turn off security warnings". Spanish labels included.
