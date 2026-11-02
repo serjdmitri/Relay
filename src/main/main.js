@@ -404,9 +404,11 @@ function registerIpc() {
   ask.onCallCommand = async command => {
     try {
       if (!command.background) openMain('calls');
-      if (command.type === 'open') return { status: 'done', reply: 'Phone Calls is open, Sir. Calls require review before dialing.' };
+      if (command.type === 'open') return { status: 'done', reply: 'Phone Calls is open, Sir.' };
       if (command.type === 'schedule') { callService.addSchedule(command.spec); return { status: 'done', reply: 'The check-in review is scheduled, Sir. At that time it will await approval of the exact number and purpose; it will not dial automatically.' }; }
-      callService.prepare(command.purpose, { source: command.background ? 'schedule' : 'voice' });
+      const result = await callService.requestOwnerCall(command.purpose, { background: command.background });
+      if (result.error) return { status: 'failed', reply: result.error };
+      if (!result.review) return { status: 'done', reply: 'Your call has been submitted to Bland, Sir. Watch Calls for its status.' };
       return { status: 'done', reply: 'Your call is prepared, Sir. Review the number and purpose in Calls and approve the dialing prompt. No call has been placed.' };
     } catch (err) { return { status: 'failed', reply: err.message }; }
   };
