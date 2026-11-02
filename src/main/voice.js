@@ -181,7 +181,7 @@ class Speaker {
     this.ladder.ok(wanted);
     const engine = this.engineFor(tts);
     if (wanted !== 'system' && engine === 'system') {
-      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs')) return { ok: false, message: 'Cloud voices are paused while Relay uses a local model.' };
+      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs' || wanted === 'gemini')) return { ok: false, message: 'Cloud voices are paused while Relay uses a local model.' };
       return { ok: false, message: wanted === 'kokoro' ? 'The on-device voice is not downloaded yet.' : `Add your ${cloud.NAMES[wanted] || wanted} key first.` };
     }
     if (engine === 'system') {
