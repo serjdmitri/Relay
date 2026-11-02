@@ -51,5 +51,6 @@ test('saved geometry is clamped to the connected display and manual changes are 
   const a = await m.show({kind:'weather',location:'Paris'});
   assert.equal(a.win.bounds.x,840); assert.equal(a.win.bounds.y,500);
   a.win.bounds.x = 100; a.win.events.moved();
+  await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(layouts[a.key].x,100);
 });

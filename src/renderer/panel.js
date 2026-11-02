@@ -5,6 +5,7 @@ const body = document.getElementById('body');
 const LABEL = { cpu: 'CPU', memory: 'Memory', battery: 'Battery', network: 'Network', disk: 'Disk', jobs: 'Working on' };
 let spec = null;
 let frame = null;
+let latestData;
 const rows = {};
 
 const meter = (key, label) => {
@@ -56,19 +57,23 @@ relay.panelGet(id).then((s) => {
   if (s.kind === 'custom') {
     frame = document.createElement('iframe');
     frame.setAttribute('sandbox', 'allow-scripts'); // no same-origin: the page cannot reach Relay, its storage or the files
+    frame.onload = () => { if (latestData !== undefined) receive(latestData); };
     frame.srcdoc = s.doc;
     body.style.padding = '0';
     body.append(frame);
   }
+  if (latestData !== undefined) receive(latestData);
 });
-relay.onPanel((pid, data) => {
-  if (pid !== id || !spec) return;
+function receive(data) {
+  latestData = data;
+  if (!spec) return;
   if (spec.kind === 'custom') {
     const out = {};
     for (const k of spec.sources) if (data[k] !== undefined) out[k] = data[k];
     frame?.contentWindow?.postMessage(out, '*');
   } else draw(data);
-});
+}
+relay.onPanel((pid, data) => { if (pid === id) receive(data); });
 document.getElementById('x').onclick = () => relay.panelClose(id);
 
 document.getElementById('refresh').onclick = () => relay.panelRefresh(id);

@@ -82,7 +82,7 @@ class PanelHub {
     this.panels.set(id, panel);
     win.onClosed(() => this.close(id));
     const every = spec.kind === 'plugin' ? spec.everySeconds * 1000 : 2000;
-    panel.timer = this.setTimer(() => this.tick(panel), every);
+    if (spec.kind === 'plugin' || spec.sources.length) panel.timer = this.setTimer(() => this.tick(panel), every);
     this.tick(panel);
     return { ok: true, id };
   }
@@ -92,12 +92,14 @@ class PanelHub {
     if (this.lowPower()) return; // on a low battery the panels rest
     p.busy = true;
     try {
-      if (p.spec.kind === 'plugin') p.win.send({ text: String(await this.callPlugin(p.spec.pluginName, p.spec.tool)).slice(0, 4000) });
-      else { const data = {}; for (const s of p.spec.sources) data[s] = await this.sampler.sample(s); p.win.send(data); }
+      const data = p.spec.kind === 'plugin' ? { text: String(await this.callPlugin(p.spec.pluginName, p.spec.tool)).slice(0, 4000) }
+        : Object.fromEntries(await Promise.all(p.spec.sources.map(async s => [s, await this.sampler.sample(s)])));
+      if (!this.panels.has(p.id) || this.hidden) return;
+      p.win.send(data);
       p.fails = 0;
     } catch (e) {
       p.fails = (p.fails || 0) + 1;
-      if (p.fails >= 5) { p.win.send({ error: String(e.message).slice(0, 200) }); this.close(p.id); }
+      if (p.fails >= 5 && this.panels.has(p.id)) { p.win.send({ error: String(e.message).slice(0, 200) }); this.close(p.id); }
     } finally { p.busy = false; }
   }
 

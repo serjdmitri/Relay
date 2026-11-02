@@ -47,12 +47,14 @@ class PanelWindows {
     w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     w.webContents.on('will-navigate', (e) => e.preventDefault());
+    let loaded = false, latestData;
+    w.webContents.once('did-finish-load', () => { loaded = true; if (latestData !== undefined) w.webContents.send('panel:data', id, latestData); });
     w.loadFile(path.join(__dirname, '../renderer/panel.html'), { query: { id } });
     const key = JSON.stringify([spec.kind, spec.title]);
     let manual = false;
     w.on('will-move', () => { manual = true; }); w.on('will-resize', () => { manual = true; });
     const save = () => { if (manual && !w.isDestroyed()) this.saveLayouts({ ...this.getLayouts(), [key]: w.getBounds() }); };
-    w.on('moved', save); w.on('resized', save);
+    require('./windowGeometry').watchGeometry(w, save);
     w.once('ready-to-show', () => {
       const saved = this.getLayouts()[key];
       if (saved && ['x','y','width','height'].every(k => Number.isFinite(saved[k]))) {
@@ -65,7 +67,7 @@ class PanelWindows {
     let onClosed = () => {};
     w.on('closed', () => { this.specs.delete(id); this.closers.delete(id); this.windows.delete(id); onClosed(); });
     this.closers.set(id, () => { if (!w.isDestroyed()) w.close(); });
-    return { reveal: () => { if (!w.isDestroyed()) { w.showInactive(); w.moveTop(); } }, send: (data) => { if (!w.isDestroyed()) w.webContents.send('panel:data', id, data); }, close: () => { if (!w.isDestroyed()) w.close(); }, onClosed: (fn) => { onClosed = fn; } };
+    return { reveal: () => { if (!w.isDestroyed()) { w.showInactive(); w.moveTop(); } }, send: (data) => { latestData = data; if (loaded && !w.isDestroyed()) w.webContents.send('panel:data', id, data); }, close: () => { if (!w.isDestroyed()) w.close(); }, onClosed: (fn) => { onClosed = fn; } };
   }
 }
 

@@ -153,3 +153,18 @@ test('offline menus open directly, built-in calculator retries reuse one window,
   assert.equal((await h.show({html:'<p>Network</p>',hosts:['example.com']})).ok,false);
   assert.equal(approvals,1);
 });
+
+test('independent data sources refresh concurrently, and closing mid-refresh prevents late updates', async () => {
+ let release;
+ const pending = new Promise(resolve => { release = resolve; }), started = [];
+ const {h,sent} = hub({sampler:{sample:async s=>{started.push(s);await pending;return {source:s};}}});
+ const {id} = await h.show({sources:['cpu','battery','disk']});
+ assert.deepEqual(started,['cpu','battery','disk']);
+ h.close(id);release();await wait();
+ assert.equal(sent.length,0);
+});
+
+test('offline calculator does not create an idle polling timer', async () => {
+ const {h,timers} = hub();await h.show({builtin:'calculator'});
+ assert.equal(timers.length,0);
+});
