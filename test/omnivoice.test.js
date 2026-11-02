@@ -18,3 +18,13 @@ test('cancelling an OmniVoice request rejects it and stops its worker', async ()
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(child.killed, true);
 });
+
+test('OmniVoice receives the chosen synthesis speed rather than changing playback pitch',async()=>{
+ const {EventEmitter}=require('node:events'),{PassThrough}=require('node:stream');
+ let sent;const child=new EventEmitter();child.stdin=new EventEmitter();child.stdout=new PassThrough();child.kill=()=>{};
+ child.stdin.write=line=>{sent=JSON.parse(line);setImmediate(()=>child.stdout.write(JSON.stringify({id:sent.id,ok:true})+'\n'));};
+ const voice=new OmniVoice({python:process.execPath,spawnFn:()=>child});
+ await voice.synthesize('A quick reply',{rate:'faster'});assert.equal(sent.speed,1.15);
+ await voice.synthesize('A calm report',{rate:'slower'});assert.equal(sent.speed,.9);
+ voice.stop();
+});
