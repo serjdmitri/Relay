@@ -46,6 +46,7 @@ function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,s
    if(granted&&!granted.includes(service))return{service,status:'not authorized'};
    try{await api.call(account,'GET',url);return{service,status:'working'};}catch{return{service,status:'unavailable; reconnect or enable the API in Google Cloud'};}
   }));
+  checks.push({service:'docs',status:granted?.includes('docs')?'authorized; a specific document has not been tested':'permission not verified'});
   checks.push({service:'sheets',status:granted?.includes('sheets')?'authorized; a specific spreadsheet has not been tested':'permission not verified'});return{ok:true,checks};
  });
  handle('remove',async email=>{

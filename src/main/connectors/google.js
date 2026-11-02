@@ -238,6 +238,7 @@ class GoogleApi {
 function googleTools(api) {
   const acct = str('Which connected Google account (part of the address is enough). Leave out to use all of them for reading.');
   return [
+    ...require('./googleDocs').googleDocsTools(api),
     {
       name: 'gmail_search',
       description: 'Search Gmail. q uses Gmail search words: "is:unread", "from:anna", "subject:invoice", "newer_than:2d". Default is the inbox. Returns sender, subject, date, a snippet and an id for gmail_read.',
