@@ -13,7 +13,7 @@ function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) 
 const events = (m, kind) => m.log.filter((e) => e[0] === kind);
 
 test('the time is adjustable within safe limits, and it is off unless turned on', () => {
-  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45 });
+  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true });
   assert.equal(config({ seconds: 1 }).seconds, 5); assert.equal(config({ seconds: 9999 }).seconds, 120); assert.equal(config({ seconds: 45 }).seconds, 45);
   assert.equal(config({ threshold: 5 }).threshold, 0.7); assert.equal(config({ enabled: 'true' }).enabled, false);
   const m = make({ enabled: false }); m.feed([0.01], 60);
@@ -159,4 +159,34 @@ test('the away screen can be turned off, needs owner recognition on, and is not 
   assert.deepEqual(parseOwnerCommand('turn off the away screen'), { type: 'away-off' });
   assert.deepEqual(parseOwnerCommand('test the away screen'), { type: 'away-demo' });
   assert.deepEqual(parseOwnerCommand('enable standby mode'), { type: 'away-on' }); assert.equal(parseOwnerCommand('turn on the lights mode'), null);
+});
+
+// a face as the camera page reports it: [score], [alive]
+const feedLive = (m, scores, live, secs = 1) => { let last = null; for (let i = 0; i < secs; i++) { m.clock.t += 1000; last = m.g.frame({ faces: scores.length, scores, live }) || last; } return last; };
+
+test('liveness: a face that matches you but is not alive (a picture) is a stranger, never you', async () => {
+  const m = make();
+  feedLive(m, [0.9], [false], 3);
+  assert.equal(m.g.state, 'alarm', 'a photo of you held to the camera starts the alarm');
+  feedLive(m, [0.9], [false], 25); await tick();
+  assert.equal(m.locks.length, 1, 'and it cannot stop the alarm, either');
+});
+
+test('liveness: a living you stops the alarm that a picture started, and a picture beside you does not start one', () => {
+  const m = make();
+  feedLive(m, [0.9], [false], 3); assert.equal(m.g.state, 'alarm');
+  feedLive(m, [0.9], [true], 2); assert.equal(m.g.state, 'idle');
+  const n = make(); feedLive(n, [0.9, 0.9], [true, false], 30);
+  assert.deepEqual(n.log, [], 'you are there and alive; the picture next to you is the viewer guard\'s business');
+});
+
+test('liveness: it can be turned off, and a missing report (the blink finder is not ready) counts as alive', () => {
+  const off = make({ enabled: true, seconds: 20, threshold: 0.4, liveness: false }); feedLive(off, [0.9], [false], 30);
+  assert.deepEqual(off.log, []);
+  const unknown = make(); unknown.g.frame({ faces: 1, scores: [0.9] }); unknown.g.frame({ faces: 1, scores: [0.9] }); feedLive(unknown, [0.9], [], 10);
+  assert.deepEqual(unknown.log, []);
+  assert.equal(config({}).liveness, true); assert.equal(config({ liveness: false }).liveness, false);
+  assert.deepEqual(parseOwnerCommand('turn off the liveness check'), { type: 'liveness-off' });
+  assert.deepEqual(parseOwnerCommand('enable the blink check'), { type: 'liveness-on' });
+  assert.equal(parseOwnerCommand('turn on the lights check'), null);
 });

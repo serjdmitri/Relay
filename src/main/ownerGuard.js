@@ -4,13 +4,13 @@
 // back in is up to macOS (and Glance, if you use it). Pure logic here; main.js supplies the lock, the alarm window and the camera.
 //
 // Honest limits: recognition can be wrong (poor light, glasses, a different angle: you may be flagged for a few seconds, which is why two frames of
-// you cancel it), a photo or video of you can fool it (no liveness check), and covering the camera makes it blind rather than suspicious.
+// you cancel it), a VIDEO of you blinking can fool it (a still photo cannot: the liveness check wants a blink), and covering the camera makes it blind rather than suspicious.
 
-const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45 }; // 0.363 is the published cosine threshold for the SFace model
+const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true }; // 0.363 is the published cosine threshold for the SFace model
 const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 function config(raw) {
   const c = raw && typeof raw === 'object' ? raw : {};
-  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)) };
+  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false };
 }
 
 // ---- matching ----
@@ -46,11 +46,12 @@ class OwnerGuard {
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
-  frame({ faces = 0, scores = [] } = {}) {
+  // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
+  frame({ faces = 0, scores = [], live = [] } = {}) {
     const cfg = config(this.getConfig());
     if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; return null; }
-    const known = scores.filter((s) => Number.isFinite(s));
-    const owner = known.some((s) => s >= cfg.threshold), stranger = known.some((s) => s < cfg.threshold);
+    const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
+    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold || !k.alive);
     this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
     this.owners = owner ? this.owners + 1 : 0;
     this.strangers = stranger && !owner ? this.strangers + 1 : 0;
@@ -104,6 +105,8 @@ function parseOwnerCommand(text) {
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:owner|face) (?:recognition|check|guard|lock)$|^(?:owner|face) (?:recognition|guard) off$/.test(n)) return { type: 'off' };
   const m = /^(?:set|change|make) (?:the )?(?:lock |access denied |intruder )?(?:countdown|timer|delay|time)(?: (?:for|of) (?:the )?(?:owner|face|access denied|lock)[a-z ]*)? (?:to|at) (\d{1,3})(?: ?(s|sec|secs|seconds?|m|min|mins|minutes?))?$/.exec(n);
   if (m) { const v = Number(m[1]); return { type: 'seconds', seconds: /^m/.test(m[2] || '') ? v * 60 : v }; }
+  if (/^(?:turn on|enable|switch on) (?:the )?(?:liveness|blink|photo|anti[- ]?spoof(?:ing)?) (?:check|test|protection|detection)$/.test(n)) return { type: 'liveness-on' };
+  if (/^(?:turn off|disable|switch off) (?:the )?(?:liveness|blink|photo|anti[- ]?spoof(?:ing)?) (?:check|test|protection|detection)$/.test(n)) return { type: 'liveness-off' };
   if (/^(?:turn on|enable|start|switch on) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-on' };
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-off' };
   if (/^(?:test|show|preview|try) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-demo' };
