@@ -2030,7 +2030,7 @@ class AskController {
         if (tier) return this.finish(entry, this.setModelTier(tier));
         let effective = text;
         const mode = !opts.shown && parseWorkMode(text);
-        if (mode) { this.store.set('settings.workMode', mode); this.dropWarm(true); this.onChange(); return this.finish(entry, { status: 'done', reply: `Work mode set to ${mode}.` }); }
+        if (mode) { if(this.applyWorkMode)return this.finish(entry,await this.applyWorkMode(mode));this.store.set('settings.workMode', mode); this.dropWarm(true); this.onChange(); return this.finish(entry, { status: 'done', reply: `Work mode set to ${mode}.` }); }
         if (!opts.shown && isRetry(text)) {
           if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to try again yet.', actions: 0 });
           effective = this.lastRequestText;
