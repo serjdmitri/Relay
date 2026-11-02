@@ -7,6 +7,8 @@ test('weather requests preserve the requested location', () => {
   assert.deepEqual(parseForecast('show me the forecast for London'), { place: 'London' });
   assert.deepEqual(parseForecast('what is the weather'), { place: '' });
   assert.deepEqual(parseForecast('whats the weather in Moscow'), { place: 'Moscow' });
+  assert.deepEqual(parseForecast('show me a weather menu in Hollywood Florida'), { place: 'Hollywood Florida' });
+  assert.deepEqual(parseForecast('make a menu with weather in Moscow Russia'), { place: 'Moscow Russia' });
   assert.equal(parseForecast('email me the weather report'), null);
 });
 

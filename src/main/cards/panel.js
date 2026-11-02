@@ -22,7 +22,7 @@ class CardPanel {
     if (this.win && !this.win.isDestroyed()) return this.win;
     this.win = new BrowserWindow({
       width: WIDTH, height: 400, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
-      resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
+      resizable: false, movable: true, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
       webPreferences: { preload: this.preload, contextIsolation: true }
     });
     this.win.setAlwaysOnTop(true, 'screen-saver');
