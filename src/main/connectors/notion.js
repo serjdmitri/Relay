@@ -50,21 +50,22 @@ function textToBlocks(text) {
 }
 
 class NotionApi {
-  constructor({ token, fetchImpl = fetch }) {
-    this.token = token;
+  constructor({ token, refreshToken, fetchImpl = fetch }) {
+    this.token = token; this.refreshToken = refreshToken;
     this.fetch = fetchImpl;
   }
 
-  async call(method, path, body) {
+  async call(method, path, body, renewed = false) {
     const res = await this.fetch(`${API}${path}`, {
-      method,
-      headers: { authorization: `Bearer ${this.token}`, 'notion-version': VERSION, 'content-type': 'application/json' },
+      method, signal: AbortSignal.timeout(15000), redirect: 'error',
+      headers: { authorization: `Bearer ${typeof this.token === 'function' ? await this.token() : this.token}`, 'notion-version': VERSION, 'content-type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {})
     });
+    if (res.status === 401 && this.refreshToken && !renewed) { await this.refreshToken(); return this.call(method, path, body, true); }
     if (res.status === 401) throw new Error('Notion rejected the token. Check it in Settings > Connectors.');
     if (res.status === 404) throw new Error('Notion cannot see that page. Open it in Notion, choose ••• > Connections, and add Relay.');
     if (res.status === 429) throw new Error('Notion says too many requests. Try again in a moment.');
-    if (!res.ok) throw new Error(`Notion error ${res.status}: ${(await res.text()).slice(0, 160)}`);
+    if (!res.ok) throw new Error(`Notion request failed (HTTP ${res.status}). Check the connection permissions.`);
     return res.json();
   }
 
