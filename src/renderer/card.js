@@ -78,31 +78,42 @@ function renderWeather(c) {
     const el = mk('div', 'weather-metric'); el.append(mk('span', '', label), mk('strong', '', value)); metrics.append(el);
   }
   main.append(metrics); box.append(main);
-  const hourly = (c.hourly || []).filter((h) => Number.isFinite(h.temperature));
-  if (hourly.length > 1) {
-    const graph = mk('div', 'weather-graph');
-    graph.append(mk('div', 'weather-graph-label', 'NEXT HOURS  /  TEMPERATURE'));
+  const hourly = (c.hourly || []).filter(h => typeof h.time === 'string' && Number.isFinite(h.temperature));
+  const graph = mk('div', 'weather-graph');
+  const dayButtons = [];
+  function showHours(date) {
+    const hours = hourly.filter(h => h.time.startsWith(date + 'T'));
+    graph.replaceChildren(mk('div', 'weather-graph-label', `${date}  /  HOURLY TEMPERATURE · LOCATION TIME`));
+    for (const button of dayButtons) button.setAttribute('aria-pressed', String(button.dataset.date === date));
+    if (!hours.length) { graph.append(mk('div', 'weather-hour-detail', 'Hourly forecast unavailable for this day.')); return; }
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 700 70'); svg.setAttribute('preserveAspectRatio', 'none');
-    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Hourly temperature trend');
-    const vals = hourly.map((h) => h.temperature); const min = Math.min(...vals); const range = Math.max(1, Math.max(...vals) - min);
-    const points = hourly.map((h, i) => `${i * 700 / (hourly.length - 1)},${60 - (h.temperature - min) / range * 45}`).join(' ');
+    svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', `Hourly temperature trend for ${date}; individual readings below`);
+    const vals = hours.map(h => h.temperature), min = Math.min(...vals), range = Math.max(1, Math.max(...vals) - min);
+    const points = hours.map((h, i) => `${hours.length === 1 ? 350 : i * 700 / (hours.length - 1)},${60 - (h.temperature - min) / range * 45}`).join(' ');
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     line.setAttribute('points', points); line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#40d8ff'); line.setAttribute('stroke-width', '3');
     svg.append(line); graph.append(svg);
-    const labels = mk('div', 'weather-hour-labels');
-    for (const h of [hourly[0], hourly[Math.floor(hourly.length / 2)], hourly.at(-1)]) labels.append(mk('span', '', `${String(h.time).split('T')[1] || ''} · ${Math.round(h.temperature)}°`));
-    graph.append(labels); box.append(graph);
+    const detail = mk('div', 'weather-hour-detail'); detail.setAttribute('role', 'status');
+    const readings = mk('div', 'weather-hour-readings'); readings.setAttribute('aria-label', 'Hourly temperatures');
+    for (const h of hours) {
+      const text = `${h.time.split('T')[1]} · ${Math.round(h.temperature)}°${String(c.units || '').toUpperCase()}`;
+      const button = mk('button', 'weather-hour', text); button.type = 'button';
+      button.onclick = () => { detail.textContent = `${date} ${text} · forecast, location time`; for (const b of readings.children) b.setAttribute('aria-pressed', String(b === button)); };
+      readings.append(button);
+    }
+    graph.append(detail, readings); readings.firstElementChild.click();
   }
+  box.append(graph);
   const strip = mk('div', 'weather-days');
   (c.days || []).forEach((d, i) => {
-    const day = mk('div', `weather-day${i === 0 ? ' today' : ''}`);
+    const day = mk('button', 'weather-day'); day.type = 'button'; day.dataset.date = d.date; day.setAttribute('aria-label', `Hourly forecast for ${d.date}`); day.onclick = () => showHours(d.date); dayButtons.push(day);
     const date = new Date(`${d.date}T12:00:00Z`);
     const label = i === 0 ? 'TODAY' : Number.isFinite(date.getTime()) ? date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toUpperCase() : d.date;
     day.append(mk('div', 'weather-day-label', label), mk('div', 'weather-day-icon', weatherSymbol(d.code)), mk('div', 'weather-day-condition', d.conditions || 'Unavailable'), mk('div', 'weather-day-temps', `${Math.round(d.high)}°  /  ${Math.round(d.low)}°`), mk('div', 'weather-day-rain', Number.isFinite(d.rain) ? `${d.rain}% precipitation` : 'Precipitation —'));
     strip.append(day);
   });
-  box.append(strip); root.append(box);
+  box.append(strip); root.append(box); if (c.days?.length) showHours(c.days[0].date);
 }
 
 function weatherSymbol(code) {
