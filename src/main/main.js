@@ -45,6 +45,7 @@ const welcome = require('./welcome');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
+const { ViewerGuard, config } = require('./viewerGuard');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
@@ -88,7 +89,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let fitnessPanel, callService, assignmentsPanel, agentsPanel, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -240,7 +241,7 @@ async function setPresence(on) {
   if (on) {
     const r = await presence.enable();
     if (!r.ok) { store.set('settings.presence.enabled', false); ask.notice(r.error, 'failed'); }
-  } else presence.disable();
+  } else { presence.disable(); viewerGuard?.reset(); }
   broadcast();
 }
 
@@ -948,7 +949,7 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
-  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); });
+  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); if (presence?.enabled) viewerGuard?.frame(f || {}); });
   ipcMain.handle('presence:status', (_e, st) => { presence?.setStatus(st); });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
@@ -1362,6 +1363,18 @@ app.whenReady().then(() => {
     notify: (m) => ask.notice(m, 'failed')
   });
   presence.onChange = broadcast;
+  // Second-viewer guard (opt-in, locks only): more faces in view than expected starts a countdown. It counts faces; it cannot tell who anyone is.
+  viewerGuard = new ViewerGuard({ lock: () => ask.mac.lockScreen(), notify: (m) => ask.notice(m, 'failed'), getConfig: () => store.get('settings.presence.guard') });
+  ask.viewerGuardCommand = async (c) => {
+    const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';
+    if (c.type === 'snooze') { viewerGuard.snooze(30); return { status: 'done', reply: 'Understood, Sir. The viewer guard is paused for 30 minutes.', actions: 1 }; }
+    store.set('settings.presence.guard', { ...(store.get('settings.presence.guard') || {}), enabled: c.type === 'on' }); viewerGuard.reset();
+    if (c.type === 'off') { broadcast(); return { status: 'done', reply: 'The viewer guard is off.', actions: 1 }; }
+    let note = '';
+    if (!store.get('settings.presence.enabled')) { store.set('settings.presence.enabled', true); await setPresence(true); note = ' I turned Presence on, because the guard uses its camera.'; }
+    broadcast();
+    return { status: 'done', reply: `The viewer guard is on: if another face stays in view, I will warn you and lock the screen after ${config(store.get('settings.presence.guard')).seconds} seconds.${note}${limits}`, actions: 1 };
+  };
   if (store.get('settings.presence.enabled')) presence.enable().then((r) => { if (!r.ok) store.set('settings.presence.enabled', false); broadcast(); });
   ask.onHands = handsCommand;
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
