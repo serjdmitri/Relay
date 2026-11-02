@@ -1,7 +1,7 @@
 const crypto=require('crypto');
 const {nextRun,parseScheduleCommand,MISSED_MS}=require('../schedule');
 const {isSecret}=require('../memory');
-const DEFAULTS={enabled:false,ownerNumber:'',maxDuration:2,dailyCalls:2,dailyMinutes:10,quiet:true,quietStart:21,quietEnd:8,offerOnCompletion:false};
+const DEFAULTS={enabled:false,immediate:true,ownerNumber:'',maxDuration:2,dailyCalls:2,dailyMinutes:10,quiet:true,quietStart:21,quietEnd:8,offerOnCompletion:false};
 const ACTIVE=new Set(['sending','queued','active','uncertain','stop-requested']);
 const day=at=>{const d=new Date(at);return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;};
 function quiet(cfg,now){if(!cfg.quiet)return false;const hour=new Date(now).getHours();return cfg.quietStart===cfg.quietEnd|| (cfg.quietStart<cfg.quietEnd?hour>=cfg.quietStart&&hour<cfg.quietEnd:hour>=cfg.quietStart||hour<cfg.quietEnd);}
@@ -18,7 +18,7 @@ class Calls {
   state(){const {keyEnc,...config}=this.config();return{config,hasKey:this.hasKey(),privateMode:this.privateMode(),requests:this.items().slice(-100).reverse(),schedules:this.schedules(),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone};}
   configure(raw){
     const old=this.config(),cfg={...old};
-    for(const k of ['enabled','quiet','offerOnCompletion'])if(k in raw)cfg[k]=!!raw[k];
+    for(const k of ['enabled','immediate','quiet','offerOnCompletion'])if(k in raw)cfg[k]=!!raw[k];
     if('ownerNumber'in raw)cfg.ownerNumber=raw.ownerNumber?number(raw.ownerNumber):'';
     for(const [k,min,max]of [['maxDuration',1,5],['dailyCalls',1,10],['dailyMinutes',1,60],['quietStart',0,23],['quietEnd',0,23]])if(k in raw){if(!Number.isInteger(Number(raw[k]))||+raw[k]<min||+raw[k]>max)throw Error(`${k} must be between ${min} and ${max}.`);cfg[k]=+raw[k];}
     this.store.set('settings.calls',cfg);this.save();return this.state();
@@ -29,6 +29,11 @@ class Calls {
     if(this.items().filter(r=>r.state==='review'&&r.expires>this.now()).length>=10)throw Error('Ten calls await review. Cancel or review them first.');
     const r={id:crypto.randomUUID(),number:to,purpose:text,minutes:cfg.maxDuration,created:this.now(),expires:this.now()+15*60000,state:'review',source,...(occurrence?{occurrence}:{})};
     this.store.data.callRequests=[...this.items(),r];this.save();try{this.onReview(r);}catch{}return r;
+  }
+  async requestOwnerCall(text,{background=false}={}){
+    const r=this.prepare(text,{source:background?'schedule':'voice'});
+    if(background||!this.config().immediate)return{review:true};
+    return this.approve(r.id,async()=>true); // An explicit current owner command authorizes this saved destination.
   }
   validate(r){
     const cfg=this.config();

@@ -17,3 +17,15 @@ test('restart during sending is marked uncertain and no automatic request is rep
 test('due schedules create one expiring review, persist advancement and never dial',async()=>{const r=setup(),s=r.calls.addSchedule({purpose:'Daily check-in',repeat:'daily',hour:13,minute:0});r.setNow(s.next);await r.calls.tick();await r.calls.tick();assert.equal(r.calls.items().length,1);assert.equal(r.calls.items()[0].state,'review');assert.equal(r.posts(),0);r.setNow(r.now()+16*60000);await r.calls.tick();assert.equal(r.calls.items()[0].state,'expired');});
 test('missed schedules are not unexpectedly dialed on wake',async()=>{const r=setup(),s=r.calls.addSchedule({purpose:'Daily check-in',repeat:'daily',hour:13,minute:0});r.setNow(s.next+60*60000);await r.calls.tick();assert.equal(r.calls.items().length,0);assert.match(s.error,/missed/);assert.equal(r.posts(),0);});
 test('Bland uses fixed endpoints, disables recording/retries and never leaks provider errors or the key',async()=>{const requests=[];const api=new Bland({getKey:()=> 'fixture-secret',fetchFn:async(url,options)=>{requests.push({url,options});return{ok:true,json:async()=>({call_id:'safe-id'})};}});await api.dial({id:'request',number:'+15555550123',purpose:'Check in',minutes:2});const body=JSON.parse(requests[0].options.body);assert.equal(body.record,false);assert.equal(body.max_duration,2);assert.equal(body.retry,undefined);assert.equal(body.voicemail_action,'hangup');assert.equal(requests[0].options.redirect,'error');assert.match(body.first_sentence,/AI assistant/);assert.equal(body.task.includes('fixture-secret'),false);assert.throws(()=>api.id('../../other'),/valid/);const bad=new Bland({getKey:()=> 'fixture-secret',fetchFn:async()=>({ok:false,status:401})});await assert.rejects(bad.check(),e=>!e.message.includes('fixture-secret'));});
+
+test('explicit call-me requests dial the saved owner immediately; schedules and review mode never do',async()=>{
+ const r=setup();assert.equal(r.calls.config().immediate,true);
+ const result=await r.calls.requestOwnerCall('Check in about robotics');assert.equal(result.ok,true);assert.equal(r.posts(),1);
+ assert.equal(r.calls.items()[0].number,'+15555550123');
+ const scheduled=setup();assert.equal((await scheduled.calls.requestOwnerCall('Check in',{background:true})).review,true);assert.equal(scheduled.posts(),0);
+ const review=setup();review.calls.configure({immediate:false});assert.equal((await review.calls.requestOwnerCall('Check in')).review,true);assert.equal(review.posts(),0);
+});
+test('immediate owner calls still enforce private mode, enabled status, quiet hours, key and limits',async()=>{
+ for(const over of [{privateMode:()=>true},{hasKey:()=>false}]){const r=setup(over);await assert.rejects(r.calls.requestOwnerCall('Check in'));assert.equal(r.posts(),0);}
+ for(const cfg of [{enabled:false},{dailyMinutes:1},{quiet:true,quietStart:0,quietEnd:0}]){const r=setup();r.calls.configure(cfg);await assert.rejects(r.calls.requestOwnerCall('Check in'));assert.equal(r.posts(),0);}
+});
