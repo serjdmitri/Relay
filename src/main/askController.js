@@ -2036,6 +2036,7 @@ class AskController {
           const cc = require('./calls/service').parseCallCommand(effective);
           if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
         }
+        if (!opts.shown && !opts.scheduled && this.sessionNotes) { const command = require('./sessionNotes').parseSessionCommand(effective); if (command) return this.finish(entry, await this.sessionNotes.command(command)); }
         if (!opts.shown && !opts.scheduled && require('./school').parseSchoolCommand(effective)) return this.finish(entry, await this.showSchoolAssignments());
         if (!opts.shown && !opts.scheduled) {
           if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
@@ -3210,6 +3211,7 @@ class AskController {
     const historyEntry = { ...entry, finishedAt: Date.now(), status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) };
     if (this.activeScheduledId && entry.id === this.activeScheduledId) this.store.updateHistory(entry.id, historyEntry);
     else this.store.addHistory(historyEntry);
+    this.sessionNotes?.capture(historyEntry);
     if (!res.preserveLastReply) this.store.set('lastReply', reply);
     if (Date.now() - entry.ts > 60000 && !entry.remote && entry.text) this.onProactive?.({ type: 'job', title: String(entry.text).slice(0, 60), status: res.status === 'done' ? 'done' : 'failed', id: entry.id });
     if (res.status === 'done' && reply && entry.text) {

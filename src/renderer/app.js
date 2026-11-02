@@ -571,6 +571,7 @@ const PAGES = {
   },
 
   memory(c) {
+    renderSessionNotes(c);
     c.append(h('<div class="lead">What Relay knows about you. Say “remember that…” or add it here. Explicit new memories are stored in Relay and exported to Desktop/memory for manual import; they are not automatically saved to Sentient OS. Forgetting here does not remove existing export files or vault notes.</div>'));
     const on = S.settings.memory !== false;
     const sw = h('<div class="card flat" style="margin-bottom:18px"></div>');

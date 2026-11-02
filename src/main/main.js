@@ -142,7 +142,8 @@ function broadcast() {
 }
 
 function publicState() {
-  const d = JSON.parse(JSON.stringify(store.data));
+  const { sessionNotes: _sessionNotes, ...publicData } = store.data;
+  const d = JSON.parse(JSON.stringify(publicData)); // session notes use protected Memory IPC, not broadcasts
   if (d.settings.calls) { delete d.settings.calls.keyEnc; delete d.settings.calls.twilioTokenEnc; }
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
@@ -484,6 +485,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('state:set', (_e, key, value) => {
+    if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
     if (key === 'settings.model.provider' && value === 'ollama') { googleConnections.cancel(); notionConnection.cancel(); }
     if (key === 'settings.calls' || key.startsWith('settings.calls.')) throw Error('Use Calls settings to change calling permissions.');
     if (key === 'settings.driveRoots' || key.startsWith('settings.driveRoots.')) throw new Error('Use the folder chooser for file access.');
@@ -495,6 +497,7 @@ function registerIpc() {
     if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.sentient.enabled' || key === 'settings.memory' || key === 'settings.model.provider') ask.dropWarm(true);
+    if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
     if (key === 'settings.model.provider' && value === 'ollama') speaker?.stop();
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
@@ -859,6 +862,8 @@ function registerIpc() {
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
   const googleConnections = registerGoogleConnections({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
   registerSchoolConnection({ ipcMain, store, getWindow: () => mainWin, getBridge: () => bridge, openFirefox: url => new Promise((resolve, reject) => execFile('/usr/bin/open', ['-a', 'Firefox', url], { timeout: 5000 }, e => e ? reject(e) : resolve())), checkAssignments: () => ask.handleText('check my assignments'), onChange: broadcast });
+  ask.sessionNotes = require('./sessionNotes').registerSessionNotes({ ipcMain, store, getWindow: () => mainWin, onChange: broadcast, exportDir: () => path.join(app.getPath('desktop'), 'memory'), confirmDelete: async () => (await dialog.showMessageBox(mainWin, { type: 'warning', message: 'Delete these local session notes?', detail: 'Existing History entries, export files and Sentient OS notes are separate and will remain.', buttons: ['Delete session', 'Cancel'], defaultId: 1, cancelId: 1 })).response === 0, openMemory: () => openMain('memory'), showMatches: (sessions, query) => cardPanel.show({ kind: 'list', hold: true, title: 'Session notes: ' + query, summary: 'Local conversation notes; requests and replies are not independently verified facts.', items: sessions.map(s => ({ title: s.title, subtitle: new Date(s.created).toLocaleString(), note: s.entries.filter(e => (e.request + ' ' + e.reply).toLowerCase().includes(query.toLowerCase())).slice(0, 2).map(e => e.request + ': ' + e.reply).join('\n').slice(0, 1500) })), facts: [], links: [] }) });
+
   // Relay Remote: the phone page, served by Relay on this Mac.
   ipcMain.handle('remote:set', async (_e, patch) => {
     for (const [k, v] of Object.entries(patch || {})) if (['enabled', 'lan'].includes(k)) store.set(`settings.remote.${k}`, !!v);
