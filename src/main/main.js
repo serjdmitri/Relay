@@ -63,7 +63,7 @@ app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let lastThrown = null;
-let presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -929,13 +929,16 @@ app.whenReady().then(() => {
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
   overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
   overlay.watchDisplays();
+  trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
+  floatingMotion = new (require('./floatingMotion').FloatingMotion)({ area: point => screen.getDisplayNearestPoint(point).bounds, cursor: () => screen.getCursorScreenPoint(), onZone: states => trashTarget.render(states), onThrow: undo => { lastThrown = undo; } });
+  app.once('before-quit', () => { floatingMotion.stop(); trashTarget.close(); });
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();
-  cardPanel = new CardPanel({ preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false, getLayouts: () => store.get('menuLayouts') || {}, saveLayouts: layouts => store.set('menuLayouts', layouts) });
+  cardPanel = new CardPanel({ motion: floatingMotion, preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false, getLayouts: () => store.get('menuLayouts') || {}, saveLayouts: layouts => store.set('menuLayouts', layouts) });
   cardPanel.onRefresh = (card, units) => require('./forecast').forecast(card.location, { units, signal: AbortSignal.timeout(10000) });
   cardPanel.onDismiss = (card) => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); };
   assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
-  holos = new HoloManager({
+  holos = new HoloManager({ motion: floatingMotion,
     createWindow: ({ width, height }) => holoWin.createHoloWindow({ preload: path.join(__dirname, 'preload.js'), width, height }),
     cursor: () => hands?.virtualCursor() || holoWin.cursor(), getUi: () => store.get('settings.holoUi'), area: holoWin.area, displayFor: holoWin.displayFor, download: (u) => downloadStl(u),
     generate: (c) => ask.generatePhotoModel(c), readFile: (f) => ask.modelCache?.readInside(f),
@@ -1029,7 +1032,7 @@ app.whenReady().then(() => {
   setInterval(() => { if (store.get('settings.remote.enabled')) lockWatch.refresh(); }, 8000);
   ask.holos = holos;
   ask.stickies = new Stickies({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } });
-  stickyPanel = new StickyPanel({ stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });
+  stickyPanel = new StickyPanel({ motion: floatingMotion, stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });
   stickyPanel.sync(); // the stickies you left are still there
   ask.drive = new Drive({
     fs: require('fs'), home: os.homedir(), cards: cardPanel,
@@ -1046,7 +1049,7 @@ app.whenReady().then(() => {
   cardPanel.onFile = (p) => ask.drive.openFile(p);
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
-  hands = new HandControl({
+  hands = new HandControl({ motion: floatingMotion,
     externalDrag,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
@@ -1071,12 +1074,7 @@ app.whenReady().then(() => {
         if (spec) { const original = { ...spec }; const pos = panel.position(); panel.undo = async () => { const r = await panelHub.show(original); if (!r.ok) throw new Error(r.error); const win = panelWins.windows.get(r.id); if (win && !win.isDestroyed()) win.setPosition(pos.x, pos.y); }; }
         return panel;
       }
-      const win = cardPanel?.win;
-      if (!cardPanel?.visible || cardPanel.card?.hold || !win || win.isDestroyed() || !win.isVisible()) return null;
-      const b = win.getBounds();
-      if (pt.x < b.x || pt.y < b.y || pt.x > b.x + b.width || pt.y > b.y + b.height) return null;
-      const savedCard = cardPanel.card; const pos = win.getBounds();
-      return { key: 'answer-card', undo: async () => { await cardPanel.show(savedCard); if (cardPanel.win && !cardPanel.win.isDestroyed()) cardPanel.win.setPosition(pos.x, pos.y); }, position: () => win.getBounds(), move: (x, y) => { if (!win.isDestroyed()) win.setPosition(Math.round(x), Math.round(y)); }, close: () => cardPanel.hide() };
+      return cardPanel?.handTarget(pt) || null;
     },
     holos, display: () => screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).bounds,
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
@@ -1155,8 +1153,9 @@ app.whenReady().then(() => {
     const layout = require('./menuLayout'), windows = [...cardPanel.live().map(e => e.win), ...panelWins.windows.values()];
     if (!onlyIfOverlapping || layout.menusOverlap(windows)) layout.arrangeMenus(windows);
   };
-  panelWins = new PanelWindows({ preload: path.join(__dirname, 'preload.js'), getLayouts: () => store.get('panelWindowLayouts') || {}, saveLayouts: layouts => store.set('panelWindowLayouts', layouts), onArrange: arrangeOpenMenus });
+  panelWins = new PanelWindows({ motion: floatingMotion, preload: path.join(__dirname, 'preload.js'), getLayouts: () => store.get('panelWindowLayouts') || {}, saveLayouts: layouts => store.set('panelWindowLayouts', layouts), onArrange: arrangeOpenMenus });
   cardPanel.onArrange = arrangeOpenMenus;
+  panelWins.onRestore = async (spec, bounds) => { const r = await panelHub.show(spec); const w = panelWins.windows.get(r.id); if (w) w.once('ready-to-show', () => w.setBounds(bounds)); };
   panelWins.onRefresh = id => { const p = panelHub?.panels.get(id); if (p) return panelHub.tick(p); };
   ask.onResetMenus = () => { store.set('panelWindowLayouts', {}); arrangeOpenMenus(); };
   let batteryNow = { present: false };
@@ -1307,7 +1306,7 @@ app.whenReady().then(() => {
     });
   }
   hotkeys = new Hotkeys({ getShortcuts: () => { const s = store.get('settings.shortcuts'); const used = Object.values(s).some(v => v?.code === 'KeyI' && v.mods?.includes('Alt')); return used ? s : { ...s, reactorIdle: { code: 'KeyI', mods: ['Alt'] } }; }, onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
-  hotkeys.onMouse = (down) => { holos?.mouseButton(down); overlay?.dropWatch(down); }; // a file dragged onto a hologram is accepted while the button is held over it
+  hotkeys.onMouse = (down) => { floatingMotion?.mouseButton(down); holos?.mouseButton(down); overlay?.dropWatch(down); }; // a file dragged onto a hologram is accepted while the button is held over it
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');
   const icon = nativeImage.createFromPath(iconPath);

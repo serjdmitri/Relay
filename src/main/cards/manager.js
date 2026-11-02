@@ -3,7 +3,7 @@ const { CardPanel: CardWindow } = require('./panel');
 
 // Each card owns its window and controls; the latest-card accessors preserve existing callers.
 class CardPanel {
-  constructor(options) { this.options = options; this.entries = []; }
+  constructor(options) { this.options = options; this.entries = []; this.serial = 0; }
   live() { return this.entries.filter(e => e.card && e.win && !e.win.isDestroyed()); }
   get latest() { return this.live().at(-1); }
   get win() { return this.latest?.win; }
@@ -13,6 +13,7 @@ class CardPanel {
   async show(card) {
     if (this.live().length + this.entries.filter(e => e.pending).length >= 8) throw new Error('Eight menus are open. Close a menu before opening another.');
     const e = new CardWindow(this.options);
+    e.motionKey = `card:${++this.serial}`;
     e.key = JSON.stringify([card.kind, card.location || card.title || 'Menu']);
     e.pinned = false; e.pending = true;
     e.onDismiss = c => { this.onDismiss?.(c); };
@@ -34,7 +35,20 @@ class CardPanel {
       this.options.saveLayouts?.(Object.fromEntries(Object.entries(layouts).slice(-100)));
     };
     require('../windowGeometry').watchGeometry(e.win, save);
+    this.options.motion?.watchWindow(e.win, this.target(e));
     return e;
+  }
+  target(e) {
+    const card = e.card, bounds = e.win.getBounds();
+    return { key: e.motionKey, alive: () => !!e.card && !e.win.isDestroyed(), position: () => e.win.getBounds(), move: (x,y) => { if (!e.win.isDestroyed()) e.win.setPosition(Math.round(x), Math.round(y)); }, close: () => e.hide(), undo: async () => { const restored = await this.show(card); restored.manualMove = restored.manualSize = true; restored.win.setBounds(bounds); } };
+  }
+  handTarget(point) {
+    for (const e of this.live().reverse()) {
+      if (!e.win.isVisible()) continue;
+      const b = e.win.getBounds();
+      if (point.x >= b.x && point.x <= b.x+b.width && point.y >= b.y && point.y <= b.y+b.height) return this.target(e);
+    }
+    return null;
   }
   hide(all = false) { for (const e of this.live()) if (all || !e.pinned) e.hide(); }
   arrange(onlyIfOverlapping = false) {

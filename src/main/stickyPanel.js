@@ -6,9 +6,9 @@ const path = require('path');
 const { slot, W, H } = require('./stickies');
 
 class StickyPanel {
-  constructor({ stickies, preload, onClose = () => {} }) {
+  constructor({ stickies, preload, motion = null, onClose = () => {} }) {
     this.stickies = stickies;
-    this.preload = preload;
+    this.preload = preload; this.motion = motion;
     this.wins = new Map();
     this.onClose = onClose;
     stickies.onChange = () => this.sync();
@@ -41,6 +41,7 @@ class StickyPanel {
       let t = null;
       const saveAt = () => { clearTimeout(t); t = setTimeout(() => { if (!w.isDestroyed()) { const b = w.getBounds(); this.stickies.onChange = () => {}; this.stickies.move(s.id, b.x, b.y); this.stickies.onChange = () => this.sync(); } }, 400); };
       w.on('moved', saveAt);
+      this.motion?.watchWindow(w, { key: `sticky:${s.id}`, close: () => w.hide() });
       this.wins.set(s.id, w);
       n++;
     }

@@ -11,8 +11,9 @@ const momentum = require('./momentum');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null }) {
+  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
+    this.motion = motion;
     this.sensitivity = sensitivity;
     this.saveMargin = saveMargin;
     this.onThrow = onThrow;
@@ -66,13 +67,13 @@ class HandControl {
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor();
     if (!this.secondary) {
-      this.peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
+      this.peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
       this.peer.claims = this.claims;
       this.peer.glides = this.glides;
       this.peer.enabled = true;
       this.peer.ring = this.createCursor();
       this.extraPeers = Array.from({ length: 2 }, () => {
-        const peer = new HandControl({ holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
+        const peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
         peer.claims = this.claims; peer.glides = this.glides; peer.enabled = true; peer.ring = this.createCursor();
         return peer;
       });
@@ -265,6 +266,7 @@ class HandControl {
     const drag = this.drag;
     this.drag = null;
     if (drag) {
+      if (this.motion) { this.motion.release(drag.target.key, !throwAtEdge); this.captured = null; return; }
       const b = this.display();
       const recent = drag.trail.filter(p => this.now() - p.t <= 500);
       const start = recent[0];
@@ -308,6 +310,7 @@ class HandControl {
       if (this.externalHeld) { this.externalDrag?.move(this, pt); this.ringState('held'); return; }
       if (this.drag) {
         this.drag.target.move(pt.x - this.drag.ax, pt.y - this.drag.ay);
+        this.motion?.update(this.drag.target.key, pt);
         const now = this.now();
         this.drag.trail.push({ x: pt.x, y: pt.y, t: now });
         this.drag.trail = this.drag.trail.filter(p => now - p.t <= 500);
@@ -327,6 +330,7 @@ class HandControl {
         this.claim = floating.key; this.claims.set(this.claim, this);
         const origin = floating.position();
         this.drag = { target: floating, ax: pt.x - origin.x, ay: pt.y - origin.y, trail: [{ x: pt.x, y: pt.y, t: this.now() }] };
+        this.motion?.begin(floating, pt);
         this.ringState('held');
         return;
       }
@@ -345,6 +349,7 @@ class HandControl {
         const target = { key: `holo:${h.id}`, undo: () => this.holos.show(original), position: () => ({ x: h.x, y: h.y }), move: (x, y) => { h.x = Math.round(x); h.y = Math.round(y); this.holos.place(h); if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.holos.local(h)); }, finish: () => this.holos.persist(), close: () => this.holos.close(h.id) };
         this.captured = h;
         this.drag = { target, ax: pt.x - h.x, ay: pt.y - h.y, trail: [{ x: pt.x, y: pt.y, t: this.now() }] };
+        this.motion?.begin(target, pt);
         return;
       }
       this.captured = h;

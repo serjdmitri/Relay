@@ -397,3 +397,11 @@ test('a fist away from Relay objects drags a Mac window and releases on tracking
   assert.deepEqual(events.map(e => e[0]), ['down', 'move', 'up']);
   hc.disable();
 });
+
+test('mouse-independent hand grabs delegate motion to the shared trash/glide controller',async()=>{
+ const {hc,ev,at}=await rig();const calls=[];
+ hc.motion={begin:(t,p)=>calls.push(['begin',t.key]),update:(key,p)=>calls.push(['update',key]),release:(key,cancelled)=>calls.push(['release',key,cancelled])};
+ hc.floatingAt=()=>({key:'menu:test',position:()=>({x:900,y:550}),move(){},close(){}});
+ await ev({type:'grab',...at(900,550)});await ev({type:'move',...at(1000,600)});await ev({type:'release',...at(1000,600)});
+ assert.deepEqual(calls,[['begin','menu:test'],['update','menu:test'],['release','menu:test',false]]);
+});
