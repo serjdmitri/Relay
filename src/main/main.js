@@ -16,7 +16,6 @@ const overnightMod = require('./overnight');
 const { gatherFacts } = require('./auditFacts');
 const securityAudit = require('./securityAudit');
 const { Bland } = require('./calls/bland');
-const { Twilio } = require('./calls/twilio');
 const { Calls, quiet: callsQuiet } = require('./calls/service');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
@@ -143,7 +142,7 @@ function broadcast() {
 
 function publicState() {
   const d = JSON.parse(JSON.stringify(store.data));
-  if (d.settings.calls) { delete d.settings.calls.keyEnc; delete d.settings.calls.twilioTokenEnc; }
+  if (d.settings.calls) delete d.settings.calls.keyEnc;
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
   const hasTtsKeys = {};
@@ -382,9 +381,7 @@ async function welcomeBack(lockedAt, lastWelcome) {
 function registerIpc() {
   const callKey = () => decryptKey(store.get('settings.calls.keyEnc')) || blandLaunchKey;
   const bland = new Bland({ getKey: callKey });
-  const twilioCreds = () => { const c = store.get('settings.calls') || {}; return { sid: c.twilioSid, from: c.twilioFrom, voice: c.twilioVoice, token: decryptKey(c.twilioTokenEnc) }; };
-  const twilio = new Twilio({ getCreds: twilioCreds });
-  callService = new Calls({ store, api: bland, twilio, hasTwilio: () => { const c = twilioCreds(); return /^AC[0-9a-f]{32}$/i.test(c.sid || '') && !!c.from && !!c.token; }, hasKey: () => !!callKey(), privateMode: () => store.get('settings.model.provider') === 'ollama', onChange: broadcast, onReview: r => {
+  callService = new Calls({ store, api: bland, hasKey: () => !!callKey(), privateMode: () => store.get('settings.model.provider') === 'ollama', onChange: broadcast, onReview: r => {
     if (callsQuiet(callService?.config() || {}, Date.now())) return;
     if (Notification.isSupported()) { const n = new Notification({ title: 'Jarvis call ready for review', body: 'Open Calls to review the number and purpose. No call has been placed.', silent: true }); n.on('click', () => openMain('calls')); n.show(); }
   } });
@@ -395,8 +392,6 @@ function registerIpc() {
   callIpc('calls:state', () => callService.state());
   callIpc('calls:configure', raw => callService.configure(raw || {}));
   callIpc('calls:key', key => { if (typeof key !== 'string' || key.length > 4000) throw Error('Invalid key.'); store.set('settings.calls.keyEnc', key.trim() ? encryptKey(key.trim()) : ''); store.flush(); broadcast(); return { ok: true }; });
-  callIpc('calls:twilio-token', token => { if (typeof token !== 'string' || token.length > 400) throw Error('Invalid token.'); store.set('settings.calls.twilioTokenEnc', token.trim() ? encryptKey(token.trim()) : ''); store.flush(); broadcast(); return { ok: true }; });
-  callIpc('calls:test-twilio', () => { if (callService.privateMode()) throw Error('Phone call access is disabled in local/private mode.'); return twilio.check(); });
   callIpc('calls:test', () => { if (callService.privateMode()) throw Error('Bland access is disabled in local/private mode.'); return bland.check(); });
   callIpc('calls:prepare', text => callService.prepare(text));
   callIpc('calls:approve', id => callService.approve(id, async preview => {
