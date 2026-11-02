@@ -44,7 +44,7 @@ const sched = require('./schedule');
 const { AgentManager, parseAgentCommand } = require('./agents');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
-const { WakeWord } = require('./wake');
+const { WakeWord, commandAfterWake } = require('./wake');
 const { BargeIn } = require('./barge');
 const { shouldFollowUp, followUpAnswer, spokenReply, mayCloseAnswer } = require('./conversation');
 const { Layouts } = require('./layouts');
@@ -247,7 +247,7 @@ class AskController {
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
       onArmed: (on) => this.overlay.setArmed(on),
-      onWake: () => this.wakeTriggered(),
+      onWake: text => this.wakeTriggered(text),
       log: console
     });
     // Meeting notes: listens in short stretches until you say "Jarvis, end the meeting"; then the model writes the Note and the reminders.
@@ -1604,9 +1604,11 @@ class AskController {
   }
 
   // The phrase was heard: chime, then listen for the request. It ends by itself when the user stops talking.
-  async wakeTriggered() {
+  async wakeTriggered(heard = '') {
     if (this.state !== 'idle' && this.state !== 'done') return;
     this.wake?.disarm();
+    const inline = commandAfterWake(heard, this.store.get('settings.wake.phrase') || 'hey jarvis');
+    if (inline) return this.handleText(inline, { voice: true });
     if (this.store.get('settings.speakReplies') && this.speaker) {
       this.state = 'waking';
       this.ensureWindow();

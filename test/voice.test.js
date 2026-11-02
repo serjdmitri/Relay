@@ -154,3 +154,16 @@ test('voice preparation has its own state and clears before playback',async()=>{
  release('test.wav');await new Promise(r=>setImmediate(r));child.emit('spawn');child.emit('exit',0);await done;
  assert.deepEqual(states,[['preparing',true],['preparing',false],['playing',true],['playing',false]]);
 });
+test('stalled playback clears its speaking state and reports an actionable error', async () => {
+  let expire;const child=new EventEmitter();child.kill=()=>{};
+  const speaker=new Spk({spawnFn:()=>child,setTimer:fn=>{expire=fn;return 1;},clearTimer(){}});
+  const states=[];speaker.onState=on=>states.push(on);
+  const playing=speaker.play('fixture.wav',speaker.token);child.emit('spawn');assert.equal(speaker.talking,true);
+  expire();await assert.rejects(playing,/stalled/);assert.equal(speaker.speaking,false);assert.deepEqual(states,[true,false]);
+});
+test('stop settles playback even if an audio subprocess never emits exit', async () => {
+  const child=new EventEmitter();let killed=false,cleared=false;child.kill=()=>{killed=true;};
+  const speaker=new Spk({spawnFn:()=>child,setTimer:()=>1,clearTimer:()=>{cleared=true;}});
+  const playing=speaker.play('fixture.wav',speaker.token);speaker.stop();await playing;
+  assert.equal(killed,true);assert.equal(cleared,true);assert.equal(speaker.speaking,false);
+});

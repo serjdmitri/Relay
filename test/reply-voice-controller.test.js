@@ -156,3 +156,9 @@ test('background noise alone never submits an automatic voice command', () => {
     assert.deepEqual(calls, ['cancel']);
   } finally { Date.now = original; }
 });
+test('a command heard with the wake phrase runs once by voice without an extra spoken greeting', async () => {
+  const c=Object.create(AskController.prototype),commands=[];
+  Object.assign(c,{_state:'idle',store:{get:key=>key==='settings.wake.phrase'?'hey jarvis':true},wake:{disarm(){}},handleText:(text,options)=>commands.push({text,options}),speaker:{speak:()=>assert.fail('inline requests must not wait for a greeting')}});
+  await c.wakeTriggered('hey jarvis open notes');
+  assert.deepEqual(commands,[{text:'open notes',options:{voice:true}}]);
+});

@@ -67,7 +67,7 @@ function rig(over = {}) {
   let can = true;
   const woke = [];
   const armed = [];
-  const w = new WakeWord({ speech, getConfig: () => cfg, canListen: () => can, onWake: (t) => woke.push(t), onArmed: (a) => armed.push(a), setTimer: (f, ms) => { timers.push({ f, ms }); return timers.length; }, clearTimer: () => {}, ...over });
+  const w = new WakeWord({ handoffMs: 0, speech, getConfig: () => cfg, canListen: () => can, onWake: (t) => woke.push(t), onArmed: (a) => armed.push(a), setTimer: (f, ms) => { timers.push({ f, ms }); return timers.length; }, clearTimer: () => {}, ...over });
   return { w, speech, log, cfg, woke, armed, timers, setCan: (v) => { can = v; } };
 }
 
@@ -117,4 +117,26 @@ test('a session is renewed now and then, and a failing microphone is retried a f
   for (let i = 0; i < 7; i++) await bad.w.arm();
   assert.equal(bad.w.errors, 7);
   assert.equal(bad.timers.filter((t) => t.ms >= 2000).length, 4, 'retries stop after a few tries');
+});
+
+test('quieter separated clap impulses work without treating sustained sound as two claps', () => {
+  const gate = new ClapGate();
+  for(let t=0;t<500;t+=50) gate.level(.03,t);
+  assert.equal(gate.level(.28,600),false); gate.level(.04,660);
+  assert.equal(gate.level(.3,850),true);
+  gate.reset();for(let t=0;t<1000;t+=50) assert.equal(gate.level(.8,t),false);
+  assert.equal(gate.level(NaN,1200),false);
+});
+test('wake handoff retains inline words and is cancelled when listening is disabled', async () => {
+  const r=rig({handoffMs:300}); await r.w.refresh();
+  r.speech.emit('partial','hey jarvis');r.speech.emit('partial','hey jarvis open notes');
+  assert.equal(r.woke.length,0);r.timers.find(t=>t.ms===300).f();
+  assert.deepEqual(r.woke,['hey jarvis open notes']);
+  const stopped=rig({handoffMs:300});await stopped.w.refresh();stopped.speech.emit('partial','hey jarvis');stopped.cfg.enabled=false;stopped.w.disarm();stopped.timers.find(t=>t.ms===300).f();assert.equal(stopped.woke.length,0);
+});
+test('inline wake commands exclude the wake phrase and preceding room transcript', () => {
+  const {commandAfterWake}=require('../src/main/wake');
+  assert.equal(commandAfterWake('the television hey Jarvis open my calculator','hey jarvis'),'open my calculator');
+  assert.equal(commandAfterWake('Jarvis wake up show my battery','hey jarvis'),'show my battery');
+  assert.equal(commandAfterWake('hey jarvis','hey jarvis'),'');
 });

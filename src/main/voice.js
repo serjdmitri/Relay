@@ -70,8 +70,8 @@ function speakable(text) {
 class Speaker {
   // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
   // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
-  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null } = {}) {
-    this.spawnFn = spawnFn;
+  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+    this.spawnFn = spawnFn; this.setTimer = setTimer; this.clearTimer = clearTimer;
     this.exec = exec;
     this.log = log;
     this.getTts = getTts;
@@ -237,12 +237,15 @@ class Speaker {
       this.child = child;
       child.once('spawn', () => { if (token === this.token) { this.setPreparing(false); this.setTalking(true); } });
       let settled = false;
+      const timer = this.setTimer(() => { done(new Error('Audio playback stalled. Check your sound output device.')); try { child.kill('SIGTERM'); } catch {} }, 30000);
       const done = error => {
-        if (settled) return; settled = true;
+        if (settled) return; settled = true; this.clearTimer(timer);
+        if (this.cancelPlayback === cancel) this.cancelPlayback = null;
         if (this.child === child) this.child = null;
         if (token === this.token) this.setTalking(false);
         if (error && token === this.token) reject(error); else resolve();
       };
+      const cancel = () => done(); this.cancelPlayback = cancel;
       child.once('exit', code => done(code ? new Error('Audio playback failed. Check your sound output device.') : null));
       child.once('error', e => done(e));
     });
@@ -260,11 +263,15 @@ class Speaker {
       this.child = child;
       await new Promise((resolve, reject) => {
         let settled = false;
+        const timeout = Math.max(30000, Math.min(600000, say.split(/\s+/).length / (RATES[rate] || RATES.normal) * 60000 + 15000));
+        const timer = this.setTimer(() => { done(new Error('The Mac voice stalled. Check your sound output device.')); try { child.kill('SIGTERM'); } catch {} }, timeout);
         const done = error => {
-          if (settled) return; settled = true;
+          if (settled) return; settled = true; this.clearTimer(timer);
+          if (this.cancelPlayback === cancel) this.cancelPlayback = null;
           if (this.child === child) this.child = null;
           if (error && token === this.token) reject(error); else resolve();
         };
+        const cancel = () => done(); this.cancelPlayback = cancel;
         child.once('spawn', () => { if (token === this.token) { this.setPreparing(false); this.setTalking(true); } });
         child.once('exit', code => done(code ? new Error('The Mac voice could not play. Check your sound output device.') : null));
         child.once('error', e => done(e));
@@ -298,8 +305,9 @@ class Speaker {
     this.setTalking(false);
     try { this.abort && this.abort.abort(); } catch {}
     this.abort = null;
-    if (!this.child) return;
-    try { this.child.kill('SIGTERM'); } catch {}
+    const child = this.child; this.cancelPlayback?.();
+    if (!child) return;
+    try { child.kill('SIGTERM'); } catch {}
     this.child = null;
   }
 }
