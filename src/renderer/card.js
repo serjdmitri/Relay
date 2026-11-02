@@ -61,7 +61,7 @@ function renderWeather(c) {
   const box = mk('div', 'weather-inner');
   box.append(mk('div', 'weather-kicker', 'WEATHER  /  OPEN-METEO'));
   box.append(mk('h1', 'weather-title', c.location || 'Forecast'));
-  box.append(mk('div', 'weather-source', 'Local forecast · Open-Meteo'));
+  box.append(mk('div', 'weather-source', `Open-Meteo · Retrieved ${c.fetchedAt ? new Date(c.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'time unavailable'} · Conditions ${c.current?.time?.replace('T', ' ') || 'time unavailable'} (location time)`));
   const main = mk('div', 'weather-main');
   const now = c.current || {};
   const hero = mk('div', 'weather-hero');
