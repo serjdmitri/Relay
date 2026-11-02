@@ -447,6 +447,34 @@ function registerIpc() {
   setInterval(() => callService.tick().catch(() => {}), 10000);
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
+  // Folder clutter: every few hours, look (names, sizes and dates only) at the folders you chose. A messy one where organization is on gets a quiet notification that
+  // opens Files settings, where "Preview organization" shows where everything would go. Nothing is moved, and nothing is offered where organization is off.
+  const fsx = require('fs'), clutterMod = require('./clutter'), { isProject: isCodeProject } = require('./drive/plan'), { planDownloads: planFolderMoves } = require('./drive/nightly');
+  const clutterRun = () => clutterMod.evaluate(access.roots(), store.get('clutterState') || {}, { probe: (r) => access.probe(r), fs: fsx, planMovable: (d) => { try { return planFolderMoves({ fs: fsx, home: d, folder: d, limit: 150 }).raw.moves.length; } catch { return null; } }, isProject: (d) => isCodeProject(d, fsx) });
+  const clutterCheck = () => {
+    try {
+      if ((store.get('settings.clutter') || {}).enabled === false) return;
+      const { results, state } = clutterRun();
+      if (require('./proactive').inQuiet((store.get('settings.proactive') || {}).quiet, new Date())) return; // not now; nothing is recorded, so it is told after quiet hours
+      store.set('clutterState', state);
+      for (const r of results.filter((x) => x.notify)) if (Notification.isSupported()) { const n = new Notification({ title: 'A folder is getting cluttered', body: `${clutterMod.describe(r.name, r.assessment)}. Open Files settings to preview where everything would go. Nothing moves without your yes.`, silent: true }); n.on('click', () => openMain('permissions')); n.show(); }
+    } catch (e) { console.error('Clutter check failed:', e); }
+  };
+  setTimeout(clutterCheck, 120000); setInterval(clutterCheck, 6 * 3600e3);
+  ask.clutterNames = () => access.roots().map((r) => path.basename(r.path));
+  ask.clutterCommand = (c) => {
+    const { results } = clutterRun();
+    if (c.type === 'check') {
+      if (!results.length) return 'You have not chosen any folders for Relay yet. Add some in Files settings and I will watch them for clutter.';
+      return results.map((r) => r.skipped ? `${r.name}: ${r.skipped}` : r.assessment.level === 'tidy' ? `${r.name}: tidy (${r.assessment.loose} loose file${r.assessment.loose === 1 ? '' : 's'}).` : `${clutterMod.describe(r.name, r.assessment)}.${r.offer ? ' A preview is available in Files settings.' : r.root.mode !== 'organize' ? ' Turn on organization for it in Files settings to get a preview.' : ''}`).join('\n');
+    }
+    const r = results.find((x) => x.name === c.name);
+    if (!r || r.skipped) return `${c.name}: ${r?.skipped || 'I could not find that folder.'}`;
+    openMain('permissions');
+    if (r.root.mode !== 'organize') return `Organization is not turned on for ${c.name}. I opened Files settings; turn it on there and press Preview organization.`;
+    if (r.assessment.movable === 0) return `There is nothing in ${c.name} that I could sort right now.`;
+    return `I opened Files settings. Under ${c.name}, press Preview organization to see where everything would go. Nothing moves until you apply it, and you can undo it afterwards.`;
+  };
   storagePanel = new StorageWindow({ access, motion: floatingMotion, reveal: p => shell.showItemInFolder(p), settings: () => openMain('permissions') });
   ask.trashStorageSelection = async () => {
     const r=await storagePanel.trashSelected();

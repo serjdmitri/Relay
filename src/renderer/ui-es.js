@@ -39,6 +39,7 @@
     'Ask my notes': 'Preguntar a mis notas', 'Add a folder': 'Añadir una carpeta', 'Index now': 'Indexar ahora', Update: 'Actualizar', 'Live panels': 'Paneles en vivo',
     'Run my overnight list while I sleep': 'Hacer mi lista nocturna mientras duermo', 'Overnight tasks': 'Tareas nocturnas', 'Overnight hours': 'Horas nocturnas', 'File permissions': 'Permisos de archivos',
     'Answer plain questions quickly with Groq': 'Responder preguntas sencillas rápido con Groq', 'Quick answers': 'Respuestas rápidas',
+    'Suggest tidying cluttered folders': 'Sugerir ordenar las carpetas desordenadas', 'Folder suggestions': 'Sugerencias de carpetas',
     'Security warnings': 'Avisos de seguridad', 'Warn me about new security problems': 'Avisarme de nuevos problemas de seguridad',
     'Speak up on its own': 'Hablar por iniciativa propia', 'Offline mode': 'Modo sin conexión', 'Quiet hours': 'Horas de silencio', 'How loud': 'Qué tan alto',
     'Faster answers': 'Respuestas más rápidas',
