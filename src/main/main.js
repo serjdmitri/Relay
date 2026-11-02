@@ -962,6 +962,7 @@ app.whenReady().then(() => {
     },
     onProblem: (m) => { voiceProblem = m; broadcast(); }
   });
+  speaker.prepare(profileFor('quiet', store.get('settings') || {}));
   timers = new Timers({
     store,
     onFire: (t) => {

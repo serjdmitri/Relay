@@ -91,8 +91,32 @@ class Speaker {
   }
 
   async voiceList() {
-    if (!this.voices) this.voices = await listVoices(this.exec);
+    if (!this.voices) {
+      this.voiceListPending ||= listVoices(this.exec);
+      this.voices = await this.voiceListPending;
+    }
     return this.voices;
+  }
+
+  acknowledgementKey(engine, tts, rate, kokoroVoice) {
+    return JSON.stringify([engine, rate, kokoroVoice || tts.kokoro?.voice || '']);
+  }
+
+  // Warm only an already-installed local voice. Cache this fixed phrase in memory,
+  // never conversations, and never make a paid/cloud request in the background.
+  prepare({ rate = 'normal', kokoroVoice } = {}) {
+    this.voiceList().catch(() => {});
+    const tts = this.getTts() || {}, engine = this.engineFor(tts);
+    if (!['omnivoice', 'kokoro'].includes(engine)) return Promise.resolve();
+    const key = this.acknowledgementKey(engine, tts, rate, kokoroVoice);
+    if (this.ackAudio?.key === key) return Promise.resolve();
+    if (this.preparing) return this.preparing;
+    this.preparing = (async () => {
+      const file = await (engine === 'omnivoice' ? this.omni.synthesize('On it, Sir.')
+        : this.kokoro.synthesize('On it, Sir.', { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate }));
+      try { this.ackAudio = { key, bytes: fs.readFileSync(file) }; } finally { this.discard(file); }
+    })().catch(() => {}).finally(() => { this.preparing = null; });
+    return this.preparing;
   }
 
   // lang: the language of what is about to be said. A voice for another language than English is picked by that language (the voice chosen in Settings is an English one).
@@ -112,13 +136,16 @@ class Speaker {
     return 'system';
   }
 
-  async speak(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice, lang = 'en' } = {}) {
+  async speak(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice, lang = 'en', quick = false } = {}) {
     this.stop();
     const say = speakable(text);
     if (!say) return;
     this.currentText = say;
     const tts = this.getTts() || { engine: 'system' };
-    const engine = this.engineFor(tts, lang);
+    const selected = this.engineFor(tts, lang);
+    const cachedAudio = quick && say === 'On it, Sir.' && this.ackAudio?.key === this.acknowledgementKey(selected, tts, rate, kokoroVoice) ? this.ackAudio.bytes : null;
+    // Acknowledgements must not start a slow synthesis that completion would cancel.
+    const engine = quick && !cachedAudio ? 'system' : selected;
     if (engine === 'system') {
       try { await this.speakSystem(say, { voice, rate, volume, lang }); }
       catch (e) { this.onProblem?.(e.message); this.log.error?.('voice:', e.message); }
@@ -128,7 +155,7 @@ class Speaker {
     this.abort = new AbortController();
     this.busy = true;
     try {
-      await this.speakWith(engine, tts, say, rate, token, this.abort.signal, { volume, kokoroVoice });
+      await this.speakWith(engine, tts, say, rate, token, this.abort.signal, { volume, kokoroVoice, cachedAudio });
     } catch (e) {
       if ((e && e.name === 'AbortError') || token !== this.token) return;
       this.log.error?.('voice:', e.message);
@@ -168,11 +195,11 @@ class Speaker {
   }
 
   // Makes and plays a reply with one engine. Throws when the engine fails.
-  async speakWith(engine, tts, say, rate, token, signal, { volume = 1, kokoroVoice } = {}) {
-    const make = (piece) => (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal }) : engine === 'kokoro'
+  async speakWith(engine, tts, say, rate, token, signal, { volume = 1, kokoroVoice, cachedAudio } = {}) {
+    const make = (piece) => cachedAudio ? Promise.resolve(this.writeTemp(cachedAudio, 'wav')) : (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal }) : engine === 'kokoro'
       ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate })
       : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
-    const pieces = cloud.sentences(say);
+    const pieces = cloud.sentences(say, 160);
     let pending = make(pieces[0]);
     try {
       for (let i = 0; i < pieces.length; i++) {
