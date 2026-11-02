@@ -1,3 +1,4 @@
+const connectionMessages={google:'',notion:'',school:''};
 /* global h, esc, relay */
 let googleConnecting=false,googleServices=['gmail','calendar','drive','sheets'];
 const googleChecks=new Map();
@@ -5,7 +6,7 @@ const GOOGLE_SERVICES={gmail:['Gmail','Read email; draft and send with approval'
 function renderGoogleConnections(c,g){
  c.append(h('<div class="section-title">Google connections</div>'));
  const box=h('<div class="card" style="padding:16px"><div class="ttl">Choose what Jarvis can use</div><p class="d" style="margin:8px 0">Click Connect, sign in in your browser, and choose the permissions you allow. Google data retrieved for a request may be sent to your selected AI provider.</p><div data-services></div><div style="display:flex;gap:8px;align-items:center;margin:12px 0"><button class="btn primary" data-connect>Connect with Google</button><button class="btn" data-cancel>Cancel sign-in</button></div><div class="note" data-google-status role="status"></div><div data-accounts></div><details data-setup><summary>App credentials · one-time setup</summary><p class="d" style="margin:8px 0">Create a Desktop app OAuth client in Google Cloud and enable the APIs you select. Import its downloaded JSON file, or enter its client ID and secret below. Credentials stay encrypted on this Mac. Testing-mode apps can require reconnecting after seven days; managed accounts may need administrator approval.</p><button class="btn" data-import>Import Google credentials JSON</button><div class="field-row" style="margin-top:10px"><input class="field" data-id aria-label="Google OAuth client ID" placeholder="Client ID"><input class="field" data-secret type="password" autocomplete="off" aria-label="Google OAuth client secret" placeholder="Client secret"><button class="btn" data-save>Save app credentials</button></div></details></div>');
- const q=s=>box.querySelector(s),status=text=>{const el=document.querySelector('[data-google-status]')||q('[data-google-status]');if(el)el.textContent=text;};
+ const q=s=>box.querySelector(s),status=text=>{connectionMessages.google=text;const el=document.querySelector('[data-google-status]')||q('[data-google-status]');if(el)el.textContent=text;};
  q('[data-id]').value=g.clientId||'';q('[data-secret]').placeholder=g.hasSecret?'Secret saved; paste only to replace':'Client secret';q('[data-setup]').open=!(g.clientId&&g.hasSecret);
  for(const [id,[name,access]]of Object.entries(GOOGLE_SERVICES)){
   const row=h(`<label class="row" style="padding:8px 0"><input type="checkbox" ${googleServices.includes(id)?'checked':''}><span class="grow"><span class="t">${name}</span><span class="d">${access}</span></span></label>`);
@@ -28,14 +29,14 @@ function renderGoogleConnections(c,g){
   row.querySelector('[data-remove]').onclick=async()=>{if(!confirm(`Disconnect ${account.email} from Relay?`))return;const r=await relay.removeGoogle(account.email);googleChecks.delete(account.email);if(r?.warning)status(r.warning);};
   q('[data-accounts]').append(row);
  }
- c.append(box);
+ status(connectionMessages.google);c.append(box);
 }
 
 let notionConnecting=false;
 function renderNotionConnection(c,n){
  c.append(h('<div class="section-title" style="margin-top:0">Notion</div>'));
  const box=h(`<div class="card" style="padding:16px"><div class="ttl">${n.connected?'Connected to '+esc(n.name||'Notion'):'Connect your Notion workspace'}</div><p class="d" style="margin:8px 0">Sign in in your browser and choose pages to share. Jarvis can search and read those pages, and create or append content after approval. Retrieved content may go to your selected AI provider.</p><div style="display:flex;gap:8px"><button class="btn primary" data-notion-connect>${n.connected?'Reconnect with Notion':'Connect with Notion'}</button><button class="btn" data-notion-cancel>Cancel sign-in</button>${n.connected?'<button class="btn" data-notion-check>Check connection</button><button class="btn" data-notion-remove>Disconnect</button>':''}</div><div class="note" data-notion-status role="status" style="margin:10px 0"></div><details data-notion-setup><summary>App credentials · one-time setup</summary><p class="d" style="margin:8px 0">Create a public Notion connection in the Notion developer portal. Register this exact redirect URI: <span style="user-select:text">http://127.0.0.1:18790/notion/cb</span>. Save its OAuth client ID and secret here. This setup is for your own local app; credentials are not bundled or uploaded by Relay.</p><div class="field-row"><input class="field" data-notion-id aria-label="Notion OAuth client ID" placeholder="OAuth client ID"><input class="field" data-notion-secret aria-label="Notion OAuth client secret" type="password" autocomplete="off" placeholder="OAuth client secret"><button class="btn" data-notion-save>Save app credentials</button></div></details><details style="margin-top:10px"><summary>Advanced: existing integration token</summary><p class="d">Use an internal integration token instead of browser sign-in. Share pages with that integration in Notion first.</p><div class="field-row"><input class="field" type="password" autocomplete="off" data-notion-token aria-label="Notion integration token" placeholder="Integration token"><button class="btn" data-notion-token-save>Connect token</button></div></details></div>`);
- const q=s=>box.querySelector(s),status=text=>{const el=document.querySelector('[data-notion-status]')||q('[data-notion-status]');if(el)el.textContent=text;};
+ const q=s=>box.querySelector(s),status=text=>{connectionMessages.notion=text;const el=document.querySelector('[data-notion-status]')||q('[data-notion-status]');if(el)el.textContent=text;};
  const busy=on=>{notionConnecting=on;for(const el of[box,document]){const b=el.querySelector('[data-notion-connect]'),cancel=el.querySelector('[data-notion-cancel]');if(b)b.disabled=on||!n.clientId||!n.hasSecret;if(cancel)cancel.hidden=!on;}};
  busy(notionConnecting);q('[data-notion-id]').value=n.clientId||'';q('[data-notion-secret]').placeholder=n.hasSecret?'Secret saved; paste only to replace':'OAuth client secret';q('[data-notion-setup]').open=!n.clientId||!n.hasSecret;
  q('[data-notion-save]').onclick=async()=>{try{const r=await relay.notionConnection('client',{clientId:q('[data-notion-id]').value,secret:q('[data-notion-secret]').value});if(r.ok){q('[data-notion-secret]').value='';status('Credentials saved. Click Connect with Notion.');}else status(r.error||'Cancelled.');}catch{status('Could not save credentials.');}};
@@ -43,17 +44,17 @@ function renderNotionConnection(c,n){
  q('[data-notion-cancel]').onclick=()=>relay.notionConnection('cancel');
  if(n.connected){q('[data-notion-check]').onclick=async()=>{status('Checking Notion…');try{const r=await relay.notionConnection('check');status(r.ok?r.message:r.error);}catch{status('Check failed. Reconnect Notion.');}};q('[data-notion-remove]').onclick=async()=>{if(confirm('Disconnect Notion from Relay? Remove the connection in Notion too to revoke its provider-side access.'))await relay.clearNotion();};}
  q('[data-notion-token-save]').onclick=async()=>{try{const r=await relay.setNotionToken(q('[data-notion-token]').value);if(r.ok){q('[data-notion-token]').value='';status('Integration token connected.');}else status(r.error);}catch{status('Could not connect that integration token.');}};
- c.append(box);
+ status(connectionMessages.notion);c.append(box);
 }
 
 let schoolActionPending=false;
 function renderSchoolConnection(c,savedUrl){
  c.append(h('<div class="section-title" style="margin-top:0">School · Blackbaud</div>'));
  const box=h('<div class="card" style="padding:16px"><div class="ttl">Connect your school assignment center</div><p class="d" style="margin:8px 0">Sign in in Firefox using your school’s normal login. Relay uses that browser session; it does not store your school password. Keep the Relay Firefox extension connected.</p><input class="field" data-school-url aria-label="School assignment-center URL" placeholder="https://your-school.myschoolapp.com/lms-assignment/assignment-center/student"><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button class="btn" data-school-save>Save school link</button><button class="btn primary" data-school-connect>Connect school</button><button class="btn" data-school-check>Check connection</button><button class="btn" data-school-assignments>Show assignments</button></div><div class="note" data-school-status role="status"></div><div class="d">Show assignments sends the visible page to your selected model to identify incomplete work. The result may be limited by page filters or unloaded items. Check the school page for the full list. Briefings and Plan today reuse this source.</div></div>');
- const q=s=>box.querySelector(s),status=t=>{const el=document.querySelector('[data-school-status]')||q('[data-school-status]');if(el)el.textContent=t;};q('[data-school-url]').value=savedUrl;
+ const q=s=>box.querySelector(s),status=t=>{connectionMessages.school=t;const el=document.querySelector('[data-school-status]')||q('[data-school-status]');if(el)el.textContent=t;};q('[data-school-url]').value=savedUrl;
  const busy=on=>{schoolActionPending=on;for(const el of[box,document])for(const b of el.querySelectorAll('[data-school-connect],[data-school-check],[data-school-assignments]'))b.disabled=on;};busy(schoolActionPending);
  const save=async()=>{const r=await relay.schoolConnection('save',q('[data-school-url]').value.trim());if(!r.ok)throw Error(r.error);};
  q('[data-school-save]').onclick=()=>save().then(()=>status('School link saved.')).catch(e=>status(e.message));
  for(const action of['connect','check','assignments'])q('[data-school-'+action+']').onclick=async e=>{busy(true);status(action==='assignments'?'Checking visible assignments with the selected model…':'Checking school connection…');try{await save();const r=await relay.schoolConnection(action);status(r.ok?r.message:r.error);}catch(e){status(e.message||'Could not finish the school check.');}finally{busy(false);}};
- c.append(box);
+ status(connectionMessages.school);c.append(box);
 }
