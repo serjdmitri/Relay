@@ -27,7 +27,7 @@ function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,s
   if(local())return{ok:false,error:'Google sign-in is disabled in local/private mode.'};
   if(pending)return{ok:false,error:'A Google sign-in is already open. Finish or cancel it first.'};
   const g=config(),secret=decryptKey(g.clientSecretEnc);if(!g.clientId||!secret)return{ok:false,error:'Import or save the Google Desktop app credentials first.'};
-  let services;try{services=Object.keys(require('./googleSetup').SERVICES).filter(s=>(options.services||Object.keys(require('./googleSetup').SERVICES)).includes(s));scopesFor(services);}catch{return{ok:false,error:'Choose at least one Google service.'};}
+  let services;try{services=Object.keys(require('./googleSetup').SERVICES).filter(s=>(options.services||require('./googleSetup').DEFAULT_SERVICES).includes(s));scopesFor(services);}catch{return{ok:false,error:'Choose at least one Google service.'};}
   const ac=pending=new AbortController();
   try{
    const r=await connectAccount({clientId:g.clientId,clientSecret:secret,services,email:typeof options.email==='string'?options.email:undefined,signal:ac.signal,openUrl:u=>shell.openExternal(u)});

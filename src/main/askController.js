@@ -2049,6 +2049,7 @@ class AskController {
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
+          if (this.openFitness && require('./connectors/fitness').fitnessIntent(effective)) return this.finish(entry, await this.openFitness());
           const menus = require('./menuIntent').menuRequests(effective);
           if (menus.length) {
             const result = await this.openMenuRequests(menus);
