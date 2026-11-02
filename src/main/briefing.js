@@ -122,4 +122,12 @@ function mergeEvents(...lists) {
   return out;
 }
 
-module.exports = { parseBriefingCommand, buildBriefing, fetchWeather, weatherWord, parseMacEvents, parseMacDue, mergeEvents };
+// Reuse the standard movable card; no model writes markup or invents source data.
+function briefingCard(facts,text){
+ const missing=[...(facts.missing||[]),...(facts.school?.problem?['school assignments']:[])];
+ const checked=facts.now instanceof Date?facts.now.toLocaleString():'Time unavailable';
+ const source=require('./school').schoolUrl(facts.school?.sourceUrl)?.href;
+ return{kind:'list',hold:true,title:'Daily briefing',subtitle:'Checked '+checked,summary:text,items:[{title:'Source status',subtitle:missing.length?'Unavailable or not configured: '+missing.join(', '):'Available configured sources were checked; this is not a complete record of work outside Relay.'},...(facts.school?.truncated?[{title:'School results are limited',subtitle:'Open the assignment center to check filters and unloaded items.'}]:[])],facts:[],links:source?[{label:'School assignment center',url:source}]:[]};
+}
+
+module.exports = { briefingCard, parseBriefingCommand, buildBriefing, fetchWeather, weatherWord, parseMacEvents, parseMacDue, mergeEvents };
