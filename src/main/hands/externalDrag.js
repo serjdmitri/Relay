@@ -16,6 +16,8 @@ class ExternalDrag {
         this.buf += String(data); let i;
         while ((i = this.buf.indexOf('\n')) >= 0) {
           const line = this.buf.slice(0, i).trim(); this.buf = this.buf.slice(i + 1);
+          if(line==='down'&&this.owner){this.accepted=true;if(this.point&&(this.point.x!==this.startPoint?.x||this.point.y!==this.startPoint?.y))this.send('move',this.point);}
+          if(line==='not-draggable'){clearTimeout(this.watchdog);this.owner=null;this.point=null;this.accepted=false;}
           if (line === 'ready') { this.ready = true; this.warned = false; }
           // A fist away from a title bar is normal, not an error. The helper
           // declines the drag without pressing the mouse; keep that silent.
@@ -31,9 +33,9 @@ class ExternalDrag {
   begin(owner, pt) {
     if (!this.enabled() || this.owner) return false;
     if (!this.ready) { this.start(); return false; }
-    this.owner = owner; this.point = pt; this.send('down', pt); this.arm(); return true;
+    this.owner = owner;this.accepted=false;this.startPoint=pt; this.point = pt; this.send('down', pt); this.arm(); return true;
   }
-  move(owner, pt) { if (this.owner !== owner) return; this.point = pt; this.send('move', pt); this.arm(); }
+  move(owner, pt) { if (this.owner !== owner) return; this.point = pt; if(this.accepted)this.send('move', pt); this.arm(); }
   end(owner) { if (this.owner !== owner) return; this.send('up', this.point); clearTimeout(this.watchdog); this.watchdog = null; this.owner = null; this.point = null; }
   close() {
     if (this.owner) this.end(this.owner);

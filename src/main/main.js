@@ -570,6 +570,7 @@ function registerIpc() {
     if (key === 'settings.sentient.enabled' || key === 'settings.memory' || key === 'settings.model.provider') ask.dropWarm(true);
     if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
     if (key === 'settings.model.provider' && value === 'ollama') speaker?.stop();
+    if(key==='settings.hands.maxHands'&&hands?.enabled){hands.disable();hands.enable().catch(e=>ask.notice(e.message,'failed'));}
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
@@ -1287,7 +1288,7 @@ app.whenReady().then(() => {
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
   hands = new HandControl({ motion: floatingMotion,
-    externalDrag,
+    externalDrag,maxHands:()=>store.get('settings.hands.maxHands')??4,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
     onThrow: rememberThrow,
@@ -1348,13 +1349,14 @@ app.whenReady().then(() => {
         action: (a) => { if (shown && !win.isDestroyed()) win.webContents.send('hands:action', a); }
       };
     },
-    createCursor: () => {
+    createCursor: (slot=0) => {
+      const rgb=['0,212,255','170,120,255','66,235,170','255,190,70','255,110,160','120,195,255'][slot%6];
       const win = new BrowserWindow({ width: 56, height: 56, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
       win.setIgnoreMouseEvents(true);
       win.setAlwaysOnTop(true, 'screen-saver');
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       win.setHiddenInMissionControl?.(true);
-      win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent('<body class="open" style="margin:0;background:transparent;overflow:hidden"><style>div{position:absolute;inset:10px;border-radius:50%;border:2px solid rgba(0,212,255,.9);box-shadow:0 0 14px rgba(0,212,255,.6);transition:all .12s}.held div{background:rgba(0,212,255,.35);inset:14px}.pinch div{inset:19px;background:rgba(0,212,255,.55)}.click div{inset:2px;opacity:.5}.mic div{inset:4px;box-shadow:0 0 26px rgba(0,212,255,.95)}</style><div></div></body>')}`);
+      win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent('<body class="open" style="margin:0;background:transparent;overflow:hidden"><style>div{position:absolute;inset:10px;border-radius:50%;border:2px solid rgba(0,212,255,.9);box-shadow:0 0 14px rgba(0,212,255,.6);transition:all .12s}.held div{background:rgba(0,212,255,.35);inset:14px}.pinch div{inset:19px;background:rgba(0,212,255,.55)}.click div{inset:2px;opacity:.5}.mic div{inset:4px;box-shadow:0 0 26px rgba(0,212,255,.95)}</style><div></div></body>'.replaceAll('0,212,255',rgb))}`);
       return { moveTo: (pt) => { if (!win.isDestroyed()) { if (!win.isVisible()) win.showInactive(); win.setPosition(Math.round(pt.x - 28), Math.round(pt.y - 28)); } }, hide: () => { if (!win.isDestroyed()) win.hide(); }, close: () => { if (!win.isDestroyed()) win.close(); }, setState: (c) => { if (!win.isDestroyed()) win.webContents.executeJavaScript(`document.body.className=${JSON.stringify(String(c).replace(/[^a-z]/g, ''))}`).catch(() => {}); } };
     },
     air: (type, x, y) => overlay.air(type, x, y),
