@@ -30,7 +30,7 @@ async function fetchWeather(city, { fetchFn = fetch, units = 'f', signal } = {})
   const d = f.daily || {};
   if (![f.current?.temperature_2m, d.temperature_2m_max?.[0], d.temperature_2m_min?.[0]].every(Number.isFinite)) return null;
   const code = d.weather_code?.[0] ?? f.current?.weather_code;
-  return { city: place.name, tempNow: Math.round(f.current?.temperature_2m), high: Math.round(d.temperature_2m_max[0]), low: Math.round(d.temperature_2m_min[0]), rain: d.precipitation_probability_max?.[0] ?? 0, word: weatherWord(code), units };
+  return { city: place.name, tempNow: Math.round(f.current?.temperature_2m), high: Math.round(d.temperature_2m_max[0]), low: Math.round(d.temperature_2m_min[0]), rain: d.precipitation_probability_max?.[0] ?? 0, word: weatherWord(code), code, units };
 }
 
 const hour = (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: d.getMinutes() ? '2-digit' : undefined }).replace(' ', ' ');
@@ -126,11 +126,21 @@ function mergeEvents(...lists) {
 }
 
 // Reuse the standard movable card; no model writes markup or invents source data.
-function briefingCard(facts,text){
- const missing=[...(facts.missing||[]),...(facts.school?.problem?['school assignments']:[])];
- const checked=facts.now instanceof Date?facts.now.toLocaleString():'Time unavailable';
- const source=require('./school').schoolUrl(facts.school?.sourceUrl)?.href;
- return{kind:'list',hold:true,title:'Daily briefing',subtitle:'Checked '+checked,summary:text,items:[{title:'Source status',subtitle:(facts.disabled?.length?'Turned off: '+facts.disabled.map(key=>SOURCE_LABELS[key]||key).join(', ')+'. ':'')+(missing.length?'Unavailable or not configured: '+missing.join(', '):'Available configured sources were checked; this is not a complete record of work outside Relay.')},...(facts.school?.truncated?[{title:'School results are limited',subtitle:'Open the assignment center to check filters and unloaded items.'}]:[])],facts:[],links:source?[{label:'School assignment center',url:source}]:[]};
+function briefingSections(f){
+ const sections=[],add=(title,bullets)=>{if(bullets.length)sections.push({title,bullets});};
+ add('Calendar',(f.events||[]).map(e=>`${e.title} · ${e.allDay||!e.start?'All day':hour(e.start)}`));
+ add('Due today',[...(f.due||[])].sort((a,b)=>Number(!!b.overdue)-Number(!!a.overdue)).map(r=>`${r.title}${r.overdue?' · Overdue':''}`));
+ add('School',f.school?.problem?[f.school.problem]:f.school?(f.school.assignments||[]).map(a=>`${a.title}${a.due?' · Due '+a.due:''}`).concat(f.school.truncated?['Limited results · check the assignment center']:[]):[]);
+ add('Important inbox items',(f.mail||[]).map(m=>`${String(m.from||'').replace(/<.*$/,'').trim()}: ${m.subject||'No subject'}`));
+ add('Review recent requests',[...new Set((f.unfinished||[]).map(h=>`${h.text} · ${h.status}`))]);
+ const disabled=new Set(f.disabled||[]),missing=new Set(f.missing||[]);
+ add('Today',[...(!disabled.has('calendar')&&!missing.has('calendar')&&!f.events?.length?['Mac calendar · No events found today']:[]),...(!disabled.has('reminders')&&!missing.has('reminders')&&!f.due?.length?['Reminders · None due']:[]),...(f.mailChecked&&!f.mail?.length?['Inbox · No recent important unread items found']:[])]);
+ add('Sources',[...(f.missing||[]).map(key=>(SOURCE_LABELS[key]||key)+' · Unavailable or not configured'),...(f.disabled||[]).map(key=>(SOURCE_LABELS[key]||key)+' · Turned off')]);
+ return sections;
+}
+function briefingCard(facts,text,{report=false}={}){
+ const now=facts.now instanceof Date?facts.now:new Date(),source=require('./school').schoolUrl(facts.school?.sourceUrl)?.href;
+ return{kind:'list',briefing:true,hold:true,title:'Daily briefing',subtitle:'Checked '+now.toLocaleString(),summary:'',dateTile:{weekday:now.toLocaleDateString('en-US',{weekday:'short'}),day:String(now.getDate()),month:now.toLocaleDateString('en-US',{month:'short'}),full:now.toLocaleDateString('en-US',{dateStyle:'full'})},briefingWeather:facts.weather||null,sections:report?[{title:'Your plan',bullets:String(text||'').split('\n').map(line=>line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)}]:briefingSections(facts),items:[],facts:[],links:source?[{label:'School assignment center',url:source}]:[]};
 }
 
-module.exports = { SOURCE_LABELS, briefingCard, parseBriefingCommand, buildBriefing, fetchWeather, weatherWord, parseMacEvents, parseMacDue, mergeEvents };
+module.exports = { SOURCE_LABELS, briefingSections, briefingCard, parseBriefingCommand, buildBriefing, fetchWeather, weatherWord, parseMacEvents, parseMacDue, mergeEvents };
