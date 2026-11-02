@@ -89,7 +89,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -537,6 +537,7 @@ function registerIpc() {
   });
   filesIpc('files:mode', (id, mode) => access.mode(id, mode));
   filesIpc('files:remove', id => access.remove(id));
+  assistantBackdrop=require('./assistantBackdrop').registerBackdrop({ipcMain,dialog,nativeImage,dir:app.getPath('userData'),getWindow:()=>mainWin,onChange:()=>{overlay.refreshHudBlur();broadcast();}});
   ipcMain.handle('state:get', () => publicState());
   ipcMain.handle('skills:review', (_e, id, approve) => {
     const list = store.get('skillSuggestions') || [];
@@ -560,7 +561,7 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
-    if (key === 'settings.assistantBlur') overlay.refreshHudBlur();
+    if (key === 'settings.assistantBlur' || key === 'settings.assistantBlurStrength') overlay.refreshHudBlur();
     if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.sentient.enabled' || key === 'settings.memory' || key === 'settings.model.provider') ask.dropWarm(true);
@@ -1080,7 +1081,7 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getBackdrop:()=>({opacity:store.get('settings.assistantBlurStrength')??.7,image:assistantBackdrop?.image||''}), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
   overlay.watchDisplays();
   restoreToast = new (require('./restoreToast').RestoreToast)(path.join(__dirname, 'preload.js'));
   trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
