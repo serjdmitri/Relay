@@ -6,7 +6,7 @@ Everything since 0.36.2:
 - **Jarvis phone calls:** faster replies (Fast reply), and a Twilio fallback that reads the message aloud when Bland cannot place the call.
 - **Quick answers through Groq's free tier:** plain, timeless questions skip the Claude CLI for a faster reply; nothing personal is ever sent. Needs a free Groq key.
 - From the other Claude session: saved skills, the council, Gemini voices, email and notification readers, YouTube voice control and work modes.
-- Guided Google sign-in and weather menu updates.
+- **From the ChatGPT/Codex session** (listed from its commit messages; not tried by me): choose forecast days and hourly temperatures in weather menus; readable, collapsible, copyable call reports; guided Google sign-in; Notion browser connection with encrypted token renewal; school connection controls and sourced assignment checks, including Blackbaud links; opt-in local session notes with recall and export; sourced daily routine menus and a morning briefing control; approval-gated Google Docs append and document-tab reading.
 
 The full test suite passes (1114 tests). Most of it has not been tried on a real Mac, a real phone call, a real Groq or Twilio account, or a real night. See the changelog for the details and the limits.
 
