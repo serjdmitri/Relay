@@ -77,6 +77,7 @@ const { parseDoctorCommand } = require('./doctor');
 const { parseAuditCommand, parseWatchCommand } = require('./securityAudit');
 const { parsePrioritiesCommand } = require('./priorities');
 const { parseOvernightCommand } = require('./overnight');
+const { QuickLane } = require('./quickLane');
 const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
 const { ConfirmHub } = require('./confirmHub');
@@ -2140,7 +2141,7 @@ class AskController {
         if (opts.shown) return this.runRequest(effective, entry);
         this.lastRequestText = effective;
         const quick = await this.tryQuick(effective, entry);
-        return quick || this.runRequest(effective, entry);
+        return quick || (await this.tryQuickLane(effective, entry, opts)) || this.runRequest(effective, entry);
       }
     }
   }
@@ -2874,6 +2875,21 @@ class AskController {
     } catch {
       return null; // let the model try
     }
+  }
+
+  // Plain, timeless questions go straight to Groq's free tier (see quickLane.js). Never in private or offline mode, for scheduled or shown requests, or when anything needs the Mac.
+  quickLaneKey() { return decryptKey(this.store.get('settings.quick.keyEnc')) || decryptKey(this.store.get('settings.model.presets.groq.keyEnc')); }
+  lane() { return (this.quickLane ||= new QuickLane({ getKey: () => this.quickLaneKey(), settings: () => this.store.get('settings.quick') })); }
+  async tryQuickLane(text, entry, opts = {}) {
+    if (opts.scheduled || opts.shown || this.offline || this.store.get('settings.model.provider') === 'ollama') return null;
+    const lane = this.lane(), r = await lane.answer(text);
+    const day = new Date().toDateString(), st = this.store.get('quickStats');
+    const stats = st && st.day === day ? st : { day, answered: 0, escalated: 0, failed: 0, ms: 0 };
+    if (lane.last.outcome === 'answered') { stats.answered++; stats.ms += lane.last.ms; } else if (lane.last.outcome === 'escalated') stats.escalated++; else if (['failed', 'rate-limited', 'key-rejected'].includes(lane.last.outcome)) stats.failed++;
+    if (['answered', 'escalated', 'failed', 'rate-limited', 'key-rejected'].includes(lane.last.outcome)) { this.store.set('quickStats', stats); this.onChange(); }
+    if (!r) return null;
+    this.lastOk = text;
+    return this.finish(entry, { status: 'done', reply: r.reply, actions: 0, model: `Groq ${r.model}` });
   }
 
   async tryQuick(text, entry) {
