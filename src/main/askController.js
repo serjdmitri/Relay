@@ -2044,6 +2044,10 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
+        if (!opts.shown && parseBriefingCommand(effective)) {
+          this.lastRequestText = effective;
+          return this.runBriefingCommand(effective, entry);
+        }
         if (!opts.shown && this.onCallCommand) {
           const cc = require('./calls/service').parseCallCommand(effective);
           if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
@@ -2074,9 +2078,6 @@ class AskController {
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
         }
         if (!opts.shown && /\band\b/i.test(effective) && (effective.match(/\b(?:weather|forecast|calculator|cpu|memory|battery|network|disk)\b/gi) || []).length > 1) return this.runRequest(effective, entry);
-        if (!opts.shown && parseBriefingCommand(effective)) {
-          return this.runBriefingCommand(effective, entry);
-        }
         if (!opts.shown && !opts.scheduled) {
           const query = require('./forecast').parseForecast(effective);
           if (query) return this.finish(entry, await this.forecastCommand(query));

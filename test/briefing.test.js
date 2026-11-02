@@ -294,3 +294,13 @@ test('disabled briefing sources make no source calls and are not reported empty 
 });
 
 test('briefing display uses numeric weather and sourced bullets independently of natural speech',()=>{const f={now:new Date(2026,10,2,9),weather:{city:'Hollywood',tempNow:78,high:82,low:76,rain:44,code:3,word:'overcast',units:'f'},due:[{title:'Study physics',overdue:false}],missing:['mail']};const {briefingCard}=require('../src/main/briefing');const c=briefingCard(f,buildBriefing(f));assert.equal(c.dateTile.weekday,'Mon');assert.equal(c.briefingWeather.tempNow,78);assert.equal(c.briefingWeather.code,3);assert.equal(c.summary,'');assert(c.sections.some(s=>s.bullets.includes('Study physics')));assert.match(buildBriefing(f),/It is 78 degrees and overcast/);assert.doesNotMatch(JSON.stringify(c.sections),/It is 78/);});
+
+test('explicit brief menu requests use the built-in briefing command, with common spoken variants',()=>{
+ for(const phrase of ['show the brief menu.','Show me my briefing','open the briefing menu','bring up my daily brief panel','Jarvis, show the brief menu','can you show me the brief menu please','give me a breif','show the breifing card','brief'])assert.deepEqual(parseBriefingCommand(phrase),{type:'briefing'},phrase);
+ for(const phrase of ['write a brief about robots','email my briefing to Mom','close the brief menu','explain what a briefing is'])assert.equal(parseBriefingCommand(phrase),null,phrase);
+});
+test('a direct briefing request shows the structured menu even when a source is missing',async()=>{
+ const c=Object.create(AskController.prototype);let card,models=0;const facts={now:new Date(2026,10,2,18),missing:['mail'],due:[]};
+ c.briefingText=async options=>{options.onFacts(facts);return 'Good evening. Email is unavailable.';};c.recordBriefingSources=()=>{};c.store={get:()=>true};c.cardPanel={show:async value=>{card=value;}};c.requestLanguage=()=> 'en';c.runRequest=()=>{models++;};c.finish=(_entry,result)=>result;
+ const r=await c.runBriefingCommand('show the brief menu.',{id:'fixture'});assert.equal(r.status,'done');assert.equal(card.briefing,true);assert.equal(card.dateTile.day,'2');assert.match(JSON.stringify(card.sections),/Unavailable/);assert.equal(models,0);
+});

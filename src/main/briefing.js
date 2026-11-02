@@ -6,9 +6,9 @@ const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').
 
 // "Good morning", "morning briefing", "brief me", "what's my day look like", "what's on today". Returns { type: 'briefing' } or null.
 function parseBriefingCommand(text) {
-  const n = clean(text).replace(/^(?:hey |ok |okay )?(?:relay|jarvis) /, '').replace(/^please /, '').replace(/ please$/, '');
+  const n = clean(text).replace(/^(?:hey |ok |okay )?(?:relay|jarvis) /, '').replace(/^(?:can|could|would) you /, '').replace(/^please /, '').replace(/ please$/, '').replace(/\bbreif(ing)?\b/g, 'brief$1');
   if (/^(?:good morning|morning)(?: jarvis| relay)?$/.test(n)) return { type: 'briefing' };
-  if (/^(?:give me |read me |tell me |play )?(?:my |the |a )?(?:morning |daily |day )?(?:briefing|brief|rundown|run down|summary of my day)(?: for (?:today|this morning))?$/.test(n)) return { type: 'briefing' };
+  if (/^(?:(?:give|read|tell|show)(?: me)? |(?:open|play|display|bring up) )?(?:my |the |a )?(?:morning |daily |day )?(?:briefing|brief|rundown|run down|summary of my day)(?: menu| panel| card)?(?: for (?:today|this morning))?$/.test(n)) return { type: 'briefing' };
   if (/^brief me$|^(?:what s|what is|whats) (?:my day look like|my day like|on today|on my plate today|happening today|going on today|my schedule today)$|^how s my day looking$|^how is my day looking$|^what do i have (?:on )?today$/.test(n)) return { type: 'briefing' };
   return null;
 }
