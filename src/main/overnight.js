@@ -3,7 +3,10 @@
 // failed and what needed you. Pure decisions here (the queue, the window, the checks, the report); main.js does the running. Honest by design: a
 // result is only "checked" when Relay itself could look (for example that a file is really gone); otherwise it is "done, not independently checked".
 
+const { READ_ONLY } = require('./learned');
+
 const HOUR = 3600e3;
+const MAX_ATTEMPTS = 2; // a task that was interrupted gets one more try, and only when the first try changed nothing
 const MAX_TASKS = 20;
 const STALE_MS = 6 * HOUR;
 const clean = (s, n = 300) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -78,6 +81,8 @@ function buildReport(tasks, routines = [], { now = Date.now() } = {}) {
       lines.push(`   ${MARK[t.verdict] || MARK[t.status] || t.status}${t.notes?.length ? `: ${t.notes.join(' ')}` : ''}`);
       for (const c of t.checks || []) lines.push(`   ${c.ok ? '✓' : '✗'} ${c.label}`);
       if (t.reply && ['checked', 'recorded', 'unconfirmed'].includes(t.verdict)) lines.push(`   Relay said: ${clean(t.reply, 220)}`);
+      const tries = (t.attempts || []).filter((a) => a.outcome === 'interrupted');
+      if (tries.length) lines.push(`   ${tries.length === 1 ? 'The first try was' : `${tries.length} tries were`} interrupted${t.status === 'done' ? ' and it was run again' : ''}. A step in progress at the moment of an interruption leaves no record.`);
     });
   } else lines.push('Nothing was assigned for the night.');
   if (routines.length) {
@@ -87,6 +92,19 @@ function buildReport(tasks, routines = [], { now = Date.now() } = {}) {
   lines.push('', 'A result is only "checked" when Relay could look at it itself. Everything else is what the task reported.');
   const summary = [counts.checked && `${counts.checked} checked`, counts.recorded && `${counts.recorded} done but not independently checked`, counts.problem && `${counts.problem} need${counts.problem === 1 ? 's' : ''} attention`, counts.skipped && `${counts.skipped} not run`].filter(Boolean).join(', ');
   return { text: lines.join('\n'), counts, summary: summary || 'nothing ran' };
+}
+
+// ---- an interrupted run: run it again, or hand it back ----
+// A task is run again only when it is safe: its first try recorded nothing but looking (reading, searching, listing), so a second try cannot repeat or
+// duplicate anything. If it had already changed something, Relay does not guess what remains: it says exactly what was done and leaves the next step to you.
+// One caveat is stated in the report: a step that was in progress at the very moment of the interruption leaves no record.
+function assessInterruption(attempts, actions) {
+  const acts = Array.isArray(actions) ? actions.filter((a) => a && a.tool) : [];
+  const changed = acts.filter((a) => a.ok !== false && !READ_ONLY.has(a.tool));
+  const names = [...new Set(changed.map((a) => a.tool.replace(/_/g, ' ')))];
+  if (changed.length) return { resume: false, verdict: 'needs-you', notes: [`Relay was interrupted partway. Before that it had already done: ${names.slice(0, 5).join(', ')}. It did not run the task again, because repeating those steps could duplicate them. Check what was done, and say "tonight, ..." again if the rest still needs doing.`] };
+  if (attempts >= MAX_ATTEMPTS) return { resume: false, verdict: 'unknown', notes: [`It was interrupted on each of ${MAX_ATTEMPTS} tries, so Relay stopped trying. Nothing it recorded changed anything.`] };
+  return { resume: true, verdict: null, notes: ['The first try was interrupted before it had changed anything Relay recorded, so it was queued to run again.'] };
 }
 
 // ---- the queue ----
@@ -112,7 +130,23 @@ class OvernightQueue {
   clear() { const s = this.state, q = this.queued(); this.save({ ...s, tasks: s.tasks.filter((x) => x.status !== 'queued') }); return q.length; }
 
   update(id, patch) { const s = this.state; this.save({ ...s, tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)) }); }
-  begin(task) { const runId = `overnight:${task.id}`; this.update(task.id, { status: 'running', startedAt: this.now().getTime(), runId }); return runId; }
+  // Each try has its own run id, so the checks after a second try look only at what that try did.
+  begin(task) {
+    const tries = (task.attempts || []).length + 1, runId = tries === 1 ? `overnight:${task.id}` : `overnight:${task.id}:${tries}`;
+    const startedAt = this.now().getTime();
+    this.update(task.id, { status: 'running', startedAt, runId, attempts: [...(task.attempts || []), { n: tries, startedAt }] });
+    return runId;
+  }
+  // Closes the try that is open on a task: how it ended.
+  endAttempt(task, outcome) { const at = (task.attempts || []).slice(); const last = at[at.length - 1]; if (last && !last.outcome) at[at.length - 1] = { ...last, endedAt: this.now().getTime(), outcome }; return at; }
+  // Relay was closed or stopped mid-run. `actions`: what that try recorded. Puts the task back in the queue when that is safe, otherwise reports it.
+  interrupt(task, actions) {
+    const a = assessInterruption((task.attempts || []).length, actions);
+    const attempts = this.endAttempt(task, 'interrupted');
+    if (a.resume) this.update(task.id, { status: 'queued', attempts, runId: null, notes: a.notes });
+    else this.update(task.id, { status: 'failed', verdict: a.verdict, attempts, finishedAt: this.now().getTime(), notes: a.notes });
+    return a;
+  }
 
   // What to do right now: run the next task, skip what the window missed, mark an interrupted run, or write the morning report.
   next({ canRun = true, activeRunId = null } = {}) {
@@ -132,8 +166,8 @@ class OvernightQueue {
     }
     return out;
   }
-  skip(tasks, why) { for (const t of tasks) this.update(t.id, { status: 'skipped', verdict: 'skipped', finishedAt: this.now().getTime(), notes: [why] }); }
+  skip(tasks, why) { for (const t of tasks) this.update(t.id, { status: 'skipped', verdict: 'skipped', finishedAt: this.now().getTime(), notes: [why, ...((t.attempts || []).length ? ['It had been interrupted once earlier and was waiting to run again.'] : [])] }); }
   markReported(tasks, report) { const ids = new Set(tasks.map((t) => t.id)); const s = this.state; this.save({ tasks: s.tasks.map((t) => (ids.has(t.id) ? { ...t, reported: true } : t)).slice(-60), report: { ts: this.now().getTime(), text: report.text, counts: report.counts, summary: report.summary } }); }
 }
 
-module.exports = { OvernightQueue, parseOvernightCommand, verifyRun, buildReport, inWindow, windowBounds, MARK };
+module.exports = { OvernightQueue, parseOvernightCommand, verifyRun, buildReport, inWindow, windowBounds, assessInterruption, MARK, MAX_ATTEMPTS };
