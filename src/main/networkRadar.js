@@ -117,13 +117,13 @@ async function bonjour({ run = timed, limit = 40 } = {}) {
 }
 const run = (file,args) => new Promise((resolve,reject) => execFile(file,args,{timeout:2500,maxBuffer:1024*1024,encoding:'utf8'},(err,out,stderr)=>err && !(file.endsWith('/lsof') && err.code === 1 && !out && !stderr) ? reject(new Error(`${file.split('/').pop()} unavailable (${err.code || 'failed'})`)) : resolve(out)));
 class NetworkRadar {
-  constructor({ exec = run, interfaces = () => os.networkInterfaces(), store, now = Date.now, probe = sweep, browse = bonjour } = {}) { Object.assign(this,{exec,interfaces,store,now,probe,browse,names:new Map(),lastScan:null}); }
+  constructor({ exec = run, interfaces = () => os.networkInterfaces(), store, now = Date.now, probe = sweep, browse = bonjour } = {}) { Object.assign(this,{exec,interfaces,store,now,probe,browse,names:new Map(),seen:new Map(),lastScan:null}); }
   recognized() { return this.store?.get('networkRecognized') || []; }
-  mark(mac, on) {
-    if (!MAC.test(String(mac))) throw new Error('Choose a device from the radar.');
-    const normalized=mac.toLowerCase();
-    if (!this.latest?.devices.some(d => d.mac === normalized)) throw new Error('Refresh the radar and choose a current cached device.');
-    const set=new Set(this.recognized());if(on)set.add(normalized);else set.delete(normalized);
+  mark(id, on) {
+    const key=String(id||'').toLowerCase();
+    if (!MAC.test(key) && !/^name:.{1,120}$/.test(key)) throw new Error('Choose a device from the radar.');
+    if (!this.latest?.devices.some(d => d.id === key)) throw new Error('Refresh the radar and choose a current device.');
+    const set=new Set(this.recognized());if(on)set.add(key);else set.delete(key);
     this.store.set('networkRecognized',[...set].slice(-256));return{ok:true};
   }
   // Opt-in, started by the Scan network button: wake the devices on your own subnet, name the ones that advertise themselves, then read the cache.
@@ -136,11 +136,15 @@ class NetworkRadar {
     if(!hosts){this.lastScan={at,hosts:0,named:0,note:'No private IPv4 network was found to scan.'};return this.snapshot();}
     const [,found]=await Promise.all([this.probe(targets).catch(()=>{}),Promise.resolve(this.browse()).catch(()=>[])]);
     await this.pending?.catch(()=>{});
-    const result=await this.snapshot();
-    for(const f of found||[]){const d=result.devices.find(x=>x.ip===f.ip);if(d){const entry={name:f.name,kind:f.kind,model:f.model,services:f.services};this.names.set(d.mac,entry);Object.assign(d,entry);}}
+    let result=await this.snapshot();
+    for(const f of found||[]){
+      const d=result.devices.find(x=>x.ip===f.ip&&x.mac),entry={name:f.name,kind:f.kind,model:f.model,services:f.services};
+      if(d)this.names.set(d.mac,entry);else this.seen.set(f.ip,{...entry,ip:f.ip,at});
+    }
+    result=await this.snapshot();
     const advertising=(found||[]).length,named=result.devices.filter(d=>d.name).length;
-    this.lastScan={at,hosts,named,advertising};
-    if(!result.devices.length)this.lastScan.note=`The scan ran, but macOS showed Relay no neighbors${advertising?` even though ${advertising} device${advertising===1?'':'s'} advertise on this network`:''}. Open System Settings > Privacy & Security > Local Network and turn Relay on, then scan again.`;
+    this.lastScan={at,hosts,named,advertising,neighborRows:result.neighborRows};
+    if(!result.neighborRows)this.lastScan.note=`The scan ran, but macOS showed Relay no neighbor list${advertising?`, so only the ${advertising} device${advertising===1?'':'s'} that advertise by name ${advertising===1?'is':'are'} shown`:''}. To see the rest: open System Settings > Privacy & Security > Local Network, turn Relay on, quit Relay completely, open it again and scan.`;
     result.scan=this.lastScan;
     return result;
   }
@@ -160,14 +164,21 @@ class NetworkRadar {
     const speed=!errors.some(e=>e.source==='Traffic')&&elapsed>0&&counters.inB>=this.previous.inB&&counters.outB>=this.previous.outB?{downKBs:Math.round((counters.inB-this.previous.inB)/elapsed/1024),upKBs:Math.round((counters.outB-this.previous.outB)/elapsed/1024)}:null;
     this.previous=errors.some(e=>e.source==='Traffic')?null:{...counters,at};
     const local=Object.entries(this.interfaces()).flatMap(([name,items])=>(items||[]).filter(i=>!i.internal).map(i=>({interface:name,address:i.address,family:i.family})));
-    const devices=neighbors(arp).map(d=>({...d,...this.names.get(d.mac),recognized:this.recognized().includes(d.mac)}));
+    const rows=neighbors(arp),known=this.recognized();
+    const devices=rows.map(d=>({...d,id:d.mac,...this.names.get(d.mac),recognized:known.includes(d.mac)}));
+    for(const [ip,f] of this.seen){
+      if(f.at<at-600000){this.seen.delete(ip);continue;}   // ten minutes, then it has to be seen again
+      if(devices.some(d=>d.ip===ip))continue;
+      const id=`name:${f.name}`.toLowerCase().slice(0,125);
+      devices.push({ip,mac:null,id,interface:null,privateAddress:false,source:'bonjour',name:f.name,kind:f.kind,model:f.model,services:f.services,recognized:known.includes(id)});
+    }
     const firewall=parseFirewall(fw),filevault=parseFileVault(fv),services=listeners(open);
     const warnings=[];
     if(firewall===0)warnings.push('The macOS application firewall is off. Review Firewall in System Settings.');
     if(firewall===null)warnings.push('Firewall status is unavailable; this is not a passed check.');
     if(filevault==='off')warnings.push('FileVault disk encryption is off. This is a Mac protection check, not a router test.');
     if(services.some(s=>!s.localOnly))warnings.push('Some local services listen beyond localhost. They may be reachable on permitted networks; review the service list.');
-    const result={at,devices,local,route:route(gateway),firewall,filevault,services,speed,warnings,errors,scan:this.lastScan};this.latest=result;return result;
+    const result={at,devices,local,route:route(gateway),firewall,filevault,services,speed,warnings,errors,neighborRows:rows.length,scan:this.lastScan};this.latest=result;return result;
   }
 }
 module.exports={NetworkRadar,neighbors,route,listeners,sweepTargets,parseBrowse,parseResolve,parseAddress,classify,bonjour};
