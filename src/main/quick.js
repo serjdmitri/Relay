@@ -18,6 +18,7 @@ const { parseClipboardCommand } = require('./clipboardHistory');
 const { parseYoutubeCommand } = require('./youtube');
 const { parseNotificationCommand } = require('./notifications');
 const { parseModeCommand } = require('./modes');
+const { parseCouncilCommand } = require('./council');
 
 const ALIASES = {
   chrome: 'Google Chrome', 'google chrome': 'Google Chrome', code: 'Visual Studio Code', vscode: 'Visual Studio Code', 'vs code': 'Visual Studio Code',
@@ -117,7 +118,7 @@ function parseQuick(text, now = new Date()) {
   if (sum) return { type: 'calc', reply: sum.reply, kind: sum.kind };
 
   // ----- window layouts, focus mode, text from the screen -----
-  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text) || parseClipboardCommand(text) || parseYoutubeCommand(text) || parseNotificationCommand(text) || parseModeCommand(text);
+  const lay = parseLayoutCommand(text) || parseFocusCommand(text) || parseOcrCommand(text) || parseHoloCommand(text) || parseStickyCommand(text) || parseClipboardCommand(text) || parseYoutubeCommand(text) || parseNotificationCommand(text) || parseModeCommand(text) || parseCouncilCommand(text);
   if (lay) return lay;
 
   // ----- the web -----
@@ -508,6 +509,10 @@ async function runQuick(cmd, mac, ctx = {}) {
       if (cmd.type === 'mode-list') return { tool: 'mode', input: { list: true }, reply: md.list(), readonly: true };
       if (cmd.type === 'mode-forget') return { tool: 'mode', input: { forget: cmd.name }, reply: md.forget(cmd.name), readonly: true };
       return { tool: 'mode', input: { create: cmd.name }, reply: md.create({ name: cmd.name, open: cmd.open, quit: cmd.quit }), readonly: true };
+    }
+    case 'council': {
+      if (!ctx.council) return null;
+      return { tool: 'council', input: { mode: cmd.mode }, reply: await ctx.council(cmd), readonly: true };
     }
     case 'ocr': {
       if (!ctx.ocr) return null;
