@@ -5,6 +5,7 @@ function parseForecast(text) {
   const unit = /\s+in (celsius|centigrade|fahrenheit)$/i.exec(t);
   if (unit) t = t.slice(0, unit.index);
   const m = /^(?:what(?:'s|s| is) (?:the )?weather|(?:(?:show|give|make) me |(?:open|show|make) )?(?:(?:a|the) )?(?:(?:weather|forecast)(?: (?:menu|panel|card))?|(?:menu|panel|card) (?:of|for|with) (?:the )?(?:weather|forecast)))(?: (?:in|for|at) (.+))?$/i.exec(t);
+  if (m?.[1]?.includes(' and ')) return null; // multiple cities use the shared model tool, once per city
   return m ? { place: (m[1] || '').trim(), ...(unit ? { units: /^f/i.test(unit[1]) ? 'f' : 'c' } : {}) } : null;
 }
 

@@ -9,12 +9,14 @@ const W = 300;
 const H = 260;
 
 class PanelWindows {
-  constructor({ preload }) {
+  constructor({ preload, getLayouts = () => ({}), saveLayouts = () => {}, onArrange = () => {} }) {
+    Object.assign(this, { getLayouts, saveLayouts, onArrange });
     this.preload = preload;
     this.specs = new Map();
     this.closers = new Map();
     this.windows = new Map();
     ipcMain.handle('panel:get', (_e, id) => { const s = this.specs.get(String(id)); return s ? { kind: s.kind, title: s.title, sources: s.sources, ...(s.kind === 'custom' ? { doc: frameDocument(s) } : {}) } : null; });
+    ipcMain.handle('panel:refresh', (e, id) => this.windows.get(String(id))?.webContents === e.sender ? this.onRefresh?.(String(id)) : null);
     ipcMain.handle('panel:close', (_e, id) => { this.closers.get(String(id))?.(); });
   }
 
@@ -46,7 +48,20 @@ class PanelWindows {
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     w.webContents.on('will-navigate', (e) => e.preventDefault());
     w.loadFile(path.join(__dirname, '../renderer/panel.html'), { query: { id } });
-    w.once('ready-to-show', () => w.showInactive());
+    const key = JSON.stringify([spec.kind, spec.title]);
+    let manual = false;
+    w.on('will-move', () => { manual = true; }); w.on('will-resize', () => { manual = true; });
+    const save = () => { if (manual && !w.isDestroyed()) this.saveLayouts({ ...this.getLayouts(), [key]: w.getBounds() }); };
+    w.on('moved', save); w.on('resized', save);
+    w.once('ready-to-show', () => {
+      const saved = this.getLayouts()[key];
+      if (saved && ['x','y','width','height'].every(k => Number.isFinite(saved[k]))) {
+        const area = screen.getDisplayMatching(saved).workArea;
+        const width = Math.min(area.width, Math.max(220, saved.width)), height = Math.min(area.height, Math.max(140, saved.height));
+        w.setBounds({ width, height, x: Math.max(area.x, Math.min(saved.x, area.x + area.width - width)), y: Math.max(area.y, Math.min(saved.y, area.y + area.height - height)) });
+      }
+      w.showInactive(); this.onArrange(!!saved);
+    });
     let onClosed = () => {};
     w.on('closed', () => { this.specs.delete(id); this.closers.delete(id); this.windows.delete(id); onClosed(); });
     this.closers.set(id, () => { if (!w.isDestroyed()) w.close(); });

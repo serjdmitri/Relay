@@ -889,8 +889,8 @@ class AskController {
   }
 
   closePanels() {
-    const n = this.panelHub.list().length;
-    this.panelHub.closeAll();
+    const n = (this.panelHub?.list().length || 0) + (this.cardPanel?.live?.().length || 0);
+    this.panelHub?.closeAll(); this.cardPanel?.hide(true);
     return n ? `Closed ${n} panel${n === 1 ? '' : 's'}.` : 'No panels were open.';
   }
 
@@ -1909,6 +1909,14 @@ class AskController {
       case 'routine-run':
         return this.runRoutine(cmd.routine, entry);
       default: {
+        if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?(?:close|dismiss) all (?:the )?(?:menus|panels|cards)[.!?]*$/i.test(text.trim())) {
+          this.cardPanel?.hide(true); this.panelHub?.closeAll();
+          return this.finish(entry, { status: 'done', reply: 'Closed all menus, Sir.', actions: 0 });
+        }
+        if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?reset (?:the |my )?(?:menu|panel) layout[.!?]*$/i.test(text.trim())) {
+          this.cardPanel?.reset(); this.onResetMenus?.();
+          return this.finish(entry, { status: 'done', reply: 'Reset the menu layout, Sir.', actions: 0 });
+        }
         if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?(?:read|say|speak|repeat) (?:your |the )?(?:last |previous )(?:answer|reply|response)(?: (?:again|aloud|out loud))?[.!?]*$/i.test(text.trim())) {
           const previous = this.store.get('lastReply');
           return this.finish(entry, { status: previous ? 'done' : 'failed', reply: previous || 'There is no reply to read yet.', actions: 0, preserveLastReply: true, forceSpeak: !entry.remote, noFollowUp: true });
@@ -1941,6 +1949,7 @@ class AskController {
           const ac = parseAgentCommand(effective);
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
         }
+        if (!opts.shown && /\band\b/i.test(effective) && (effective.match(/\b(?:weather|forecast|calculator|cpu|memory|battery|network|disk)\b/gi) || []).length > 1) return this.runRequest(effective, entry);
         if (!opts.shown && parseBriefingCommand(effective)) {
           return this.runBriefingCommand(effective, entry);
         }

@@ -6,7 +6,7 @@ const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 function render(c) {
   root.replaceChildren();
   root.classList.toggle('weather', c.kind === 'weather');
-  if (c.kind === 'weather') { renderWeather(c); return; }
+  if (c.kind === 'weather') { renderWeather(c); menuToolbar(c); return; }
   root.classList.toggle('noimg', !(c.kind === 'entity' && c.image));
   if (c.kind === 'entity' && c.image) {
     const hero = mk('div', 'hero');
@@ -51,6 +51,7 @@ function render(c) {
     body.append(ls);
   }
   root.append(body);
+  menuToolbar(c);
 }
 
 function renderWeather(c) {
@@ -128,3 +129,19 @@ relay.onCard((m, card) => {
 });
 root.addEventListener('mouseenter', () => relay.cardHover(true));
 root.addEventListener('mouseleave', () => relay.cardHover(false));
+
+function menuToolbar(card) {
+  const bar = mk('div', 'menu-toolbar');
+  const status = mk('span', 'menu-status', '');
+  const pin = mk('button', 'menu-pin', card.pinned ? 'Unpin' : 'Pin');
+  pin.setAttribute('aria-pressed', String(!!card.pinned));
+  const button = (label, action) => { const b = mk('button', '', label); b.onclick = async () => { b.disabled = true; status.textContent = ''; try { const result = await relay.cardAction(action); if (!result?.ok) status.textContent = result?.error || 'Unavailable'; } catch { status.textContent = 'Could not update this menu.'; } finally { b.disabled = false; } }; bar.append(b); return b; };
+  pin.onclick = async () => { const result = await relay.cardAction('pin'); if (result?.ok) { pin.textContent = result.pinned ? 'Unpin' : 'Pin'; pin.setAttribute('aria-pressed', String(result.pinned)); } };
+  bar.append(pin);
+  if (card.kind === 'weather') {
+    button('Refresh', 'refresh'); button(card.units === 'c' ? 'Show °F' : 'Show °C', 'units');
+    const source = mk('button', '', 'Source ↗'); source.onclick = () => relay.cardOpen('https://open-meteo.com/'); bar.append(source);
+  }
+  bar.append(status); root.append(bar);
+}
+relay.onCardPin?.(pinned => { const button = root.querySelector('.menu-pin'); if (button) { button.textContent = pinned ? 'Unpin' : 'Pin'; button.setAttribute('aria-pressed', String(pinned)); } });
