@@ -21,6 +21,7 @@ const DEFAULTS = {
     failover: { codex: true, until: 0 }, // when Claude is out of usage, carry on with Codex (signed in with ChatGPT) without a word; `until` is when Claude is tried again
     recap: { enabled: true, hour: 20, minute: 30, lastRun: '' }, // each evening: a notification with what Relay did today, and what can be undone
     robotics: { lists: {}, sheetId: '' }, // checklists you edited (the standard ones are built in), and the Google Sheet that "log this" adds a line to
+    clutter: { enabled: true }, // every few hours Relay looks at the folders you chose and tells you quietly when one is cluttered; a preview of tidying it is one click in Files settings
     quick: { enabled: true, model: 'llama-3.1-8b-instant', keyEnc: '' }, // plain questions go straight to Groq's free tier for a faster answer (needs a Groq key); anything personal, timely or involving this Mac never does
     overnight: { enabled: true, from: 1, to: 6 }, // work you hand Relay for the night runs between these hours (24-hour clock), one task at a time, only if the Mac is awake and Relay is open; the report comes in the morning
     filePermissions: { levels: { low: 'allow', medium: 'allow', high: 'ask', critical: 'ask-mac' } }, // how risky a file operation is (low, medium, high, critical) and what to do about each: allow | ask | ask-mac (only at this Mac) | deny

@@ -1198,6 +1198,10 @@ const PAGES = {
     msel.onchange = () => relay.set('settings.quick.model', msel.value);
     quickCard.append(mrow);
     c.append(quickCard);
+    c.append(h('<div class="section-title">Folder suggestions</div>'));
+    const clutterCard = h('<div class="card"></div>');
+    clutterCard.append(toggleRow('Suggest tidying cluttered folders', 'Every few hours Relay looks at the folders you chose in Files settings (names, sizes and dates only, never what is inside the files). If one where organization is turned on gets cluttered, you get a quiet notification that opens Files settings, where Preview organization shows where everything would go. Nothing moves without your yes, and you can undo it. Say “check my folders for clutter” any time.', 'settings.clutter.enabled'));
+    c.append(clutterCard);
     if (Object.keys(S.flagList || {}).length) c.append(h('<div class="section-title">Experimental</div>'));
     const ex = h('<div class="card"></div>');
     for (const [name, f] of Object.entries(S.flagList || {})) {
