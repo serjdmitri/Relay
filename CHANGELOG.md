@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.1
+
+A fix for the network radar in 0.36.0, which could show no devices at all.
+
+- **The radar shows devices that advertise by name, even when macOS hides the neighbor list.** macOS only shows your Mac's IPv4 neighbor list (what `arp` reads) to Apple's own programs and to apps you have allowed under System Settings > Privacy & Security > Local Network. Tried on a real network from a terminal, Relay's runtime, Node and a re-signed copy of `arp` all got an empty list while Apple's perl and osascript got hundreds of entries. So Scan network now also lists every device Bonjour can name (marked "by name"), keeps them for ten minutes and lets you mark them recognized. On the network it was tried on that was 23 devices (Macs and Apple TVs); no phones or tablets showed up there, which looks like Wi-Fi that stops devices seeing each other. When the neighbor list is hidden the radar says so and says what to do: turn Relay on under Local Network, quit Relay completely, open it again and scan. **Not yet confirmed in the packaged app: that allowing Local Network and reopening Relay brings the neighbor list back.**
+
 ## 0.36.0
 
 Everything since 0.35.1: 217 changes, made between 29 October and 2 November. The full test suite passes (984 tests). **Most of it has not been tried on a real Mac by voice, by hand gesture or from a phone.** If Relay does not open, run `npm start` in the repo and send the first error.
