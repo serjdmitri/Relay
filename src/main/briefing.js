@@ -37,7 +37,9 @@ const hour = (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: d.g
 const list = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`);
 
 // facts: { now: Date, name, weather, events: [{ title, start: Date|null, allDay }], due: [{ title, overdue }], mail: [{ from, subject }], unreadCount, missing: ['weather', …] }
+const SOURCE_LABELS={calendar:'Mac calendar','google-calendar':'Google calendar',reminders:'Reminders',mail:'email',weather:'weather',school:'school'};
 function buildBriefing(f) {
+  const disabled=new Set(f.disabled||[]),checked=key=>!disabled.has(key)&&!(f.missing||[]).includes(key);
   const now = f.now || new Date();
   const part = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
   const out = f.includeGreeting === false ? [] : [`Good ${part}${f.name ? `, ${f.name}` : ''}.`];
@@ -56,12 +58,12 @@ function buildBriefing(f) {
     else if (timed.length) bits.push(`${timed.length === 1 ? 'one event was scheduled' : `${timed.length} events were scheduled`} earlier today`);
     if (allDay.length) bits.push(`all day: ${list(allDay.slice(0, 3).map((e) => e.title))}`);
     out.push(bits.length ? `On your calendar, ${bits.join('; ')}.` : 'Your calendar is clear.');
-  } else if (!(f.missing || []).includes('calendar')) out.push((f.missing || []).includes('google-calendar') ? 'Your Mac calendar is clear today.' : 'Your calendar is clear today.');
+  } else if(checked('calendar')||(disabled.has('calendar')&&checked('google-calendar'))) out.push(checked('calendar')&&checked('google-calendar')?'Your calendar is clear today.':checked('calendar')?'Your Mac calendar is clear today.':'Your Google calendar is clear today.');
   const due = [...(f.due || [])].sort((a, b) => Number(!!b.overdue) - Number(!!a.overdue));
   if (due.length) {
     const overdue = due.filter((d) => d.overdue);
     out.push(`${due.length === 1 ? 'One reminder is' : `${due.length} reminders are`} due: ${list(due.slice(0, 4).map((d) => d.title))}${due.length > 4 ? ', and more' : ''}${overdue.length ? `, ${overdue.length === due.length ? 'overdue' : `${overdue.length} of them overdue`}` : ''}.`);
-  } else if (!(f.missing || []).includes('reminders')) out.push(f.school !== undefined ? 'No reminders are due.' : 'Nothing is due.');
+  } else if (checked('reminders')) out.push(f.school !== undefined ? 'No reminders are due.' : 'Nothing is due.');
   if (f.school === null) out.push('I could not check school assignments. Open your assignment center in signed-in Firefox and check the connection.');
   else if (f.school?.problem) out.push(f.school.problem);
   else if (f.school) {
@@ -79,6 +81,7 @@ function buildBriefing(f) {
     const names = { calendar: 'Mac calendar', 'google-calendar': 'Google calendar', reminders: 'reminders', mail: 'email', 'weather-unavailable': 'weather' };
     out.push(`I could not check ${list(unavailable.map((m) => names[m]))}.`);
   }
+  if(disabled.size)out.push('Briefing sources turned off: '+[...disabled].map(key=>SOURCE_LABELS[key]||key).join(', ')+'.');
   return out.join(' ');
 }
 
@@ -127,7 +130,7 @@ function briefingCard(facts,text){
  const missing=[...(facts.missing||[]),...(facts.school?.problem?['school assignments']:[])];
  const checked=facts.now instanceof Date?facts.now.toLocaleString():'Time unavailable';
  const source=require('./school').schoolUrl(facts.school?.sourceUrl)?.href;
- return{kind:'list',hold:true,title:'Daily briefing',subtitle:'Checked '+checked,summary:text,items:[{title:'Source status',subtitle:missing.length?'Unavailable or not configured: '+missing.join(', '):'Available configured sources were checked; this is not a complete record of work outside Relay.'},...(facts.school?.truncated?[{title:'School results are limited',subtitle:'Open the assignment center to check filters and unloaded items.'}]:[])],facts:[],links:source?[{label:'School assignment center',url:source}]:[]};
+ return{kind:'list',hold:true,title:'Daily briefing',subtitle:'Checked '+checked,summary:text,items:[{title:'Source status',subtitle:(facts.disabled?.length?'Turned off: '+facts.disabled.map(key=>SOURCE_LABELS[key]||key).join(', ')+'. ':'')+(missing.length?'Unavailable or not configured: '+missing.join(', '):'Available configured sources were checked; this is not a complete record of work outside Relay.')},...(facts.school?.truncated?[{title:'School results are limited',subtitle:'Open the assignment center to check filters and unloaded items.'}]:[])],facts:[],links:source?[{label:'School assignment center',url:source}]:[]};
 }
 
-module.exports = { briefingCard, parseBriefingCommand, buildBriefing, fetchWeather, weatherWord, parseMacEvents, parseMacDue, mergeEvents };
+module.exports = { SOURCE_LABELS, briefingCard, parseBriefingCommand, buildBriefing, fetchWeather, weatherWord, parseMacEvents, parseMacDue, mergeEvents };

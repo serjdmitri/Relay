@@ -45,7 +45,7 @@ const DEFAULTS = {
     wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false }, // on-device wake phrase; optionally require two claps immediately beforehand
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
-    briefing: { city: '', name: '', units: 'f', schoolUrl: '' }, // an optional signed-in school assignment page
+    briefing: { city: '', name: '', units: 'f', schoolUrl: '', sources: {} }, // an optional signed-in school assignment page
     language: { reply: 'auto', ui: 'en' }, // what language answers come in: auto (the one you asked in) or a code like 'es'
     followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
     autoSend: { enabled: true, silenceSeconds: 1.5 }, // tap to ask: submit after a pause; off for noisy environments

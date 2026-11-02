@@ -1,0 +1,7 @@
+# Connection checks and briefing sources
+
+Connections → Connection health → Check configured connections performs manual, read-only checks for saved Google accounts, connected Notion and the configured school browser source. It shows a timestamp and per-service results. App credentials and OAuth permission alone are not proof that an API or a particular document works. Use each connection's Reconnect or setup controls below the summary. Results are kept only for the current app session and no probes run automatically. Missing connections are not described as working. School checks require signed-in Firefox and Relay's browser extension. They do not run the assignment extraction model.
+
+General → Morning briefing → Sources for briefings and daily plans lets you turn Mac calendar, Google calendar, Reminders, important inbox items, weather and school assignments on or off. All remain on by default, preserving the existing behavior. Disabled sources are not called and are labeled turned off rather than empty or unavailable. Calendar choices also apply to tomorrow's calendar in Close the day. The switches do not disconnect accounts or prevent you explicitly requesting a source separately. Saved plans still use Relay's existing local Desktop/memory output.
+
+Verified: native Google connection/check-all workflow; native source switch persistence after renderer refresh; service tests ensure no disabled source is invoked, including close-of-day calendar checks. These checks do not replace real Google/Notion consent or school sign-in.

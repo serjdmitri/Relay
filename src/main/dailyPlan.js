@@ -43,7 +43,8 @@ function closeDay({ facts, actions = [], history = [] }) {
   if (facts.tomorrow) {
     const events = facts.tomorrow.events || [];
     if (events.length) lines.push(`Tomorrow’s calendar: ${events.slice(0, 5).map((e) => `${e.title}${e.allDay ? ' (all day)' : ` at ${e.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}`).join('; ')}${events.length > 5 ? '; more events available in Calendar' : ''}.`);
-    else if (!(facts.tomorrow.missing || []).length) lines.push('No events were found on tomorrow’s checked calendars.');
+    else if (!(facts.tomorrow.missing || []).length && !(facts.tomorrow.disabled || []).length) lines.push('No events were found on tomorrow’s checked calendars.');
+    if(facts.tomorrow.disabled?.length)lines.push('Tomorrow calendar sources turned off: '+facts.tomorrow.disabled.join(', ')+'.');
     if (facts.tomorrow.missing?.length) lines.push(`Could not check tomorrow’s ${facts.tomorrow.missing.join(' and ')}.`);
   } else lines.push('Tomorrow’s calendar was not checked.');
   lines.push('Work outside Relay may not appear in its records.');
