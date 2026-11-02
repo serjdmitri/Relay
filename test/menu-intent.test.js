@@ -31,3 +31,8 @@ test('multiple keyword topics each produce their own menu request and repeated w
   assert.deepEqual(menus.map(m => m.kind), ['storage', 'weather', 'calculator', 'battery', 'network']);
   assert.equal(menus[1].query.place, 'Paris');
 });
+
+test('network speech misspellings and direct radar requests retain local routing',()=>{
+ for(const text of ['check my neckwork','check my netwrok','check my netowrk','check my net work','open radar','show me the radar','radar'])assert.deepEqual(menuTopics(text),['network'],text);
+ for(const text of ['disconnect my neckwork','do not check my netwrok','explain radar','weather radar for Miami'])assert.equal(menuTopics(text).includes('network'),false,text);
+});

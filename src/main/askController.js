@@ -886,6 +886,10 @@ class AskController {
 
   // ----- live panels -----
   async showPanel(raw) {
+    if (this.openNetworkRadar && !raw?.plugin && !raw?.builtin && Array.isArray(raw?.sources) && raw.sources.length === 1 && raw.sources[0] === 'network') {
+      const r = await this.openNetworkRadar();
+      return r.reply;
+    }
     const r = await this.panelHub.show(raw);
     return r.ok ? `Showing the panel "${String(raw.title || 'Panel').slice(0, 40)}". It updates by itself and the user can drag it or close it with the x. Answer in one short sentence.` : `The panel was not shown: ${r.error}`;
   }
@@ -2042,6 +2046,7 @@ class AskController {
           if (this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels')) {
             const pc2 = parsePanelCommand(effective);
             if (pc2?.type === 'close') return this.finish(entry, { status: 'done', reply: this.closePanels() });
+            if (pc2?.type === 'show' && pc2.sources?.length === 1 && pc2.sources[0] === 'network' && this.openNetworkRadar) return this.finish(entry, await this.openNetworkRadar());
             if (pc2?.type === 'show') { const r = await this.panelHub.show({ title: pc2.title, sources: pc2.sources }); return this.finish(entry, { status: r.ok ? 'done' : 'failed', reply: r.ok ? `Here is the ${pc2.title.toLowerCase()} panel.` : r.error }); }
           }
           const recentFailure = (this.store.get('history') || [])[0];

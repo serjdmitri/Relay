@@ -159,3 +159,14 @@ test('owner phone requests outrank menu keywords and never invoke either model',
     clearTimeout(c.doneTimer);clearTimeout(c.holdTimer);
   }
 });
+
+test('misheard network requests and model network panels use radar across providers',async t=>{
+ for(const provider of ['claude','codex']){
+  const c=make();let opened=0;t.after(()=>{clearTimeout(c.doneTimer);clearTimeout(c.holdTimer);});const get=c.store.get;c.store.get=k=>k==='settings.model.provider'?provider:get(k);
+  c.openNetworkRadar=()=>{opened++;return{status:'done',reply:'Radar open.'};};c.runRequest=()=>assert.fail('Misspelled network request must stay local');
+  c.panelHub={show:async()=>assert.fail('Network-only panel must use radar')};
+  await c.handleText('check my neckwork');assert.equal(opened,1);
+  assert.equal(await c.showPanel({title:'Network',sources:['network']}),'Radar open.');assert.equal(opened,2);
+  assert.equal(await c.showPanel({title:'Network',sources:['network'],html:'<div>Network speed</div>'}),'Radar open.');assert.equal(opened,3);
+ }
+});
