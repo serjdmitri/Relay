@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.2
 
 - **The access-denied and away screens now cover the menu bar and the notch area too**, instead of stopping just below the menu bar.
 - **Owner recognition rebuilt the way Glance does it, and it can no longer lock you out.** The first version aligned faces on four rough points and flagged the owner as a stranger straight away. Faces are now aligned on five landmarks (both pupils, nose tip, mouth corners) from MediaPipe's face landmarker, onto the standard ArcFace template, exactly as Glance's own `FaceAligner` does, and the camera runs at 640x480 for more detail. **You need to say "enroll my face" again** (faces saved with the old alignment are ignored). New safety rule: it only *arms* once it has recognised you (alive) for three frames in a row in a session; until then it never sounds the alarm, blanks the screen or locks. "Owner recognition status" says whether it is armed and shows your best match score against the threshold. Glance's own enrolled face data is encrypted inside Glance (and its model weights are research-licensed), so Relay does not read or copy them: Relay keeps its own enrollment.
