@@ -19,3 +19,10 @@ test('closing the window during Dock activation does not reactivate it', async (
   await activateMainWindow({ app, win, platform: 'darwin' });
   assert.equal(focused, false);
 });
+
+test('activating a field restores native input and explicitly focuses the renderer',async()=>{
+ const events=[];
+ const win={isDestroyed:()=>false,isVisible:()=>true,setFocusable:on=>events.push(['focusable',on]),setIgnoreMouseEvents:on=>events.push(['ignoreMouse',on]),focus:()=>events.push('window'),webContents:{focus:()=>events.push('renderer')}};
+ await activateMainWindow({app:{focus:()=>events.push('app')},win,platform:'linux'});
+ assert.deepEqual(events,['app',['focusable',true],['ignoreMouse',false],'window','renderer']);
+});

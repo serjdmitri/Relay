@@ -11,6 +11,7 @@ let capturing = null; // which shortcut is being recorded
 let loginBusy = false;
 let loginError = '';
 let modelTest = '';
+let memoryDraft = '', memoryAdding = false;
 let vocabPrefill = '';
 let locales = null;
 let appIcons = {};
@@ -604,16 +605,30 @@ const PAGES = {
     c.append(h('<div class="lead">What Relay knows about you. Say “remember that…” or add it here. Explicit new memories are stored in Relay and exported to Desktop/memory for manual import; they are not automatically saved to Sentient OS. Forgetting here does not remove existing export files or vault notes.</div>'));
     const on = S.settings.memory !== false;
     const sw = h('<div class="card flat" style="margin-bottom:18px"></div>');
-    sw.append(toggleRow('Remember things about me', 'Off: Relay does not use or collect memories, and “remember …” does nothing.', 'settings.memory'));
+    sw.append(toggleRow('Remember things about me', on ? 'On: explicit memories can be saved here or by voice.' : 'Off: Relay does not use or collect memories, and “remember …” does nothing.', 'settings.memory'));
     sw.append(toggleRow('Read Sentient OS memory', 'Uses the Sentient OS connection configured in Codex. Notes are retrieved from Sentient OS and can be sent to the active cloud model. Read-only; unavailable when Ollama is selected.', 'settings.sentient.enabled'));
     c.append(sw);
     const row = h('<div class="field-row" style="margin-bottom:22px"><input class="field" id="min" placeholder="Something to remember, e.g. I am vegetarian"><button class="btn primary" id="madd" style="height:28px">Add</button></div>');
-    const add = () => {
-      const v = $('#min', row).value;
-      if (v.trim()) relay.addMemory(v).then((r) => { $('#min', row).value = ''; if (r && r.status === 'failed') alert(r.reply); });
+    const field = $('#min', row), button = $('#madd', row);
+    field.value = memoryDraft;
+    field.oninput = () => { memoryDraft = field.value; };
+    const add = async () => {
+      const value = field.value.trim();
+      if (!value || memoryAdding) return;
+      memoryAdding = true; button.disabled = true;
+      let saved = false;
+      try {
+        const result = await relay.addMemory(value);
+        if (result?.status === 'failed') { alert(result.reply); return; }
+        saved = true;
+        if (field.value.trim() === value) { memoryDraft = ''; field.value = ''; }
+        S = await relay.getState();
+        if (page === 'memory') { field.blur(); render(); $('#min')?.focus(); }
+      } catch { alert(saved ? 'The memory was saved, but the list could not refresh. Reopen Memory to see it.' : 'Could not save this memory. Your text is still here.'); }
+      finally { memoryAdding = false; button.disabled = false; }
     };
-    $('#madd', row).onclick = add;
-    $('#min', row).onkeydown = (e) => e.key === 'Enter' && add();
+    button.onclick = add;
+    field.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
     c.append(row);
     const list = S.memories || [];
     c.append(h(`<div class="section-title" style="margin-top:0"><span>${list.length} thing${list.length === 1 ? '' : 's'}${on ? '' : ' (off)'}</span>${list.length ? '<button class="btn" id="mall">Forget all</button>' : ''}</div>`));
