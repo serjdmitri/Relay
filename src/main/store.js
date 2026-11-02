@@ -10,6 +10,7 @@ const DEFAULTS = {
   panelLayouts: [], // saved panel and hologram arrangements
   skillSuggestions: [], // proposed routines; never run without review and approval
   settings: {
+    driveRoots: [], // explicitly selected file-workspace folders
     menuSnap: true, // align floating menus near a screen edge without resizing
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
     playSounds: true,

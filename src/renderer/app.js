@@ -1273,6 +1273,25 @@ const PAGES = {
     if (S.hotkeysError) c.append(h(`<div class="note warn" style="margin-top:10px">Shortcuts are not running: ${esc(S.hotkeysError)}. Grant Accessibility and Input Monitoring, then reopen Relay.</div>`));
     c.append(h('<div class="note" style="margin:11px 4px 0;font-size:13px">Relay asks before anything that sends or deletes, whatever is allowed here.</div>'));
 
+    c.append(h('<div class="section-title">Folders & connected drives</div>'));
+    const files = h('<div class="card" style="padding:16px"><div class="d">Access checks are for selected folders only. They do not prove access to every file. Other Jarvis commands keep their existing permission rules.</div><div data-roots></div><div data-volumes class="d" style="margin:12px 0"></div><button class="btn" data-choose>Choose folder</button> <button class="btn" data-refresh>Refresh access checks</button><div data-error class="note warn" role="status"></div></div>');
+    const showAccess = data => {
+      files.querySelector('[data-error]').textContent = data.error || data.volumeError || '';
+      if (!data.roots) return;
+      const list = files.querySelector('[data-roots]'); list.replaceChildren();
+      for (const r of data.roots) {
+        const row = h(`<div style="border-bottom:1px solid var(--line);padding:12px 0"><div class="ttl">${esc(r.path)}</div><div class="d">${esc(r.error || (r.writable ? 'Read and write checks passed' : 'Readable · read-only'))}</div><label class="d">File workspace access <select class="btn"><option value="read">Read only</option><option value="organize">Allow organization with preview</option></select></label> <button class="btn" data-remove>Remove access</button></div>`);
+        const select = row.querySelector('select'); select.value = r.mode; select.disabled = !r.readable;
+        select.onchange = async () => { const result = await relay.fileRootMode(r.id, select.value); if (result.error) select.value = r.mode; showAccess(result); };
+        row.querySelector('[data-remove]').onclick = async () => showAccess(await relay.removeFileRoot(r.id));
+        list.append(row);
+      }
+      files.querySelector('[data-volumes]').textContent = 'Mounted drives: ' + (data.volumes.map(v => v.name).join(', ') || 'none found') + '. Choose a folder to grant this workspace access; listing a drive grants nothing.';
+    };
+    files.querySelector('[data-choose]').onclick = async () => showAccess(await relay.chooseFileRoot());
+    files.querySelector('[data-refresh]').onclick = async () => showAccess(await relay.fileAccess());
+    c.append(files);
+    relay.fileAccess().then(showAccess).catch(e => showAccess({ error: e.message }));
     c.append(h('<div class="section-title">Apps Relay works in</div>'));
     const apps = h('<div class="card"></div>');
     const APPS = [['Notes', 'Works in Notes for you.'], ['Reminders', 'Works in Reminders for you.'], ['Messages', 'Works in Messages for you.'], ['Calendar', 'Reads and adds events.'], ['Finder', 'Shows, opens and trashes files.'], ['Firefox', 'Opens pages and switches tabs.']];

@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { Store } = require('./store');
+const { DriveAccess } = require('./drive/access');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
@@ -360,6 +361,18 @@ async function welcomeBack(lockedAt, lastWelcome) {
 }
 
 function registerIpc() {
+  const access = new DriveAccess({ store, home: os.homedir() });
+  const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
+    if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use file access controls.' };
+    try { return await run(...args); } catch (err) { return { error: err.message }; }
+  });
+  filesIpc('files:access', () => access.status());
+  filesIpc('files:choose', async () => {
+    const r = await dialog.showOpenDialog(mainWin, { title: 'Choose a folder for the file workspace', properties: ['openDirectory'] });
+    return r.canceled ? access.status() : access.add(r.filePaths[0]);
+  });
+  filesIpc('files:mode', (id, mode) => access.mode(id, mode));
+  filesIpc('files:remove', id => access.remove(id));
   ipcMain.handle('state:get', () => publicState());
   ipcMain.handle('skills:review', (_e, id, approve) => {
     const list = store.get('skillSuggestions') || [];
@@ -375,6 +388,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('state:set', (_e, key, value) => {
+    if (key === 'settings.driveRoots' || key.startsWith('settings.driveRoots.')) throw new Error('Use the folder chooser for file access.');
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
     store.set(key, value);
     applyDockAndLogin();
