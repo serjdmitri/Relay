@@ -1,0 +1,42 @@
+const $ = id => document.getElementById(id);
+const size = n => n >= 1e12 ? (n/1e12).toFixed(1)+' TB' : n>=1e9 ? (n/1e9).toFixed(1)+' GB' : n>=1e6 ? (n/1e6).toFixed(1)+' MB' : n>=1e3 ? (n/1e3).toFixed(1)+' KB' : n+' B';
+let current=null, shown=100, poll=null;
+const status = text => { $('status').textContent=text; };
+const action = async (name,value) => { const result=await relay.storageAction(name,value);if(result?.error)throw Error(result.error);return result; };
+const button = (label,run,cls='') => {const b=document.createElement('button');b.textContent=label;b.className=cls;b.onclick=()=>Promise.resolve().then(run).catch(e=>status(e.message));return b;};
+function map(){
+  $('map').replaceChildren();if(!current)return;
+  const items=current.children.length?current.children:current.node.file?[current.node]:[];
+  const blocks=storageLayout(items,$('map').clientWidth,$('map').clientHeight);
+  if(!blocks.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=current.node.reason||'No measurable files in this folder.';$('map').append(empty);}
+  for(const block of blocks){const b=button(block.name,()=>show(block.id));b.title=`${block.name} · ${size(block.bytes)}`;b.setAttribute('aria-label',b.title);Object.assign(b.style,{left:block.x+'px',top:block.y+'px',width:block.width+'px',height:block.height+'px'});if(block.width<60||block.height<34)b.textContent='';else{const detail=document.createElement('span');detail.textContent=size(block.bytes);b.append(detail);}$('map').append(b);}
+}
+function list(){
+  $('items').replaceChildren();for(const item of current.children.slice(0,shown)){
+    const row=document.createElement('div');row.className='item';const name=button((item.directory?'▸ ':'')+item.name,()=>show(item.id),'name');
+    if(item.reason){const note=document.createElement('small');note.textContent=item.reason;name.append(note);}
+    const bytes=document.createElement('span');bytes.className='size';bytes.textContent=size(item.bytes);row.append(name,bytes,button('Finder',()=>action('reveal',item.id),'reveal'));$('items').append(row);
+  }$('more').hidden=current.children.length<=shown;
+}
+async function show(id='0'){
+  const data=await action('view',id);if(!data.node)return;
+  current=data;shown=100;$('total').textContent=size(data.node.bytes);$('path').textContent=data.node.path;$('finder').disabled=false;
+  $('crumbs').replaceChildren(...data.crumbs.map(c=>button(c.name,()=>show(c.id))));
+  $('warning').textContent=data.node.reason|| (data.partial?`Incomplete scan · ${data.unreadable} unreadable · ${data.skipped} excluded. Limits: 20,000 entries, 24 levels, 15 seconds.`:'');
+  status(`${data.files} files measured · ${new Date(data.scannedAt).toLocaleTimeString()} · ${data.partial?'partial results':'scan finished'}`);map();list();
+}
+function busy(on){$('scan').disabled=on||!$('roots').value;$('roots').disabled=on;$('cancel').hidden=!on;}
+async function tick(){
+  try{const result=await action('status');if(result.status==='scanning')status(`Scanning locally… ${result.files||0} files, ${result.entries||0} entries checked.`);
+    else{clearInterval(poll);poll=null;busy(false);if(result.status==='ready')await show();else status(result.error||'Scan cancelled. Start a new scan when ready.');}
+  }catch(e){clearInterval(poll);poll=null;busy(false);status(e.message);}
+}
+$('scan').onclick=async()=>{try{current=null;$('map').replaceChildren();$('items').replaceChildren();$('crumbs').replaceChildren();$('finder').disabled=true;$('total').textContent='—';$('path').textContent='';$('warning').textContent='';await action('start',$('roots').value);busy(true);status('Scanning locally…');clearInterval(poll);poll=setInterval(tick,400);}catch(e){status(e.message);busy(false);}};
+$('cancel').onclick=async()=>{await action('cancel');await tick();};
+$('finder').onclick=()=>action('reveal',current?.node.id).catch(e=>status(e.message));
+$('settings').onclick=()=>action('settings').catch(e=>status(e.message));
+$('x').onclick=()=>action('close');$('more').onclick=()=>{shown+=100;list();};
+new ResizeObserver(map).observe($('map'));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')action('close');});
+async function roots(){try{const old=$('roots').value,data=await action('roots');$('roots').replaceChildren();for(const r of data.roots){const o=document.createElement('option');o.value=r.id;o.textContent=r.path+(r.error?' · '+r.error:'');o.disabled=!r.readable;$('roots').append(o);}const available=[...$('roots').options].filter(o=>!o.disabled);$('roots').value=available.some(o=>o.value===old)?old:available[0]?.value||'';busy(!!poll);if(!available.length)status('Choose a readable folder in Permissions first. This panel grants no new access.');}catch(e){status(e.message);}}
+window.addEventListener('focus',roots);roots();

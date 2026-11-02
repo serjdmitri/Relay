@@ -1948,6 +1948,7 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
+        if (!opts.shown && !opts.scheduled && this.openStorageMap && require('./drive/storageScan').isStorageRequest(effective)) return this.finish(entry, await this.openStorageMap());
         const debateTopic = !opts.shown && !opts.scheduled && parseDebate(effective);
         if (debateTopic) return this.runRequest(debatePrompt(debateTopic), entry);
         if (!opts.shown) {
