@@ -9,6 +9,10 @@ const on = (channel, cb) => {
 
 contextBridge.exposeInMainWorld('relay', {
   getState: () => invoke('state:get'),
+  fileAccess: () => invoke('files:access'),
+  chooseFileRoot: () => invoke('files:choose'),
+  fileRootMode: (id, mode) => invoke('files:mode', id, mode),
+  removeFileRoot: id => invoke('files:remove', id),
   set: (key, value) => invoke('state:set', key, value),
   setApiKey: (key) => invoke('model:set-key', key),
   setPresetKey: (id, key) => invoke('model:set-preset-key', id, key),
