@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { Store } = require('./store');
 const { DriveAccess } = require('./drive/access');
 const { FileWorkspace } = require('./drive/workspace');
+const { StorageWindow } = require('./storageWindow');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
@@ -69,7 +70,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -364,10 +365,13 @@ async function welcomeBack(lockedAt, lastWelcome) {
 function registerIpc() {
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
+  storagePanel = new StorageWindow({ access, motion: floatingMotion, reveal: p => shell.showItemInFolder(p), settings: () => openMain('permissions') });
+  ask.openStorageMap = () => { storagePanel.open(); return { status: 'done', reply: 'The storage map is open, Sir. Choose a folder and click Scan to see what uses space.', actions: 1 }; };
   const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
     if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use file access controls.' };
     try { return await run(...args); } catch (err) { return { error: err.message }; }
   });
+  filesIpc('files:storage', () => { storagePanel.open(); return { ok: true }; });
   filesIpc('files:preview', id => workspace.preview(id));
   filesIpc('files:apply', id => workspace.apply(id));
   filesIpc('files:undo', id => workspace.undo(id));
@@ -1095,6 +1099,7 @@ app.whenReady().then(() => {
     },
     saveMargin: (margin) => { store.set('settings.hands.margin', margin); hands?.cam?.syncConfig?.(); broadcast(); },
     floatingAt: (pt) => {
+      const storage = storagePanel?.handTarget(pt); if (storage) return storage;
       const panel = panelWins?.handTarget(pt);
       if (panel) {
         const spec = panelHub?.panels.get(panel.id)?.spec;

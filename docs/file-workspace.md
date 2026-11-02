@@ -11,3 +11,15 @@ Enable organization for a chosen folder, then click **Preview organization**. Re
 **Apply these moves** is the explicit approval for the displayed plan. Previews expire in 30 minutes and can be applied only once. Moves use Relay's exclusive native mover. Conflicts or files changed after the preview are left in place. Organization does not delete anything, overwrite anything, or move across drives.
 
 Undo buttons persist across restarts in Relay's local `workspaceMoves` journal. Failed undo entries remain available for retry; changed files and occupied original names are protected. Keep the folder access entry to retain its undo controls, and reconnect its original drive before undoing. Removing access does not remove the journal or undo moves. The journal records paths, timestamps and file identities, not document contents. Empty destination folders may remain after undo.
+
+## Storage map
+
+Say **“Show me the storage map”** or **“What's filling up my space?”**, or click **Storage map** in Permissions. This local command works regardless of the selected cloud model. Choose an authorized folder, then Scan. The panel floats above the reactor, has a draggable title bar, supports resizing and hand movement, and reuses menu momentum/trash-to-dismiss behavior. Dismissing the map never deletes files.
+
+Click a block or folder row to drill down, use breadcrumbs to go back, and use **Show in Finder** or a row's Finder button to inspect an item. The blocks compare the 30 largest items in the selected view; the list includes the rest of the scanned items, 100 at a time. There is no file-deletion control.
+
+Scanning reads local names, types and file sizes, never document contents or cloud services. It runs in a separate worker and can be cancelled. It is limited to 20,000 entries, 24 levels and approximately 15 seconds; a nonresponding drive is stopped after 20 seconds. Symbolic links, protected folders/packages and other mounted filesystems are excluded. Errors and limits produce visibly incomplete results. Cancelling discards the current scan. Maps live only in memory until closed or rescanned.
+
+Reported sizes are logical file lengths, not exact physical space: compressed, shared, sparse and hard-linked files can differ from actual disk usage. This is a folder map, not an audit of the entire disk. Finder reveal rechecks the selected root and item identity. A disconnected or changed drive must be selected again; no automatic access escalation occurs.
+
+Validation used temporary fixture files only: native preview/move/undo, storage worker scanning, cancellation, drill-down, Finder-target verification, rejected unrelated-window requests, and narrow/wide native UI checks. The packaged archive's scan worker was also exercised. Actual external-drive hardware, macOS permission prompts, spoken microphone input and hand-camera gestures still require physical testing.

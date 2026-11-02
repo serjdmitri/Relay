@@ -1274,7 +1274,7 @@ const PAGES = {
     c.append(h('<div class="note" style="margin:11px 4px 0;font-size:13px">Relay asks before anything that sends or deletes, whatever is allowed here.</div>'));
 
     c.append(h('<div class="section-title">Folders & connected drives</div>'));
-    const files = h('<div class="card" style="padding:16px"><div class="d">Access checks are for selected folders only. They do not prove access to every file. Other Jarvis commands keep their existing permission rules.</div><div data-roots></div><div data-volumes class="d" style="margin:12px 0"></div><button class="btn" data-choose>Choose folder</button> <button class="btn" data-refresh>Refresh access checks</button><div data-error class="note warn" role="status"></div></div>');
+    const files = h('<div class="card" style="padding:16px"><div class="d">Access checks are for selected folders only. They do not prove access to every file. Other Jarvis commands keep their existing permission rules.</div><div data-roots></div><div data-volumes class="d" style="margin:12px 0"></div><button class="btn" data-choose>Choose folder</button> <button class="btn" data-refresh>Refresh access checks</button> <button class="btn" data-storage>Storage map</button><div data-error class="note warn" role="status"></div></div>');
     const showAccess = data => {
       files.querySelector('[data-error]').textContent = data.error || data.volumeError || '';
       if (!data.roots) return;
@@ -1315,6 +1315,7 @@ const PAGES = {
       }
       files.querySelector('[data-volumes]').textContent = 'Mounted drives: ' + (data.volumes.map(v => v.name).join(', ') || 'none found') + '. Choose a folder to grant this workspace access; listing a drive grants nothing.';
     };
+    files.querySelector('[data-storage]').onclick = () => relay.openStorageMap().then(result => { if (result.error) showAccess(result); });
     files.querySelector('[data-choose]').onclick = async () => showAccess(await relay.chooseFileRoot());
     files.querySelector('[data-refresh]').onclick = async () => showAccess(await relay.fileAccess());
     c.append(files);

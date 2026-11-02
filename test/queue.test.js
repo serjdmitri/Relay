@@ -85,3 +85,15 @@ test('a task that ends while you are asking for the next one waits to be shown',
   assert.equal(c.state, 'done');
   assert.equal(c.pushes.at(-1).reply, 'did one');
 });
+
+test('storage map opens through the local command path for both Claude and Codex without a model request', async () => {
+  for (const provider of ['claude', 'codex']) {
+    const c = make(); let opened = 0;
+    const get = c.store.get;
+    c.store.get = k => k === 'settings.model.provider' ? provider : get(k);
+    c.openStorageMap = () => { opened++; return { status: 'done', reply: 'The storage map is open.', actions: 1 }; };
+    c.runRequest = () => { throw new Error('Storage request should not call a model'); };
+    const result = await c.handleText('show me the storage map');
+    assert.equal(opened, 1); assert.equal(result.status, 'done');
+  }
+});
