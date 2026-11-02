@@ -1,0 +1,106 @@
+// Owner guard: the camera page compares each face it sees with your enrolled face (a list of 128-number templates, never a picture). When a face
+// is in view that is NOT you, and you are not in view, an "access denied" alarm starts and a countdown runs; if you come back in time (seen in two
+// frames in a row) the alarm stops, otherwise the Mac is locked. Locking is the only thing it does: it never unlocks the Mac. After the lock, getting
+// back in is up to macOS (and Glance, if you use it). Pure logic here; main.js supplies the lock, the alarm window and the camera.
+//
+// Honest limits: recognition can be wrong (poor light, glasses, a different angle: you may be flagged for a few seconds, which is why two frames of
+// you cancel it), a photo or video of you can fool it (no liveness check), and covering the camera makes it blind rather than suspicious.
+
+const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363 }; // 0.363 is the published cosine threshold for the SFace model
+const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+function config(raw) {
+  const c = raw && typeof raw === 'object' ? raw : {};
+  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold) };
+}
+
+// ---- matching ----
+const norm = (v) => { let s = 0; for (const x of v) s += x * x; return Math.sqrt(s) || 1; };
+function cosine(a, b) {
+  if (!a || !b || a.length !== b.length || !a.length) return null;
+  let d = 0; for (let i = 0; i < a.length; i++) d += a[i] * b[i];
+  return d / (norm(a) * norm(b));
+}
+// The best match of one face against all enrolled templates, or null when it cannot be compared.
+function bestScore(embedding, templates) {
+  if (!embedding || !Array.isArray(templates) || !templates.length) return null;
+  let best = null;
+  for (const t of templates) { const s = cosine(embedding, t); if (s !== null && (best === null || s > best)) best = s; }
+  return best;
+}
+
+// Keep enrollment samples that add something: the new one is skipped when it is nearly identical to one already kept (a still face makes 12 copies).
+function addSample(samples, embedding, { max = 12, tooSimilar = 0.97 } = {}) {
+  if (!Array.isArray(embedding) || embedding.length !== 128 || embedding.some((x) => !Number.isFinite(x))) return { samples, added: false, why: 'bad' };
+  if (samples.length >= max) return { samples, added: false, why: 'full' };
+  if (samples.some((s) => cosine(s, embedding) >= tooSimilar)) return { samples, added: false, why: 'similar' };
+  return { samples: [...samples, embedding.map((x) => Math.round(x * 1e5) / 1e5)], added: true };
+}
+
+// ---- the guard ----
+class OwnerGuard {
+  // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 3, ownerFrames = 2, calmFrames = 10 }) {
+    Object.assign(this, { lock, onAlarm, onCount, onClear, onLocked, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+    this.reset();
+  }
+  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; }
+
+  // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
+  frame({ faces = 0, scores = [] } = {}) {
+    const cfg = config(this.getConfig());
+    if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); return null; }
+    const known = scores.filter((s) => Number.isFinite(s));
+    const owner = known.some((s) => s >= cfg.threshold), stranger = known.some((s) => s < cfg.threshold);
+    this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
+    this.owners = owner ? this.owners + 1 : 0;
+    this.strangers = stranger && !owner ? this.strangers + 1 : 0;
+    this.calm = stranger ? 0 : this.calm + 1;
+    return this.step(cfg);
+  }
+
+  // Called every second as well, so the countdown ends on time even if the camera stops sending pictures.
+  step(cfg = config(this.getConfig())) {
+    const t = this.now();
+    if (this.state === 'idle') {
+      if (cfg.enabled && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
+      return null;
+    }
+    if (this.state === 'alarm') {
+      if (this.owners >= this.ownerFrames && !this.demo) return this.clear('owner');
+      if (t >= this.deadline) return this.end();
+      this.onCount(this.secondsLeft());
+      return null;
+    }
+    // locked: quiet until you have been seen again, or nobody strange has been in view for a while, so one stranger is not alarmed over and over
+    if (this.owners >= this.ownerFrames || this.calm >= this.calmFrames) { this.state = 'idle'; this.strangers = 0; }
+    return null;
+  }
+
+  end() {
+    if (this.demo) { this.clear('ended'); return 'cleared'; }
+    this.state = 'locked'; this.deadline = null;
+    Promise.resolve().then(() => this.lock()).catch(() => {});
+    this.onLocked(); return 'locked';
+  }
+  clear(reason) { this.state = 'idle'; this.deadline = null; this.strangers = 0; this.demo = false; this.onClear(reason); return 'cleared'; }
+
+  // "Test the access denied screen": the same alarm for a few seconds, which never locks and ignores who is in view.
+  startDemo(seconds = 6) { this.state = 'alarm'; this.demo = true; this.deadline = this.now() + seconds * 1000; this.onAlarm({ seconds, demo: true }); }
+  secondsLeft() { return this.state === 'alarm' && this.deadline ? Math.max(0, Math.ceil((this.deadline - this.now()) / 1000)) : null; }
+}
+
+// "enroll my face", "forget my face", "turn on owner recognition", "set the lock countdown to 30 seconds", "owner recognition status", "test the access denied screen".
+function parseOwnerCommand(text) {
+  const n = String(text || '').trim().replace(/[“”"]/g, '').replace(/[.!?]+$/, '').replace(/^(?:hey |ok |okay )?(?:relay|jarvis)[, ]+/i, '').replace(/^please /i, '').replace(/\s+/g, ' ').toLowerCase();
+  if (/^(?:enroll|enrol|register|save|add|learn|scan|set up) my face$|^(?:set up|start) (?:face|owner) (?:recognition|enrollment|enrolment)$/.test(n)) return { type: 'enroll' };
+  if (/^(?:forget|delete|remove|erase|clear) my face(?: data)?$|^(?:forget|delete|erase) (?:the )?(?:face|owner) (?:data|templates?)$/.test(n)) return { type: 'forget' };
+  if (/^(?:turn on|enable|start|switch on) (?:the )?(?:owner|face) (?:recognition|check|guard|lock)$|^(?:owner|face) (?:recognition|guard) on$/.test(n)) return { type: 'on' };
+  if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:owner|face) (?:recognition|check|guard|lock)$|^(?:owner|face) (?:recognition|guard) off$/.test(n)) return { type: 'off' };
+  const m = /^(?:set|change|make) (?:the )?(?:lock |access denied |intruder )?(?:countdown|timer|delay|time)(?: (?:for|of) (?:the )?(?:owner|face|access denied|lock)[a-z ]*)? (?:to|at) (\d{1,3})(?: ?(s|sec|secs|seconds?|m|min|mins|minutes?))?$/.exec(n);
+  if (m) { const v = Number(m[1]); return { type: 'seconds', seconds: /^m/.test(m[2] || '') ? v * 60 : v }; }
+  if (/^(?:owner|face) (?:recognition|guard) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recognition|guard) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
+  if (/^(?:test|show|preview|try) (?:the )?(?:access denied|intruder|not your computer)(?: screen| alarm| warning)?$/.test(n)) return { type: 'demo' };
+  return null;
+}
+
+module.exports = { OwnerGuard, config, cosine, bestScore, addSample, parseOwnerCommand, DEFAULTS };
