@@ -41,3 +41,12 @@ test('a leftward menu flick keeps the title reachable instead of leaving it offs
  for(let i=0;i<140&&r.timers.size;i++)for(const tick of [...r.timers])tick();
  assert.equal(r.closed,0);assert.ok(r.pos.x>=0);assert.ok(r.pos.y>=0);
 });
+
+test('edge snapping respects usable screen bounds and preserves the size',()=>{
+ const {snapRectangle}=require('../src/main/floatingMotion');
+ const area={x:-1000,y:40,width:1000,height:720};
+ assert.deepEqual(snapRectangle({x:-999,y:43,width:300,height:200},area),{x:-988,y:52});
+ assert.deepEqual(snapRectangle({x:-302,y:557,width:300,height:200},area),{x:-312,y:548});
+ assert.deepEqual(snapRectangle({x:-600,y:200,width:300,height:200},area),{x:-600,y:200});
+ assert.equal(snapRectangle({x:1,y:2},area),null,'hologram centers are not resized or snapped like rectangular menus');
+});

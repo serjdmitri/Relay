@@ -810,6 +810,7 @@ const PAGES = {
         return row;
       })(),
       toggleRow('Keep listening after an answer', 'After you ask out loud and Relay answers, it listens for a few seconds more, so you can say “and the next one?” without pressing anything.', 'settings.followUp.enabled'),
+      toggleRow('Snap menus to screen edges', 'Align floating menus when you release them near an edge. Their size stays the same.', 'settings.menuSnap'),
       toggleRow('Send after I stop speaking', 'For a tapped voice shortcut, send after a pause. Turn this off in a noisy place and press the shortcut again to send. Holding the shortcut still works.', 'settings.autoSend.enabled'),
       (() => {
         const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Voice timing</div><div class="d">Seconds of quiet before sending, and seconds to wait for another command.</div></div><input class="field" id="autoPause" type="number" min="0.7" max="5" step="0.1" style="width:75px"><span class="d">quiet</span><input class="field" id="followWait" type="number" min="3" max="20" step="1" style="width:75px"><span class="d">follow-up</span></div>`);
