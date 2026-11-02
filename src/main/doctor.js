@@ -27,6 +27,13 @@ function parseFirewall(output) {
   return match ? Number(match[1]) : null;
 }
 
+function parseFileVault(output) {
+  const text = String(output || '').trim();
+  if (/^FileVault is On\.$/i.test(text)) return 'on';
+  if (/^FileVault is Off\.$/i.test(text)) return 'off';
+  return 'unknown';
+}
+
 // How the running app is signed, from `codesign -dv --verbose=2` output: adhoc | local (the "Relay Local Signing" certificate) | developer | unknown.
 function parseSigning(output) {
   const t = String(output || '');
@@ -37,6 +44,14 @@ function parseSigning(output) {
 }
 
 const CHECKS = [
+  {
+    id: 'filevault', title: 'FileVault disk encryption', run: (env) => {
+      const state = env.filevault?.();
+      if (state === 'on') return ok('FileVault is on.');
+      if (state === 'off') return warn('FileVault is off. Review FileVault in System Settings > Privacy & Security.');
+      return warn('FileVault status could not be confirmed; encryption may be changing.');
+    }
+  },
   {
     id: 'firewall', title: 'macOS application firewall', run: (env) => {
       const state = env.firewall?.();
@@ -288,4 +303,4 @@ function summarize(results) {
   return `${order.length} thing${order.length === 1 ? ' needs' : 's need'} a look. ${first}${more}`;
 }
 
-module.exports = { parseDoctorCommand, summarize, CHECKS, runChecks, worst, fixPolicy, scrub, buildReport, issueUrl, parseSigning, parseFreeMb, parseFirewall, REPO };
+module.exports = { parseDoctorCommand, summarize, CHECKS, runChecks, worst, fixPolicy, scrub, buildReport, issueUrl, parseSigning, parseFreeMb, parseFirewall, parseFileVault, REPO };

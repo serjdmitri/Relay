@@ -15,10 +15,21 @@ const good = {
   hotkeys: () => ({ running: true }),
   speech: () => ({ available: true }),
   storeInfo: () => ({ freeMb: 5000 }),
-  firewall: () => 1,
+  firewall: () => 1, filevault: () => 'on',
   recentErrors: () => []
 };
 const by = (rs, id) => rs.find((r) => r.id === id);
+
+test('FileVault reports confirmed states and leaves transitions unconfirmed', async () => {
+  assert.equal(d.parseFileVault('FileVault is On.\n'), 'on');
+  assert.equal(d.parseFileVault('FileVault is Off.'), 'off');
+  assert.equal(d.parseFileVault('Encryption in progress: 50%'), 'unknown');
+  assert.equal(d.parseFileVault('FileVault is On.\nDecryption in progress'), 'unknown');
+  for (const [state, expected] of [['on', 'ok'], ['off', 'warn'], ['unknown', 'warn']]) {
+    const check = by(await d.runChecks({ ...good, filevault: () => state }), 'filevault');
+    assert.equal(check.status, expected);
+  }
+});
 
 test('firewall diagnostics distinguish enabled, disabled and unknown', async () => {
   assert.equal(d.parseFirewall('Firewall is disabled. (State = 0)'), 0);
