@@ -29,3 +29,8 @@ test('a new grab stops the old glide and multiple held items keep trash visible'
  r.m.begin(r.target,{x:250,y:100});assert.equal(r.timers.size,0);
  r.m.begin({...r.target,key:'other'},{x:400,y:200});r.m.release('item',true);assert.equal(r.zones.at(-1).length,1);r.m.stop();assert.deepEqual(r.zones.at(-1),[]);
 });
+
+test('a nearby menu expands the target while releasing a far-away pointer remains safe',()=>{
+ const state=trashGeometry({x:650,y:400},bounds,{x:650,y:400,width:350,height:400});
+ assert.equal(state.radius,210);assert.equal(state.inside,false);
+});
