@@ -4,7 +4,7 @@
 // Like Glance, recognition aligns each face on five landmarks (pupils, nose tip, mouth corners) before it is compared; the face landmarker supplies them several
 // times a second, which also lets the liveness check see blinks.
 import { FaceDetector, FaceLandmarker, FilesetResolver } from './vendor/mediapipe/vision_bundle.mjs';
-import { LivenessTracker } from './liveness.js';
+import { LivenessTracker, lookingAway } from './liveness.js';
 
 const video = document.getElementById('v');
 const status = (state, extra = {}) => { try { relay.presenceStatus({ state, ...extra }); } catch { /* the page may be closing */ } };
@@ -15,6 +15,7 @@ let stopped = false;
 let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBusy = false, recogOn = false, livenessOn = false, lmTimer = 0;
 let lastLm = { t: 0, faces: [] };
 const tracker = new LivenessTracker();
+const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
 let busy = false, embed = null, embedFailed = false, templates = [], version = 0;
 const cosine = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x) * Math.sqrt(y) || 1); };
 const bestScore = (e, list) => list.reduce((best, t) => { const s = t.length === e.length ? cosine(e, t) : null; return s !== null && (best === null || s > best) ? s : best; }, null);
@@ -22,7 +23,7 @@ const bestScore = (e, list) => list.reduce((best, t) => { const s = t.length ===
 async function loadLandmarker() {
   lmLoading = true;
   try {
-    const make = (delegate) => FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 3, outputFaceBlendshapes: true });
+    const make = (delegate) => FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/face_landmarker.task', delegate }, runningMode: 'VIDEO', numFaces: 3, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true });
     try { landmarker = await make('GPU'); } catch { landmarker = await make('CPU'); }
     // blinks are quick, so this looks several times a second (only while owner recognition is on)
     lmTimer = setInterval(() => {
@@ -33,7 +34,8 @@ async function loadLandmarker() {
         const faces = (r.faceLandmarks || []).map((lm, i) => {
           const cats = r.faceBlendshapes?.[i]?.categories || [], g = (n) => cats.find((c) => c.categoryName === n)?.score;
           const xs = lm.map((p) => p.x), width = Math.max(...xs) - Math.min(...xs);
-          return { lm, width, x: lm[1].x, y: lm[1].y, blinkL: g('eyeBlinkLeft'), blinkR: g('eyeBlinkRight') };
+          const away = lookingAway({ gazeDownL: g('eyeLookDownLeft'), gazeDownR: g('eyeLookDownRight'), matrix: r.facialTransformationMatrixes?.[i]?.data });
+          return { lm, width, away, x: lm[1].x, y: lm[1].y, blinkL: g('eyeBlinkLeft'), blinkR: g('eyeBlinkRight') };
         });
         lastLm = { t: Date.now(), faces };
         if (livenessOn) tracker.update(faces, Date.now());
@@ -69,12 +71,14 @@ async function start() {
             // the accurate way: faces with their landmarks from the last few moments; the rough way (the face finder's four points) if the landmark finder is not running
             const fresh = landmarker && Date.now() - lastLm.t < 700 && lastLm.faces.length;
             const area = (d) => (d.boundingBox?.width || 0) * (d.boundingBox?.height || 0);
-            const faces = fresh ? lastLm.faces.slice().sort((a, b) => b.width - a.width).slice(0, 3).map((f) => ({ lm: f.lm, x: f.x, y: f.y }))
-              : dets.slice().sort((a, b) => area(b) - area(a)).slice(0, 3).map((d) => ({ keypoints: d.keypoints, x: d.keypoints?.[2]?.x, y: d.keypoints?.[2]?.y }));
+            const faces = fresh ? lastLm.faces.slice().sort((a, b) => b.width - a.width).slice(0, 3).map((f) => ({ lm: f.lm, x: f.x, y: f.y, width: f.width, away: !!f.away }))
+              : dets.slice().sort((a, b) => area(b) - area(a)).slice(0, 3).map((d) => ({ keypoints: d.keypoints, x: d.keypoints?.[2]?.x, y: d.keypoints?.[2]?.y, width: (d.boundingBox?.width || 0) / (video.videoWidth || 1) }));
             if (c.mode === 'enroll') {
               if (faces.length === 1 && fresh) { const e = await embed(video, faces[0]); if (e) await relay.presenceEnroll({ embedding: e }); } // enrolling needs the accurate alignment
             } else {
-              frame.scores = await Promise.all(faces.map(async (f) => { const e = await embed(video, f); return e ? bestScore(e, templates) : null; }));
+              // like Glance, a face too small in the picture is a bystander or too far to judge: no score, rather than a low one
+              frame.down = faces.some((f) => f.away); // looking down at the keyboard or turned aside: not the same as leaving, and not judged
+              frame.scores = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? bestScore(e, templates) : null; }));
               // Liveness: a face that matches you but has not blinked lately is reported as not alive (a picture). Until the blink finder is ready, or if it cannot load, faces count as alive.
               frame.live = faces.map((f) => (livenessOn && fresh && Number.isFinite(f.x) ? tracker.isLive(f.x, f.y, Date.now()) !== false : true));
             }

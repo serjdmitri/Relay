@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Owner recognition is less trigger-happy, and knows when you are looking down.**
+  - *Less sensitive:* a "not sure" match score (a face that is far away, turned or badly lit: between the threshold and 0.12 below it) is now neither you nor a stranger, so only a clearly low score counts against you. A stranger must be seen for five frames in a row (was three). Faces narrower than 14% of the picture are not judged at all (Glance does the same with bystanders). The blink check is more forgiving: you stay "alive" for 30 seconds after a blink (was 15), with 8 seconds' grace, and it notices lighter blinks.
+  - *Looking down:* it now reads your head pose and where your eyes point. A face looking down at the keyboard, or turned aside, is not judged, so it can no longer be mistaken for a stranger; and if your face disappears right after you looked down, the away screen waits three times as long. "Owner recognition status" says when you are looking away.
+  - "Owner recognition status" is understood even when misheard ("recognistion").
+
 ## 0.37.2
 
 - **The access-denied and away screens now cover the menu bar and the notch area too**, instead of stopping just below the menu bar.
