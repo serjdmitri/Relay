@@ -33,7 +33,7 @@ class CardPanel {
       const layouts = { ...(this.options.getLayouts?.() || {}), [e.key]: e.win.getBounds() };
       this.options.saveLayouts?.(Object.fromEntries(Object.entries(layouts).slice(-100)));
     };
-    e.win.on('moved', save); e.win.on('resized', save);
+    require('../windowGeometry').watchGeometry(e.win, save);
     return e;
   }
   hide(all = false) { for (const e of this.live()) if (all || !e.pinned) e.hide(); }
