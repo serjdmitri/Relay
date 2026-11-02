@@ -936,6 +936,7 @@ app.whenReady().then(() => {
   recent.start();
   cardPanel = new CardPanel({ motion: floatingMotion, preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false, getLayouts: () => store.get('menuLayouts') || {}, saveLayouts: layouts => store.set('menuLayouts', layouts) });
   cardPanel.onRefresh = (card, units) => require('./forecast').forecast(card.location, { units, signal: AbortSignal.timeout(10000) });
+  cardPanel.onUnitsChange = units => { store.set('settings.briefing.units', units); broadcast(); };
   cardPanel.onDismiss = (card) => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); };
   assistPanel = new AssistPanel({ preload: path.join(__dirname, 'preload.js'), getHidden: () => store.get('settings.meeting.hidden') !== false });
   holos = new HoloManager({ motion: floatingMotion,

@@ -13,3 +13,5 @@
 .menu-toolbar button:focus-visible, #refresh:focus-visible { outline: 2px solid white; outline-offset: 2px; }
 .menu-toolbar button:disabled { opacity: .6; cursor: wait; }
 .menu-status { color: #ffda9e; font-size: 11px; }
+
+.menu-hint { flex-basis: 100%; color: var(--menu-ink); opacity: .8; font-size: 10px; }

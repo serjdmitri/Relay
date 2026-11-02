@@ -20,9 +20,13 @@ async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
     const normalized = /^moskow$/i.test(city) ? 'Moscow' : city;
     if (!searches.has(normalized)) searches.set(normalized, get(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: normalized, count: '10', language: 'en', format: 'json' })}`));
     const geo = await searches.get(normalized);
-    return (geo.results || []).find((x) => (!exact || fold(x.name) === fold(normalized)) && (!hint || fold(`${x.admin1 || ''} ${x.country || ''} ${x.country_code || ''}`).includes(fold(hint))));
+    return (geo.results || []).filter((x) => (!exact || fold(x.name) === fold(normalized)) && (!hint || fold(`${x.admin1 || ''} ${x.country || ''} ${x.country_code || ''}`).includes(fold(hint))));
   };
-  let p = await search(name, parts.join(' '), false);
+  const initial = await search(name, parts.join(' '), false);
+  const exact = initial.filter(p => p.feature_code !== 'PCLI' && fold(p.name) === fold(name));
+  const choices = [...new Map(exact.map(p => { const label = [...new Set([p.name,p.admin1,p.country].filter(Boolean))].join(', '); return [label,{label,place:label}]; })).values()].slice(0,6);
+  if (!parts.length && choices.length > 1) return { needsChoice: true, choices, units };
+  let p = initial[0];
   // Speech may put the region before or after the city. Try bounded, exact
   // city/region pairs concurrently; never choose an unrelated Hollywood.
   if (!p) {
@@ -32,7 +36,7 @@ async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
       const left = words.slice(0, i).join(' '), right = words.slice(i).join(' ');
       candidates.push([left, right], [right, left]);
     }
-    p = (await Promise.all(candidates.map(([city, hint]) => search(city, hint, true)))).find(Boolean);
+    p = (await Promise.all(candidates.map(([city, hint]) => search(city, hint, true)))).flat().find(Boolean);
   }
   if (p?.feature_code === 'PCLI') return { needsCity: true, country: p.name };
   if (!p || !Number.isFinite(p.latitude) || !Number.isFinite(p.longitude)) return null;

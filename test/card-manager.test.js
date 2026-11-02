@@ -64,3 +64,14 @@ test('hand targeting finds every held or pinned card, not only the latest one',a
  assert.equal(m.handTarget({x:500,y:100}).key,b.motionKey);
  m.handTarget({x:100,y:100}).close();assert.equal(m.live().length,1);assert.equal(b.card.location,'London');
 });
+
+test('weather choices update only their menu and successful unit toggles save the preference',async()=>{
+ const m=new CardPanel({});let saved;
+ const a=await m.show({kind:'list',units:'f',choices:[{label:'Paris, France',place:'Paris, France'}]});
+ m.onRefresh=async(card,units)=>({location:card.location,units,days:[{date:'2026-11-01',high:20,low:10}]});
+ m.onUnitsChange=units=>{saved=units};
+ assert.equal((await m.action(a.win.webContents,'choice:9')).ok,false);
+ assert.equal((await m.action(a.win.webContents,'choice:0')).ok,true);assert.equal(a.card.kind,'weather');
+ assert.equal((await m.action(a.win.webContents,'units')).ok,true);assert.equal(saved,'c');
+ m.onRefresh=async()=>{throw Error('offline')};await m.action(a.win.webContents,'units');assert.equal(saved,'c');
+});
