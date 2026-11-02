@@ -21,10 +21,13 @@ const same = (heard, want) => heard === want || (want.length >= 5 && heard.lengt
 // Levels are sampled about 20 times per second, so a real microphone check is needed.
 class ClapGate {
   constructor() { this.reset(); }
-  reset() { this.high = false; this.first = null; this.until = 0; }
+  reset() { this.high = false; this.first = null; this.until = 0; this.floor = .025; }
   level(value, now) {
-    const high = Number(value) >= 0.55;
-    if (!high) { this.high = false; return false; }
+    const sample = Number(value);
+    if (!Number.isFinite(sample)) return false;
+    const threshold = Math.max(.18, Math.min(.75, this.floor * 4 + .07));
+    if (sample < threshold * .8) { this.high = false; this.floor = this.floor * .94 + Math.max(0, sample) * .06; return false; }
+    if (sample < threshold) return false;
     if (this.high) return false;
     this.high = true;
     if (this.first !== null && now - this.first >= 120 && now - this.first <= 900) {
@@ -63,7 +66,7 @@ function heardWake(text, phrase) {
 class WakeWord {
   // speech: the Speech wrapper (events 'partial', and listen()/cancel()).
   // getConfig(): { enabled, phrase }. canListen(): false while Relay is busy, speaking or being configured.
-  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout, handoffMs = 300 }) {
     this.speech = speech;
     this.getConfig = getConfig;
     this.canListen = canListen;
@@ -72,7 +75,7 @@ class WakeWord {
     this.onArmed = onArmed;
     this.getDevice = getDevice;
     this.log = log;
-    this.restartMs = restartMs;
+    this.restartMs = restartMs; this.handoffMs = handoffMs; this.handoff = null; this.pendingText = null;
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
     this.armed = false;
@@ -135,6 +138,7 @@ class WakeWord {
   disarm() {
     this.clearTimer(this.timer);
     this.clearTimer(this.retry);
+    this.clearTimer(this.handoff); this.handoff = null; this.pendingText = null;
     if (!this.armed) return;
     this.armed = false;
     this.claps.reset();
@@ -152,15 +156,30 @@ class WakeWord {
     if (c.requireClaps) {
       if (!this.claps.ready(Date.now())) return;
       const current = clean(text);
-      if (this.clapPrefix && !current.startsWith(`${this.clapPrefix} `)) return;
-      candidate = this.clapPrefix ? current.slice(this.clapPrefix.length).trim() : current;
+      if (this.clapPrefix && current.startsWith(`${this.clapPrefix} `)) candidate = current.slice(this.clapPrefix.length).trim();
+      else if (this.clapPrefix && heardWake(this.clapPrefix, c.phrase)) return;
+      else candidate = current; // recognition can revise earlier background words after the claps
     }
     if (!heardWake(candidate, c.phrase)) return;
     if (Date.now() - this.lastWake < 1500) return;
-    this.lastWake = Date.now();
-    this.disarm();
-    this.onWake(text);
+    this.pendingText = candidate;
+    if (this.handoff !== null) return;
+    const fire = () => {
+      if (!this.armed || !this.wanted) return;
+      const heard = this.pendingText;
+      this.lastWake = Date.now(); this.disarm(); this.onWake(heard);
+    };
+    if (!this.handoffMs) fire(); else this.handoff = this.setTimer(fire, this.handoffMs);
   }
 }
 
-module.exports = { WakeWord, ClapGate, heardWake, clean };
+function commandAfterWake(text, phrase) {
+  const heard = clean(text).split(' ').filter(Boolean), want = clean(phrase).split(' ').filter(Boolean);
+  const name = GREETINGS.has(want[0]) ? want.slice(1) : want;
+  for (let i = heard.length - 1; i >= 0; i--) {
+    if (want.join(' ') === 'hey jarvis' && same(heard[i], 'jarvis') && heard[i+1] === 'wake' && heard[i+2] === 'up') return heard.slice(i+3).join(' ');
+    if (name.length && name.every((w,k) => heard[i+k] && same(heard[i+k], w)) && (!GREETINGS.has(want[0]) || GREETINGS.has(heard[i-1]))) return heard.slice(i+name.length).join(' ');
+  }
+  return '';
+}
+module.exports = { WakeWord, ClapGate, heardWake, clean, commandAfterWake };
