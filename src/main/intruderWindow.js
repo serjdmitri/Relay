@@ -11,7 +11,18 @@ class IntruderWindow {
   }
 
   show({ seconds, demo = false }) {
-    this.state = { active: true, endsAt: Date.now() + seconds * 1000, total: seconds, demo };
+    this.state = { active: true, mode: 'alarm', endsAt: Date.now() + seconds * 1000, total: seconds, demo };
+    this.open();
+  }
+
+  // The standby screen: you stepped away. Calm, blue, no siren; it stays until main.js hides it.
+  showAway() {
+    if (this.state.active && this.state.mode === 'alarm') return;
+    this.state = { active: true, mode: 'away', since: Date.now() };
+    this.open();
+  }
+
+  open() {
     if (this.wins.some((w) => !w.isDestroyed())) return;
     this.wins = screen.getAllDisplays().map((d) => {
       const { x, y, width, height } = d.bounds;
