@@ -20,7 +20,7 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
 
   const tools = [
-    ...(forecast ? [{ name: 'weather_forecast', description: 'Get weather for a city and show Relay’s forecast panel when cards are enabled. Use this for weather and forecast requests, including when the user asks for a menu. Ask for a city if only a country is provided.', input_schema: obj({ place: str('City and optional state or country, for example Hollywood, Florida') }, ['place']), describe: (i) => `Checking weather in ${i.place}`, run: (i) => forecast(i.place) }] : []),
+    ...(forecast ? [{ name: 'weather_forecast', description: 'Get weather for a city and show Relay’s forecast panel when cards are enabled. Use this for weather and forecast requests, including when the user asks for a menu. Ask for a city if only a country is provided.', input_schema: obj({ place: str('City and optional state or country, for example Hollywood, Florida'), units: { type: 'string', enum: ['c', 'f'], description: 'Optional Celsius or Fahrenheit override for this request' } }, ['place']), describe: (i) => `Checking weather in ${i.place}`, run: (i) => forecast(i.place, i.units) }] : []),
     {
       name: 'list_running_apps',
       description: 'List the apps currently open.',

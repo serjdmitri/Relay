@@ -1,9 +1,11 @@
 const { weatherWord } = require('./briefing');
 
 function parseForecast(text) {
-  const t = String(text || '').trim().replace(/^(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+/i, '').replace(/[?.!]+$/, '');
+  let t = String(text || '').trim().replace(/^(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+/i, '').replace(/[?.!]+$/, '');
+  const unit = /\s+in (celsius|centigrade|fahrenheit)$/i.exec(t);
+  if (unit) t = t.slice(0, unit.index);
   const m = /^(?:what(?:'s|s| is) (?:the )?weather|(?:(?:show|give|make) me |(?:open|show|make) )?(?:(?:a|the) )?(?:(?:weather|forecast)(?: (?:menu|panel|card))?|(?:menu|panel|card) (?:of|for|with) (?:the )?(?:weather|forecast)))(?: (?:in|for|at) (.+))?$/i.exec(t);
-  return m ? { place: (m[1] || '').trim() } : null;
+  return m ? { place: (m[1] || '').trim(), ...(unit ? { units: /^f/i.test(unit[1]) ? 'f' : 'c' } : {}) } : null;
 }
 
 async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
