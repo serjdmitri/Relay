@@ -1904,6 +1904,9 @@ class AskController {
       case 'routine-run':
         return this.runRoutine(cmd.routine, entry);
       default: {
+        if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?copy (?:your |the )?(?:last |previous )(?:answer|reply|response)[.!?]*$/i.test(text.trim())) {
+          return this.finish(entry, await this.copyLastReply());
+        }
         if (isUndo(text)) return this.undoLast(entry);
         const tier = !opts.shown ? parseModelCommand(text) : null;
         if (tier) return this.finish(entry, this.setModelTier(tier));
@@ -2896,6 +2899,18 @@ class AskController {
   // Said aloud in the chosen voice, outside a request (for things Relay brings up on its own).
   speakText(text) { this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en' }); }
 
+  // Keep the original answer available after acknowledging the copy.
+  async copyLastReply() {
+    const text = this.store.get('lastReply');
+    if (!text) return { status: 'failed', reply: 'There is no reply to copy yet.', actions: 0, preserveLastReply: true };
+    try {
+      await this.mac.clipboardWrite(text);
+      return { status: 'done', reply: 'I have copied my last answer, Sir.', actions: 1, preserveLastReply: true };
+    } catch {
+      return { status: 'failed', reply: 'I could not copy the answer. Please try again.', actions: 0, preserveLastReply: true };
+    }
+  }
+
   // Replaying an answer must not restart an earlier hands-free conversation.
   speakLastReply() {
     const text = this.store.get('lastReply');
@@ -3057,7 +3072,7 @@ class AskController {
     const historyEntry = { ...entry, finishedAt: Date.now(), status: res.status, reply, actions: res.actions || 0, ...(res.model ? { model: res.model, escalated: !!res.escalated } : {}), ...(used ? { usage: used, usageText } : {}) };
     if (this.activeScheduledId && entry.id === this.activeScheduledId) this.store.updateHistory(entry.id, historyEntry);
     else this.store.addHistory(historyEntry);
-    this.store.set('lastReply', reply);
+    if (!res.preserveLastReply) this.store.set('lastReply', reply);
     if (Date.now() - entry.ts > 60000 && !entry.remote && entry.text) this.onProactive?.({ type: 'job', title: String(entry.text).slice(0, 60), status: res.status === 'done' ? 'done' : 'failed', id: entry.id });
     if (res.status === 'done' && reply && entry.text) {
       this.prevExchange = { request: entry.text, reply };
