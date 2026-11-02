@@ -1368,6 +1368,25 @@ class AskController {
     this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
   }
 
+  async openMenuRequests(menus) {
+    if (menus.some(m => m.kind === 'storage' && !this.openStorageMap || !['storage', 'weather'].includes(m.kind) && !this.panelHub)) return null;
+    // Preserve multi-city and other compound requests for the existing model/tool path.
+    if (menus.some(m => m.kind === 'weather' && /\band\b/i.test(m.query?.place || ''))) return null;
+    const abort = new AbortController(); this.abort = abort;
+    const results = await Promise.all(menus.map(async menu => {
+      try {
+        if (menu.kind === 'storage') return await this.openStorageMap();
+        if (menu.kind === 'weather') return await this.forecastCommand(menu.query, { parentSignal: abort.signal });
+        if (menu.kind !== 'calculator' && !flagsMod.isOn(this.store.get('settings'), 'panels')) return { status: 'failed', reply: 'Turn on Live panels in Settings to show system menus.' };
+        const spec = menu.kind === 'calculator' ? { builtin: 'calculator' } : { title: menu.title, sources: menu.kind === 'system' ? ['cpu', 'memory', 'battery', 'network', 'disk'] : [menu.kind] };
+        const result = await this.panelHub.show(spec);
+        return { status: result.ok ? 'done' : 'failed', reply: result.ok ? `Here is the ${menu.title?.toLowerCase() || 'calculator'} menu, Sir.` : result.error, actions: result.ok ? 1 : 0 };
+      } catch (e) { return { status: 'failed', reply: `I could not open the ${menu.title || menu.kind} menu: ${e.message}`, actions: 0 }; }
+    }));
+    if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped opening menus.', actions: results.reduce((n, r) => n + (r.actions || 0), 0) };
+    return { status: results.some(r => r.status === 'done') ? 'done' : results[0].status, reply: results.map(r => r.reply).filter(Boolean).join(' '), actions: results.reduce((n,r) => n + (r.actions || 0), 0) };
+  }
+
   async forecastCommand(query, { parentSignal = null } = {}) {
     const cfg = this.store.get('settings.briefing') || {};
     const place = query.place || cfg.city;
@@ -1948,7 +1967,13 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
-        if (!opts.shown && !opts.scheduled && this.openStorageMap && require('./drive/storageScan').isStorageRequest(effective)) return this.finish(entry, await this.openStorageMap());
+        if (!opts.shown && !opts.scheduled) {
+          const menus = require('./menuIntent').menuRequests(effective);
+          if (menus.length) {
+            const result = await this.openMenuRequests(menus);
+            if (result) { this.lastRequestText = effective; return this.finish(entry, result); }
+          }
+        }
         const debateTopic = !opts.shown && !opts.scheduled && parseDebate(effective);
         if (debateTopic) return this.runRequest(debatePrompt(debateTopic), entry);
         if (!opts.shown) {

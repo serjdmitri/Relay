@@ -23,3 +23,11 @@ Scanning reads local names, types and file sizes, never document contents or clo
 Reported sizes are logical file lengths, not exact physical space: compressed, shared, sparse and hard-linked files can differ from actual disk usage. This is a folder map, not an audit of the entire disk. Finder reveal rechecks the selected root and item identity. A disconnected or changed drive must be selected again; no automatic access escalation occurs.
 
 Validation used temporary fixture files only: native preview/move/undo, storage worker scanning, cancellation, drill-down, Finder-target verification, rejected unrelated-window requests, and narrow/wide native UI checks. The packaged archive's scan worker was also exercised. Actual external-drive hardware, macOS permission prompts, spoken microphone input and hand-camera gestures still require physical testing.
+
+## Natural menu requests
+
+Built-in menus now share keyword detection across voice and typed requests. You can say “my computer is out of space,” “I could use a calculator,” “how is my RAM looking,” “my Wi-Fi is slow,” “how much battery have I got,” “bring up system stats,” or “can I see the activity centre.” Weather requests can appear in longer sentences, including “could you bring up the weather for Paris please” and “how hot will it be in Miami tomorrow.” Weather still needs a city or the configured briefing city.
+
+Storage, weather, calculator, CPU, RAM/memory usage, battery, network, system metrics and Activity Center use existing menus and sources. Requests for multiple topics open separate menus; a weather lookup does not block the others from appearing. Detection is local for both Claude and Codex. Existing Live panels settings and window limits still apply. “Again” repeats the last menu request.
+
+Keywords do not replace instructions to move/organize/delete files, send messages, save memories, change settings, close menus or explain a topic. Cloud-drive requests and connected-drive inventories keep their existing paths. Complex or unsupported requests continue through Relay's existing model/tools rather than being silently reduced to a single menu.
