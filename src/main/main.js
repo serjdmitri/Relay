@@ -388,7 +388,7 @@ function registerIpc() {
   callIpc('calls:prepare', text => callService.prepare(text));
   callIpc('calls:approve', id => callService.approve(id, async preview => {
     const owner = mainWin;
-    const r = await dialog.showMessageBox(owner, { type: 'warning', buttons: ['Yes, place this call', 'Cancel'], defaultId: 1, cancelId: 1, message: `Call ${preview.number} (your configured owner number)?`, detail: `Purpose: ${preview.purpose}\nMaximum ${preview.minutes} minutes. Bland bills separately. The number and purpose will be shared with Bland. Recording is off, but the provider can retain call records/transcripts. No Mac actions will be executed from the conversation.` });
+    const r = await dialog.showMessageBox(owner, { type: 'warning', buttons: ['Yes, place this call', 'Cancel'], defaultId: 1, cancelId: 1, message: `Call ${preview.number} (your configured owner number)?`, detail: `Purpose: ${preview.purpose}\nVoice: ${preview.voice}. Maximum ${preview.minutes} minutes. Bland bills separately. The number and purpose will be shared with Bland. Recording is off, but the provider can retain call records/transcripts. No Mac actions will be executed from the conversation.` });
     return r.response === 0 && mainWin === owner && !owner.isDestroyed() && owner.isVisible();
   }));
   callIpc('calls:cancel', id => { callService.cancel(id); return { ok: true }; });
