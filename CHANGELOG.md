@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.1
 
 - **Liveness check: a photo of you no longer passes.** Owner recognition now also wants a blink. A face that matches yours but has not blinked for 15 seconds (it gets 6 seconds' grace when it first appears, so sitting down is fine) is treated as a picture: it counts as a stranger, starts the alarm, and cannot stop one. Uses MediaPipe's face landmarker (Apache-2.0, on this Mac) looking several times a second only while owner recognition is on. "Turn off the liveness check" / "turn on the liveness check". Honest limits: a video of you blinking can still fool it, a very still stare may be flagged until you blink, and enrollment itself does not check liveness. If the blink finder cannot load, you are told and faces count as alive.
 - **The access-denied reactor is alive.** It is now drawn like the regular Jarvis reactor (halo, pulse rings, three spinning rings, scanners, ticks, crosshair, core) and breathes in and out while it turns, faster as the lock gets closer, with a throb on each siren beat.
