@@ -552,7 +552,7 @@ function registerIpc() {
     broadcast();
     return { ok: true };
   });
-  modeActions=new(require('./workModes').WorkModeActions)({store,openApp:name=>ask.mac.openApp(name),queueRoutine:r=>ask.enqueue('run '+r.name,{}),onChange:()=>{ask.dropWarm(true);broadcast();}});
+  modeActions=new(require('./workModes').WorkModeActions)({store,openApp:name=>ask.mac.openApp(name),queueRoutine:r=>setImmediate(()=>ask.handleText('run '+r.name).catch(e=>ask.notice(e.message,'failed'))),onChange:()=>{ask.dropWarm(true);broadcast();}});
   ask.applyWorkMode=mode=>modeActions.apply(mode);
   ipcMain.handle('state:set', (_e, key, value) => {
     if(key==='settings.workMode'){if(_e.sender!==mainWin?.webContents)throw Error('Open General settings first.');return modeActions.apply(value);}

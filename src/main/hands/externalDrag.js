@@ -35,7 +35,7 @@ class ExternalDrag {
     if (!this.ready) { this.start(); return false; }
     this.owner = owner;this.accepted=false;this.startPoint=pt; this.point = pt; this.send('down', pt); this.arm(); return true;
   }
-  move(owner, pt) { if (this.owner !== owner) return; this.point = pt; if(this.accepted)this.send('move', pt); this.arm(); }
+  move(owner, pt) { if (this.owner !== owner) return false; this.point = pt; if(this.accepted)this.send('move', pt); this.arm(); return true; }
   end(owner) { if (this.owner !== owner) return; this.send('up', this.point); clearTimeout(this.watchdog); this.watchdog = null; this.owner = null; this.point = null; }
   close() {
     if (this.owner) this.end(this.owner);
