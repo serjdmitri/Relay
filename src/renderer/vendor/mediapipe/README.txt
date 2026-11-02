@@ -4,3 +4,5 @@ Used by Hand control (camera) to find your hands and tell a fist, an open hand, 
 License text: https://www.apache.org/licenses/LICENSE-2.0
 blaze_face_short_range.tflite (Apache License 2.0, Google): the face finder, from https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
 Used only by "Pause music when I leave the desk" (opt-in) to tell whether someone is in front of the camera: once a second it counts faces. Nothing is recognised, saved or sent.
+face_landmarker.task (Apache License 2.0, Google): the face landmark and blink finder, from https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+Used only by Owner recognition's liveness check (opt-in) to see whether a face blinks, so a photo of you is not mistaken for you. It runs on this Mac; nothing is saved or sent.
