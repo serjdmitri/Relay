@@ -13,18 +13,26 @@ async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
   const [name, ...parts] = String(place || '').split(',').map((x) => x.trim());
   if (!name) return null;
   const get = async (url) => { const r = await fetchFn(url, { signal }); if (!r.ok) throw new Error('Weather service unavailable'); return r.json(); };
+  const searches = new Map();
+  const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const search = async (city, hint, exact) => {
     // Common speech-to-text spelling; never silently replace arbitrary city names.
     const normalized = /^moskow$/i.test(city) ? 'Moscow' : city;
-    const geo = await get(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: normalized, count: '10', language: 'en', format: 'json' })}`);
-    return (geo.results || []).find((x) => (!exact || String(x.name || '').toLowerCase() === normalized.toLowerCase()) && (!hint || `${x.admin1 || ''} ${x.country || ''} ${x.country_code || ''}`.toLowerCase().includes(hint.toLowerCase())));
+    if (!searches.has(normalized)) searches.set(normalized, get(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({ name: normalized, count: '10', language: 'en', format: 'json' })}`));
+    const geo = await searches.get(normalized);
+    return (geo.results || []).find((x) => (!exact || fold(x.name) === fold(normalized)) && (!hint || fold(`${x.admin1 || ''} ${x.country || ''} ${x.country_code || ''}`).includes(fold(hint))));
   };
   let p = await search(name, parts.join(' '), false);
-  // Dictation usually omits commas: try city followed by its region or country,
-  // longest city name first, and require an exact city and region match.
-  if (!p && !parts.length) {
-    const words = name.split(/\s+/);
-    for (let i = words.length - 1; i > 0 && !p; i--) p = await search(words.slice(0, i).join(' '), words.slice(i).join(' '), true);
+  // Speech may put the region before or after the city. Try bounded, exact
+  // city/region pairs concurrently; never choose an unrelated Hollywood.
+  if (!p) {
+    const words = name.split(/\s+/), candidates = [];
+    if (parts.length) candidates.push([parts.join(' '), name]);
+    else for (let i = words.length - 1; i > 0 && candidates.length < 12; i--) {
+      const left = words.slice(0, i).join(' '), right = words.slice(i).join(' ');
+      candidates.push([left, right], [right, left]);
+    }
+    p = (await Promise.all(candidates.map(([city, hint]) => search(city, hint, true)))).find(Boolean);
   }
   if (p?.feature_code === 'PCLI') return { needsCity: true, country: p.name };
   if (!p || !Number.isFinite(p.latitude) || !Number.isFinite(p.longitude)) return null;
