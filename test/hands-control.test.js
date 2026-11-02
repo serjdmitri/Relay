@@ -10,12 +10,12 @@ function fakeHolo(mode = 'whole') {
   return w;
 }
 
-async function rig(mode = 'whole') {
+async function rig(mode = 'whole', extra={}) {
   const wins = [];
   const holos = new HoloManager({ createWindow: () => { const w = fakeHolo(mode); wins.push(w); return w; }, cursor: () => ({ x: 0, y: 0 }), area: () => ({ x: 0, y: 0, width: 1800, height: 1100 }), download: async () => Buffer.alloc(0), saved: () => [], save: () => {} });
   const h = holos.get(await holos.show({ title: 'Skull', items: [{ kind: 'shapes', title: 'Skull', parts: [] }], x: 900, y: 550 }));
   const mics = [], ring = [];
-  const hc = new HandControl({ holos, display: () => ({ x: 0, y: 0, width: 1801, height: 1101 }), askAccess: async () => true, createCamera: async () => ({ close() {} }), createCursor: () => ({ moveTo: (p) => ring.push(p), setState: (s) => ring.push(s), hide() {}, close() {} }), onMic: (id) => mics.push(id), now: () => Date.now() + (hc.t = (hc.t || 0) + 100) });
+  const hc = new HandControl({ ...extra, holos, display: () => ({ x: 0, y: 0, width: 1801, height: 1101 }), askAccess: async () => true, createCamera: async () => ({ close() {} }), createCursor: () => ({ moveTo: (p) => ring.push(p), setState: (s) => ring.push(s), hide() {}, close() {} }), onMic: (id) => mics.push(id), now: () => Date.now() + (hc.t = (hc.t || 0) + 100) });
   await hc.enable();
   const at = (x, y) => ({ x: x / 1800, y: y / 1100 });
   return { hc, h, wins, mics, ring, at, ev: async (e) => { await hc.handle(e); } };
@@ -412,3 +412,5 @@ test('pausing gestures preserves the running camera and preview',async()=>{
  hc.setPaused(false);assert.equal(hc.paused,false);assert.equal(hc.cam,cam);
 });
 test('disabling while camera opens disposes the late camera instead of reviving hands',async()=>{let ready,closed=false;const hc=new HandControl({holos:{holos:new Map()},display:()=>({}),askAccess:async()=>true,createCamera:()=>new Promise(r=>ready=r),createCursor:()=>({})});const pending=hc.enable();await new Promise(r=>setImmediate(r));hc.disable();ready({close:()=>closed=true});const result=await pending;assert.equal(result.cancelled,true);assert.equal(closed,true);assert.equal(hc.enabled,false);assert.equal(hc.cam,null);});
+
+test('three-person mode creates and releases six independent hand cursors',async()=>{const {hc}=await rig('whole',{maxHands:()=>6});assert.equal(hc.extraPeers.length,4);assert.equal(hc.tracks.count,6);hc.frame({t:1,hands:Array.from({length:6},(_,i)=>({x:.05+i*.17,y:.2,score:1,gesture:'Open_Palm',pinch:.8}))});assert.equal(hc.tracks.slots.filter(Boolean).length,6);hc.disable();assert.equal(hc.extraPeers.length,0);assert.equal(hc.enabled,false);});
