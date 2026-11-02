@@ -20,3 +20,7 @@ test('a Google client with an account adds the Gmail and Calendar tools', () => 
   const names = c.connectorTools().map((t) => t.name);
   assert.ok(['gmail_search', 'gmail_read', 'gmail_draft', 'gmail_send', 'gcal_events', 'gcal_create'].every((n) => names.includes(n)));
 });
+
+test('local/private mode exposes no cloud connectors and does not construct a Google API for briefings',()=>{
+ const c=Object.create(AskController.prototype);c.store={get:k=>k==='settings.model.provider'?'ollama':{google:{clientId:'id',accounts:[{email:'fixture@example.com',refreshEnc:'fixture'}]},notion:{tokenEnc:'fixture'}}};assert.deepEqual(c.connectorTools(),[]);assert.equal(c.googleApiIfConnected(),null);
+});

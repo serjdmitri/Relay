@@ -1354,6 +1354,7 @@ class AskController {
 
   // The Google connection, when an account is connected (made once).
   googleApiIfConnected() {
+    if (this.store.get('settings.model.provider') === 'ollama') return null;
     const c = this.store.get('settings.connectors') || {};
     if (!(c.google?.clientId && (c.google.accounts || []).length)) return null;
     if (!this.googleApi) {
