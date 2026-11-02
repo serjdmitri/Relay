@@ -51,6 +51,7 @@ const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
 const { guardTools, agentSafe } = require('./homeGuard');
+const { levelTools, rulesFrom: filePermissionRules } = require('./filePermissions');
 const { createHardware } = require('./agent/hardware');
 const devices = require('./devices');
 const driveInspect = require('./driveInspect');
@@ -1255,7 +1256,7 @@ class AskController {
 
   // forModel: these tools go to Claude or Codex over the tool server, so (with "Fewer tools per request" on) rarely used groups are left out of the list and reached through load_more_tools.
   makeTools(vision = true, { forModel = false, request = '' } = {}) {
-    const base = guardTools(this.baseTools(vision), { home: os.homedir(), enabled: () => this.store.get('settings.homeOnly') !== false });
+    const base = levelTools(guardTools(this.baseTools(vision), { home: os.homedir(), enabled: () => this.store.get('settings.homeOnly') !== false }), { home: os.homedir(), rules: () => filePermissionRules(this.store.get('settings.filePermissions')) });
     const tools = [...base, ...this.connectorTools(), ...this.pluginTools()];
     // Text from a plugin is data, not instructions: once one was read in this request, anything that sends, deletes or runs code asks first.
     for (const t of tools) if (RISKY_AFTER_PLUGIN.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.tainted ? `This request read output from a plugin. Allow "${t.name}"?` : null); }
@@ -2857,7 +2858,7 @@ class AskController {
       if (!tool) return { failed: true, reply: `The step "${step.tool}" is not available any more.` };
       this.push({ label: `${routine.name}: step ${i + 1} of ${routine.learned.length}`, text: describeStep(step) });
       const question = tool.confirm ? tool.confirm(step.input) : null;
-      if (question && !(await this.askConfirm({ question }))) return { status: 'stopped', reply: 'Skipped.', actions: i };
+      if (question && !(await this.askConfirm({ question, macOnly: tool.levelOf?.(step.input)?.action === 'ask-mac' }))) return { status: 'stopped', reply: 'Skipped.', actions: i };
       try {
         const result = await tool.run(step.input, { signal });
         this.store.addAction({ id: crypto.randomUUID(), requestId: entry.id, tool: step.tool, input: step.input, result: typeof result === 'string' ? result : 'ok', ok: true, ts: Date.now() });
@@ -3100,7 +3101,7 @@ class AskController {
 
   // The phone page answers the question the Mac is asking: the first answer wins (pendingConfirm clears itself).
   remoteConfirm(yes) {
-    if (!this.pendingConfirm) return false;
+    if (!this.pendingConfirm || this.confirmMacOnly) return false; // a question that has to be approved at the Mac cannot be answered from a phone
     this.pendingConfirm(!!yes);
     return true;
   }
@@ -3111,7 +3112,8 @@ class AskController {
       this.win.setFocusable(true);
       // A request that came by text asks on the phone as well; whichever answers first decides, and the other is told.
       let hubId = null;
-      if (this.inbound?.owns(this.currentRemote) && this.hub) {
+      this.confirmMacOnly = !!q.macOnly;
+      if (!q.macOnly && this.inbound?.owns(this.currentRemote) && this.hub) {
         const opened = this.inbound.askPhone(q.question);
         hubId = opened.id;
         opened.answer.then(({ yes, by }) => { if (by !== 'mac' && this.pendingConfirm) this.pendingConfirm(yes); });
@@ -3119,6 +3121,7 @@ class AskController {
       this.pendingConfirm = (yes) => {
         if (hubId) this.hub.answer(hubId, yes, 'mac');
         this.pendingConfirm = null;
+        this.confirmMacOnly = false;
         this.state = 'working';
         this.win.setFocusable(false);
         this.push({ label: yes ? 'Working' : 'Skipping' });

@@ -57,9 +57,14 @@ async function runAgent({ text, provider, tools, system, confirm, onEvent = () =
 async function callTool({ tool, name, input, confirm, onEvent = () => {}, signal }) {
   if (signal?.aborted) return { aborted: true, content: [] };
   if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+  const lv = tool.levelOf ? tool.levelOf(input) : null; // the file permission level of this call and what your rule for it says
+  if (lv && lv.action === 'deny') {
+    onEvent({ type: 'tool', name, input, ok: false, result: 'refused by your file permission rule' });
+    return { content: [{ type: 'text', text: `Not done: your file permission rule for ${lv.level} risk is "never" (${lv.reasons.join('; ')}). Tell the user it was refused by that rule.` }], isError: true };
+  }
   const ask = tool.confirm ? tool.confirm(input) : null;
   if (ask) {
-    const allowed = await confirm({ tool: name, input, question: ask });
+    const allowed = await confirm({ tool: name, input, question: ask, macOnly: !!(lv && lv.action === 'ask-mac') });
     if (signal?.aborted) return { aborted: true, content: [] };
     if (!allowed) {
       onEvent({ type: 'tool', name, input, ok: false, result: 'declined' });
