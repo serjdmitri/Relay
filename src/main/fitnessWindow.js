@@ -6,7 +6,7 @@ class FitnessWindow {
     Object.assign(this,{stats,motion,store});
     ipcMain.handle('fitness:action',async(e,action,value)=>{
       if(!this.win||e.sender!==this.win.webContents)return{error:'Open the Fitbit menu first.'};
-      try{if(action==='refresh')return await stats.snapshot(value);if(action==='settings')openSettings();if(action==='close')this.win.close();return{ok:true};}catch(err){return{error:err.message};}
+      try{if(action==='goal'){const goal=require('./connectors/fitnessGoals').stepGoal(value?.goal);store.set('settings.fitnessStepGoal',goal);store.flush();return{ok:true,goal};}if(action==='refresh')return await stats.snapshot(value);if(action==='settings')openSettings();if(action==='close')this.win.close();return{ok:true};}catch(err){return{error:err.message};}
     });
   }
   syncPrivacy(){if(this.win && this.identity!==JSON.stringify([this.store.get('settings.model.provider'),this.store.get('settings.connectors.google')]))this.win.close();}
