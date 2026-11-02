@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { OvernightQueue, parseOvernightCommand, verifyRun, buildReport, inWindow, windowBounds } = require('../src/main/overnight');
+const { OvernightQueue, parseOvernightCommand, verifyRun, buildReport, inWindow, windowBounds, assessInterruption, MAX_ATTEMPTS } = require('../src/main/overnight');
 
 const at = (day, h, m = 0) => new Date(2026, 10, day, h, m);
 function make(clock, settings = {}) {
@@ -104,7 +104,7 @@ test('the report waits for the morning, covers everything, and is written once',
   assert.equal(q.state.report.counts.recorded, 2);
 });
 
-test('a window the Mac slept through skips what was waiting and says so; an interrupted run is never retried', () => {
+test('a window the Mac slept through skips what was waiting and says so; an interrupted run is only retried by the safe-resume rules', () => {
   const { q, now } = make(at(5, 22));
   const a = q.add('organize my Downloads').task;
   now.t = at(6, 8);
@@ -120,7 +120,7 @@ test('a window the Mac slept through skips what was waiting and says so; an inte
   m.now.t = at(6, 3);
   const n2 = m.q.next({ activeRunId: null });
   assert.deepEqual(n2.interrupted.map((t) => t.id), [b.id]);
-  assert.equal(n2.run, null, 'an interrupted run is not started again');
+  assert.equal(n2.run, null, 'next() itself never restarts an interrupted run; interrupt() decides');
   assert.equal(m.q.next({ activeRunId: `overnight:${b.id}` }).interrupted.length, 0, 'a run that is still going is not interrupted');
 });
 
@@ -144,4 +144,54 @@ test('the report is plain, honest about what was and was not checked, and includ
   assert.equal(r.summary, '1 checked, 1 done but not independently checked, 1 needs attention, 1 not run');
   assert.match(buildReport([], []).text, /Nothing was assigned for the night\./);
   assert.equal(buildReport([], []).summary, 'nothing ran');
+});
+
+test('an interrupted task that had only looked around is queued again; one that had changed something is handed back with exactly what was done', () => {
+  const read = (tool) => ({ tool, input: {}, ok: true }), did = (tool) => ({ tool, input: {}, ok: true });
+  assert.deepEqual(assessInterruption(1, []).resume, true);
+  assert.deepEqual(assessInterruption(1, [read('web_search'), read('fetch_page'), { tool: 'notes_create', ok: false }]).resume, true, 'a step that failed changed nothing');
+  const a = assessInterruption(1, [read('web_search'), did('notes_create'), did('notes_create'), did('trash_path')]);
+  assert.deepEqual([a.resume, a.verdict], [false, 'needs-you']);
+  assert.match(a.notes[0], /notes create, trash path/); assert.match(a.notes[0], /could duplicate/);
+  assert.deepEqual([assessInterruption(MAX_ATTEMPTS, []).resume, assessInterruption(MAX_ATTEMPTS, []).verdict], [false, 'unknown'], 'two tries is the limit');
+});
+
+test('resuming: the queue puts a safe task back, runs it under its own run id, and the report tells the truth about both tries', () => {
+  const m = make(at(5, 22));
+  const t = m.q.add('make flashcards from my notes').task;
+  m.now.t = at(6, 1, 10);
+  const first = m.q.begin(m.q.next({}).run);
+  assert.equal(first, `overnight:${t.id}`);
+  m.now.t = at(6, 1, 30);
+  const interrupted = m.q.next({ activeRunId: null }).interrupted;
+  assert.deepEqual(interrupted.map((x) => x.id), [t.id]);
+  const r = m.q.interrupt(interrupted[0], [{ tool: 'notes_list', ok: true }]);
+  assert.equal(r.resume, true);
+  assert.equal(m.q.list()[0].status, 'queued');
+  assert.equal(m.q.list()[0].attempts[0].outcome, 'interrupted');
+  const again = m.q.next({ activeRunId: null }).run;
+  assert.equal(again.id, t.id, 'it is next in line inside the window');
+  const second = m.q.begin(again);
+  assert.equal(second, `overnight:${t.id}:2`, 'the second try has its own run id, so checks look only at what it did');
+  m.q.update(t.id, { status: 'done', verdict: 'recorded', notes: ['2 steps ran'], reply: 'Made 12 cards.', attempts: m.q.endAttempt(m.q.list()[0], 'done') });
+  const task = m.q.list()[0];
+  assert.deepEqual(task.attempts.map((a) => [a.n, a.outcome]), [[1, 'interrupted'], [2, 'done']]);
+  const rep = buildReport([task], [], { now: at(6, 7).getTime() }).text;
+  assert.match(rep, /The first try was interrupted and it was run again/);
+  assert.match(rep, /leaves no record/);
+  // a third interruption is not tried again
+  const m2 = make(at(5, 22)); m2.q.add('summarize my reading'); m2.now.t = at(6, 1, 5);
+  m2.q.begin(m2.q.next({}).run); m2.now.t = at(6, 1, 20); m2.q.interrupt(m2.q.next({}).interrupted[0], []);
+  m2.q.begin(m2.q.next({}).run); m2.now.t = at(6, 1, 40); const last = m2.q.interrupt(m2.q.next({}).interrupted[0], []);
+  assert.equal(last.resume, false); assert.equal(m2.q.list()[0].status, 'failed'); assert.match(m2.q.list()[0].notes[0], /stopped trying/);
+});
+
+test('a task changed before the interruption is not queued again, and the morning report says what to check', () => {
+  const m = make(at(5, 22));
+  m.q.add('organize my desktop'); m.now.t = at(6, 2); m.q.begin(m.q.next({}).run); m.now.t = at(6, 2, 20);
+  m.q.interrupt(m.q.next({}).interrupted[0], [{ tool: 'trash_path', input: { path: '~/Desktop/a.txt' }, ok: true }]);
+  const task = m.q.list()[0];
+  assert.deepEqual([task.status, task.verdict], ['failed', 'needs-you']);
+  assert.equal(m.q.next({}).run, null, 'nothing restarts it');
+  assert.match(buildReport([task], [], { now: at(6, 7).getTime() }).text, /Needs you: Relay was interrupted partway[^]*trash path/);
 });

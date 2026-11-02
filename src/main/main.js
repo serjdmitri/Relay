@@ -1173,7 +1173,8 @@ app.whenReady().then(() => {
     recordScheduledOutcome(store, runId, result);
     const actions = (store.get('actions') || []).filter((a) => a.requestId === runId);
     const v = overnightMod.verifyRun(result || {}, actions, { exists: (p) => require('fs').existsSync(p), home: app.getPath('home') });
-    ask.overnight.update(task.id, { status: result?.status === 'done' ? 'done' : result?.status === 'stopped' ? 'stopped' : 'failed', verdict: v.verdict, checks: v.checks, notes: v.notes, reply: clip(result?.reply), finishedAt: Date.now() });
+    const fresh = ask.overnight.list().find((t) => t.id === task.id) || task;
+    ask.overnight.update(task.id, { status: result?.status === 'done' ? 'done' : result?.status === 'stopped' ? 'stopped' : 'failed', verdict: v.verdict, checks: v.checks, notes: v.notes, reply: clip(result?.reply), finishedAt: Date.now(), attempts: ask.overnight.endAttempt(fresh, result?.status || 'unknown') });
     broadcast();
   };
   const overnightReport = (ids) => {
@@ -1193,7 +1194,7 @@ app.whenReady().then(() => {
     try {
       const st = ask.overnight.next({ canRun: ask.canRunScheduled(), activeRunId: ask.activeScheduledId });
       let changed = false;
-      for (const t of st.interrupted) { ask.overnight.update(t.id, { status: 'failed', verdict: 'unknown', finishedAt: Date.now(), notes: ['Relay was closed or interrupted before the outcome was confirmed. It was not run again.'] }); changed = true; }
+      for (const t of st.interrupted) { ask.overnight.interrupt(t, (store.get('actions') || []).filter((a) => a.requestId === t.runId)); changed = true; }
       if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
       if (st.run) { await runOvernightTask(st.run); changed = true; }
       if (!changed && st.report) overnightReport(st.report);
