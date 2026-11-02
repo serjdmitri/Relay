@@ -15,9 +15,20 @@ const good = {
   hotkeys: () => ({ running: true }),
   speech: () => ({ available: true }),
   storeInfo: () => ({ freeMb: 5000 }),
+  firewall: () => 1,
   recentErrors: () => []
 };
 const by = (rs, id) => rs.find((r) => r.id === id);
+
+test('firewall diagnostics distinguish enabled, disabled and unknown', async () => {
+  assert.equal(d.parseFirewall('Firewall is disabled. (State = 0)'), 0);
+  assert.equal(d.parseFirewall('Firewall is enabled. (State = 1)'), 1);
+  assert.equal(d.parseFirewall('unexpected output'), null);
+  for (const [state, expected] of [[0, 'warn'], [1, 'ok'], [2, 'ok'], [null, 'warn']]) {
+    const check = by(await d.runChecks({ ...good, firewall: () => state }), 'firewall');
+    assert.equal(check.status, expected);
+  }
+});
 
 test('free disk space preserves zero and reports unavailable readings', async () => {
   assert.equal(d.parseFreeMb('Filesystem 1M-blocks Used Available Capacity Mounted on\n/dev/disk 1000 1000 0 100% /'), 0);
