@@ -3,10 +3,10 @@ const DEFAULT_VOICE='fd9c6765-a2ce-429a-abc7-00be9d1e3a92'; // tanner-british: P
 class Bland {
   constructor({getKey,fetchFn=fetch}){Object.assign(this,{getKey,fetchFn});}
   async request(path,{method='GET',body}={}){
-    const key=this.getKey();if(!key)throw Error('Add your Bland API key in Calls settings.');
+    const key=this.getKey();if(!key){const e=Error('Add your Bland API key in Calls settings.');e.fallbackOk=true;throw e;}
     let response;
     try{response=await this.fetchFn('https://api.bland.ai/v1'+path,{method,headers:{authorization:key,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(15000)});}catch{throw Error('Bland could not be reached. The call outcome may be uncertain; check Bland before trying again.');}
-    if(!response.ok)throw Error(response.status===401||response.status===403?'Bland rejected the key or access.':response.status===402?'Bland billing or balance needs attention.':`Bland request failed (HTTP ${response.status}).`);
+    if(!response.ok){const e=Error(response.status===401||response.status===403?'Bland rejected the key or access.':response.status===402?'Bland billing or balance needs attention.':`Bland request failed (HTTP ${response.status}).`);e.fallbackOk=[401,402,403].includes(response.status);throw e;} // only these mean the call was definitely not placed
     let data;try{data=await response.json();}catch{throw Error('Bland returned an unreadable response. Check its call history before retrying.');}
     if(data?.status==='error')throw Error('Bland reported an error. Check its dashboard for details.');return data;
   }
