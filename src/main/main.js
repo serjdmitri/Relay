@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { Store } = require('./store');
-const { Hotkeys } = require('./hotkeys');
+const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
 const { Overlay } = require('./overlay');
@@ -153,7 +153,7 @@ function publicState() {
     hasHfToken,
     activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
     providerUsage: require('./usage').providerSummaries(d.history, ask?.rate),
-    handsInfo: { status: hands?.status || 'off', message: hands?.message || '' },
+    handsInfo: { paused: !!hands?.paused, status: hands?.status || 'off', message: hands?.message || '' },
     presenceInfo: { status: presence?.status || 'off', message: presence?.message || '', state: presence?.state || 'unknown', faces: presence?.faces || 0 },
     voiceProblem,
     kokoro: kokoro.status(),
@@ -162,7 +162,7 @@ function publicState() {
     actions: (() => { const can = ask?.undos?.ids(); return d.actions.slice(0, 300).map((a) => (can && can.has(a.id) ? { ...a, undoable: true } : a)); })(),
     recap: ask?.recapData?.() || null,
     stats: store.stats(),
-    labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark) },
+    labels: { ask: label(d.settings.shortcuts.ask), dictate: label(d.settings.shortcuts.dictate), type: label(d.settings.shortcuts.type), mark: label(d.settings.shortcuts.mark), handsPause: withAuxiliaryShortcuts(d.settings.shortcuts).handsPause ? label(withAuxiliaryShortcuts(d.settings.shortcuts).handsPause) : 'Not assigned' },
     claude: claudeState,
     codex: ask?.codexInfo ? { installed: ask.codexInfo.installed, signedIn: ask.codexInfo.signedIn, method: ask.codexInfo.method, usable: ask.codexInfo.usable, checked: true, using: !!ask.failover?.active } : { checked: false },
     speech: { available: speech.available, ...speechInfo },
@@ -244,6 +244,7 @@ function rebuildTray() {
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
     { label: holos?.holos.size ? `Clear ${holos.holos.size} Hologram${holos.holos.size === 1 ? '' : 's'}` : 'No Holograms', enabled: !!holos?.holos.size, click: () => holos.closeAll() },
     { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: (item) => setHands(item.checked) },
+    { label: 'Pause hand gestures', type: 'checkbox', checked: !!hands?.paused, enabled: !!hands?.enabled, click: item => hands.setPaused(item.checked) },
     { label: 'Show Hand View (top right)', type: 'checkbox', checked: !!store.get('settings.hands.preview'), enabled: !!store.get('settings.hands.enabled'), click: (item) => setHandsPreview(item.checked) },
     { label: 'Stop Speaking', enabled: !!speaker?.speaking, click: () => ask.interruptSpeech() },
     { label: 'Speak Last Reply', enabled: !!last, click: () => ask.speakLastReply() },
@@ -1122,9 +1123,10 @@ app.whenReady().then(() => {
     air: (type, x, y) => overlay.air(type, x, y),
     shape: (r) => { const m = shapeToModel(r); if (m) holos.show({ title: m.title, items: [{ kind: 'shapes', title: m.title, credit: 'Drawn in the air', parts: m.parts }], x: Math.round(r.cx), y: Math.round(r.cy), scale: m.scale }).catch(() => {}); },
     onMic: (id) => ask.listenFromHand(id).catch(() => {}),
-    notify: (m) => ask.notice(m, 'failed')
+    notify: (m, status = 'failed') => ask.notice(m, status)
   });
   hands.onChange = () => { rebuildTray(); broadcast(); };
+  ask.onHandsPause = () => { if (hands.enabled) hands.setPaused(!hands.paused); };
   presence = new PresenceControl({
     getConfig: () => store.get('settings.presence'),
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
@@ -1327,7 +1329,7 @@ app.whenReady().then(() => {
       glass.start();
     });
   }
-  hotkeys = new Hotkeys({ getShortcuts: () => { const s = store.get('settings.shortcuts'); const used = Object.values(s).some(v => v?.code === 'KeyI' && v.mods?.includes('Alt')); return used ? s : { ...s, reactorIdle: { code: 'KeyI', mods: ['Alt'] } }; }, onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
+  hotkeys = new Hotkeys({ getShortcuts: () => withAuxiliaryShortcuts(store.get('settings.shortcuts')), onEvent: (n, k) => ask.onShortcut(n, k), onClick: () => ask.guide.onClick() });
   hotkeys.onMouse = (down) => { floatingMotion?.mouseButton(down); holos?.mouseButton(down); overlay?.dropWatch(down); }; // a file dragged onto a hologram is accepted while the button is held over it
 
   const iconPath = path.join(__dirname, '../../assets/trayTemplate.png');

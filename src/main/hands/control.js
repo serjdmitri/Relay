@@ -115,7 +115,8 @@ class HandControl {
     this.ring?.hide?.(); this.peer?.ring?.hide?.();
     this.pointer = new HandPointer({ onEvent: e => this.handle(e).catch(() => {}) });
     if (this.peer) this.peer.pointer = new HandPointer({ onEvent: e => this.peer?.handle(e).catch(() => {}) });
-    this.notify(this.paused ? 'Hand control paused. Hold both palms up to resume.' : 'Hand control resumed.');
+    this.notify(this.paused ? 'Hand control paused. Use the pause shortcut or hold both palms up to resume.' : 'Hand control resumed.', 'done');
+    this.onChange();
   }
 
   calibrate() {
