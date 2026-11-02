@@ -1096,6 +1096,27 @@ app.whenReady().then(() => {
   ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
   ask.memoryExport = (fact) => require('./memoryExport').exportMemory(path.join(app.getPath('desktop'), 'memory'), fact);
   ask.outputExport = (title, text) => require('./memoryExport').exportOutput(path.join(app.getPath('desktop'), 'memory'), title, text);
+  // Review a session's notes and keep only the facts you tick: saved as Relay memories, or exported to a file. Nothing happens until you press a button.
+  ipcMain.handle('notes:review', async (e, action, value) => {
+    if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Memory on this Mac.' };
+    try {
+      const R = require('./sessionReview'), session = (ask.sessionNotes?.items() || []).find((s) => s.id === String(value?.id || ''));
+      if (!session) throw Error('Session not found.');
+      if (action === 'suggest') return { suggestions: R.suggest(session) };
+      if (action !== 'save' && action !== 'export') throw Error('Unknown review action.');
+      if (action === 'save' && store.get('settings.memory') === false) throw Error('Memory is switched off. Turn it on to save memories.');
+      const { ok, rejected } = R.validatePicks(session, value?.picks);
+      if (!ok.length) return { error: rejected[0]?.why || 'Tick at least one line.', rejected };
+      if (action === 'export') return { file: ask.outputExport(`Session facts: ${session.title}`, R.exportText(session, ok)), count: ok.length, rejected };
+      const r = R.saveFacts(store.get('memories') || [], ok, { id: () => require('crypto').randomUUID() });
+      for (const f of r.added) if (ask.memoryExport) f.exportPending = true;
+      if (r.added.length) store.set('memories', r.list);
+      let exportFailed = 0;
+      for (const f of r.added) if (ask.memoryExport) { try { ask.memoryExport(f.text); delete f.exportPending; } catch { exportFailed++; } }
+      if (r.added.length) { store.set('memories', r.list); broadcast(); }
+      return { added: r.added.map((f) => f.text), skipped: r.skipped, rejected, exportFailed };
+    } catch (err) { return { error: err.message }; }
+  });
   ask.onLanguage = () => { ask.wake.disarm(); ask.ducker.recover(); prepareSpeech().finally(() => ask.wake.refresh()); broadcast(); }; // "speak Spanish" said out loud
   // What you copied (text only, in memory, a day by default; never anything a password manager marks or that looks like a key or password).
   ask.clipHistory = new ClipboardHistory({
