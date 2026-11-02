@@ -2,6 +2,17 @@
 let callNotice='',callPurposeDraft='';let callSettingsDraft={};const callReports=new Map();
 async function callControl(action,value){const r=await relay.callAction(action,value);if(r?.error)throw Error(r.error);return r;}
 function callsNotice(text){callNotice=text;const el=document.querySelector('[data-call-notice]');if(el)el.textContent=text;}
+function showCallReport(row,call,report){
+  const host=row.querySelector('[data-report]');host.replaceChildren();
+  const title=h('<div class="ttl">Call summary</div>'),summary=document.createElement('p');
+  summary.style.cssText='white-space:pre-wrap;user-select:text;margin:8px 0';summary.textContent=report.summary;
+  const details=document.createElement('details'),label=document.createElement('summary'),transcript=document.createElement('pre');
+  label.textContent='Transcript';transcript.textContent=report.transcript;transcript.style.cssText='white-space:pre-wrap;user-select:text;font:12px/1.5 system-ui;max-height:300px;overflow:auto;margin-top:8px';details.append(label,transcript);
+  const controls=h('<div style="display:flex;gap:8px;margin-top:10px"><button class="btn" data-copy-report>Copy report</button><button class="btn" data-hide-report>Hide report</button></div>');
+  controls.querySelector('[data-copy-report]').onclick=async()=>{try{await relay.copyText(`Jarvis call report\nDate: ${new Date(call.created).toLocaleString()}\nNumber: ${call.number}\nPurpose: ${call.purpose}\nStatus: ${call.state}\n\nSummary\n${report.summary}\n\nTranscript\n${report.transcript}`);callsNotice('Report copied. It has not been added to memory.');}catch{callsNotice('Could not copy the report. You can select and copy its text manually.');}};
+  controls.querySelector('[data-hide-report]').onclick=()=>{callReports.delete(call.id);host.replaceChildren();callsNotice('Report hidden locally. Bland’s records are unchanged.');};
+  host.append(title,summary,details,controls);
+}
 function renderCalls(container){
   container.append(h('<div class="lead">Jarvis can call your configured phone through Bland. This is a separately billed cloud service, not included in ChatGPT or Claude. Direct “call me” requests can dial your saved number immediately. Scheduled check-ins wait for review.</div><div class="note warn" data-call-notice role="status"></div>'));
   callsNotice(callNotice);
@@ -32,13 +43,13 @@ function buildCalls(c,state){
   c.append(h('<div class="section-title">Call reviews & history</div>'));
   if(!state.requests.length)c.append(h('<div class="card" style="padding:16px">No calls prepared or placed yet.</div>'));
   for(const r of state.requests){
-    const row=h(`<div class="card" style="padding:16px;margin-bottom:10px"><div class="ttl">${esc(r.state)} · ${esc(r.number)}</div><div style="margin:8px 0;white-space:pre-wrap">${esc(r.purpose)}</div><div class="d">Up to ${r.minutes} minutes · ${esc(new Date(r.created).toLocaleString())}${r.answeredBy?' · '+esc(r.answeredBy):''}${r.price!==undefined&&r.price!==null?' · provider price $'+esc(r.price):''}${r.outcome?' · '+esc(r.outcome):''}</div>${r.error?'<div class="note warn">'+esc(r.error)+'</div>':''}<div data-actions style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div><pre data-report style="white-space:pre-wrap;font:12px/1.5 system-ui;max-height:300px;overflow:auto"></pre></div>`);
+    const row=h(`<div class="card" style="padding:16px;margin-bottom:10px"><div class="ttl">${esc(r.state)} · ${esc(r.number)}</div><div style="margin:8px 0;white-space:pre-wrap">${esc(r.purpose)}</div><div class="d">Up to ${r.minutes} minutes · ${esc(new Date(r.created).toLocaleString())}${r.answeredBy?' · '+esc(r.answeredBy):''}${r.price!==undefined&&r.price!==null?' · provider price $'+esc(r.price):''}${r.outcome?' · '+esc(r.outcome):''}</div>${r.error?'<div class="note warn">'+esc(r.error)+'</div>':''}<div data-actions style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div><div data-report style="margin-top:12px"></div></div>`);
     const actions=row.querySelector('[data-actions]');
-    const add=(label,action,disabled=false)=>{const b=h(`<button class="btn">${label}</button>`);b.disabled=disabled;b.onclick=async()=>{b.disabled=true;try{const result=await callControl(action,r.id);callsNotice(result?.cancelled?'Cancelled. No new call was placed.':action==='stop'?'Stop requested. Refresh the call to verify it ended.':'Call state updated.');if(action==='report'){callReports.set(r.id,result);if(callReports.size>5)callReports.delete(callReports.keys().next().value);row.querySelector('[data-report]').textContent=result.summary+'\n\n'+result.transcript;}}catch(e){callsNotice(e.message);}finally{b.disabled=disabled;}};actions.append(b);};
+    const add=(label,action,disabled=false)=>{const b=h(`<button class="btn">${label}</button>`);b.disabled=disabled;b.onclick=async()=>{b.disabled=true;try{if(action==='report')callsNotice('Loading the report from Bland…');const result=await callControl(action,r.id);callsNotice(result?.cancelled?'Cancelled. No new call was placed.':action==='stop'?'Stop requested. Refresh the call to verify it ended.':'Call state updated.');if(action==='report'){callReports.set(r.id,result);if(callReports.size>5)callReports.delete(callReports.keys().next().value);showCallReport(row,r,result);callsNotice('Report loaded. Open Transcript to read the conversation.');}}catch(e){callsNotice(e.message);}finally{b.disabled=disabled;}};actions.append(b);};
     if(r.state==='review'){add('Review & call','approve',!cfg.enabled||!state.hasKey||state.privateMode);add('Cancel review','cancel');}
     if(r.callId){add('Refresh status','refresh',state.privateMode);add('Show report / transcript','report',state.privateMode);if(['queued','active','uncertain','stop-requested'].includes(r.state))add('Stop call','stop',state.privateMode);}
     if(r.state==='uncertain')add('I checked Bland’s dashboard','acknowledge');
-    if(callReports.has(r.id)){const report=callReports.get(r.id);row.querySelector('[data-report]').textContent=report.summary+'\n\n'+report.transcript;}
+    if(callReports.has(r.id))showCallReport(row,r,callReports.get(r.id));
     c.append(row);
   }
 }
