@@ -25,12 +25,12 @@ let doctorBusy = false;
 const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 
 const NAV = [
-  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors'], ['remote', 'Remote']],
+  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors'], ['remote', 'Remote'], ['calls', 'Calls']],
   [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions'], ['doctor', 'Doctor']],
   [['account', 'Account']]
 ];
 const TITLES = Object.fromEntries(NAV.flat());
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', doctor: 'permissions', account: 'account' };
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', calls: 'calls', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', doctor: 'permissions', account: 'account' };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const usageOpen = { claude: false, codex: false };
@@ -1258,6 +1258,9 @@ const PAGES = {
       }
       c.append(h('<div class="d" style="margin:4px 4px 14px">Needs Full Disk Access so Relay can read your own thread in Messages; Doctor checks it. Turn on “Queue while the Mac sleeps” above so texts sent while the Mac sleeps wait and a later text can cancel one.</div>'));
     }
+  },
+  calls(c) {
+    renderCalls(c);
   },
   permissions(c) {
     c.append(h('<div class="section-title" style="margin-top:0">On this Mac</div>'));

@@ -1970,6 +1970,10 @@ class AskController {
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
         }
+        if (!opts.shown && this.onCallCommand) {
+          const cc = require('./calls/service').parseCallCommand(effective);
+          if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
+        }
         if (!opts.shown && !opts.scheduled) {
           if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
           const menus = require('./menuIntent').menuRequests(effective);
