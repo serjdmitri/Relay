@@ -69,7 +69,7 @@ function guardTools(tools, { home, enabled = () => true, skip = ['read_file'] } 
 function agentSafe(t) {
   if (!t.guarded) return !t.confirm ? t : null;
   if (t.origConfirm) return null;
-  return { ...t, confirm: undefined, run: (i, ctx) => { const o = t.outsideHome(i); return o.length ? `Not done: ${say(o)} is outside the home folder, and a background agent cannot ask first.` : t.run(i, ctx); } };
+  return { ...t, confirm: undefined, run: (i, ctx) => { const o = t.outsideHome(i); if (o.length) return `Not done: ${say(o)} is outside the home folder, and a background agent cannot ask first.`; const b = t.levelBlock?.(i); return b || t.run(i, ctx); } };
 }
 
 module.exports = { guardTools, agentSafe, outsidePaths, outside, pathsIn };

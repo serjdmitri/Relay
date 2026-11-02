@@ -1161,6 +1161,25 @@ const PAGES = {
     const securityCard = h('<div class="card"></div>');
     securityCard.append(toggleRow('Warn me about new security problems', 'Relay checks this Mac in the background and tells you about anything new that is Medium or worse, even if you did not ask. Say “security audit” to see everything.', 'settings.securityWatch.enabled'));
     c.append(securityCard);
+    c.append(h('<div class="section-title">File permissions</div>'));
+    const FP = { allow: 'Allow', ask: 'Ask me first', 'ask-mac': 'Ask me first, at this Mac only', deny: 'Never' };
+    const FP_ROWS = [
+      ['low', 'Low risk', 'Reading and listing files in your home folder.', ['allow', 'ask'], 'allow'],
+      ['medium', 'Medium risk', 'Creating files, or moving them inside your home folder.', ['allow', 'ask', 'ask-mac', 'deny'], 'allow'],
+      ['high', 'High risk', 'Deleting or changing files, or touching anything outside your home folder or on another drive.', ['ask', 'ask-mac', 'deny'], 'ask'],
+      ['critical', 'Critical risk', 'System folders, passwords and private data, startup files, administrator commands, or very large changes.', ['ask-mac', 'deny'], 'ask-mac']
+    ];
+    const fpCard = h('<div class="card"></div>');
+    const fpNow = S.settings.filePermissions?.levels || {};
+    for (const [key, title, desc, opts, dflt] of FP_ROWS) {
+      const row = h(`<div class="row"><div class="grow"><div class="t">${title}</div><div class="d">${desc}</div></div><div class="select"><span></span><select>${opts.map((o) => `<option value="${o}">${FP[o]}</option>`).join('')}</select></div></div>`);
+      const sel = $('select', row); sel.value = opts.includes(fpNow[key]) ? fpNow[key] : dflt;
+      $('span', row).textContent = sel.options[sel.selectedIndex].text;
+      sel.onchange = () => relay.set(`settings.filePermissions.levels.${key}`, sel.value);
+      fpCard.append(row);
+    }
+    fpCard.append(h('<div class="d" style="padding:6px 14px 10px">A tool that already asks you still asks. These rules only add questions or refuse; they never skip one. "At this Mac only" means a phone or a text cannot approve it. Background agents cannot ask, so anything above Allow is refused for them.</div>'));
+    c.append(fpCard);
     if (Object.keys(S.flagList || {}).length) c.append(h('<div class="section-title">Experimental</div>'));
     const ex = h('<div class="card"></div>');
     for (const [name, f] of Object.entries(S.flagList || {})) {
