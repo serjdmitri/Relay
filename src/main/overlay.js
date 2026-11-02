@@ -357,6 +357,10 @@ class Overlay {
   }
 
   // Relay is speaking: the reactor swells and throws off sparks.
+  voicePreparing(on) {
+    if (this.hudEntry) this.send(this.hudEntry, { type: 'hud-voice-preparing', on: !!on });
+  }
+
   speaking(on) {
     if (this.hudEntry) this.send(this.hudEntry, { type: 'hud-speaking', on: !!on });
     this.speakingNow = !!on;

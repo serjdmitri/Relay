@@ -145,3 +145,12 @@ test('voice warmup never sends text to a cloud service',async()=>{
  const sp=new Spk({exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'openai',openai:{key:'test'}}),fetchFn:()=>{fetched++;throw Error('No background cloud request')}});
  await sp.prepare();assert.equal(fetched,0);
 });
+
+test('voice preparation has its own state and clears before playback',async()=>{
+ let release,child;const states=[];
+ const sp=new Spk({getTts:()=>({engine:'kokoro'}),kokoro:{installed:()=>true,synthesize:()=>new Promise(r=>{release=r})},spawnFn:()=>{child=new EventEmitter();return child}});
+ sp.discard=()=>{};sp.onPreparing=on=>states.push(['preparing',on]);sp.onState=on=>states.push(['playing',on]);
+ const done=sp.speak('Ready');assert.deepEqual(states,[['preparing',true]]);
+ release('test.wav');await new Promise(r=>setImmediate(r));child.emit('spawn');child.emit('exit',0);await done;
+ assert.deepEqual(states,[['preparing',true],['preparing',false],['playing',true],['playing',false]]);
+});

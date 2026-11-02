@@ -21,7 +21,7 @@
   const CANVAS = SIZE * 1.5;
   const PRI = '0,212,255';
   const ACC = '255,107,0';
-  const COLORS = { 'TYPE A REQUEST': '#00d4ff', CONFIRM: '#ffcc00', LISTENING: '#00ff88', PROCESSING: '#ffcc00', THINKING: '#ffcc00', SPEAKING: '#ff6b00', COMPLETE: '#00d4ff', ATTENTION: '#ff3355', DICTATING: '#00ff88' };
+  const COLORS = { 'TYPE A REQUEST': '#00d4ff', CONFIRM: '#ffcc00', LISTENING: '#00ff88', PROCESSING: '#ffcc00', THINKING: '#ffcc00', SPEAKING: '#ff6b00', 'PREPARING VOICE': '#ffcc00', COMPLETE: '#00d4ff', ATTENTION: '#ff3355', DICTATING: '#00ff88' };
 
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   canvas.width = CANVAS * dpr;
@@ -35,7 +35,7 @@
   let visual = 'reactor';
   let status = 'LISTENING';
   let base = 'LISTENING'; // the status without the speaking overlay
-  let speaking = false;
+  let speaking = false, preparingVoice = false;
   let level = 0; // 0..1 microphone level
   let amp = 0; // smoothed
   let scale = 1;
@@ -293,7 +293,7 @@
       hud.classList.remove('on');
       tasksEl.replaceChildren();
       busySince = 0;
-      speaking = false;
+      speaking = preparingVoice = false;
       level = 0;
       return;
     }
@@ -374,6 +374,7 @@
     shownState = s;
     base = status;
     if (speaking) status = 'SPEAKING';
+    else if (preparingVoice) status = 'PREPARING VOICE';
     if (!(busySince && status === 'PROCESSING')) statusEl.textContent = status;
     statusEl.style.color = COLORS[status] || '#00d4ff';
     lineEl.textContent = line;
@@ -395,7 +396,7 @@
   function setSpeaking(v) {
     speaking = !!v;
     if (!on) return;
-    status = speaking ? 'SPEAKING' : base;
+    status = speaking ? 'SPEAKING' : preparingVoice ? 'PREPARING VOICE' : base;
     statusEl.textContent = status;
     statusEl.style.color = COLORS[status] || '#00d4ff';
   }
@@ -409,7 +410,8 @@
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && shownState === 'confirm') window.relay.ask.confirm(false); });
   function focusInput() { if (shownState === 'input') inEl.focus(); }
 
-  window.Hud = { apply, focusInput, setSpeaking, get on() { return on; } };
+  function setPreparing(on) { preparingVoice = !!on; setSpeaking(speaking); }
+  window.Hud = { apply, focusInput, setSpeaking, setPreparing, get on() { return on; } };
   // Where the reactor is, for a file dragged onto it (the page is click-through until then): is this point (in the window's pixels) on the reactor?
   window.__hudHit = (x, y) => {
     if (!hud.classList.contains('on')) return false;
