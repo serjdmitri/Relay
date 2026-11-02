@@ -14,7 +14,7 @@ Undo buttons persist across restarts in Relay's local `workspaceMoves` journal. 
 
 ## Storage map
 
-Say **“Show me the storage map”** or **“What's filling up my space?”**, or click **Storage map** in Permissions. This local command works regardless of the selected cloud model. Choose an authorized folder, then Scan. The panel floats above the reactor, has a draggable title bar, supports resizing and hand movement, and reuses menu momentum/trash-to-dismiss behavior. Dismissing the map never deletes files.
+Say **“Show me the storage map”**, **“What's filling up my space?”** or **“whats taking up my storage”**, or click **Storage map** in Permissions. These commands run locally regardless of the selected cloud model. Spoken/text storage requests open the map immediately and start scanning an already authorized folder. With no readable authorized folder, a native folder chooser opens; selecting a folder grants read-only access and starts its scan. Cancelling leaves the menu open. The panel’s Choose folder button switches scope directly; Scan manually refreshes it. The panel floats above the reactor, has a draggable title bar, supports resizing and hand movement, and reuses menu momentum/trash-to-dismiss behavior. Dismissing the map never deletes files.
 
 Click a block or folder row to drill down, use breadcrumbs to go back, and use **Show in Finder** or a row's Finder button to inspect an item. The blocks compare the 30 largest items in the selected view; the list includes the rest of the scanned items, 100 at a time. There is no file-deletion control.
 

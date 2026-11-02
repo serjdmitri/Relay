@@ -36,6 +36,6 @@ test('treemap preserves total area at narrow and wide sizes without overlaps or 
  const items=[1,3,10,7,2,0].map((bytes,id)=>({id,bytes}));for(const [w,h]of[[360,175],[780,220]]){const blocks=storageLayout(items,w,h);assert.equal(blocks.length,5);assert.ok(Math.abs(blocks.reduce((n,b)=>n+b.width*b.height,0)-w*h)<.01);for(const b of blocks){assert.ok(b.x>=0&&b.y>=0&&b.x+b.width<=w+.01&&b.y+b.height<=h+.01);assert.ok(b.width>0&&b.height>0);}for(let i=0;i<blocks.length;i++)for(let j=i+1;j<blocks.length;j++){const a=blocks[i],b=blocks[j];assert.ok(a.x+a.width<=b.x+.01||b.x+b.width<=a.x+.01||a.y+a.height<=b.y+.01||b.y+b.height<=a.y+.01);}}assert.deepEqual(storageLayout([],100,100),[]);
 });
 test('storage commands work independently of Claude or Codex; unrelated disk actions stay separate',()=>{
- for(const text of ['show storage map','Open my disk map','Jarvis, what is filling up my space?','what\'s taking up my disk space','please show me the storage map'])assert.equal(isStorageRequest(text),true,text);
- for(const text of ['delete disk','weather in London','move my documents','show disk cpu and weather'])assert.equal(isStorageRequest(text),false,text);
+ for(const text of ['whats taking up my storage', 'what’s taking up my storage?', 'what is using my disk', 'check my storage', 'show my storage chart', 'show storage map','Open my disk map','Jarvis, what is filling up my space?','what\'s taking up my disk space','please show me the storage map'])assert.equal(isStorageRequest(text),true,text);
+ for(const text of ['delete disk','weather in London','move my documents','show disk cpu and weather', 'show my storage and delete old files', 'what is taking up my storage then email my files'])assert.equal(isStorageRequest(text),false,text);
 });

@@ -74,6 +74,9 @@ class StorageScan {
     this.reveal(node.path); return { ok: true };
   }
 }
-const isStorageRequest = text => /^(?:(?:hey\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?(?:(?:show|open)(?: me)? (?:the |my )?(?:storage|disk)(?: usage)? map|what(?:'s| is) (?:filling(?: up)?|taking up|using)(?: all)? (?:my )?(?:disk |storage )?space)[.!?]*$/i.test(String(text).trim());
+function isStorageRequest(text) {
+  const request = String(text).trim().replace(/[’‘]/g, "'").replace(/\s+/g, ' ');
+  return /^(?:(?:hey\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?(?:(?:show|open|check)(?: me)? (?:the |my )?(?:storage|disk)(?: usage)?(?: map| chart)?|what(?:'s|s| is) (?:filling(?: up)?|taking up|using)(?: all)? (?:my |the )?(?:storage(?: space)?|disk(?: space)?|space|hard drive|ssd))[.!?]*$/i.test(request);
+}
 if (!isMainThread && workerData?.root) scanTree(workerData.root, { progress: progress => parentPort.postMessage({ progress }) }).then(result => parentPort.postMessage(result), e => parentPort.postMessage({ error: `Scan unavailable (${e.code || e.message}).` }));
 module.exports = { scanTree, StorageScan, isStorageRequest };
