@@ -1,5 +1,5 @@
 // One vocabulary for built-in read-only menus. Words can appear anywhere in a request.
-const normalize = text => String(text || '').replace(/[’‘]/g, "'").replace(/wi[ -]fi/gi, 'wifi').replace(/\s+/g, ' ').trim();
+const normalize = text => String(text || '').replace(/[’‘]/g, "'").replace(/wi[ -]fi/gi, 'wifi').replace(/\b(?:neckwork|netwrok|netowrk|net work)\b/gi, 'network').replace(/\s+/g, ' ').trim();
 const ACTION = /\b(?:delete|erase|wipe|move|organize|rename|email|send|text|message|save|remember|forget|schedule|connect|disconnect|install|uninstall|update|write|edit|download|upload|restart|shutdown|shut down|cancel|close|hide|dismiss|remove|stop|disable|enable|turn (?:on|off)|set (?:a |the |my )?(?:timer|reminder|alarm|password))\b/i;
 const DISCUSSION = /\b(?:explain|teach|learn|define|definition|article|essay|tutorial|source code|implement|programming|translate|compare)\b|\b(?:what is|what's|whats) (?:a|an)\b/i;
 function eligible(text) {
@@ -12,7 +12,7 @@ const WORDS = {
   cpu: /\b(?:cpu|processor|processing load)\b/i,
   memory: /\b(?:ram|memory (?:usage|use|pressure|load|stats|panel|monitor))\b/i,
   battery: /\b(?:battery|batteries|charge level)\b/i,
-  network: /\b(?:network|wifi|internet|bandwidth|connection speed)\b/i,
+  network: /\b(?:network|wifi|internet|bandwidth|connection speed)\b|^(?:(?:show|open|check)(?: me)? (?:my |the )?)?radar(?: menu| panel)?[.!?]*$/i,
   system: /\b(?:system (?:status|stats|health|diagnostics|monitor|panel|performance)|computer (?:status|stats|health|diagnostics|performance)|mac (?:status|stats|health|diagnostics|performance))\b/i,
   dashboard: /\b(?:activity (?:center|centre)|dashboard|task (?:progress|status)|what (?:are you|is jarvis) working on)\b/i
 };
