@@ -15,6 +15,7 @@ function scoreEvent(e) {
     case 'calendar': return e.minutes <= 2 ? 0.95 : e.minutes <= 5 ? 0.85 : e.minutes <= 10 ? 0.7 : 0.3;
     case 'battery': return e.percent <= 5 ? 0.95 : e.percent <= 10 ? 0.9 : e.percent <= 20 ? 0.6 : 0;
     case 'job': return e.status === 'failed' ? 0.7 : 0.5;
+    case 'mail': return Math.max(0, Math.min(1, Number(e.importance) || 0.5));
     case 'plugin': return Math.max(0, Math.min(1, Number(e.importance) || 0.5));
     case 'security': return e.severity === 'critical' ? 1 : e.severity === 'high' ? 0.9 : e.severity === 'medium' ? 0.6 : 0;
     case 'folder': return 0.5;
@@ -29,12 +30,15 @@ const textFor = (e) => {
     case 'job': return e.status === 'failed' ? `That did not work: ${e.title}.` : `Finished: ${e.title}.`;
     case 'folder': return `New in ${e.title}: ${e.name}.`;
     case 'security': return e.summary ? String(e.title) : `Security warning: ${e.title}.`;
+    case 'mail': return e.digest
+      ? `${e.count} new emails, from ${e.names.length > 1 ? `${e.names.slice(0, -1).join(', ')} and ${e.names[e.names.length - 1]}` : e.names[0]}${e.count > e.names.length ? ' and others' : ''}.`
+      : `New email from ${e.name}: ${e.subject}.`;
     default: return String(e.title || '');
   }
 };
 
 // The event's own identity, so the same thing is not told twice.
-const keyOf = (e) => (e.type === 'calendar' ? `cal:${e.title}:${e.start}` : e.type === 'battery' ? `bat:${e.percent <= 10 ? 10 : 20}` : e.type === 'job' ? `job:${e.id || e.title}` : e.type === 'folder' ? `folder:${e.title}:${e.name}` : e.type === 'security' ? `sec:${e.id}:${e.severity}` : `${e.type}:${e.title}`);
+const keyOf = (e) => (e.type === 'calendar' ? `cal:${e.title}:${e.start}` : e.type === 'battery' ? `bat:${e.percent <= 10 ? 10 : 20}` : e.type === 'job' ? `job:${e.id || e.title}` : e.type === 'mail' ? `mail:${e.id}` : e.type === 'folder' ? `folder:${e.title}:${e.name}` : e.type === 'security' ? `sec:${e.id}:${e.severity}` : `${e.type}:${e.title}`);
 
 const inQuiet = (q, date) => { if (!q?.on) return false; const h = date.getHours(); return q.from > q.to ? h >= q.from || h < q.to : h >= q.from && h < q.to; };
 

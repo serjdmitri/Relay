@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const cloud = require('./tts/cloud');
+const { Ladder } = require('./ladder');
 const { pickJarvis, JARVIS } = require('./voiceProfile');
 const { LANGS } = require('./lang');
 
@@ -70,7 +71,8 @@ function speakable(text) {
 class Speaker {
   // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
   // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
-  constructor({ spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  constructor({ ladder = new Ladder(), spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+    this.ladder = ladder; // online voices that failed rest for a while (see ladder.js) so the next replies do not wait on them again
     this.spawnFn = spawnFn; this.setTimer = setTimer; this.clearTimer = clearTimer;
     this.exec = exec;
     this.log = log;
@@ -129,9 +131,9 @@ class Speaker {
   // Which engine will speak, and why not the one chosen (a missing key, a voice not downloaded).
   engineFor(tts, lang = 'en') {
     const e = tts.engine;
-    if (this.getLocalOnly() && (e === 'openai' || e === 'elevenlabs')) return 'system';
+    if (this.getLocalOnly() && (e === 'openai' || e === 'elevenlabs' || e === 'gemini')) return 'system';
     if (e === 'kokoro' && lang && lang !== 'en') return 'system'; // the on-device voice here is English only
-    if (e === 'openai' || e === 'elevenlabs') return tts[e] && tts[e].key ? e : 'system';
+    if (e === 'openai' || e === 'elevenlabs' || e === 'gemini') return tts[e] && tts[e].key && !this.ladder.resting(e) ? e : 'system';
     if (e === 'kokoro') return this.kokoro && this.kokoro.installed() ? 'kokoro' : 'system';
     if (e === 'omnivoice') return this.omni && this.omni.installed() ? 'omnivoice' : 'system';
     return 'system';
@@ -158,8 +160,10 @@ class Speaker {
     this.setPreparing(true);
     try {
       await this.speakWith(engine, tts, say, rate, token, this.abort.signal, { volume, kokoroVoice, cachedAudio });
+      this.ladder.ok(engine);
     } catch (e) {
       if ((e && e.name === 'AbortError') || token !== this.token) return;
+      this.ladder.fail(engine, e);
       this.log.error?.('voice:', e.message);
       if (this.onProblem) this.onProblem(e.message);
       try { await this.speakSystem(say, { voice, rate, volume, lang }); }
@@ -174,9 +178,10 @@ class Speaker {
     this.stop();
     const tts = this.getTts() || { engine: 'system' };
     const wanted = tts.engine;
+    this.ladder.ok(wanted);
     const engine = this.engineFor(tts);
     if (wanted !== 'system' && engine === 'system') {
-      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs')) return { ok: false, message: 'Cloud voices are paused while Relay uses a local model.' };
+      if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs' || wanted === 'gemini')) return { ok: false, message: 'Cloud voices are paused while Relay uses a local model.' };
       return { ok: false, message: wanted === 'kokoro' ? 'The on-device voice is not downloaded yet.' : `Add your ${cloud.NAMES[wanted] || wanted} key first.` };
     }
     if (engine === 'system') {
@@ -201,7 +206,7 @@ class Speaker {
   async speakWith(engine, tts, say, rate, token, signal, { volume = 1, kokoroVoice, cachedAudio } = {}) {
     const make = (piece) => cachedAudio ? Promise.resolve(this.writeTemp(cachedAudio, 'wav')) : (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal, rate }) : engine === 'kokoro'
       ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate })
-      : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
+      : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, cloud.EXT[engine] || 'mp3')));
     const pieces = cloud.sentences(say, 160);
     let pending = make(pieces[0]);
     try {

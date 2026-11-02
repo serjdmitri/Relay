@@ -34,6 +34,8 @@ const { Sampler } = require('./panels/sources');
 const { PanelWindows } = require('./panelWindow');
 const { NotesService } = require('./notes/service');
 const { Alerts, parseCalendar, calendarEvents, batteryEvent } = require('./proactive');
+const { NotificationReader, importanceOf: notifyImportance, describe: describeNote } = require('./notifications');
+const { MailWatch, toEvents: mailEvents, gmailQuery } = require('./mailWatch');
 const { Connectivity } = require('./connectivity');
 const welcome = require('./welcome');
 const { newTopic } = require('./notify');
@@ -143,7 +145,7 @@ function publicState() {
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
   const hasTtsKeys = {};
-  for (const id of ['openai', 'elevenlabs']) {
+  for (const id of ['openai', 'elevenlabs', 'gemini']) {
     hasTtsKeys[id] = !!decryptKey(d.settings.tts[id].keyEnc);
     delete d.settings.tts[id].keyEnc;
   }
@@ -596,7 +598,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('tts:set-key', (_e, engine, key) => {
-    if (!['openai', 'elevenlabs'].includes(engine)) return;
+    if (!['openai', 'elevenlabs', 'gemini'].includes(engine)) return;
     store.set(`settings.tts.${engine}.keyEnc`, encryptKey(String(key || '').trim()));
     voiceProblem = '';
     broadcast();
@@ -624,7 +626,7 @@ function registerIpc() {
   ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', profileFor('reply', { ...(store.get('settings') || {}), voice, voiceRate: rate })));
   ipcMain.handle('app:open-link', (_e, url) => {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
-    if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
+    if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io|aistudio\.google\.com)\//.test(String(url))) shell.openExternal(String(url));
   });
   ipcMain.handle('window:focus-main', async (event) => {
     if (!mainWin || mainWin.isDestroyed() || event.sender !== mainWin.webContents) return;
@@ -1071,7 +1073,7 @@ app.whenReady().then(() => {
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
     getTts: () => {
       const t = store.get('settings.tts');
-      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) } };
+      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) }, gemini: { ...t.gemini, key: decryptKey(t.gemini?.keyEnc) } };
     },
     onProblem: (m) => { voiceProblem = m; broadcast(); }
   });
@@ -1434,6 +1436,36 @@ app.whenReady().then(() => {
     if (b) surface(b);
     if (tickN++ % 5 === 0) { try { for (const e of calendarEvents(parseCalendar(await ask.mac.calendarEvents(1)))) surface(e); } catch { /* no calendar access: Doctor and Permissions say so */ } }
   }, 60000);
+  // New email: check connected Gmail accounts every few minutes and tell you about what arrived (the first check only learns what is already there).
+  const mailWatch = new MailWatch({ load: () => store.get('mailSeen') || {}, save: (v) => store.set('mailSeen', v) });
+  let mailTick = 0;
+  let mailBusy = false;
+  setInterval(async () => {
+    const o = store.get('settings.mail') || {};
+    if (!o.enabled || mailBusy || ask.offline || ++mailTick % Math.max(1, Number(o.everyMin) || 3) !== 0) return;
+    const api = ask.googleApiIfConnected();
+    if (!api) return;
+    mailBusy = true;
+    try {
+      for (const r of await api.gmailFresh((a) => mailWatch.known(a), gmailQuery)) {
+        for (const e of mailEvents(mailWatch.update(r.account, r.ids, r.fresh), { vip: o.vip || [] })) surface(e);
+      }
+    } catch (e) { console.error('mail check:', e.message); } finally { mailBusy = false; }
+  }, 60000);
+  // Notifications: read the Mac's notification database (needs Full Disk Access) so "read my notifications" works and, if you ask, important ones are spoken.
+  const runWithInput = (file, args, input) => new Promise((res, rej) => { const c = execFile(file, args, { timeout: 20000, maxBuffer: 16e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(String(out)))); if (input !== undefined) { c.stdin.on('error', () => {}); c.stdin.end(input); } });
+  const notifyTick = async () => {
+    const o = store.get('settings.notifications') || {};
+    if (!o.enabled) { ask.notificationReader = null; return; }
+    if (!ask.notificationReader) ask.notificationReader = new NotificationReader({ run: runWithInput, exists: (p) => require('fs').existsSync(p), selfApps: ['com.sergey.relay'] });
+    try {
+      for (const n of await ask.notificationReader.poll()) {
+        const score = notifyImportance(n);
+        if (o.speak && score >= 0.5) surface({ type: 'plugin', title: describeNote(n), importance: score });
+      }
+    } catch (e) { /* Doctor and the "read my notifications" reply explain a missing permission */ }
+  };
+  setInterval(notifyTick, 20000);
   connectivity = new Connectivity({
     probe: () => Promise.any(['https://api.anthropic.com', 'https://www.apple.com/library/test/success.html'].map((u) => fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(4000) }).then(() => true))).catch(() => false),
     onChange: (online) => { ask.offline = !online; if (!online && flagsMod.isOn(store.get('settings'), 'offline')) speaker?.stop(); broadcast(); }

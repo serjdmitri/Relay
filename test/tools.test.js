@@ -198,3 +198,11 @@ test('the Firefox tools pass their arguments to the extension, and closing sever
   assert.match(t.firefox_close_tabs.confirm({ match: 'amazon' }), /amazon/);
   assert.match(t.firefox_close_tabs.confirm({ duplicates: true }), /duplicate/);
 });
+
+test('no tool lets the model approve its own action: no confirm-style input fields', () => {
+  const tools = buildTools({ mac: fakeMac, getScale: () => 1, firefox: { isConnected: () => true, call: async () => ({}) } });
+  for (const t of tools) {
+    const bad = Object.keys(t.input_schema.properties || {}).filter((k) => /^(confirm|confirmed|approve|approved|yes|force|skip_confirm|i_am_sure)$/i.test(k));
+    assert.deepEqual(bad, [], `${t.name} takes a field the model could use to skip the question`);
+  }
+});

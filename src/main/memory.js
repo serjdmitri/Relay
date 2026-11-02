@@ -51,7 +51,8 @@ function removeFacts(list, query) {
   return { list: list.filter((f) => !hit(f)), removed: list.filter(hit) };
 }
 
-// The lines the model sees with each request, newest first, within a budget.
+// The lines the model sees with each request, newest first, within a budget. Facts that do not fit are not lost: the request says how many
+// are left and the recall_memory tool finds them by words (a model cannot look up something it does not know exists).
 function memoryContext(list, budget = 2400) {
   const lines = [];
   let used = 0;
@@ -60,7 +61,25 @@ function memoryContext(list, budget = 2400) {
     lines.push(`- ${f.text}`);
     used += f.text.length + 3;
   }
-  return lines.length ? `What the user has told Relay to remember (use it when it helps; do not recite it):\n${lines.join('\n')}` : '';
+  if (!lines.length) return '';
+  const left = list.length - lines.length;
+  const more = left > 0 ? `\n(${left} older ${left === 1 ? 'fact is' : 'facts are'} also remembered. Use recall_memory with a few words when the request might involve one.)` : '';
+  return `What the user has told Relay to remember (use it when it helps; do not recite it):\n${lines.join('\n')}${more}`;
 }
 
-module.exports = { parseMemory, isSecret, addFact, removeFacts, memoryContext, clean, MAX_LEN, MAX_FACTS };
+const WORD = /[\p{L}\p{N}]{2,}/gu;
+const words = (t) => [...new Set((String(t).toLowerCase().match(WORD) || []))];
+
+// The remembered facts that share the most words with the query (a word may match the start of another, so "sister" finds "sisters"). Newest wins ties.
+function searchFacts(list, query, limit = 8) {
+  const q = words(query);
+  if (!q.length) return [];
+  const scored = list.map((f, i) => {
+    const w = words(f.text);
+    const hit = q.filter((x) => w.some((y) => y === x || (x.length > 3 && (y.startsWith(x) || x.startsWith(y) && y.length > 3)))).length;
+    return { f, hit, i };
+  }).filter((x) => x.hit > 0).sort((a, b) => b.hit - a.hit || a.i - b.i);
+  return scored.slice(0, limit).map((x) => x.f);
+}
+
+module.exports = { parseMemory, isSecret, addFact, removeFacts, memoryContext, searchFacts, clean, MAX_LEN, MAX_FACTS };

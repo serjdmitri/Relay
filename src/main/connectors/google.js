@@ -144,6 +144,23 @@ class GoogleApi {
     return out;
   }
 
+  // For the new-mail watcher: the unread inbox ids per account, with details fetched only for the ones not in known(account).
+  async gmailFresh(known = () => new Set(), q = 'in:inbox is:unread newer_than:2d', max = 15) {
+    const out = [];
+    for (const a of this.pick(null)) {
+      const list = await this.call(a, 'GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages?${new URLSearchParams({ q, maxResults: String(max) })}`);
+      const ids = (list.messages || []).map((m) => m.id);
+      const had = known(a.email);
+      const fresh = [];
+      for (const id of ids.filter((i) => !had.has(i)).slice(0, 8)) {
+        const j = await this.call(a, 'GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`);
+        fresh.push({ id, from: header(j, 'From'), subject: header(j, 'Subject'), labels: j.labelIds || [] });
+      }
+      out.push({ account: a.email, ids, fresh });
+    }
+    return out;
+  }
+
   async gmailRead(email, id) {
     const a = this.pick(email)[0];
     const j = await this.call(a, 'GET', `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`);

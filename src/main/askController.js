@@ -58,6 +58,11 @@ const driveInspect = require('./driveInspect');
 const robotics = require('./robotics');
 const recap = require('./recap');
 const { Failover } = require('./failover');
+const { YoutubeControl } = require('./youtube');
+const { Modes } = require('./modes');
+const skillsMod = require('./skills');
+const council = require('./council');
+const { describe: describeNotification } = require('./notifications');
 const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
 const { parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
@@ -1043,7 +1048,46 @@ class AskController {
     return this.handleText(s.text, { scheduled: true });
   }
 
+  modeSet() {
+    return this._modes || (this._modes = new Modes({ store: this.store, mac: this.mac, layouts: this.layouts(), focus: this.focusMode() }));
+  }
+
+  // "Read my notifications": what came in (from notifications.js), or the reason it cannot be read.
+  async notificationReply(cmd) {
+    if (this.store.get('settings.notifications.enabled') !== true) return 'Reading notifications is off. Turn it on in Settings under Notifications; it needs Full Disk Access.';
+    try { await this.notificationReader.poll(); } catch (e) { return e.message; }
+    return this.notificationReader.summary({ app: cmd.app });
+  }
+
+  // Learned skills (skills.js): the model saves a script that worked; it waits in Settings > Memory until approved.
+  findSkillsFor(task) {
+    const all = this.store.get('skills') || [];
+    const found = skillsMod.findSkills(all, task);
+    if (found.length) this.store.set('skills', skillsMod.markUsed(all, found.map((f) => f.id)));
+    return skillsMod.skillText(found);
+  }
+
+  saveSkill(input) {
+    const r = skillsMod.addSkill(this.store.get('skills') || [], input, { id: crypto.randomUUID() });
+    if (!r.added) return r.why;
+    this.store.set('skills', r.list);
+    this.onChange();
+    return 'Saved. It waits for the user to approve it in Settings under Memory before it can be used.';
+  }
+
+  // "Ask the council whether I should ...": three small model calls (council.js).
+  async councilCommand(cmd) {
+    const out = await council.convene({ ask: (p, sys) => this.askOnce(p, sys), question: cmd.question, mode: cmd.mode });
+    return council.speak(out);
+  }
+
   // ----- what Relay remembers about you -----
+  // For the recall_memory tool: the remembered facts that match some words.
+  recallFacts(query) {
+    const hits = mem.searchFacts(this.store.get('memories') || [], query);
+    return hits.length ? hits.map((f) => `- ${f.text}`).join('\n') : 'Nothing remembered matches that.';
+  }
+
   memoryText() {
     if (this.store.get('settings.memory') === false) return '';
     const base = mem.memoryContext(this.store.get('memories') || []);
@@ -1087,6 +1131,8 @@ class AskController {
     else if (action === 'inferred-approve') this.store.set('inferred', lessons.approveInferred(inferredList, id));
     else if (action === 'inferred-edit') this.store.set('inferred', lessons.editInferred(inferredList, id, payload.text));
     else if (action === 'inferred-delete') this.store.set('inferred', lessons.removeById(inferredList, id));
+    else if (action === 'skill-approve') this.store.set('skills', skillsMod.approveSkill(this.store.get('skills') || [], id));
+    else if (action === 'skill-delete') this.store.set('skills', skillsMod.removeSkill(this.store.get('skills') || [], id));
     else return { ok: false };
     this.onChange();
     return { ok: true };
@@ -1266,7 +1312,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, forecast: async (place, units) => (await this.forecastCommand({ place, units }, { parentSignal: this.abort?.signal })).reply, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, notes: this.notesService && flagsMod.isOn(this.store.get('settings'), 'folderQa') && this.notesService.folders().length ? { ask: (q, f) => this.notesService.ask(q, f) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, forecast: async (place, units) => (await this.forecastCommand({ place, units }, { parentSignal: this.abort?.signal })).reply, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, notes: this.notesService && flagsMod.isOn(this.store.get('settings'), 'folderQa') && this.notesService.folders().length ? { ask: (q, f) => this.notesService.ask(q, f) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply, recall: (q) => this.recallFacts(q) }, skills: this.store.get('settings.memory') === false ? null : { find: (t) => this.findSkillsFor(t), save: (i) => this.saveSkill(i) }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Tools from the plugins you approved (Settings > Doctor > Plugins), only while that switch is on.
@@ -2534,6 +2580,10 @@ class AskController {
       holoReal: this.holos ? (mm) => this.holoRealSize(mm) : null,
       holoLib: this.holos?.library ? (cmd) => this.holoLibraryCommand(cmd) : null,
       focus: this.focusMode(),
+      youtube: this.youtube || (this.youtube = new YoutubeControl({ osa: (lines) => this.mac.osa(lines) })),
+      notifications: this.notificationReader ? (cmd) => this.notificationReply(cmd) : null,
+      modes: this.modeSet(),
+      council: (cmd) => this.councilCommand(cmd),
       ocr: (cmd) => this.readScreenText(cmd),
       downloads: this.drive ? {
         plan: async () => { const r = await this.drive.proposeDownloads({ nightly: false }); return r.moves ? `Here is where ${r.moves} ${r.moves === 1 ? 'file' : 'files'} in Downloads would go. Say “apply the plan” to do it, or “skip the plan”.` : 'Nothing in Downloads needs tidying right now.'; },
