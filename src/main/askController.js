@@ -1369,13 +1369,14 @@ class AskController {
   }
 
   async openMenuRequests(menus) {
-    if (menus.some(m => m.kind === 'storage' && !this.openStorageMap || !['storage', 'weather'].includes(m.kind) && !this.panelHub)) return null;
+    if (menus.some(m => m.kind === 'storage' && !this.openStorageMap || !['storage', 'weather'].includes(m.kind) && !(m.kind === 'network' && this.openNetworkRadar) && !this.panelHub)) return null;
     // Preserve multi-city and other compound requests for the existing model/tool path.
     if (menus.some(m => m.kind === 'weather' && /\band\b/i.test(m.query?.place || ''))) return null;
     const abort = new AbortController(); this.abort = abort;
     const results = await Promise.all(menus.map(async menu => {
       try {
         if (menu.kind === 'storage') return await this.openStorageMap();
+        if (menu.kind === 'network' && this.openNetworkRadar) return await this.openNetworkRadar();
         if (menu.kind === 'weather') return await this.forecastCommand(menu.query, { parentSignal: abort.signal });
         if (menu.kind !== 'calculator' && !flagsMod.isOn(this.store.get('settings'), 'panels')) return { status: 'failed', reply: 'Turn on Live panels in Settings to show system menus.' };
         const spec = menu.kind === 'calculator' ? { builtin: 'calculator' } : { title: menu.title, sources: menu.kind === 'system' ? ['cpu', 'memory', 'battery', 'network', 'disk'] : [menu.kind] };
