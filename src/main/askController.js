@@ -232,6 +232,7 @@ class AskController {
       log: console
     });
     if (this.speaker) {
+      this.speaker.onPreparing = on => { this.overlay.voicePreparing?.(on); if (!on) this.followUpSoon(); };
       this.speaker.onState = (on) => {
         this.overlay.speaking(on);
         if (on) this.barge.arm(); else { this.barge.disarm(); this.followUpSoon(); }

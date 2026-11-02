@@ -87,6 +87,7 @@ class Speaker {
     this.busy = false;
     this.onState = null; // set by the app: called with true while a voice is speaking and false when it stops, for the ring
     this.talking = false;
+    this.preparingVoice = false; this.onPreparing = null;
     this.currentText = ''; // what is being said right now (the microphone also hears it; see barge.js)
   }
 
@@ -154,6 +155,7 @@ class Speaker {
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
+    this.setPreparing(true);
     try {
       await this.speakWith(engine, tts, say, rate, token, this.abort.signal, { volume, kokoroVoice, cachedAudio });
     } catch (e) {
@@ -163,7 +165,7 @@ class Speaker {
       try { await this.speakSystem(say, { voice, rate, volume, lang }); }
       catch (error) { this.onProblem?.(error.message); this.log.error?.('voice:', error.message); }
     } finally {
-      if (token === this.token) { this.busy = false; if (!this.child) this.setTalking(false); }
+      if (token === this.token) { this.busy = false; this.setPreparing(false); if (!this.child) this.setTalking(false); }
     }
   }
 
@@ -184,13 +186,14 @@ class Speaker {
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
+    this.setPreparing(true);
     try {
       await this.speakWith(engine, tts, speakable(text), rate, token, this.abort.signal);
       return { ok: true };
     } catch (e) {
       return { ok: false, message: e.message };
     } finally {
-      if (token === this.token) this.busy = false;
+      if (token === this.token) { this.busy = false; this.setPreparing(false); }
     }
   }
 
@@ -203,6 +206,7 @@ class Speaker {
     let pending = make(pieces[0]);
     try {
       for (let i = 0; i < pieces.length; i++) {
+        this.setPreparing(true);
         const file = await pending;
         pending = null;
         if (token !== this.token) { this.discard(file); return; }
@@ -231,7 +235,7 @@ class Speaker {
       if (token !== this.token) return resolve();
       const child = this.spawnFn('afplay', volume < 1 ? ['-v', String(volume), file] : [file], { stdio: 'ignore' });
       this.child = child;
-      child.once('spawn', () => { if (token === this.token) this.setTalking(true); });
+      child.once('spawn', () => { if (token === this.token) { this.setPreparing(false); this.setTalking(true); } });
       let settled = false;
       const done = error => {
         if (settled) return; settled = true;
@@ -247,6 +251,7 @@ class Speaker {
   async speakSystem(say, { voice, rate, volume = 1, lang = 'en' }) {
     const token = this.token;
     this.busy = true;
+    this.setPreparing(true);
     try {
       const name = await this.resolve(voice, lang);
       if (token !== this.token) return;
@@ -260,15 +265,20 @@ class Speaker {
           if (this.child === child) this.child = null;
           if (error && token === this.token) reject(error); else resolve();
         };
-        child.once('spawn', () => { if (token === this.token) this.setTalking(true); });
+        child.once('spawn', () => { if (token === this.token) { this.setPreparing(false); this.setTalking(true); } });
         child.once('exit', code => done(code ? new Error('The Mac voice could not play. Check your sound output device.') : null));
         child.once('error', e => done(e));
         child.stdin.on('error', () => {});
         child.stdin.end(volume < 1 ? `[[volm ${volume}]] ${say}` : say);
       });
     } finally {
-      if (token === this.token) { this.busy = false; this.setTalking(false); }
+      if (token === this.token) { this.busy = false; this.setPreparing(false); this.setTalking(false); }
     }
+  }
+
+  setPreparing(on) {
+    if (this.preparingVoice === on) return;
+    this.preparingVoice = on; this.onPreparing?.(on);
   }
 
   setTalking(on) {
@@ -284,6 +294,7 @@ class Speaker {
   stop() {
     this.token++;
     this.busy = false;
+    this.setPreparing(false);
     this.setTalking(false);
     try { this.abort && this.abort.abort(); } catch {}
     this.abort = null;

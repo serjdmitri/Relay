@@ -411,6 +411,9 @@ window.relay.onOverlay((m) => {
     case 'hud-focus':
       window.Hud.focusInput();
       break;
+    case 'hud-voice-preparing':
+      window.Hud.setPreparing(m.on);
+      break;
     case 'hud-speaking':
       window.Hud.setSpeaking(m.on);
       break;
