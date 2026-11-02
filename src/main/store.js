@@ -1,3 +1,4 @@
+const { DEFAULTS: CALL_DEFAULTS } = require('./calls/service');
 const fs = require('fs');
 const path = require('path');
 const { PRESETS } = require('./agent/providers/presets');
@@ -10,6 +11,7 @@ const DEFAULTS = {
   panelLayouts: [], // saved panel and hologram arrangements
   skillSuggestions: [], // proposed routines; never run without review and approval
   settings: {
+    calls: { ...CALL_DEFAULTS, keyEnc: '' },
     driveRoots: [], // explicitly selected file-workspace folders
     menuSnap: true, // align floating menus near a screen edge without resizing
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
@@ -123,6 +125,7 @@ const DEFAULTS = {
   inferred: [], // {id, text, status: pending | approved, conf, ts}: things Relay noticed about you; unused until you approve
   holograms: [], // pinned holograms: where they are and links to their models (never the model files)
   remoteDevices: [], // paired phones: { id, name, hash, created, lastSeen } (only a hash of each token)
+  callRequests: [], callSchedules: [], // outbound phone call reviews and check-in times
   schedules: [], // requests to run later or on repeat: see schedule.js
   corrections: {}, // fixes seen once, waiting for a second sighting: { 'from>to': count }
   lastReply: ''

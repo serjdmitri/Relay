@@ -4,7 +4,7 @@
   const ES = {
     // sidebar and page titles
     'Watch folders': 'Vigilar carpetas', 'Add a folder': 'Añadir una carpeta', Clear: 'Borrar', 'What changed': 'Qué cambió', 'When a question is not answered': 'Cuando una pregunta no se responde', 'Run now': 'Ejecutar ahora', Drop: 'Descartar', 'Better page control': 'Mejor control de páginas', 'Holograms and hands': 'Hologramas y manos', Startup: 'Arranque', Privacy: 'Privacidad',
-    Home: 'Inicio', History: 'Historial', Routines: 'Rutinas', Vocabulary: 'Vocabulario', Memory: 'Memoria', Connectors: 'Conectores', Remote: 'Remoto', General: 'General', Speech: 'Voz', Shortcuts: 'Atajos', Permissions: 'Permisos', Account: 'Cuenta',
+    Home: 'Inicio', History: 'Historial', Routines: 'Rutinas', Vocabulary: 'Vocabulario', Memory: 'Memoria', Connectors: 'Conectores', Remote: 'Remoto', Calls: 'Llamadas', General: 'General', Speech: 'Voz', Shortcuts: 'Atajos', Permissions: 'Permisos', Account: 'Cuenta',
     // home
     'Get started': 'Primeros pasos', 'Ask Relay': 'Pregúntale a Relay', 'Say what you want done. It acts, then checks that it worked.': 'Di qué quieres que haga. Actúa y luego comprueba que funcionó.', Dictate: 'Dictar', 'Talk, and the words are typed where your cursor is.': 'Habla y las palabras se escriben donde está tu cursor.',
     'Type a request': 'Escribir una petición', "For when talking isn't an option.": 'Para cuando no puedes hablar.', 'Customize your shortcuts': 'Personaliza tus atajos', 'Change the keys for any of these.': 'Cambia las teclas de cualquiera de estos.',

@@ -9,6 +9,7 @@ const on = (channel, cb) => {
 
 contextBridge.exposeInMainWorld('relay', {
   getState: () => invoke('state:get'),
+  callAction: (action, value) => invoke('calls:' + action, value),
   openStorageMap: () => invoke('files:storage'),
   onStorageChanged: cb => on('storage:changed', cb),
   onStorageScanRequested: cb => on('storage:scan-requested', cb),

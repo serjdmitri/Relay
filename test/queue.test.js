@@ -146,3 +146,16 @@ test('voice removal of a storage selection uses the same permission-gated local 
   c.trashStorageSelection=async()=>{called++;return{status:'stopped',reply:'Cancelled. No files moved.'};};c.runRequest=()=>assert.fail('Selected storage files must use the local confirmation path');
   const result=await c.handleText('delete the selected files');assert.equal(called,1);assert.equal(result.status,'stopped');
 });
+
+test('owner phone requests outrank menu keywords and never invoke either model', async () => {
+  for (const provider of ['claude', 'codex']) for (const scheduled of [false, true]) {
+    const c=make(),commands=[];const get=c.store.get;
+    c.store.get=k=>k==='settings.model.provider'?provider:get(k);
+    c.onCallCommand=async command=>{commands.push(command);return{status:'done',reply:'Prepared for review.'};};
+    c.runRequest=()=>{throw Error('Call preparation must not invoke a model');};
+    c.openStorageMap=()=>{throw Error('Call purpose must not trigger a menu');};
+    const result=await c.handleText('call me about storage',{scheduled});
+    assert.equal(result.status,'done');assert.deepEqual(commands,[{type:'prepare',purpose:'storage',background:scheduled}]);
+    clearTimeout(c.doneTimer);clearTimeout(c.holdTimer);
+  }
+});

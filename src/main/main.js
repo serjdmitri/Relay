@@ -1,3 +1,6 @@
+// Keep a launch-provided phone key out of every child model/tool process.
+const blandLaunchKey = process.env.BLAND_API_KEY || '';
+delete process.env.BLAND_API_KEY;
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
@@ -7,6 +10,8 @@ const { DriveAccess } = require('./drive/access');
 const { FileWorkspace } = require('./drive/workspace');
 const { StorageWindow } = require('./storageWindow');
 const { NetworkWindow } = require('./networkWindow');
+const { Bland } = require('./calls/bland');
+const { Calls, quiet: callsQuiet } = require('./calls/service');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
@@ -71,7 +76,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let callService, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -129,6 +134,7 @@ function broadcast() {
 
 function publicState() {
   const d = JSON.parse(JSON.stringify(store.data));
+  if (d.settings.calls) delete d.settings.calls.keyEnc;
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
   const hasTtsKeys = {};
@@ -153,6 +159,7 @@ function publicState() {
     schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
     hasKeys,
+    calls: callService?.state(),
     hasTtsKeys,
     hasHfToken,
     activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
@@ -364,6 +371,46 @@ async function welcomeBack(lockedAt, lastWelcome) {
 }
 
 function registerIpc() {
+  const callKey = () => decryptKey(store.get('settings.calls.keyEnc')) || blandLaunchKey;
+  const bland = new Bland({ getKey: callKey });
+  callService = new Calls({ store, api: bland, hasKey: () => !!callKey(), privateMode: () => store.get('settings.model.provider') === 'ollama', onChange: broadcast, onReview: r => {
+    if (callsQuiet(callService?.config() || {}, Date.now())) return;
+    if (Notification.isSupported()) { const n = new Notification({ title: 'Jarvis call ready for review', body: 'Open Calls to review the number and purpose. No call has been placed.', silent: true }); n.on('click', () => openMain('calls')); n.show(); }
+  } });
+  const callIpc = (channel, fn) => ipcMain.handle(channel, async (e, ...args) => {
+    if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Calls settings to use this control.' };
+    try { return await fn(...args); } catch (err) { return { error: err.message }; }
+  });
+  callIpc('calls:state', () => callService.state());
+  callIpc('calls:configure', raw => callService.configure(raw || {}));
+  callIpc('calls:key', key => { if (typeof key !== 'string' || key.length > 4000) throw Error('Invalid key.'); store.set('settings.calls.keyEnc', key.trim() ? encryptKey(key.trim()) : ''); store.flush(); broadcast(); return { ok: true }; });
+  callIpc('calls:test', () => { if (callService.privateMode()) throw Error('Bland access is disabled in local/private mode.'); return bland.check(); });
+  callIpc('calls:prepare', text => callService.prepare(text));
+  callIpc('calls:approve', id => callService.approve(id, async preview => {
+    const owner = mainWin;
+    const r = await dialog.showMessageBox(owner, { type: 'warning', buttons: ['Yes, place this call', 'Cancel'], defaultId: 1, cancelId: 1, message: `Call ${preview.number} (your configured owner number)?`, detail: `Purpose: ${preview.purpose}\nMaximum ${preview.minutes} minutes. Bland bills separately. The number and purpose will be shared with Bland. Recording is off, but the provider can retain call records/transcripts. No Mac actions will be executed from the conversation.` });
+    return r.response === 0 && mainWin === owner && !owner.isDestroyed() && owner.isVisible();
+  }));
+  callIpc('calls:cancel', id => { callService.cancel(id); return { ok: true }; });
+  callIpc('calls:refresh', id => callService.refresh(id));
+  callIpc('calls:stop', id => callService.stop(id));
+  callIpc('calls:report', id => callService.report(id));
+  callIpc('calls:acknowledge', async id => {
+    const r = await dialog.showMessageBox(mainWin, { type: 'warning', buttons: ['I checked Bland', 'Cancel'], defaultId: 1, cancelId: 1, message: 'Have you reviewed this uncertain call in Bland?', detail: 'Relay cannot verify its outcome. This does not stop a provider-side call. Review and stop it in Bland first if needed; this call still counts against today’s limits.' });
+    if (r.response !== 0) return { cancelled: true }; callService.acknowledge(id); return { ok: true };
+  });
+  callIpc('calls:schedule', raw => callService.addSchedule(raw || {}));
+  callIpc('calls:remove-schedule', id => { callService.removeSchedule(id); return { ok: true }; });
+  ask.onCallCommand = async command => {
+    try {
+      if (!command.background) openMain('calls');
+      if (command.type === 'open') return { status: 'done', reply: 'Phone Calls is open, Sir. Calls require review before dialing.' };
+      if (command.type === 'schedule') { callService.addSchedule(command.spec); return { status: 'done', reply: 'The check-in review is scheduled, Sir. At that time it will await approval of the exact number and purpose; it will not dial automatically.' }; }
+      callService.prepare(command.purpose, { source: command.background ? 'schedule' : 'voice' });
+      return { status: 'done', reply: 'Your call is prepared, Sir. Review the number and purpose in Calls and approve the dialing prompt. No call has been placed.' };
+    } catch (err) { return { status: 'failed', reply: err.message }; }
+  };
+  setInterval(() => callService.tick().catch(() => {}), 10000);
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
   storagePanel = new StorageWindow({ access, motion: floatingMotion, reveal: p => shell.showItemInFolder(p), settings: () => openMain('permissions') });
@@ -405,6 +452,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('state:set', (_e, key, value) => {
+    if (key === 'settings.calls' || key.startsWith('settings.calls.')) throw Error('Use Calls settings to change calling permissions.');
     if (key === 'settings.driveRoots' || key.startsWith('settings.driveRoots.')) throw new Error('Use the folder chooser for file access.');
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
     store.set(key, value);
@@ -1257,6 +1305,9 @@ app.whenReady().then(() => {
   // Speaking up on its own, and offline mode
   const alerts = new Alerts();
   const surface = (event) => {
+    if (event.type === 'job' && callService?.config().enabled && callService.config().offerOnCompletion && !callService.privateMode() && !callsQuiet(callService.config(), Date.now())) {
+      try { callService.prepare(`Review the task status: ${event.title}. Relay reported ${event.status}. Do not claim details beyond that status.`, { source: 'job', occurrence: `job:${event.id}` }); } catch {}
+    }
     if (!flagsMod.isOn(store.get('settings'), 'proactive')) return;
     const o = store.get('settings.proactive') || {};
     const d = alerts.decide(event, { mode: o.mode, quiet: o.quiet, busy: !!ask.meeting?.active || ask.state === 'listening' || !!ask.speaker?.speaking, away: !!ask.lockWatch?.locked });
