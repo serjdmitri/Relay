@@ -141,10 +141,18 @@ function broadcast() {
   rebuildTray();
 }
 
+// What Settings shows about the quick lane: whether it has a key, and what it did today. Never the key.
+function quickState() {
+  const st = store.get('quickStats'), today = st && st.day === new Date().toDateString() ? st : { answered: 0, escalated: 0, failed: 0, ms: 0 };
+  const own = !!decryptKey(store.get('settings.quick.keyEnc'));
+  return { hasKey: !!ask?.quickLaneKey?.(), usingGroqService: !own && !!decryptKey(store.get('settings.model.presets.groq.keyEnc')), keyProblem: !!ask?.quickLane?.keyProblem, today: { answered: today.answered, escalated: today.escalated, failed: today.failed, avgMs: today.answered ? Math.round(today.ms / today.answered) : 0 } };
+}
+
 function publicState() {
   const { sessionNotes: _sessionNotes, ...publicData } = store.data;
   const d = JSON.parse(JSON.stringify(publicData)); // session notes use protected Memory IPC, not broadcasts
   if (d.settings.calls) { delete d.settings.calls.keyEnc; delete d.settings.calls.twilioTokenEnc; }
+  if (d.settings.quick) delete d.settings.quick.keyEnc;
   const hasKey = !!decryptKey(d.settings.model.anthropicKeyEnc);
   delete d.settings.model.anthropicKeyEnc;
   const hasTtsKeys = {};
@@ -170,6 +178,7 @@ function publicState() {
     hasKey,
     hasKeys,
     calls: callService?.state(),
+    quick: quickState(),
     hasTtsKeys,
     hasHfToken,
     activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
@@ -398,6 +407,12 @@ function registerIpc() {
   callIpc('calls:key', key => { if (typeof key !== 'string' || key.length > 4000) throw Error('Invalid key.'); store.set('settings.calls.keyEnc', key.trim() ? encryptKey(key.trim()) : ''); store.flush(); broadcast(); return { ok: true }; });
   callIpc('calls:twilio-token', token => { if (typeof token !== 'string' || token.length > 400) throw Error('Invalid token.'); store.set('settings.calls.twilioTokenEnc', token.trim() ? encryptKey(token.trim()) : ''); store.flush(); broadcast(); return { ok: true }; });
   callIpc('calls:test-twilio', () => { if (callService.privateMode()) throw Error('Phone call access is disabled in local/private mode.'); return twilio.check(); });
+  const quickIpc = (channel, fn) => ipcMain.handle(channel, async (e, ...args) => {
+    if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use this control.' };
+    try { return await fn(...args); } catch (err) { return { error: err.message }; }
+  });
+  quickIpc('quick:key', key => { if (typeof key !== 'string' || key.length > 400) throw Error('Invalid key.'); store.set('settings.quick.keyEnc', key.trim() ? encryptKey(key.trim()) : ''); store.flush(); ask.lane().keyProblem = false; ask.lane().pausedUntil = 0; broadcast(); return { ok: true }; });
+  quickIpc('quick:test', async () => { if (!ask.quickLaneKey()) throw Error('Add a Groq key first.'); const r = await ask.lane().test(); ask.lane().keyProblem = false; broadcast(); return r; });
   callIpc('calls:test', () => { if (callService.privateMode()) throw Error('Bland access is disabled in local/private mode.'); return bland.check(); });
   callIpc('calls:prepare', text => callService.prepare(text));
   callIpc('calls:approve', id => callService.approve(id, async preview => {

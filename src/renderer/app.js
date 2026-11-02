@@ -1177,6 +1177,22 @@ const PAGES = {
     $('#ovt', onRow).onchange = (e) => relay.set('settings.overnight.to', Number(e.target.value));
     onCard.append(onRow);
     c.append(onCard);
+    c.append(h('<div class="section-title">Quick answers</div>'));
+    const quickCard = h('<div class="card"></div>');
+    quickCard.append(toggleRow('Answer plain questions quickly with Groq', 'Short, timeless questions (“how do you spell necessary”, “what is 15% of 80”) go straight to Groq’s free tier, so the answer starts sooner and uses none of your subscriptions. Only the question itself, plus up to three earlier quick questions and answers from the last 10 minutes, is sent to Groq: never your memory, files, calendar, screen or anything about this Mac. Anything personal, timely or that needs the Mac stays with your usual model, and if Groq is slow, rate-limited or unsure, your usual model answers instead. Off in private (local model) mode.', 'settings.quick.enabled'));
+    const qs = S.quick || { today: {} };
+    const qrow = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Groq key</div><div class="d" data-qstatus>${qs.keyProblem ? 'Groq rejected this key.' : qs.usingGroqService ? 'Using the key from your Groq model service.' : qs.hasKey ? 'Key saved.' : 'No key yet, so quick answers are off. A free key is at console.groq.com.'}${qs.today && (qs.today.answered || qs.today.escalated || qs.today.failed) ? ` Today: ${qs.today.answered} answered${qs.today.answered ? ` (about ${qs.today.avgMs} ms each)` : ''}, ${qs.today.escalated} passed to your usual model, ${qs.today.failed} failed.` : ''}</div></div><input class="field" type="password" data-qkey autocomplete="off" aria-label="Groq key" placeholder="${qs.hasKey && !qs.usingGroqService ? 'Paste a new key to replace it' : 'Paste your Groq key'}" style="min-width:220px"><button class="btn" data-qsave>Save</button><button class="btn" data-qtest>Test</button></div>`);
+    const qnote = (t) => { $('[data-qstatus]', qrow).textContent = t; };
+    $('[data-qsave]', qrow).onclick = async () => { const r = await relay.quickAction('key', $('[data-qkey]', qrow).value); $('[data-qkey]', qrow).value = ''; qnote(r && r.error ? r.error : 'Key saved in macOS secure storage.'); };
+    $('[data-qtest]', qrow).onclick = async () => { qnote('Testing…'); const r = await relay.quickAction('test'); qnote(r && r.error ? r.error : `Works: an answer took ${r.ms} ms (${r.model}).`); };
+    quickCard.append(qrow);
+    const qmodels = [['llama-3.1-8b-instant', 'Llama 3.1 8B (fastest, 14,400 questions a day)'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B (smarter, about 1,000 a day)'], ['openai/gpt-oss-20b', 'GPT-OSS 20B (about 1,000 a day)']];
+    const mrow = h(`<div class="row"><div class="grow"><div class="t">Quick model</div><div class="d">The free-tier limits are Groq’s and can change.</div></div><div class="select"><span></span><select>${qmodels.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></div></div>`);
+    const msel = $('select', mrow); msel.value = qmodels.some(([v]) => v === S.settings.quick?.model) ? S.settings.quick.model : qmodels[0][0];
+    $('span', mrow).textContent = msel.options[msel.selectedIndex].text;
+    msel.onchange = () => relay.set('settings.quick.model', msel.value);
+    quickCard.append(mrow);
+    c.append(quickCard);
     if (Object.keys(S.flagList || {}).length) c.append(h('<div class="section-title">Experimental</div>'));
     const ex = h('<div class="card"></div>');
     for (const [name, f] of Object.entries(S.flagList || {})) {
