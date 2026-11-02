@@ -5,6 +5,7 @@ const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 
 function render(c) {
   root.replaceChildren();
+  root.classList.toggle('briefing',!!c.briefing);
   root.classList.toggle('weather', c.kind === 'weather');
   if (c.kind === 'weather') { renderWeather(c); menuToolbar(c); return; }
   root.classList.toggle('noimg', !(c.kind === 'entity' && c.image));
@@ -23,6 +24,7 @@ function render(c) {
   const body = mk('div', 'body');
   body.append(mk('h1', '', c.title));
   if (c.subtitle) body.append(mk('div', 'sub', c.subtitle));
+  if(c.briefing){renderBriefing(c,body);root.append(body);menuToolbar(c);return;}
   if (c.summary) body.append(mk('div', 'sum', c.summary));
   if (c.facts?.length) {
     const dl = mk('dl', 'facts');
@@ -52,6 +54,14 @@ function render(c) {
   }
   root.append(body);
   menuToolbar(c);
+}
+
+function renderBriefing(c,body){
+ const top=mk('div','briefing-overview'),d=c.dateTile||{},tile=mk('div','briefing-date');tile.setAttribute('aria-label',d.full||'Today');tile.append(mk('span','',d.weekday||''),mk('strong','',d.day||''),mk('small','',d.month||''));top.append(tile);
+ const w=c.briefingWeather;if(w){const weather=mk('div','briefing-weather'),reading=mk('div','briefing-reading');reading.append(mk('span','briefing-symbol',weatherSymbol(w.code)),mk('strong','',Number.isFinite(w.tempNow)?`${Math.round(w.tempNow)}°${w.units==='c'?'C':'F'}`:'—'));weather.append(reading,mk('b','',w.city||'Weather'),mk('span','',`${w.word||'Conditions unavailable'} · H ${w.high}° / L ${w.low}°`),mk('small','',Number.isFinite(w.rain)?`${w.rain}% rain`:'Rain unavailable'));top.append(weather);}else top.append(mk('div','briefing-weather','Today · '+(d.full||'')));
+ body.append(top);
+ for(const section of c.sections||[]){if(!section.bullets?.length)continue;const box=mk('section','briefing-section');box.append(mk('h2','',section.title));const ul=mk('ul','');for(const line of section.bullets)ul.append(mk('li','',line));box.append(ul);body.append(box);}
+ if(c.links?.length){const links=mk('div','links');for(const l of c.links){const b=mk('button','link',l.label);b.onclick=()=>relay.cardOpen(l.url);links.append(b);}body.append(links);}
 }
 
 function renderWeather(c) {

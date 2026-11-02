@@ -1529,7 +1529,7 @@ class AskController {
     if (close && !abort.signal.aborted) facts.tomorrow = await untilStopped(this.tomorrowCalendar(facts.now), abort.signal);
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
-    if (this.cardPanel && this.store.get('settings.cards') !== false) { try { await this.cardPanel.show({ ...require('./briefing').briefingCard(facts, plan), title: close ? 'Close the day' : 'Plan today' }); } catch { /* local reports remain available */ } }
+    if (this.cardPanel && this.store.get('settings.cards') !== false) { try { await this.cardPanel.show({ ...require('./briefing').briefingCard(facts, plan, {report:true}), title: close ? 'Close the day' : 'Plan today' }); } catch { /* local reports remain available */ } }
     let saved;
     try { saved = this.outputExport(close ? 'Close the day' : 'Plan today', plan); }
     catch {
@@ -3059,7 +3059,7 @@ class AskController {
   }
 
   // Said aloud in the chosen voice, outside a request (for things Relay brings up on its own).
-  speakText(text) { this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en' }); }
+  speakText(text, options = {}) { return this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en', ...options }); }
 
   // Keep the original answer available after acknowledging the copy.
   async copyLastReply() {

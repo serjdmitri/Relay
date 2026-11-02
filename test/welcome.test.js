@@ -138,3 +138,13 @@ test('plain wording for long absences and a meeting later today', () => {
   const w = buildWelcome({ lockedAt: T - 20 * MIN, now: T, events: [{ title: 'Lab', start: T + 2 * 3600e3 }] });
   assert.match(w.spoken, /Next up: Lab at 2 PM\./);
 });
+
+test('unlock begins greeting before a slow briefing and waits for it before details',async()=>{
+ const {deliverInStages}=require('../src/main/welcome');const order=[];let release,voiceDone;
+ const pending=deliverInStages({canDeliver:()=>true,begin:()=>{order.push('greeting');return new Promise(r=>voiceDone=r);},collect:()=>{order.push('checking');return new Promise(r=>release=r);},finish:()=>order.push('details')});
+ assert.deepEqual(order,['greeting','checking']);release({});await new Promise(r=>setImmediate(r));assert(!order.includes('details'));voiceDone();assert.equal(await pending,true);assert.deepEqual(order,['greeting','checking','details']);
+});
+test('a newly locked or busy Mac receives no late briefing',async()=>{
+ const {deliverInStages}=require('../src/main/welcome');let allowed=true,release,finished=false;
+ const pending=deliverInStages({canDeliver:()=>allowed,begin:()=>{},collect:()=>new Promise(r=>release=r),finish:()=>{finished=true;}});allowed=false;release({});await pending;assert.equal(finished,false);
+});
