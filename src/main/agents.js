@@ -6,6 +6,8 @@ const crypto = require('crypto');
 
 const MAX_RUNNING = 3;
 const LINGER_MS = 15000; // a finished agent stays on screen this long, then goes
+const MAX_QUEUE = 10; // jobs waiting for a free slot (the dashboard queues; saying "start an agent" still refuses at the limit)
+const MAX_HISTORY = 20; // finished agents the dashboard keeps for review, this session only
 
 const cut = (s, n) => (String(s).length > n ? `${String(s).slice(0, n - 1).trimEnd()}…` : String(s));
 
@@ -19,6 +21,8 @@ class AgentManager {
     this.now = now;
     this.setTimer = setTimer;
     this.items = [];
+    this.queue = [];
+    this.history = [];
   }
 
   running() {
@@ -26,10 +30,10 @@ class AgentManager {
   }
 
   // Starts an agent, or returns null when the limit is reached.
-  start(task) {
+  start(task, id = crypto.randomUUID()) {
     if (this.running().length >= this.max) return null;
     const ac = new AbortController();
-    const a = { id: crypto.randomUUID(), task: String(task).trim(), status: 'running', step: 'Starting', steps: 0, startedAt: this.now(), result: '', ac, stopped: false };
+    const a = { id, task: String(task).trim(), status: 'running', step: 'Starting', steps: 0, startedAt: this.now(), result: '', ac, stopped: false };
     this.items.push(a);
     this.onChange();
     Promise.resolve()
@@ -51,17 +55,66 @@ class AgentManager {
     a.status = a.stopped ? 'stopped' : r.status === 'done' ? 'done' : 'failed';
     a.result = String(r.reply || '');
     a.endedAt = this.now();
+    this.history.unshift({ id: a.id, task: a.task, status: a.status, steps: a.steps, startedAt: a.startedAt, endedAt: a.endedAt, result: String(a.result).slice(0, 8000) });
+    this.history = this.history.slice(0, MAX_HISTORY);
     this.onChange();
     this.onFinish(a);
     this.setTimer(() => { this.items = this.items.filter((x) => x !== a); this.onChange(); }, this.linger);
+    this._startNext();
+  }
+
+  // A slot freed up: the job that has waited longest starts.
+  _startNext() {
+    while (this.queue.length && this.running().length < this.max) {
+      const q = this.queue.shift();
+      if (!this.start(q.task, q.id)) { this.queue.unshift(q); break; }
+    }
+    this.onChange();
+  }
+
+  // For the dashboard: start now if there is a free slot, otherwise wait in line. Returns { started | queued, id } or { error }.
+  submit(task) {
+    const text = String(task || '').trim();
+    if (text.length < 4) return { error: 'Tell me what the job should do.' };
+    const a = this.start(text);
+    if (a) return { started: true, id: a.id };
+    if (this.queue.length >= MAX_QUEUE) return { error: `${MAX_QUEUE} jobs are already waiting. Let some finish first.` };
+    const q = { id: crypto.randomUUID(), task: text, at: this.now() };
+    this.queue.push(q);
+    this.onChange();
+    return { queued: true, id: q.id, position: this.queue.length };
+  }
+
+  // Cancel one job by its id: a running one is stopped, a waiting one is dropped. Returns 'running', 'queued' or null.
+  cancel(id) {
+    const q = this.queue.findIndex((x) => x.id === id);
+    if (q >= 0) { this.queue.splice(q, 1); this.onChange(); return 'queued'; }
+    const a = this.running().find((x) => x.id === id);
+    if (a && !a.stopped) { a.stopped = true; a.ac.abort(); return 'running'; }
+    return null;
+  }
+
+  clearFinished() { const n = this.history.length; this.history = []; this.onChange(); return n; }
+
+  // Everything the dashboard shows.
+  snapshot() {
+    return {
+      max: this.max, maxQueue: MAX_QUEUE, now: this.now(),
+      running: this.running().map((a) => ({ id: a.id, task: a.task, step: a.step, steps: a.steps, startedAt: a.startedAt, stopping: !!a.stopped })),
+      queued: this.queue.map((q, i) => ({ id: q.id, task: q.task, position: i + 1, waitingSince: q.at })),
+      finished: this.history.map((h) => ({ ...h }))
+    };
   }
 
   // Stops the agents whose task has all of these words (all running ones with no query). Returns how many.
   stop(query = '') {
     const words = String(query).toLowerCase().split(/\s+/).filter(Boolean);
     const hit = this.running().filter((a) => !a.stopped && words.every((w) => a.task.toLowerCase().includes(w)));
+    // Waiting jobs that match are dropped first, so a freed slot does not start one the person just asked to stop.
+    const waiting = this.queue.filter((q) => words.every((w) => q.task.toLowerCase().includes(w)));
+    if (waiting.length) { this.queue = this.queue.filter((q) => !waiting.includes(q)); this.onChange(); }
     for (const a of hit) { a.stopped = true; a.ac.abort(); }
-    return hit.length;
+    return hit.length + waiting.length;
   }
 
   // What the screen shows.
@@ -71,6 +124,12 @@ class AgentManager {
 }
 
 const PREFIX = String.raw`^(?:(?:hey |ok |okay )?(?:relay|jarvis)[, ]+)?(?:please )?`;
+
+// "agents dashboard", "open the agent manager": the window with every agent, a queue and cancel buttons. ("what are my agents doing" stays a spoken answer.)
+function parseAgentsDashboardCommand(text) {
+  const n = String(text || '').trim().replace(/[“”"]/g, '').replace(/[.!?]+$/, '').replace(/^(?:hey |ok |okay )?(?:relay|jarvis)[, ]+/i, '').replace(/^please /i, '').replace(/\s+/g, ' ').toLowerCase();
+  return /^(?:open|show|bring up|pull up|display)(?: me)?(?: my| the| all my)? (?:background )?(?:agents?|jobs?) (?:dashboard|window|board|manager|panel|list)$/.test(n) || /^(?:agents?|jobs?) (?:dashboard|manager|board)$/.test(n) || /^open (?:all )?(?:my )?agents$/.test(n);
+}
 
 // "In the background, research the best headphones and save it in a note", "start an agent to …", "what are my agents doing",
 // "stop all agents". A request that merely ends with "in the background" ("play jazz in the background") is not one.
@@ -84,4 +143,4 @@ function parseAgentCommand(text) {
   return null;
 }
 
-module.exports = { AgentManager, parseAgentCommand, MAX_RUNNING, LINGER_MS };
+module.exports = { AgentManager, parseAgentCommand, parseAgentsDashboardCommand, MAX_RUNNING, LINGER_MS, MAX_QUEUE, MAX_HISTORY };

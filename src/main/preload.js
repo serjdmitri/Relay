@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('relay', {
   securityAction: (action) => invoke('security:action', action),
   prioritiesAction: (action, id) => invoke('priorities:action', action, id),
   assignmentsAction: (action) => invoke('assignments:action', action),
+  agentsAction: (action, value) => invoke('agents:action', action, value),
   storageAction: (action, value) => invoke('storage:action', action, value),
   previewFiles: id => invoke('files:preview', id),
   applyFiles: id => invoke('files:apply', id),

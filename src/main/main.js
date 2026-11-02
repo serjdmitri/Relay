@@ -14,6 +14,7 @@ const { NetworkWindow } = require('./networkWindow');
 const { SecurityWindow } = require('./securityWindow');
 const { PrioritiesWindow } = require('./prioritiesWindow');
 const { AssignmentsWindow } = require('./assignmentsWindow');
+const { AgentsWindow } = require('./agentsWindow');
 const overnightMod = require('./overnight');
 const { gatherFacts } = require('./auditFacts');
 const securityAudit = require('./securityAudit');
@@ -87,7 +88,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let fitnessPanel, callService, assignmentsPanel, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let fitnessPanel, callService, assignmentsPanel, agentsPanel, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -506,6 +507,8 @@ function registerIpc() {
     cache: { get: () => store.get('schoolCache') || null, set: (v) => { store.set('schoolCache', v); } },
     openSource: () => require('./school').openSchoolPage(bridge, store.get('settings.briefing.schoolUrl'))
   });
+  agentsPanel = new AgentsWindow({ motion: floatingMotion, agents: ask.agents, start: (task) => { const r = ask.agents.submit(task); if (r.started) ask.sound?.('Tink'); return r; } });
+  ask.openAgentsDashboard = () => { agentsPanel.open(); return { status: 'done', reply: 'Your agents dashboard is open, Sir. Type several jobs, one per line, to run them together; you can cancel any of them from there.', actions: 1 }; };
   ask.openAssignments = () => { assignmentsPanel.open(); return { status: 'done', reply: 'Your assignment dashboard is open, Sir. It shows the last school check; press Refresh to read the page again.', actions: 1 }; };
   ask.securityWatchSet = (on) => { store.set('settings.securityWatch.enabled', !!on); return on ? 'Security warnings are on. I will tell you when something new needs attention.' : 'Security warnings are off. You can still ask me for a security audit.'; };
   ask.openStorageMap = () => { storagePanel.open({ scan: true }); return { status: 'done', reply: 'Your interactive storage map is open, Sir.', actions: 1 }; };
@@ -1291,6 +1294,7 @@ app.whenReady().then(() => {
       const security = securityPanel?.handTarget(pt); if (security) return security;
       const priorities = prioritiesPanel?.handTarget(pt); if (priorities) return priorities;
       const assignments = assignmentsPanel?.handTarget(pt); if (assignments) return assignments;
+      const agentsDash = agentsPanel?.handTarget(pt); if (agentsDash) return agentsDash;
       const storage = storagePanel?.handTarget(pt); if (storage) return storage;
       const panel = panelWins?.handTarget(pt);
       if (panel) {
