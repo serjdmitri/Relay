@@ -42,3 +42,18 @@ test('school errors tell the user what prevented the check', () => {
   assert.match(schoolProblem('extract-failed'), /could not reliably identify/i);
   assert.match(schoolProblem('timeout'), /took too long/);
 });
+
+test('school connection opens or activates only the validated assignment center',async()=>{
+ const {openSchoolPage}=require('../src/main/school'),seen=[];const b={isConnected:()=>true,call:async(m,args)=>{seen.push([m,args]);return m==='tabs.list'?[{id:7,url}]:{};}};await openSchoolPage(b,url);assert.deepEqual(seen.at(-1),['tabs.activate',{id:7}]);await assert.rejects(openSchoolPage(b,'https://evil.test/login'));assert.equal(seen.length,2);
+});
+test('shared assignment checks cancel and time out without sending a late page to a model',async()=>{
+ const {checkSchoolAssignments}=require('../src/main/school');let asks=0;
+ const b={isConnected:()=>true,call:async method=>{await new Promise(r=>setTimeout(r,15));return method==='tabs.list'?[{id:7,url}]:{url,text:'Essay due Friday'};}};
+ const result=await checkSchoolAssignments(b,url,async()=>{asks++;return'[]';},{timeoutMs:5});assert.match(result.problem,/too long/);await new Promise(r=>setTimeout(r,50));assert.equal(asks,0);
+ const cancelled=await checkSchoolAssignments(b,url,()=>assert.fail(),{signal:AbortSignal.abort()});assert.match(cancelled.problem,/cancelled/);
+});
+test('school results retain the source and checked time; voice matches preserve action requests',async()=>{
+ const {checkSchoolAssignments,parseSchoolCommand}=require('../src/main/school');const b={isConnected:()=>true,call:async m=>m==='tabs.list'?[{id:7,url}]:{url,text:'Essay due Friday'}};
+ const result=await checkSchoolAssignments(b,url,async()=>'[{"title":"Essay","due":"Friday"}]');assert.equal(result.sourceUrl,url);assert.ok(result.checkedAt);assert.equal(result.assignments[0].title,'Essay');
+ for(const s of ['check my assignments','show my school assignments','what assignments are left']){assert.equal(parseSchoolCommand(s),true,s);}assert.equal(parseSchoolCommand('delete my assignments'),false);assert.equal(parseSchoolCommand('submit my homework'),false);
+});

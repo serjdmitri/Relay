@@ -19,3 +19,11 @@ Create a public Notion connection in its developer portal and register `http://1
 Notion access/refresh tokens are encrypted, rotated on refresh and never sent to the renderer. Token renewal is shared between concurrent requests and cancelled if the connection changed. Existing internal integration tokens remain supported under Advanced. Check connection reads only the bot/workspace identity; actual page access depends on pages selected/shared and app capabilities. Disconnect removes local access but does not claim to revoke the provider’s grant: remove Relay in Notion too if you want to revoke it there.
 
 Selecting local/private mode cancels pending browser sign-ins and removes cloud connector tools. A completed callback after cancellation cannot save a new connection. Real Notion public-app registration, browser consent and granted page access remain unverified without the user’s app credentials.
+
+## School / Blackbaud
+
+Under School, save the HTTPS `myschoolapp.com/lms-assignment/assignment-center/student` link, then click **Connect school**. Relay opens or activates that assignment center in Firefox. Sign in using the school's own login there, with the Relay Firefox extension connected. Passwords are not collected by Relay, and no school API/admin privileges are assumed.
+
+**Check connection** verifies only that the matching page can be read. **Show assignments** (or “check my assignments”) uses the selected model without tools to extract visible incomplete assignments, accepting only literal titles and dates from the source. The card links to the school page and identifies the check time. It does not claim that filters, pagination, or unloaded assignments were checked. Briefings and Plan today reuse the same check. Missing login/browser/page, invalid extraction, cancellation, provider changes and timeouts are reported instead of being treated as an empty list. Page text is not sent after an abandoned browser read finishes late.
+
+Real Blackbaud completeness and sign-in remain for the user's school account to verify. Tests use fixture pages and do not submit or edit school work.

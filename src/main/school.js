@@ -51,6 +51,27 @@ async function extractSchoolAssignments(text, ask) {
   return found;
 }
 
+// Shared by manual checks and briefings; cancellation never becomes an empty result.
+async function checkSchoolAssignments(bridge,value,ask,{signal,stillCurrent=()=>true,timeoutMs=15000,now=Date.now}={}){
+ let timer;const checkedAt=new Date(now()).toISOString();let active=true;const stopped=()=>!active||signal?.aborted||!stillCurrent();
+ const work=async()=>{
+  if(stopped())return{problem:'School assignment check cancelled.'};
+  const page=await readSchoolPage(bridge,value);if(!page.ok)return{problem:schoolProblem(page.reason)};
+  if(stopped())return{problem:!stillCurrent()?'The selected model changed while reading school assignments. Run the check again.':'School assignment check stopped before sending the page to a model.'};
+  const assignments=await extractSchoolAssignments(page.text,(prompt,system)=>{if(stopped())throw Error('cancelled');return ask(prompt,system);});
+  if(stopped())return{problem:'School assignment check cancelled.'};
+  return assignments?{assignments,truncated:page.truncated||assignments.length===20,sourceUrl:schoolUrl(value).href,checkedAt}:{problem:schoolProblem('extract-failed')};
+ };
+ try{return await Promise.race([work().then(result=>active?result:{problem:schoolProblem('timeout')}),new Promise(resolve=>{timer=setTimeout(()=>{active=false;resolve({problem:schoolProblem('timeout')});},timeoutMs);})]);}finally{active=false;clearTimeout(timer);}
+}
+function parseSchoolCommand(text){return /^(?:what|which) (?:school )?(?:assignments|homework) (?:are |do i have )?(?:left|due|remaining)[.!?]*$/i.test(String(text||'').trim())||/^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?(?:(?:show|check|list|read)(?: me)? (?:my |the )?(?:school )?(?:assignments|homework|school deadlines)|(?:what(?:'s| is| are)|whats) (?:my |the )?(?:homework|school assignments|assignments)(?: left| due| remaining)?)[.!?]*$/i.test(String(text||'').trim());}
+async function openSchoolPage(bridge,value){
+ const target=schoolUrl(value);if(!target)throw Error(schoolProblem('invalid-url'));if(!bridge?.isConnected())throw Error(schoolProblem('browser-disconnected'));
+ const tabs=await bridge.call('tabs.list',{},5000);const tab=(Array.isArray(tabs)?tabs:[]).find(t=>{try{const u=new URL(t.url);return u.origin===target.origin&&u.pathname===target.pathname;}catch{return false;}});
+ if(tab&&Number.isInteger(tab.id))await bridge.call('tabs.activate',{id:tab.id},5000);else await bridge.call('tabs.open',{url:target.href},5000);
+ return{ok:true,message:'School page opened in Firefox. Sign in there, then check assignments in Relay.'};
+}
+
 function schoolProblem(reason) {
   return ({
     'invalid-url': 'The school assignment link in General settings is invalid. Use the HTTPS assignment-center link.',
@@ -64,4 +85,4 @@ function schoolProblem(reason) {
   })[reason] || 'I could not check school assignments. Check the school page directly.';
 }
 
-module.exports = { schoolUrl, readSchoolPage, extractSchoolAssignments, schoolProblem };
+module.exports = { checkSchoolAssignments, parseSchoolCommand, openSchoolPage, schoolUrl, readSchoolPage, extractSchoolAssignments, schoolProblem };
