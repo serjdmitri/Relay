@@ -6,7 +6,7 @@ import * as THREE from './vendor/three/three.module.min.js';
 import { STLLoader } from './vendor/three/STLLoader.js';
 import { GLTFLoader } from './vendor/three/GLTFLoader.js';
 import { GLTFExporter } from './vendor/three/GLTFExporter.js';
-import { splitTriangles, splitSurface, explodeOffsets, placeItems } from './holo-parts.js';
+import { splitTriangles, explodeOffsets, placeItems } from './holo-parts.js';
 import { CadView } from './holo-cad.js';
 import * as S from './holo-cad-spec.js';
 import { toStl, to3mf, toStep, zUp, printCheck } from './holo-export.js';
@@ -224,62 +224,11 @@ let hovered = null;
 
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 
-// One colour per triangle (r, g, b in 0..1), read from the texture at the triangle's UV middle, or from vertex colours, or the flat material colour.
-function triangleColors(mesh) {
-  const geo = mesh.geometry;
-  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  const index = geo.index ? geo.index.array : null;
-  const nt = index ? Math.floor(index.length / 3) : Math.floor(geo.attributes.position.count / 3);
-  const out = new Float32Array(nt * 3);
-  const corner = (t, k) => (index ? index[t * 3 + k] : t * 3 + k);
-  const vc = geo.attributes.color;
-  const uv = geo.attributes.uv;
-  const img = mat?.map?.image;
-  if (uv && img && (img.width || img.naturalWidth)) {
-    try {
-      const w0 = img.width || img.naturalWidth, h0 = img.height || img.naturalHeight;
-      const k = Math.min(1, 512 / Math.max(w0, h0));
-      const w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
-      const cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      const ctx = cv.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(img, 0, 0, w, h);
-      const px = ctx.getImageData(0, 0, w, h).data;
-      const flip = mat.map.flipY; // glTF textures are not flipped, three's default ones are
-      for (let t = 0; t < nt; t++) {
-        let u = 0, v = 0;
-        for (let c = 0; c < 3; c++) { u += uv.getX(corner(t, c)); v += uv.getY(corner(t, c)); }
-        u = (u / 3) % 1; v = (v / 3) % 1;
-        if (u < 0) u += 1;
-        if (v < 0) v += 1;
-        const x = Math.min(w - 1, Math.floor(u * w)), y = Math.min(h - 1, Math.floor((flip ? 1 - v : v) * h));
-        const o = (y * w + x) * 4;
-        out[t * 3] = px[o] / 255; out[t * 3 + 1] = px[o + 1] / 255; out[t * 3 + 2] = px[o + 2] / 255;
-      }
-      return out;
-    } catch { /* a tainted or closed image: fall through to the other sources */ }
-  }
-  if (vc) {
-    for (let t = 0; t < nt; t++) {
-      let r = 0, g = 0, b = 0;
-      for (let c = 0; c < 3; c++) { const i = corner(t, c); r += vc.getX(i); g += vc.getY(i); b += vc.getZ(i); }
-      out[t * 3] = r / 3; out[t * 3 + 1] = g / 3; out[t * 3 + 2] = b / 3;
-    }
-    return out;
-  }
-  return null; // flat colour: only creases will cut
-}
-
 // A solid model has nothing to pull apart along, so it is cut into regions; a model made of several bodies splits along them.
 function splitMesh(mesh) {
   const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
   const pos = geo.attributes.position.array;
-  let res = splitTriangles(pos, { regions: 5 });
-  // one solid skin (a model made from a photo): cut it along its creases and colours first, which gives wheels, doors and glass instead of slices
-  if (!res || res.kind === 'regions') {
-    const cut = splitSurface({ positions: mesh.geometry.attributes.position.array, index: mesh.geometry.index ? mesh.geometry.index.array : null, colors: triangleColors(mesh) });
-    if (cut && cut.groups.length >= 3) res = cut;
-  }
+  const res = splitTriangles(pos, { regions: 5 });
   if (!res) return null;
   const nor = geo.attributes.normal?.array;
   const uv = geo.attributes.uv?.array;
@@ -318,7 +267,7 @@ function collectParts() {
         parent.remove(meshes[0]);
         sp.meshes.forEach((m) => parent.add(m));
         pieces = sp.meshes;
-        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : sp.kind === 'surface' ? 'one solid piece, cut along its creases and colours' : '';
+        hintText = sp.kind === 'regions' ? 'one solid piece, cut into regions' : '';
       }
     }
     if (ud.edges) ud.edges.visible = false;
@@ -350,6 +299,40 @@ function setBoost(part, v) {
 }
 function setHover(p) { if (hovered && hovered !== selected) setBoost(hovered, 0); hovered = p; if (p && p !== selected) setBoost(p, 0.55); }
 function select(p) { if (selected) setBoost(selected, 0); selected = p; if (p) setBoost(p, 1); }
+
+// ---------- a short video of it coming apart and going back together (saved like a model file) ----------
+let tap = null; // what to do with the picture right after it is drawn (the recorder copies it then)
+let recording = false;
+async function recordVideo() {
+  if (recording) return null;
+  if (!parts.length) collectParts();
+  if (parts.length < 2) { $('err').textContent = 'That one is too detailed to pull apart.'; setTimeout(() => { $('err').textContent = ''; }, 2500); return null; }
+  recording = true;
+  $('video').classList.add('on');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const W = 960, H = 720, dpr = renderer.getPixelRatio();
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const g = out.getContext('2d');
+  const side = Math.min(innerHeight, Math.max(520, 2 * (150 * userScale + 40) * 2));
+  const sx = Math.max(0, Math.min(innerWidth - side, pos.x - side / 2)), sy = Math.max(0, Math.min(innerHeight - side, pos.y - side / 2));
+  tap = () => { g.fillStyle = '#0b1118'; g.fillRect(0, 0, W, H); g.drawImage(cv, sx * dpr, sy * dpr, side * dpr, side * dpr, 0, 0, W, H); };
+  const mime = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m));
+  const rec = new MediaRecorder(out.captureStream(30), { mimeType: mime, videoBitsPerSecond: 6e6 });
+  const chunks = [];
+  rec.ondataavailable = (e) => chunks.push(e.data);
+  const stopped = new Promise((r) => { rec.onstop = r; });
+  try {
+    if (exploded) { toggleExplode(); await sleep(1000); }
+    rec.start();
+    await sleep(700); toggleExplode(); await sleep(2400); toggleExplode(); await sleep(1500);
+    rec.stop(); await stopped;
+    const bytes = new Uint8Array(await new Blob(chunks, { type: mime }).arrayBuffer());
+    const r = await relay.holoSave({ name: `${$('title').textContent || 'hologram'} pulled apart`, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm', bytes });
+    $('err').textContent = r?.ok ? `Saved to ${r.where}` : (r?.error || 'Could not save the video.');
+    return { bytes: bytes.length, mime };
+  } finally { tap = null; recording = false; $('video').classList.remove('on'); setTimeout(() => { $('err').textContent = ''; }, 5000); }
+}
+$('video').onclick = () => { document.body.classList.remove('menu-open'); recordVideo(); };
 
 function toggleExplode() {
   if (!exploded) {
@@ -1232,6 +1215,7 @@ function frame(now) {
   placeNotes();
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   renderer.render(scene, camera);
+  if (tap) tap();
   requestAnimationFrame(frame);
 }
 // A hook for the real-window tests: where each piece is on screen, and the state of the pull-apart. Nothing here changes anything.
@@ -1240,6 +1224,7 @@ window.__holoTest = {
   where: (i) => { const p = parts[i]; if (!p) return null; const c = new THREE.Box3().setFromObject(p.obj).getCenter(new THREE.Vector3()).project(camera); return { x: (c.x + 1) / 2 * innerWidth, y: (1 - c.y) / 2 * innerHeight }; },
   fps: () => fps,
   scale: () => userScale,
+  record: () => recordVideo(),
   measureAt: (x, y) => { if (!measuring) setMeasure(true); return measureClick({ clientX: x, clientY: y }); },
   measureOff: () => setMeasure(false),
   measureState: () => measureState(),

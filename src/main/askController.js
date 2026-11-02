@@ -46,7 +46,7 @@ const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord } = require('./wake');
 const { BargeIn } = require('./barge');
-const { shouldFollowUp, followUpAnswer, spokenReply } = require('./conversation');
+const { shouldFollowUp, followUpAnswer, spokenReply, mayCloseAnswer } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
@@ -1541,9 +1541,7 @@ class AskController {
       const cfg = this.store.get('settings.followUp') || {};
       const ok = this.followFor && shouldFollowUp({ enabled: cfg.enabled !== false && !this.meeting?.active, byVoice: this.voiceAsk, state: this.state, speaking: !!this.speaker?.speaking, suspended: this.suspended, chain: this.quiz || this.checklist ? 0 : this.followChain });
       if (!ok) {
-        // Speech may still be playing; its completion will retry. Otherwise
-        // there is no follow-up to wait for, so do not keep the HUD alive.
-        if (!this.speaker?.speaking) this.followFor = null;
+        if (!this.speaker?.speaking) { this.followFor = null; this.closeDoneWhenReady(); }
         return;
       }
       this.followFor = null;
@@ -1553,7 +1551,7 @@ class AskController {
 
   closeDoneWhenReady() {
     if (this.state !== 'done' || this.holdAnswer || this.holdForHolos) return;
-    if (this.followFor || this.speaker?.speaking) {
+    if (!mayCloseAnswer({ state: this.state, speaking: !!this.speaker?.speaking, followPending: !!this.followFor })) {
       this.doneTimer = setTimeout(() => this.closeDoneWhenReady(), 500);
       this.doneTimer.unref?.();
       return;
@@ -3053,6 +3051,13 @@ class AskController {
       return { ...r, reply: `Claude and Codex are both out of usage right now. Claude should be back around ${when}.` };
     }
     return { ...r, reply: r.status === 'stopped' ? r.reply : `Using Codex because Claude reached its usage limit. ${r.reply || ''}`.trim(), model: 'codex' };
+  }
+
+  // The phone page answers the question the Mac is asking: the first answer wins (pendingConfirm clears itself).
+  remoteConfirm(yes) {
+    if (!this.pendingConfirm) return false;
+    this.pendingConfirm(!!yes);
+    return true;
   }
 
   askConfirm(q) {

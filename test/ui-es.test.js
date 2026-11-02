@@ -40,3 +40,7 @@ test('the words the window really uses are covered: the sidebar, every toggle ti
   assert.deepEqual(tray.filter((t) => !(t in ES) && !/\$\{/.test(t)), [], 'menu bar items without a Spanish version');
   assert.ok(Object.values(ES).every((v) => typeof v === 'string' && v.length && !/—/.test(v)));
 });
+
+test('the labels of the newest settings are in Spanish', () => {
+  for (const [en, es] of [['Watch folders', 'Vigilar carpetas'], ['Add a folder', 'Añadir una carpeta'], ['Clear', 'Borrar'], ['What changed', 'Qué cambió'], ['When a question is not answered', 'Cuando una pregunta no se responde'], ['Run now', 'Ejecutar ahora'], ['Drop', 'Descartar'], ['Better page control', 'Mejor control de páginas'], ['Holograms and hands', 'Hologramas y manos'], ['Startup', 'Arranque'], ['Privacy', 'Privacidad']]) assert.equal(translate(en, 'es'), es, en);
+});

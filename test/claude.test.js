@@ -293,3 +293,9 @@ test('the system prompt: fast mode does not ask for a re-check after every actio
   assert.match(fast, /Be quick/);
   for (const p of [fast, slow]) assert.match(p, /together in one step/);
 });
+
+test('the prompt tells the model how to compare two things in 3D: the first, then the second added next to it', () => {
+  const { buildSystemPrompt } = require('../src/main/agent/system-prompt');
+  const p = buildSystemPrompt({ withContext: false });
+  assert.match(p, /compare[^.]*show_3d[^.]*combine[^.]*next to it/i);
+});

@@ -196,3 +196,7 @@ body.kbopen main { visibility: hidden; } /* nothing from the page shows through 
 #volume::-moz-range-progress { height: 5px; border-radius: 3px; background: #fff; }
 #volume::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; }
 @media (orientation: landscape) { #vol { padding-top: 2px; } #vol button { width: 30px; height: 30px; } #volume { height: 22px; } }
+
+#ask { text-align: center; padding: 6px 2px; font-size: 15px; color: #d8f8ff; }
+#ask button { margin: 4px 4px 0; padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(0, 212, 255, .5); background: rgba(0, 30, 50, .7); color: #eef6fb; font-size: 15px; font-weight: 600; }
+#askyes { background: #4cc2ff; color: #04121c; }
