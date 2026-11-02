@@ -7,27 +7,10 @@
 <title>Access denied</title>
 <link rel="stylesheet" href="intruder.css">
 </head>
-<body>
-<!-- The "this is not your computer" screen: shown over every display while a face that is not yours is in front of the camera and you are not. -->
+<body class="alarm">
+<!-- Two screens over a blurred desktop, one reactor: ALARM (red: a face that is not yours is here, with a countdown to the lock) and AWAY (blue: you stepped away, standing by until you are back). -->
 <main id="wrap" role="alert" aria-live="assertive">
-  <div id="reactor" aria-hidden="true">
-    <svg viewBox="-100 -100 200 200" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <radialGradient id="core" r="60%"><stop offset="0" stop-color="#fff2f0"/><stop offset=".35" stop-color="#ff6a5c"/><stop offset="1" stop-color="#8a0d0d" stop-opacity="0"/></radialGradient>
-        <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>
-      <g filter="url(#glow)" fill="none" stroke="#ff3b30">
-        <circle class="spin slow" r="94" stroke-width="1.2" stroke-dasharray="2 7"/>
-        <circle class="spin rev" r="86" stroke-width="3" stroke-dasharray="26 9 4 9"/>
-        <circle r="74" stroke-width="1" opacity=".7"/>
-        <g class="spin mid" stroke-width="2"><circle r="64" stroke-dasharray="40 14"/></g>
-        <g id="coil" stroke-width="5" stroke-linecap="round"></g>
-        <circle r="38" stroke-width="2.4"/>
-        <polygon class="pulse" points="0,-27 23.4,13.5 -23.4,13.5" stroke-width="3" fill="rgba(255,59,48,.18)"/>
-      </g>
-      <circle class="pulse" r="22" fill="url(#core)"/>
-    </svg>
-  </div>
+  <canvas id="reactor" aria-hidden="true"></canvas>
   <h1 id="line1">THIS IS NOT YOUR COMPUTER</h1>
   <h2 id="line2">ACCESS DENIED</h2>
   <p id="count" aria-live="off"></p>
