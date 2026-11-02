@@ -89,7 +89,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -552,7 +552,10 @@ function registerIpc() {
     broadcast();
     return { ok: true };
   });
+  modeActions=new(require('./workModes').WorkModeActions)({store,openApp:name=>ask.mac.openApp(name),queueRoutine:r=>ask.enqueue('run '+r.name,{}),onChange:()=>{ask.dropWarm(true);broadcast();}});
+  ask.applyWorkMode=mode=>modeActions.apply(mode);
   ipcMain.handle('state:set', (_e, key, value) => {
+    if(key==='settings.workMode'){if(_e.sender!==mainWin?.webContents)throw Error('Open General settings first.');return modeActions.apply(value);}
     if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
     if (key === 'settings.model.provider' && value === 'ollama') { googleConnections.cancel(); notionConnection.cancel(); }
     if (key === 'settings.calls' || key.startsWith('settings.calls.')) throw Error('Use Calls settings to change calling permissions.');
