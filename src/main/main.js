@@ -604,7 +604,7 @@ function registerIpc() {
   ipcMain.handle('voice:preview', (_e, voice, rate) => speaker.speak('Hi, this is how I will sound when I answer you.', profileFor('reply', { ...(store.get('settings') || {}), voice, voiceRate: rate })));
   ipcMain.handle('app:open-link', (_e, url) => {
     // Only the key and voice pages of the voice providers; nothing a page could choose.
-    if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io)\//.test(String(url))) shell.openExternal(String(url));
+    if (/^https:\/\/(platform\.openai\.com|elevenlabs\.io|aistudio\.google\.com)\//.test(String(url))) shell.openExternal(String(url));
   });
   ipcMain.handle('window:focus-main', async (event) => {
     if (!mainWin || mainWin.isDestroyed() || event.sender !== mainWin.webContents) return;

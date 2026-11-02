@@ -166,6 +166,8 @@ test('stop settles playback even if an audio subprocess never emits exit', async
   const speaker=new Spk({spawnFn:()=>child,setTimer:()=>1,clearTimer:()=>{cleared=true;}});
   const playing=speaker.play('fixture.wav',speaker.token);speaker.stop();await playing;
   assert.equal(killed,true);assert.equal(cleared,true);assert.equal(speaker.speaking,false);
+});
+
 test('an online voice that fails is skipped for the next replies instead of failing every sentence', async () => {
   const { Speaker } = require('../src/main/voice');
   const spoke = [];
