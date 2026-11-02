@@ -1157,6 +1157,10 @@ const PAGES = {
     sel.onchange = () => relay.set('settings.doctor.fix', sel.value);
     c.append(fm);
 
+    c.append(h('<div class="section-title">Security warnings</div>'));
+    const securityCard = h('<div class="card"></div>');
+    securityCard.append(toggleRow('Warn me about new security problems', 'Relay checks this Mac in the background and tells you about anything new that is Medium or worse, even if you did not ask. Say “security audit” to see everything.', 'settings.securityWatch.enabled'));
+    c.append(securityCard);
     if (Object.keys(S.flagList || {}).length) c.append(h('<div class="section-title">Experimental</div>'));
     const ex = h('<div class="card"></div>');
     for (const [name, f] of Object.entries(S.flagList || {})) {

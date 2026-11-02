@@ -69,6 +69,7 @@ const { parseStudyCommand, quizPrompt, Quiz } = require('./study');
 const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain');
 const { parseDoctorCommand } = require('./doctor');
 const { parseAuditCommand, parseWatchCommand } = require('./securityAudit');
+const { parsePrioritiesCommand } = require('./priorities');
 const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
 const { ConfirmHub } = require('./confirmHub');
@@ -1982,6 +1983,7 @@ class AskController {
         if (!opts.shown && !opts.scheduled) {
           if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }
+          if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
           const menus = require('./menuIntent').menuRequests(effective);
           if (menus.length) {

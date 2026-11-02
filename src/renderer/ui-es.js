@@ -37,6 +37,7 @@
     'Learned about you': 'Lo que Relay notó de ti', 'Lessons from your corrections': 'Lecciones de tus correcciones', Approve: 'Aprobar', 'Smarter memory': 'Memoria más inteligente', 'in use': 'en uso',
     Plugins: 'Complementos', 'Look at it': 'Revisarlo', 'Approve and install': 'Aprobar e instalar', 'Approve update': 'Aprobar actualización', Cancel: 'Cancelar', Remove: 'Quitar', 'Check for update': 'Buscar actualización', 'Command Relay by text': 'Controlar Relay por mensaje', 'Show code': 'Mostrar código', Unpair: 'Desemparejar',
     'Ask my notes': 'Preguntar a mis notas', 'Add a folder': 'Añadir una carpeta', 'Index now': 'Indexar ahora', Update: 'Actualizar', 'Live panels': 'Paneles en vivo',
+    'Security warnings': 'Avisos de seguridad', 'Warn me about new security problems': 'Avisarme de nuevos problemas de seguridad',
     'Speak up on its own': 'Hablar por iniciativa propia', 'Offline mode': 'Modo sin conexión', 'Quiet hours': 'Horas de silencio', 'How loud': 'Qué tan alto',
     'Faster answers': 'Respuestas más rápidas',
     'Move app windows and tabs with hands': 'Mover ventanas y pestañas con las manos',
