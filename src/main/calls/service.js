@@ -33,12 +33,12 @@ class Calls {
     for(const [k,min,max]of [['maxDuration',1,5],['dailyCalls',1,10],['dailyMinutes',1,60],['quietStart',0,23],['quietEnd',0,23]])if(k in raw){if(!Number.isInteger(Number(raw[k]))||+raw[k]<min||+raw[k]>max)throw Error(`${k} must be between ${min} and ${max}.`);cfg[k]=+raw[k];}
     this.store.set('settings.calls',cfg);this.save();return this.state();
   }
-  prepare(raw,{source='manual',occurrence=null}={}){
+  prepare(raw,{source='manual',occurrence=null,silent=false}={}){
     const cfg=this.config(),to=number(cfg.ownerNumber),text=purpose(raw);
     if(occurrence){const existing=this.items().find(r=>r.occurrence===occurrence);if(existing)return existing;}
     if(this.items().filter(r=>r.state==='review'&&r.expires>this.now()).length>=10)throw Error('Ten calls await review. Cancel or review them first.');
     const r={id:crypto.randomUUID(),number:to,purpose:text,minutes:cfg.maxDuration,voice:cfg.voice,fast:cfg.fastReply!==false,created:this.now(),expires:this.now()+15*60000,state:'review',source,...(occurrence?{occurrence}:{})};
-    this.store.data.callRequests=[...this.items(),r];this.save();try{this.onReview(r);}catch{}return r;
+    this.store.data.callRequests=[...this.items(),r];this.save();try{if(!silent)this.onReview(r);}catch{}return r;
   }
   async requestOwnerCall(text,{background=false}={}){
     const r=this.prepare(text,{source:background?'schedule':'voice'});
@@ -88,7 +88,8 @@ class Calls {
   async report(id){const r=this.items().find(x=>x.id===id);if(!r?.callId)throw Error('No confirmed call ID.');if(this.privateMode())throw Error(`${this.name(r)} access is disabled in local/private mode.`);const data=await this.apiFor(r).details(r.callId);return{summary:String(data.summary||'No summary available.').slice(0,5000),transcript:String(data.concatenated_transcript||'No transcript available.').slice(0,30000)};}
   addSchedule(raw){
     if(this.schedules().length>=20)throw Error('Twenty call check-ins are already scheduled.');number(this.config().ownerNumber);
-    const s={id:crypto.randomUUID(),text:purpose(raw.purpose),repeat:raw.repeat,hour:+raw.hour,minute:+raw.minute,days:raw.days||[],at:raw.at,enabled:true};
+    const cfg=this.config(),automatic=raw.automatic===true;if(automatic&&(!cfg.enabled||!this.ready()||this.privateMode()))throw Error('Enable calls and connect a provider before authorizing automatic calls.');
+    const s={automatic,authorization:automatic?{number:cfg.ownerNumber,minutes:cfg.maxDuration,voice:cfg.voice,provider:cfg.provider}:null,id:crypto.randomUUID(),text:purpose(raw.purpose),repeat:raw.repeat,hour:+raw.hour,minute:+raw.minute,days:raw.days||[],at:raw.at,enabled:true};
     if(!['once','daily','weekdays','weekends','weekly'].includes(s.repeat)||!Array.isArray(s.days)||s.days.some(d=>!Number.isInteger(d)||d<0||d>6))throw Error('Choose a valid repeat pattern.');
     if(s.repeat!=='once'&&(!Number.isInteger(s.hour)||s.hour<0||s.hour>23||!Number.isInteger(s.minute)||s.minute<0||s.minute>59))throw Error('Choose a valid check-in time.');
     if(s.repeat==='once'&&(!Number.isFinite(s.at)||!Number.isFinite(+new Date(s.at))||s.at<=this.now()||s.at>this.now()+366*86400000))throw Error('Choose a future time within the next year.');s.next=nextRun(s,new Date(this.now()));if(!s.next)throw Error('The schedule has no next occurrence.');this.store.data.callSchedules=[...this.schedules(),s];this.save();return s;
@@ -99,7 +100,7 @@ class Calls {
     for(const r of this.items())if(r.state==='review'&&r.expires<=now){r.state='expired';changed=true;}
     for(const s of this.schedules())if(s.enabled&&s.next<=now){
       const occurrence=s.id+':'+s.next;s.next=s.repeat==='once'?null:nextRun(s,new Date(now));if(!s.next)s.enabled=false;
-      if(cfg.enabled&&!quiet(cfg,now)&&!this.privateMode()&&now-Number(occurrence.split(':').at(-1))<=MISSED_MS){try{this.prepare(s.text,{source:'schedule',occurrence});}catch(e){s.error=e.message;}}else s.error='Check-in was missed, disabled or in quiet/private mode; no call was placed.';changed=true;
+      if(cfg.enabled&&!quiet(cfg,now)&&!this.privateMode()&&now-Number(occurrence.split(':').at(-1))<=MISSED_MS){try{const r=this.prepare(s.text,{source:'schedule',occurrence,silent:s.automatic===true});if(s.automatic===true){const a=s.authorization;if(!a||a.number!==cfg.ownerNumber||a.minutes!==cfg.maxDuration||a.voice!==cfg.voice||a.provider!==cfg.provider){s.error='Call settings changed. Recreate this schedule to authorize them.';this.onReview(r);}else{const result=await this.approve(r.id,async()=>true);s.error=result.error||'';}}}catch(e){s.error=e.message;}}else s.error='Check-in was missed, disabled or in quiet/private mode; no call was placed.';changed=true;
     }
     if(changed)this.save();
     await Promise.all(this.items().filter(r=>r.callId&&ACTIVE.has(r.state)).map(r=>this.refresh(r.id)));
