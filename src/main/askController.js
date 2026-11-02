@@ -255,7 +255,7 @@ class AskController {
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps') }),
+      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
       canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
@@ -1692,7 +1692,7 @@ class AskController {
       this.reveal({ state: 'listening', mode: 'ask', partial: '' }, 'inactive');
       await new Promise((r) => setTimeout(r, 120));
       if (this.state !== 'waking') return;
-      await this.speaker.speak('Yes, Sir.', profileFor('reply', this.store.get('settings') || {}));
+      await this.speaker.speak('Yes, Sir.', {...profileFor('reply', this.store.get('settings') || {}),quick:true});
       if (this.state !== 'waking') return; // dismissed while the greeting was spoken
     }
     await new Promise((r) => setTimeout(r, 150)); // let the listening session close before a new one opens
@@ -1904,7 +1904,7 @@ class AskController {
   }
 
   async submit(raw, { voice = false } = {}) {
-    const text = String(raw || '').trim();
+    let text = String(raw || '').trim();
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
     if (this.runningTask && this.state === 'working') return this.enqueue(text, { voice }); // preserve the input method while queued
     if (this.state !== 'input') return;
@@ -1913,6 +1913,7 @@ class AskController {
       const answer = followUpAnswer(text);
       if (answer === 'no') return this.close();
       if (answer === 'yes') return this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: 10000 });
+      text=text.replace(/^(?:yes|yeah|yep|sure)(?:[,!. ]+)(?:sir[,!. ]+)?/i,'').trim();
     }
     this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
 
