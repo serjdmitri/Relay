@@ -8,12 +8,12 @@ const fakeMac = new Proxy({}, { get: (_, name) => async (...a) => `${String(name
 
 test('weather is a shared visible tool and forwards the requested city', async () => {
   const calls = [];
-  const tools = buildTools({ mac: fakeMac, getScale: () => 1, forecast: async (place) => { calls.push(place); return 'Forecast shown.'; } });
+  const tools = buildTools({ mac: fakeMac, getScale: () => 1, forecast: async (place, units) => { calls.push({ place, units }); return 'Forecast shown.'; } });
   const weather = tools.find((tool) => tool.name === 'weather_forecast');
   assert.ok(weather);
   assert.ok(require('../src/main/agent/toolCategories').exposure(tools).has('weather_forecast'));
-  assert.equal(await weather.run({ place: 'Hollywood, Florida' }), 'Forecast shown.');
-  assert.deepEqual(calls, ['Hollywood, Florida']);
+  assert.equal(await weather.run({ place: 'Hollywood, Florida', units: 'c' }), 'Forecast shown.');
+  assert.deepEqual(calls, [{ place: 'Hollywood, Florida', units: 'c' }]);
 });
 
 test('every tool has a name, schema and runner; names are unique', () => {
