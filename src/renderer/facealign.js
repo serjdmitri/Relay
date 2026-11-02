@@ -20,6 +20,24 @@ export function similarity(src, dst) {
   return { a, b, tx: dx - (a * sx - b * sy), ty: dy - (b * sx + a * sy) };
 }
 
+// The standard five-point ArcFace template (as Glance uses): left eye, right eye, nose tip, left mouth corner, right mouth corner, "left" and "right" as seen in the picture.
+export const TEMPLATE5 = [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]];
+
+// Five points from MediaPipe's 478 face landmarks (normalised 0..1): both pupils (468, 473), nose tip (1), mouth corners (61, 291). Eyes and mouth corners are put in
+// picture order by x, not by their anatomical label (the same fix Glance makes for Apple's Vision labels). Returns the transform in pixels, or null.
+export function alignFromLandmarks(lm, width, height) {
+  if (!Array.isArray(lm) || lm.length < 478) return null;
+  const p = (i) => [lm[i].x * width, lm[i].y * height];
+  const eyes = [p(468), p(473)].sort((a, b) => a[0] - b[0]), mouth = [p(61), p(291)].sort((a, b) => a[0] - b[0]);
+  const pts = [eyes[0], eyes[1], p(1), mouth[0], mouth[1]];
+  if (pts.some((q) => !Number.isFinite(q[0]) || !Number.isFinite(q[1]))) return null;
+  if (Math.hypot(eyes[1][0] - eyes[0][0], eyes[1][1] - eyes[0][1]) < 16) return null; // too small a face to tell anyone apart
+  const t = similarity(pts, TEMPLATE5);
+  if (!t) return null;
+  const scale = Math.hypot(t.a, t.b);
+  return scale > 4 || scale < 0.15 ? null : t;
+}
+
 // MediaPipe BlazeFace keypoints (normalised 0..1): [right eye, left eye, nose tip, mouth centre, right ear, left ear]. Returns the transform in pixels, or null.
 export function alignFromKeypoints(keypoints, width, height) {
   if (!Array.isArray(keypoints) || keypoints.length < 4) return null;

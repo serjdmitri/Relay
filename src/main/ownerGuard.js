@@ -39,11 +39,14 @@ function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 3, ownerFrames = 2, calmFrames = 10 }) {
-    Object.assign(this, { lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 3, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
+    Object.assign(this, { armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
     this.reset();
   }
-  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null; }
+  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
+    // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
+    // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
+    this.armed = false; this.lastScore = null; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
@@ -53,9 +56,11 @@ class OwnerGuard {
     const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
     const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold || !k.alive);
     this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
+    if (known.length) this.lastScore = Math.max(...known.map((k) => k.s));
     this.owners = owner ? this.owners + 1 : 0;
     this.strangers = stranger && !owner ? this.strangers + 1 : 0;
     this.calm = stranger ? 0 : this.calm + 1;
+    if (owner && this.owners >= this.armFrames) this.armed = true;
     this.noFaceSince = faces > 0 ? null : (this.noFaceSince ?? this.now());
     return this.step(cfg);
   }
@@ -64,12 +69,12 @@ class OwnerGuard {
   step(cfg = config(this.getConfig())) {
     const t = this.now();
     // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again.
-    if (cfg.enabled && cfg.awayScreen && !this.demo) {
+    if (cfg.enabled && cfg.awayScreen && !this.demo && this.armed) {
       if (!this.awayActive && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000) { this.awayActive = true; this.onAway(true); }
       else if (this.awayActive && this.owners >= this.ownerFrames) { this.awayActive = false; this.onAway(false); }
     } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
-      if (cfg.enabled && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
+      if (cfg.enabled && this.armed && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
       return null;
     }
     if (this.state === 'alarm') {
@@ -115,11 +120,12 @@ function parseOwnerCommand(text) {
   return null;
 }
 
-// Your enrolled face on disk: only ever encrypted (the Mac's keychain-backed safeStorage, passed in), as { v, enc, count, at }.
-function sealTemplates(templates, encrypt, at = Date.now()) { return { v: 1, enc: encrypt(JSON.stringify({ templates })), count: templates.length, at }; }
+// Your enrolled face on disk: only ever encrypted (the Mac's keychain-backed safeStorage, passed in), as { v, enc, count, at }. v is 2: version 1 was made with a rougher
+// face alignment that does not match the current one, so it is ignored and you enroll again.
+function sealTemplates(templates, encrypt, at = Date.now()) { return { v: 2, enc: encrypt(JSON.stringify({ templates })), count: templates.length, at }; }
 function openTemplates(rec, decrypt) {
   try {
-    if (!rec || rec.v !== 1 || typeof rec.enc !== 'string') return [];
+    if (!rec || rec.v !== 2 || typeof rec.enc !== 'string') return [];
     const t = JSON.parse(decrypt(rec.enc)).templates;
     return Array.isArray(t) ? t.filter((x) => Array.isArray(x) && x.length === 128 && x.every(Number.isFinite)) : [];
   } catch { return []; }

@@ -45,11 +45,27 @@ test('your face data is only ever stored through the encryption it is handed, an
   const e = (i) => Array.from({ length: 128 }, (_, k) => (k === i ? 1 : 0));
   const enc = (t) => `sealed:${Buffer.from(t).toString('base64')}`, dec = (s) => Buffer.from(s.replace(/^sealed:/, ''), 'base64').toString();
   const rec = sealTemplates([e(0), e(1)], enc, 1793660000000);
-  assert.deepEqual([rec.v, rec.count, rec.at], [1, 2, 1793660000000]);
+  assert.deepEqual([rec.v, rec.count, rec.at], [2, 2, 1793660000000]);
   assert.equal(JSON.stringify(rec).includes('"templates"'), false, 'the saved record holds only the sealed text');
   assert.deepEqual(openTemplates(rec, dec), [e(0), e(1)]);
   assert.deepEqual(openTemplates({ ...rec, enc: 'sealed:garbage' }, dec), []);
-  assert.deepEqual(openTemplates({ ...rec, v: 2 }, dec), []); assert.deepEqual(openTemplates(null, dec), []);
+  assert.deepEqual(openTemplates({ ...rec, v: 1 }, dec), [], 'faces saved with the older, rougher alignment are ignored'); assert.deepEqual(openTemplates(null, dec), []);
   assert.deepEqual(openTemplates(rec, () => { throw Error('keychain locked'); }), []);
   assert.deepEqual(openTemplates(sealTemplates([e(0), [1, 2, 3], Array(128).fill(NaN)], enc), dec), [e(0)], 'wrong-sized or non-numeric templates are dropped');
+});
+
+test('five-point alignment from the face landmarks: pupils, nose tip and mouth corners land on the standard template, whichever way round the labels are', async () => {
+  const { alignFromLandmarks, TEMPLATE5 } = await load();
+  const W = 640, H = 480, lm = Array.from({ length: 478 }, () => ({ x: 0.5, y: 0.5 }));
+  const put = (i, [x, y]) => { lm[i] = { x: x / W, y: y / H }; };
+  // a face 1.5x the template size, tilted 8 degrees, moved
+  const a = (8 * Math.PI) / 180, s = 1.5, mv = ([x, y]) => [s * (Math.cos(a) * x - Math.sin(a) * y) + 200, s * (Math.sin(a) * x + Math.cos(a) * y) + 100];
+  const [e1, e2, nose, m1, m2] = TEMPLATE5.map(mv);
+  put(468, e2); put(473, e1); put(1, nose); put(291, m1); put(61, m2); // labels swapped on purpose: it must sort by position, not by label
+  const t = alignFromLandmarks(lm, W, H);
+  assert.ok(t);
+  [e1, e2, nose, m1, m2].forEach((p, i) => { const q = apply(t, p); near(q[0], TEMPLATE5[i][0], 0.05); near(q[1], TEMPLATE5[i][1], 0.05); });
+  assert.equal(alignFromLandmarks(lm.slice(0, 400), W, H), null, 'without the iris points it cannot be used');
+  const tiny = lm.map((p) => ({ x: 0.5 + (p.x - 0.5) * 0.02, y: 0.5 + (p.y - 0.5) * 0.02 }));
+  assert.equal(alignFromLandmarks(tiny, W, H), null, 'a face too small to tell anyone apart');
 });

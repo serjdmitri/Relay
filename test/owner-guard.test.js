@@ -6,6 +6,7 @@ const tick = () => new Promise((r) => setImmediate(r));
 function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) {
   const clock = { t: 1e6 }, log = [], locks = [];
   const g = new OwnerGuard({ lock: async () => { locks.push(clock.t); }, onAlarm: (a) => log.push(['alarm', a.seconds, a.demo]), onCount: (s) => log.push(['count', s]), onClear: (r) => log.push(['clear', r]), onLocked: () => log.push(['locked']), getConfig: () => cfg, now: () => clock.t, ...extra });
+  if (!extra.unarmed) g.armed = true; // most tests are about a guard that already knows you; the unarmed ones say so
   // one second per frame; scores: what the camera page says about each face
   const feed = (scores, secs = 1) => { let last = null; for (let i = 0; i < secs; i++) { clock.t += 1000; last = g.frame({ faces: scores.length, scores }) || last; } return last; };
   return { g, clock, log, locks, feed, cfg };
@@ -189,4 +190,20 @@ test('liveness: it can be turned off, and a missing report (the blink finder is 
   assert.deepEqual(parseOwnerCommand('turn off the liveness check'), { type: 'liveness-off' });
   assert.deepEqual(parseOwnerCommand('enable the blink check'), { type: 'liveness-on' });
   assert.equal(parseOwnerCommand('turn on the lights check'), null);
+});
+
+test('safety: until you have been recognised this session it is not armed, so a recognition that fails for you can never alarm, blank the screen or lock you out', () => {
+  const m = make(undefined, { unarmed: true });
+  m.feed([0.05], 60); m.feed([], 120);
+  assert.deepEqual(m.log, []); assert.deepEqual(m.locks, []); assert.equal(m.g.armed, false);
+  assert.equal(m.g.lastScore, 0.05, 'the best score seen is kept for the status answer');
+  m.feed([0.8], 2); assert.equal(m.g.armed, false, 'two frames are not enough to be sure it is you');
+  m.feed([0.8]); assert.equal(m.g.armed, true);
+  m.feed([0.05], 3); assert.equal(m.g.state, 'alarm', 'armed: a stranger now starts the alarm');
+});
+
+test('safety: a picture of you (matches but not alive) does not arm it', () => {
+  const m = make(undefined, { unarmed: true });
+  feedLive(m, [0.9], [false], 20);
+  assert.equal(m.g.armed, false);
 });
