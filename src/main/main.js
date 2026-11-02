@@ -366,7 +366,7 @@ function registerIpc() {
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
   storagePanel = new StorageWindow({ access, motion: floatingMotion, reveal: p => shell.showItemInFolder(p), settings: () => openMain('permissions') });
-  ask.openStorageMap = () => { storagePanel.open(); return { status: 'done', reply: 'The storage map is open, Sir. Choose a folder and click Scan to see what uses space.', actions: 1 }; };
+  ask.openStorageMap = () => { storagePanel.open({ scan: true }); return { status: 'done', reply: 'Your interactive storage map is open, Sir.', actions: 1 }; };
   const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
     if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use file access controls.' };
     try { return await run(...args); } catch (err) { return { error: err.message }; }
