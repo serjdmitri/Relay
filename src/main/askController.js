@@ -77,6 +77,7 @@ const { parseDoctorCommand } = require('./doctor');
 const { parseAuditCommand, parseWatchCommand } = require('./securityAudit');
 const { parsePrioritiesCommand } = require('./priorities');
 const { parseAssignmentsDashboardCommand } = require('./assignments');
+const { parseClutterCommand } = require('./clutter');
 const { parseOvernightCommand } = require('./overnight');
 const { QuickLane } = require('./quickLane');
 const lessons = require('./lessons');
@@ -2048,6 +2049,7 @@ class AskController {
           if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
+          if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
           if (this.openAssignments && parseAssignmentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAssignments()); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
