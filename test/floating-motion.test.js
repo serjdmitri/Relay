@@ -34,3 +34,10 @@ test('a nearby menu expands the target while releasing a far-away pointer remain
  const state=trashGeometry({x:650,y:400},bounds,{x:650,y:400,width:350,height:400});
  assert.equal(state.radius,210);assert.equal(state.inside,false);
 });
+
+test('a leftward menu flick keeps the title reachable instead of leaving it offscreen',()=>{
+ const r=rig();const target={...r.target,position:()=>({...r.pos,width:300,height:200})};
+ r.m.begin(target,{x:300,y:150});r.time(100);r.m.update('item',{x:100,y:150});r.m.release('item');
+ for(let i=0;i<140&&r.timers.size;i++)for(const tick of [...r.timers])tick();
+ assert.equal(r.closed,0);assert.ok(r.pos.x>=0);assert.ok(r.pos.y>=0);
+});

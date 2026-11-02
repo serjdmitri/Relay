@@ -15,7 +15,7 @@ function createHoloWindow({ preload, width, height }) {
     minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel',
     webPreferences: { preload, contextIsolation: true, backgroundThrottling: false }
   });
-  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setAlwaysOnTop(true, 'screen-saver', 1);
   win.setHiddenInMissionControl?.(true);
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   // Clicks go to what is behind it, except where the hologram or its controls are (the page says when the pointer is over them).

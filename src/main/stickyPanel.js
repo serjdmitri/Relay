@@ -41,7 +41,7 @@ class StickyPanel {
       let t = null;
       const saveAt = () => { clearTimeout(t); t = setTimeout(() => { if (!w.isDestroyed()) { const b = w.getBounds(); this.stickies.onChange = () => {}; this.stickies.move(s.id, b.x, b.y); this.stickies.onChange = () => this.sync(); } }, 400); };
       w.on('moved', saveAt);
-      this.motion?.watchWindow(w, { key: `sticky:${s.id}`, close: () => w.hide() });
+      this.motion?.watchWindow(w, { key: `sticky:${s.id}`, close: () => w.hide(), undo: () => { if (!w.isDestroyed()) w.showInactive(); } });
       this.wins.set(s.id, w);
       n++;
     }

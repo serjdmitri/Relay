@@ -53,7 +53,13 @@ class FloatingMotion {
       const next = momentum.step(g.point, g.v, g.bounds);
       g.point = next.point; g.v = next.velocity;
       try {
-        g.target.move(g.point.x - g.ax, g.point.y - g.ay);
+        const size = g.target.position();
+        let x = g.point.x - g.ax, y = g.point.y - g.ay;
+        if (Number.isFinite(size.width) && Number.isFinite(size.height)) {
+          x = Math.max(g.bounds.x, Math.min(x, g.bounds.x + Math.max(0,g.bounds.width-size.width)));
+          y = Math.max(g.bounds.y, Math.min(y, g.bounds.y + Math.max(0,g.bounds.height-size.height)));
+        }
+        g.target.move(x, y);
         if (next.close || trashGeometry(g.point, g.bounds, g.target.rect?.() || g.target.position()).inside) {
           this.clearTimer(g.timer); this.glides.delete(key); this.dismiss(g.target); this.publish(); return;
         }
