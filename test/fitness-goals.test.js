@@ -1,0 +1,2 @@
+const{test}=require('node:test'),assert=require('node:assert/strict');const{stepGoal,stepProgress}=require('../src/main/connectors/fitnessGoals');
+test('goals are bounded whole numbers and unknown progress differs from zero',()=>{for(const v of[0,-1,1.1,Infinity,100001])assert.throws(()=>stepGoal(v));assert.equal(stepProgress(undefined,10000).percent,null);assert.equal(stepProgress(0,10000).percent,0);assert.deepEqual(stepProgress(12000,10000),{goal:10000,steps:12000,percent:100,remaining:0,extra:2000});});
