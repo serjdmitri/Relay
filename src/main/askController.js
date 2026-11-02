@@ -1489,8 +1489,10 @@ class AskController {
   async runBriefingCommand(request, entry) {
     const abort = new AbortController();
     this.abort = abort;
-    const text = await untilStopped(this.briefingText({ signal: abort.signal, onFacts: (facts) => { try { this.recordBriefingSources(facts, entry.id, 'Morning briefing'); } catch { /* the briefing still completes */ } } }), abort.signal);
+    let checkedFacts;
+    const text = await untilStopped(this.briefingText({ signal: abort.signal, onFacts: (facts) => { checkedFacts = facts; try { this.recordBriefingSources(facts, entry.id, 'Morning briefing'); } catch { /* the briefing still completes */ } } }), abort.signal);
     if (abort.signal.aborted) return this.finish(entry, { status: 'stopped', reply: 'Stopped the briefing.', actions: 0 });
+    if (checkedFacts && this.cardPanel && this.store.get('settings.cards') !== false) { try { await this.cardPanel.show(require('./briefing').briefingCard(checkedFacts, text)); } catch { /* the spoken briefing still works */ } }
     return this.requestLanguage(request) !== 'en' ? this.runRequest(`Say this morning briefing aloud, naturally and briefly, in the language of this request, without adding anything: ${text}`, entry) : this.finish(entry, { status: 'done', reply: text, actions: 0 });
   }
 
@@ -1518,6 +1520,7 @@ class AskController {
     if (close && !abort.signal.aborted) facts.tomorrow = await untilStopped(this.tomorrowCalendar(facts.now), abort.signal);
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
+    if (this.cardPanel && this.store.get('settings.cards') !== false) { try { await this.cardPanel.show({ ...require('./briefing').briefingCard(facts, plan), title: close ? 'Close the day' : 'Plan today' }); } catch { /* local reports remain available */ } }
     let saved;
     try { saved = this.outputExport(close ? 'Close the day' : 'Plan today', plan); }
     catch {

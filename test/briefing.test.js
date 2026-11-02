@@ -279,3 +279,8 @@ test('tomorrow calendar filters today, includes all-day events, and reports disc
   assert.equal(result.events[0].allDay, true);
   assert.deepEqual(result.missing, ['Google calendar']);
 });
+
+test('briefing menu retains checked time, source links and unavailable/partial warnings',()=>{
+ const {briefingCard}=require('../src/main/briefing');const card=briefingCard({now:new Date('2026-11-02T12:00:00Z'),missing:['mail'],school:{sourceUrl:'https://school.myschoolapp.com/lms-assignment/assignment-center/student',truncated:true}},'A sourced briefing.');assert.equal(card.summary,'A sourced briefing.');assert.equal(card.hold,true);assert.match(card.items[0].subtitle,/mail/);assert.match(card.items[1].title,/limited/);assert.match(card.links[0].url,/myschoolapp/);
+ assert.deepEqual(briefingCard({school:{sourceUrl:'https://evil.test/?token=secret'}},'Unavailable.').links,[]);
+});
