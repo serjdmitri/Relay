@@ -47,6 +47,7 @@ class Calls {
   }
   validate(r){
     const cfg=this.config();
+    if(r.authorization){const a=r.authorization;if(a.number!==r.number||a.minutes!==r.minutes||a.voice!==r.voice||a.provider!==cfg.provider||a.purpose!==r.purpose||a.twilioVoice!==cfg.twilioVoice)throw Error('Automatic call authorization changed. Recreate this schedule.');}
     if(!cfg.enabled)throw Error('Enable phone calls in Calls settings.');if(this.privateMode())throw Error('Phone calls use Bland. They are disabled in local/private mode.');if(!this.ready())throw Error(this.config().provider==='twilio'?'Add your Twilio account details first.':'Add your Bland API key first.');
     if(r.number!==cfg.ownerNumber)throw Error('The owner number changed. Prepare a fresh call.');if(r.minutes>cfg.maxDuration)throw Error('The duration limit changed. Prepare a fresh call.');
     if(quiet(cfg,this.now()))throw Error('It is quiet hours. Change the schedule or quiet-hours setting.');
@@ -89,7 +90,7 @@ class Calls {
   addSchedule(raw){
     if(this.schedules().length>=20)throw Error('Twenty call check-ins are already scheduled.');number(this.config().ownerNumber);
     const cfg=this.config(),automatic=raw.automatic===true;if(automatic&&(!cfg.enabled||!this.ready()||this.privateMode()))throw Error('Enable calls and connect a provider before authorizing automatic calls.');
-    const s={automatic,authorization:automatic?{number:cfg.ownerNumber,minutes:cfg.maxDuration,voice:cfg.voice,provider:cfg.provider}:null,id:crypto.randomUUID(),text:purpose(raw.purpose),repeat:raw.repeat,hour:+raw.hour,minute:+raw.minute,days:raw.days||[],at:raw.at,enabled:true};
+    const s={automatic,authorization:automatic?{number:cfg.ownerNumber,minutes:cfg.maxDuration,voice:cfg.voice,provider:cfg.provider,purpose:purpose(raw.purpose),twilioVoice:cfg.twilioVoice}:null,id:crypto.randomUUID(),text:purpose(raw.purpose),repeat:raw.repeat,hour:+raw.hour,minute:+raw.minute,days:raw.days||[],at:raw.at,enabled:true};
     if(!['once','daily','weekdays','weekends','weekly'].includes(s.repeat)||!Array.isArray(s.days)||s.days.some(d=>!Number.isInteger(d)||d<0||d>6))throw Error('Choose a valid repeat pattern.');
     if(s.repeat!=='once'&&(!Number.isInteger(s.hour)||s.hour<0||s.hour>23||!Number.isInteger(s.minute)||s.minute<0||s.minute>59))throw Error('Choose a valid check-in time.');
     if(s.repeat==='once'&&(!Number.isFinite(s.at)||!Number.isFinite(+new Date(s.at))||s.at<=this.now()||s.at>this.now()+366*86400000))throw Error('Choose a future time within the next year.');s.next=nextRun(s,new Date(this.now()));if(!s.next)throw Error('The schedule has no next occurrence.');this.store.data.callSchedules=[...this.schedules(),s];this.save();return s;
@@ -100,7 +101,7 @@ class Calls {
     for(const r of this.items())if(r.state==='review'&&r.expires<=now){r.state='expired';changed=true;}
     for(const s of this.schedules())if(s.enabled&&s.next<=now){
       const occurrence=s.id+':'+s.next;s.next=s.repeat==='once'?null:nextRun(s,new Date(now));if(!s.next)s.enabled=false;
-      if(cfg.enabled&&!quiet(cfg,now)&&!this.privateMode()&&now-Number(occurrence.split(':').at(-1))<=MISSED_MS){try{const r=this.prepare(s.text,{source:'schedule',occurrence,silent:s.automatic===true});if(s.automatic===true){const a=s.authorization;if(!a||a.number!==cfg.ownerNumber||a.minutes!==cfg.maxDuration||a.voice!==cfg.voice||a.provider!==cfg.provider){s.error='Call settings changed. Recreate this schedule to authorize them.';this.onReview(r);}else{const result=await this.approve(r.id,async()=>true);s.error=result.error||'';}}}catch(e){s.error=e.message;}}else s.error='Check-in was missed, disabled or in quiet/private mode; no call was placed.';changed=true;
+      if(cfg.enabled&&!quiet(cfg,now)&&!this.privateMode()&&now-Number(occurrence.split(':').at(-1))<=MISSED_MS){try{const r=this.prepare(s.text,{source:'schedule',occurrence,silent:s.automatic===true});if(s.automatic===true){const a=s.authorization;if(!a||a.number!==r.number||a.minutes!==r.minutes||a.voice!==r.voice||a.provider!==this.config().provider||a.purpose!==s.text||a.twilioVoice!==this.config().twilioVoice){s.error='Call settings changed. Recreate this schedule to authorize them.';this.onReview(r);}else{r.authorization={...a};this.save();const result=await this.approve(r.id,async()=>true);s.error=result.error||'';}}}catch(e){s.error=e.message;}}else s.error='Check-in was missed, disabled or in quiet/private mode; no call was placed.';changed=true;
     }
     if(changed)this.save();
     await Promise.all(this.items().filter(r=>r.callId&&ACTIVE.has(r.state)).map(r=>this.refresh(r.id)));
