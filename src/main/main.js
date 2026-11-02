@@ -63,7 +63,11 @@ app.setName('Relay');
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let lastThrown = null;
-let floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+function rememberThrow(undo) {
+  lastThrown = undo;
+  restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
+}
+let restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -216,7 +220,7 @@ function setHandsPreview(on) {
 // "hands" said to Relay: show / hide the view (turning control on if it is off) or stop it.
 async function handsCommand(cmd) {
   if (cmd === 'dashboard') { const r = await panelHub.show({ title: 'Jarvis dashboard', sources: ['dashboard'] }); return r.ok ? 'Here is your dashboard.' : r.error; }
-  if (cmd === 'undo') { if (!lastThrown) return 'There is no thrown item to restore.'; const undo = lastThrown; try { await undo(); if (lastThrown === undo) lastThrown = null; return 'Restored the last thrown item.'; } catch { return 'I could not restore the thrown item.'; } }
+  if (cmd === 'undo') { if (!lastThrown) return 'There is no thrown item to restore.'; const undo = lastThrown; try { await undo(); if (lastThrown === undo) { lastThrown = null; restoreToast?.hide(); } return 'Restored the last thrown item.'; } catch { return 'I could not restore the thrown item.'; } }
   if (cmd === 'help') { const r = await panelHub.show({ title: 'Hand gestures', html: require('./hands/help').HTML }); return r.ok ? 'Here is the hand gesture guide.' : r.error; }
   if (cmd === 'pause' || cmd === 'resume') { if (!hands.enabled) return 'Hand control is off.'; hands.setPaused(cmd === 'pause'); return `Hand control ${cmd === 'pause' ? 'paused' : 'resumed'}.`; }
   if (cmd === 'calibrate') { if (!hands.enabled) { const r = await setHands(true, { quiet: true }); if (!r.ok) return r.error; } setHandsPreview(true); const r = hands.calibrate(); return r.ok ? 'Move your hand around the edges of the camera view for eight seconds.' : r.error; }
@@ -929,9 +933,10 @@ app.whenReady().then(() => {
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
   overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
   overlay.watchDisplays();
+  restoreToast = new (require('./restoreToast').RestoreToast)(path.join(__dirname, 'preload.js'));
   trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
-  floatingMotion = new (require('./floatingMotion').FloatingMotion)({ area: point => screen.getDisplayNearestPoint(point).bounds, cursor: () => screen.getCursorScreenPoint(), onZone: states => trashTarget.render(states), onThrow: undo => { lastThrown = undo; } });
-  app.once('before-quit', () => { floatingMotion.stop(); trashTarget.close(); });
+  floatingMotion = new (require('./floatingMotion').FloatingMotion)({ area: point => screen.getDisplayNearestPoint(point).bounds, cursor: () => screen.getCursorScreenPoint(), onZone: states => trashTarget.render(states), onThrow: rememberThrow });
+  app.once('before-quit', () => { floatingMotion.stop(); trashTarget.close(); restoreToast.close(); });
   recent = new RecentPanel({ getEnabled: () => store.get('settings.recent') !== false, getDwell: () => store.get('settings.recentDelay'), preload: path.join(__dirname, 'preload.js') });
   recent.start();
   cardPanel = new CardPanel({ motion: floatingMotion, preload: path.join(__dirname, 'preload.js'), getHold: () => store.get('settings.answerStays') !== false, getLayouts: () => store.get('menuLayouts') || {}, saveLayouts: layouts => store.set('menuLayouts', layouts) });
@@ -1054,7 +1059,7 @@ app.whenReady().then(() => {
     externalDrag,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
-    onThrow: (undo) => { lastThrown = undo; },
+    onThrow: rememberThrow,
     shortcut: () => store.get('settings.hands.peaceShortcut') || 'listen',
     onShortcut: (choice) => {
       if (choice === 'home') openMain('home');
