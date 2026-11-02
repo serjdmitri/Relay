@@ -5,7 +5,7 @@ const { OwnerGuard, config, cosine, bestScore, addSample, parseOwnerCommand } = 
 const tick = () => new Promise((r) => setImmediate(r));
 function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) {
   const clock = { t: 1e6 }, log = [], locks = [];
-  const g = new OwnerGuard({ lock: async () => { locks.push(clock.t); }, onAlarm: (a) => log.push(['alarm', a.seconds, a.demo]), onCount: (s) => log.push(['count', s]), onClear: (r) => log.push(['clear', r]), onLocked: () => log.push(['locked']), getConfig: () => cfg, now: () => clock.t, ...extra });
+  const g = new OwnerGuard({ lock: async () => { locks.push(clock.t); }, onAlarm: (a) => log.push(['alarm', a.seconds, a.demo]), onCount: (s) => log.push(['count', s]), onClear: (r) => log.push(['clear', r]), onLocked: () => log.push(['locked']), getConfig: () => cfg, now: () => clock.t, strangerFrames: 3, ...extra });
   if (!extra.unarmed) g.armed = true; // most tests are about a guard that already knows you; the unarmed ones say so
   // one second per frame; scores: what the camera page says about each face
   const feed = (scores, secs = 1) => { let last = null; for (let i = 0; i < secs; i++) { clock.t += 1000; last = g.frame({ faces: scores.length, scores }) || last; } return last; };
@@ -14,7 +14,7 @@ function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) 
 const events = (m, kind) => m.log.filter((e) => e[0] === kind);
 
 test('the time is adjustable within safe limits, and it is off unless turned on', () => {
-  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true });
+  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12 });
   assert.equal(config({ seconds: 1 }).seconds, 5); assert.equal(config({ seconds: 9999 }).seconds, 120); assert.equal(config({ seconds: 45 }).seconds, 45);
   assert.equal(config({ threshold: 5 }).threshold, 0.7); assert.equal(config({ enabled: 'true' }).enabled, false);
   const m = make({ enabled: false }); m.feed([0.01], 60);
@@ -206,4 +206,33 @@ test('safety: a picture of you (matches but not alive) does not arm it', () => {
   const m = make(undefined, { unarmed: true });
   feedLive(m, [0.9], [false], 20);
   assert.equal(m.g.armed, false);
+});
+
+test('less trigger-happy: a "not sure" score (far away, turned, badly lit) is neither you nor a stranger, and a stranger needs five frames by default', async () => {
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4 });
+  m.feed([0.3], 60); // between threshold - margin (0.28) and the threshold
+  assert.deepEqual(m.log, [], 'not sure is not enough to sound the alarm');
+  const d = new OwnerGuard({ lock: async () => {}, getConfig: () => ({ enabled: true, threshold: 0.4 }), now: () => 0 });
+  assert.equal(d.strangerFrames, 5, 'five by default');
+  d.armed = true; for (let i = 0; i < 4; i++) d.frame({ faces: 1, scores: [0.05] }); assert.equal(d.state, 'idle');
+  d.frame({ faces: 1, scores: [0.05] }); assert.equal(d.state, 'alarm');
+  assert.equal(config({}).margin, 0.12); assert.equal(config({ margin: 5 }).margin, 0.3);
+});
+
+test('the status question is understood even when it is misheard or misspelled', () => {
+  for (const t of ['owner recognition status', 'owner recognistion status', 'owner recognision status', 'face recognition settings', 'is the owner recognition working']) assert.deepEqual(parseOwnerCommand(t), { type: 'status' }, t);
+});
+
+test('looking down: a face that vanishes right after looking down gets three times as long before the away screen, and a down-looking face is not judged', () => {
+  const away = [];
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4, awayScreen: true, awaySeconds: 20 }, { onAway: (on) => away.push(on) });
+  const feedDown = (secs) => { for (let i = 0; i < secs; i++) { m.clock.t += 1000; m.g.frame({ faces: 1, scores: [null], down: true }); } };
+  feedDown(3); assert.equal(m.g.lookingAway, true);
+  m.feed([], 30); assert.deepEqual(away, [], '30 seconds is more than 20, but you just looked down');
+  m.feed([], 31); assert.deepEqual(away, [true], 'after about a minute (3 x 20) it is a real absence');
+  const n = make({ enabled: true, seconds: 20, threshold: 0.4, awayScreen: true, awaySeconds: 20 }, { onAway: (on) => away.push(on) });
+  n.feed([0.9], 5); n.feed([], 25);
+  assert.equal(away.length, 2, 'without a look down first, the normal 20 seconds applies');
+  const k = make(); k.feed([0.9], 5); for (let i = 0; i < 30; i++) { k.clock.t += 1000; k.g.frame({ faces: 1, scores: [null], down: true }); }
+  assert.deepEqual(k.log, [], 'looking down at the keyboard never alarms');
 });

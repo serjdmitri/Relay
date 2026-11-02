@@ -6,11 +6,11 @@
 // Honest limits: recognition can be wrong (poor light, glasses, a different angle: you may be flagged for a few seconds, which is why two frames of
 // you cancel it), a VIDEO of you blinking can fool it (a still photo cannot: the liveness check wants a blink), and covering the camera makes it blind rather than suspicious.
 
-const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true }; // 0.363 is the published cosine threshold for the SFace model
+const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12 }; // 0.363 is the published cosine threshold for the SFace model
 const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 function config(raw) {
   const c = raw && typeof raw === 'object' ? raw : {};
-  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false };
+  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false, margin: clamp(c.margin, 0, 0.3, DEFAULTS.margin) };
 }
 
 // ---- matching ----
@@ -39,28 +39,31 @@ function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 3, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
     Object.assign(this, { armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
     this.reset();
   }
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
-  frame({ faces = 0, scores = [], live = [] } = {}) {
+  frame({ faces = 0, scores = [], live = [], down = false } = {}) {
     const cfg = config(this.getConfig());
     if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; return null; }
     const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
-    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold || !k.alive);
+    // A score between (threshold - margin) and the threshold is "not sure" (a face that is far, turned or badly lit): neither you nor a stranger. Only a clearly low score, or a match with no blink, counts against you.
+    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive));
     this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
     if (known.length) this.lastScore = Math.max(...known.map((k) => k.s));
     this.owners = owner ? this.owners + 1 : 0;
     this.strangers = stranger && !owner ? this.strangers + 1 : 0;
     this.calm = stranger ? 0 : this.calm + 1;
     if (owner && this.owners >= this.armFrames) this.armed = true;
+    if (faces > 0) this.lookingAway = !!down;
+    if (down) this.lastDownAt = this.now();
     this.noFaceSince = faces > 0 ? null : (this.noFaceSince ?? this.now());
     return this.step(cfg);
   }
@@ -70,7 +73,7 @@ class OwnerGuard {
     const t = this.now();
     // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again.
     if (cfg.enabled && cfg.awayScreen && !this.demo && this.armed) {
-      if (!this.awayActive && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000) { this.awayActive = true; this.onAway(true); }
+      if (!this.awayActive && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
       else if (this.awayActive && this.owners >= this.ownerFrames) { this.awayActive = false; this.onAway(false); }
     } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
@@ -87,6 +90,9 @@ class OwnerGuard {
     if (this.owners >= this.ownerFrames || this.calm >= this.calmFrames) { this.state = 'idle'; this.strangers = 0; }
     return null;
   }
+
+  // Looking down at the keyboard can lose the face altogether. If the face vanished right after it was seen looking down, that is most likely you, not an empty chair: wait three times as long.
+  awayFactor() { return this.lastDownAt && this.noFaceSince !== null && this.noFaceSince - this.lastDownAt < 6000 ? 3 : 1; }
 
   end() {
     if (this.demo) { this.clear('ended'); return 'cleared'; }
@@ -115,7 +121,7 @@ function parseOwnerCommand(text) {
   if (/^(?:turn on|enable|start|switch on) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-on' };
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-off' };
   if (/^(?:test|show|preview|try) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-demo' };
-  if (/^(?:owner|face) (?:recognition|guard) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recognition|guard) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
+  if (/^(?:owner|face) (?:recogn\w*|guard|check) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
   if (/^(?:test|show|preview|try) (?:the )?(?:access denied|intruder|not your computer)(?: screen| alarm| warning)?$/.test(n)) return { type: 'demo' };
   return null;
 }

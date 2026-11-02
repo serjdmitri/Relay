@@ -952,7 +952,7 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
-  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [] }); } });
+  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [], down: f?.down === true }); } });
   ipcMain.handle('presence:status', (_e, st) => {
     if (st?.state === 'faceid-error') { ask.notice(String(st.message || 'Owner recognition could not start.').slice(0, 200), 'failed'); return; }
     presence?.setStatus(st);
@@ -1451,7 +1451,7 @@ app.whenReady().then(() => {
       return done(`Owner recognition is on, and arms itself once it has recognised you. If a face that is not yours is in view while you are not, I will sound the alarm and lock the screen after ${cfg().seconds} seconds.${note} A still photo of you will not pass (it must blink), but a video of you could, and it may flag you in poor light for a moment; coming back into view stops it.`);
     }
     const t = ownerState.templates.length;
-    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. ${ownerGuard.armed ? 'It has recognised you this session, so it is armed.' : 'It has not recognised you yet this session, so it is not armed and will not sound the alarm or lock'}${ownerGuard.lastScore !== null ? ` (best match so far ${ownerGuard.lastScore.toFixed(2)}; it needs ${cfg().threshold.toFixed(2)})` : ''}. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
+    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. ${ownerGuard.armed ? 'It has recognised you this session, so it is armed.' : 'It has not recognised you yet this session, so it is not armed and will not sound the alarm or lock'}${ownerGuard.lookingAway ? ' You are looking away from the camera right now, so I am not judging your face.' : ''}${ownerGuard.lastScore !== null ? ` (best match so far ${ownerGuard.lastScore.toFixed(2)}; it needs ${cfg().threshold.toFixed(2)})` : ''}. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
   };
   ask.viewerGuardCommand = async (c) => {
     const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';

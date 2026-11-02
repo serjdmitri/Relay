@@ -1,11 +1,25 @@
 // Liveness: a photo does not blink. This follows each face in the camera picture (by where its nose is) and remembers when it last blinked, so owner recognition
-// can tell a face that is alive from a picture held up to the camera. A face counts as alive for 15 seconds after a blink, and for 6 seconds after it first
+// can tell a face that is alive from a picture held up to the camera. A face counts as alive for 30 seconds after a blink, and for 8 seconds after it first
 // appears (so you are not flagged while sitting down). A video of you blinking would still pass: this makes a spoof harder, not impossible.
 
-export const LIVE_FOR_MS = 15000;
-export const GRACE_MS = 6000;
+export const LIVE_FOR_MS = 30000; // people staring at a screen blink less, and a blink is quick: be generous
+export const GRACE_MS = 8000;
 const MATCH = 0.12; // how far a nose may move between looks and still be the same face (fraction of the picture)
-const CLOSED = 0.5, OPEN = 0.3; // eye-blink blendshape scores: above CLOSED is a closed eye, below OPEN an open one
+const CLOSED = 0.35, OPEN = 0.22; // eye-blink blendshape scores: above CLOSED is a closed eye, below OPEN an open one
+
+// Is this face looking away from the camera (down at the keyboard, or turned aside)? From the landmarker: the eyes' downward-gaze scores (0..1) and the face's 4x4
+// pose matrix (column-major). Pitch and yaw are measured as sizes, so it works whichever way the matrix's axes point. Used so that looking down is not mistaken
+// for leaving the desk or for a stranger: a face turned away cannot be judged.
+export function lookingAway({ gazeDownL, gazeDownR, matrix } = {}) {
+  const g = (Number(gazeDownL) + Number(gazeDownR)) / 2;
+  if (Number.isFinite(g) && g >= 0.5) return true;
+  const m = matrix && matrix.length >= 16 ? Array.from(matrix) : null;
+  if (!m || !m.every(Number.isFinite)) return false;
+  const r = (row, col) => m[col * 4 + row];
+  const pitch = (Math.atan2(r(2, 1), Math.abs(r(2, 2))) * 180) / Math.PI;
+  const yaw = (Math.asin(Math.max(-1, Math.min(1, r(2, 0)))) * 180) / Math.PI;
+  return Math.abs(pitch) > 25 || Math.abs(yaw) > 40;
+}
 
 export class LivenessTracker {
   constructor() { this.tracks = []; }
