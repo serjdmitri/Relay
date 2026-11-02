@@ -503,6 +503,7 @@ class AskController {
 
   // ----- shortcut events -----
   onShortcut(name, kind) {
+    if (name === 'handsPause') { if (kind === 'press') this.onHandsPause?.(); return; }
     if (this.suspended) return;
     if (name === 'reactorIdle' && kind === 'press') {
       if (this.state !== 'idle') return;

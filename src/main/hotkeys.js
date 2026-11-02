@@ -16,6 +16,14 @@ function buildCodeMap(UiohookKey) {
   return map;
 }
 
+function withAuxiliaryShortcuts(shortcuts) {
+  const out = {...shortcuts};
+  for (const [name,code] of [['reactorIdle','KeyI'],['handsPause','KeyH']]) {
+    if (!out[name] && !Object.values(out).some(v=>v?.code===code && v.mods?.includes('Alt'))) out[name]={code,mods:['Alt']};
+  }
+  return out;
+}
+
 class Hotkeys {
   constructor({ getShortcuts, onEvent, onClick = null, log = console }) {
     this.getShortcuts = getShortcuts;
@@ -66,4 +74,4 @@ class Hotkeys {
   }
 }
 
-module.exports = { Hotkeys, buildCodeMap };
+module.exports = { Hotkeys, buildCodeMap, withAuxiliaryShortcuts };

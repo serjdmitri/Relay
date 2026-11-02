@@ -405,3 +405,9 @@ test('mouse-independent hand grabs delegate motion to the shared trash/glide con
  await ev({type:'grab',...at(900,550)});await ev({type:'move',...at(1000,600)});await ev({type:'release',...at(1000,600)});
  assert.deepEqual(calls,[['begin','menu:test'],['update','menu:test'],['release','menu:test',false]]);
 });
+
+test('pausing gestures preserves the running camera and preview',async()=>{
+ const {hc}=await rig();const cam=hc.cam;hc.preview=true;hc.setPaused(true);
+ assert.equal(hc.paused,true);assert.equal(hc.enabled,true);assert.equal(hc.cam,cam);assert.equal(hc.preview,true);
+ hc.setPaused(false);assert.equal(hc.paused,false);assert.equal(hc.cam,cam);
+});
