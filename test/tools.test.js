@@ -6,6 +6,16 @@ const { stripHtml } = require('../src/main/agent/web');
 
 const fakeMac = new Proxy({}, { get: (_, name) => async (...a) => `${String(name)}(${a.join(',')})` });
 
+test('weather is a shared visible tool and forwards the requested city', async () => {
+  const calls = [];
+  const tools = buildTools({ mac: fakeMac, getScale: () => 1, forecast: async (place) => { calls.push(place); return 'Forecast shown.'; } });
+  const weather = tools.find((tool) => tool.name === 'weather_forecast');
+  assert.ok(weather);
+  assert.ok(require('../src/main/agent/toolCategories').exposure(tools).has('weather_forecast'));
+  assert.equal(await weather.run({ place: 'Hollywood, Florida' }), 'Forecast shown.');
+  assert.deepEqual(calls, ['Hollywood, Florida']);
+});
+
 test('every tool has a name, schema and runner; names are unique', () => {
   const tools = buildTools({ mac: fakeMac, getScale: () => 1, firefox: { isConnected: () => true, call: async () => ({}) } });
   const names = tools.map((t) => t.name);

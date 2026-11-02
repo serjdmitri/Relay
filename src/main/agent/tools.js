@@ -14,12 +14,13 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, homework = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, homework = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
 
   const tools = [
+    ...(forecast ? [{ name: 'weather_forecast', description: 'Get weather for a city and show Relay’s forecast panel when cards are enabled. Use this for weather and forecast requests, including when the user asks for a menu. Ask for a city if only a country is provided.', input_schema: obj({ place: str('City and optional state or country, for example Hollywood, Florida') }, ['place']), describe: (i) => `Checking weather in ${i.place}`, run: (i) => forecast(i.place) }] : []),
     {
       name: 'list_running_apps',
       description: 'List the apps currently open.',

@@ -36,6 +36,20 @@ test('forecast cancellation does not show a late card or report a network failur
   } finally { global.fetch = originalFetch; }
 });
 
+test('a model-triggered forecast preserves the request cancellation controller', async () => {
+  const c = Object.create(AskController.prototype);
+  const originalFetch = global.fetch;
+  const parent = new AbortController();
+  Object.assign(c, { store: { get: () => ({}) }, abort: parent, cardPanel: { show: async () => assert.fail('no late card') } });
+  global.fetch = (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+  try {
+    const pending = c.forecastCommand({ place: 'Paris' }, { parentSignal: parent.signal });
+    assert.equal(c.abort, parent);
+    parent.abort();
+    assert.equal((await pending).status, 'stopped');
+  } finally { global.fetch = originalFetch; }
+});
+
 test('unavailable sources are disclosed instead of being reported clear', () => {
   const text = buildBriefing({ now: new Date(2026, 9, 27, 9), includeGreeting: false, missing: ['calendar', 'google-calendar', 'reminders', 'mail', 'weather-unavailable'] });
   assert.match(text, /could not check Mac calendar, Google calendar, reminders, email and weather/);

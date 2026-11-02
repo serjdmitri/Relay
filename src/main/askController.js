@@ -1256,7 +1256,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, notes: this.notesService && flagsMod.isOn(this.store.get('settings'), 'folderQa') && this.notesService.folders().length ? { ask: (q, f) => this.notesService.ask(q, f) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ mac: this.mac, firefox: this.bridge, overlay: this.overlay, forecast: async (place) => (await this.forecastCommand({ place }, { parentSignal: this.abort?.signal })).reply, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, notes: this.notesService && flagsMod.isOn(this.store.get('settings'), 'folderQa') && this.notesService.folders().length ? { ask: (q, f) => this.notesService.ask(q, f) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Tools from the plugins you approved (Settings > Doctor > Plugins), only while that switch is on.
@@ -1366,12 +1366,15 @@ class AskController {
     this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
   }
 
-  async forecastCommand(query) {
+  async forecastCommand(query, { parentSignal = null } = {}) {
     const cfg = this.store.get('settings.briefing') || {};
     const place = query.place || cfg.city;
     if (!place) return { status: 'failed', reply: 'Tell me a city, or set your city in briefing settings.', actions: 0 };
     const abort = new AbortController();
-    this.abort = abort;
+    if (!parentSignal) this.abort = abort;
+    const cancel = () => abort.abort();
+    if (parentSignal?.aborted) abort.abort();
+    else parentSignal?.addEventListener('abort', cancel, { once: true });
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; abort.abort(); }, 10000);
     try {
@@ -1386,7 +1389,7 @@ class AskController {
       if (abort.signal.aborted && !timedOut) return { status: 'stopped', reply: 'Stopped the forecast.', actions: 0 };
       return { status: 'failed', reply: 'I could not complete the forecast. Please try again.', actions: 0 };
     }
-    finally { clearTimeout(timer); }
+    finally { clearTimeout(timer); parentSignal?.removeEventListener('abort', cancel); }
   }
 
   async runBriefingCommand(request, entry) {
