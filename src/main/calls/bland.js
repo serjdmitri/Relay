@@ -12,7 +12,9 @@ class Bland {
   }
   async check(){await this.request('/me');return{ok:true};}
   async dial(request){
-    const data=await this.request('/calls',{method:'POST',body:{phone_number:request.number,voice:request.voice||DEFAULT_VOICE,max_duration:request.minutes,record:false,wait_for_greeting:true,voicemail_action:'hangup',metadata:{relay_request_id:request.id},
+    // Fast reply (the default): Jarvis speaks the moment you answer instead of waiting in silence for you to say hello, and answers after 250 ms of quiet instead of Bland's 500.
+    const fast=request.fast!==false;
+    const data=await this.request('/calls',{method:'POST',body:{phone_number:request.number,voice:request.voice||DEFAULT_VOICE,max_duration:request.minutes,record:false,wait_for_greeting:!fast,interruption_threshold:fast?250:500,voicemail_action:'hangup',metadata:{relay_request_id:request.id},
       first_sentence:'Hello, this is Jarvis, your AI assistant. Is this a good time for your requested check-in?',
       task:`You are Jarvis, an AI assistant calling the owner for this purpose: ${request.purpose}\nIdentify yourself as AI. Confirm you reached the owner before discussing any private details. If another person answers, do not disclose the purpose; ask for the owner and end the call if unavailable. Speak naturally and politely in complete sentences, addressing the owner as Sir. Keep it brief. Never ask for passwords, verification codes or payment details. Do not pretend to have completed work. Do not transfer, send messages, execute commands, make purchases, or promise actions on the Mac. Capture any requested follow-up in the call summary for the owner to review. End politely when the owner says no or goodbye.`}});
     if(!/^[a-zA-Z0-9_-]{1,128}$/.test(data?.call_id||''))throw Error('Bland did not return a verifiable call ID. Check Bland before retrying.');return{callId:data.call_id};

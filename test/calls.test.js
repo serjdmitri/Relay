@@ -31,3 +31,15 @@ test('immediate owner calls still enforce private mode, enabled status, quiet ho
 });
 
 test('call voice is explicitly sent and each review preserves its chosen voice',async()=>{const r=setup();const first=r.calls.prepare('Check in');assert.equal(first.voice,DEFAULT_VOICE);r.calls.configure({voice:'custom-male-voice'});assert.equal(first.voice,DEFAULT_VOICE);const next=r.calls.prepare('Another check-in');assert.equal(next.voice,'custom-male-voice');let body;const api=new Bland({getKey:()=> 'fake',fetchFn:async(_url,o)=>{body=JSON.parse(o.body);return{ok:true,json:async()=>({call_id:'test'})};}});await api.dial(next);assert.equal(body.voice,'custom-male-voice');});
+test('fast reply: Jarvis speaks as soon as you answer and replies sooner; it can be switched off',async()=>{
+  const bodies=[];const api=new Bland({getKey:()=> 'k',fetchFn:async(url,options)=>{bodies.push(JSON.parse(options.body));return{ok:true,json:async()=>({call_id:'safe-id'})};}});
+  await api.dial({id:'a',number:'+15555550123',purpose:'Check in',minutes:2});
+  await api.dial({id:'b',number:'+15555550123',purpose:'Check in',minutes:2,fast:true});
+  await api.dial({id:'c',number:'+15555550123',purpose:'Check in',minutes:2,fast:false});
+  assert.deepEqual(bodies.map(b=>[b.wait_for_greeting,b.interruption_threshold]),[[false,250],[false,250],[true,500]],'fast by default; off waits for you to speak first, with Bland\'s own reply delay');
+  assert.equal(DEFAULTS.fastReply,true);
+  const r=setup();assert.equal(r.calls.prepare('Check in').fast,true);
+  r.calls.configure({fastReply:false});assert.equal(r.calls.config().fastReply,false);
+  const slow=r.calls.prepare('Check in again');assert.equal(slow.fast,false);
+  r.calls.configure({fastReply:true});assert.equal(r.calls.prepare('And once more').fast,true);
+});
