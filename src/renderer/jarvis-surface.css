@@ -1,12 +1,14 @@
 /* Shared floating-menu surface. Text stays fully opaque. */
-:root { --menu-blue: rgb(7 31 53 / var(--menu-opacity, .88)); --menu-glow: rgb(12 67 106 / var(--menu-opacity, .88)); --menu-line: #42bcdf; --menu-ink: #e6f7ff; }
-#card { background: linear-gradient(145deg, var(--menu-blue), var(--menu-glow)) !important; color: var(--menu-ink); border: 1px solid var(--menu-line); border-radius: 4px; box-shadow: 0 0 18px #00c9ff35, inset 0 0 0 1px #5adfff18 !important; }
+:root { --menu-blue: rgb(7 31 53 / var(--menu-opacity, .88)); --menu-glow: rgb(12 67 106 / var(--menu-opacity, .88)); --menu-radius: 0; --menu-control-radius: 2px; --menu-line: #42bcdf; --menu-ink: #e6f7ff; }
+:is(#card, [data-menu="assist"] .a, [data-menu="assist"] .test, [data-menu="assist"] .status, [data-menu="holo"] #savemenu, [data-menu="holo"] #cutbar, [data-menu="holo"].ui-menu #items, [data-menu="ask"] #body) { background: linear-gradient(145deg, var(--menu-blue), var(--menu-glow)) !important; color: var(--menu-ink); border: 1px solid var(--menu-line); border-radius: var(--menu-radius) !important; box-shadow: 0 0 18px #00c9ff35, inset 0 0 0 1px #5adfff18 !important; }
 #bar { background: rgba(7, 35, 57, .4); color: var(--menu-ink); }
-#x { border-radius: 2px; }
+#x, #card :is(.item, .facts, .thumb, .link, .x), [data-menu="holo"] :is(.btn, .cadui, .num, .note .txt, .note .notex), [data-menu="ask"] :is(#sheen, #neck, #pill::before, .btn) { border-radius: var(--menu-control-radius) !important; }
+[data-menu="ask"] #sheen { border: 1px solid var(--menu-line); }
+[data-menu="holo"] .note .txt { color: var(--menu-ink); background: var(--menu-blue); border: 1px solid var(--menu-line); }
 .card { width: calc(100vw - 32px); }
 @media (prefers-reduced-transparency: reduce) { :root { --menu-blue: #071f35; --menu-glow: #0c436a; } }
 
-.menu-toolbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; background: #08253de8; border-top: 1px solid #42bcdf66; -webkit-app-region: no-drag; }
+.menu-toolbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; background: var(--menu-blue); border-top: 1px solid #42bcdf66; -webkit-app-region: no-drag; }
 .menu-toolbar button { color: #e6f7ff; background: #134f72; border: 1px solid #53bad7; padding: 5px 9px; border-radius: 2px; cursor: pointer; font: inherit; }
 .menu-toolbar button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
 .menu-toolbar button:disabled { opacity: .6; cursor: wait; }

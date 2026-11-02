@@ -97,8 +97,9 @@
   .jarvis .scan::after { content: ""; position: absolute; top: 0; bottom: 0; width: 34%; background: linear-gradient(90deg, rgba(76,194,255,0), var(--cy), rgba(76,194,255,0)); animation: sweep 1.3s ease-in-out infinite; }
   @keyframes sweep { from { left: -34%; } to { left: 100%; } }
 </style>
+<link rel="stylesheet" href="jarvis-surface.css">
 </head>
-<body>
+<body data-menu="ask">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <filter id="goo-filter" x="-20%" y="-20%" width="140%" height="160%" color-interpolation-filters="sRGB">
     <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
@@ -111,5 +112,6 @@
   <div id="pill"></div>
 </div>
 <script src="ask.js"></script>
+<script src="menu-opacity.js"></script>
 </body>
 </html>
