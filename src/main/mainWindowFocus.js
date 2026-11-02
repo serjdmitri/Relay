@@ -6,7 +6,10 @@ async function activateMainWindow({ app, win, platform = process.platform }) {
   if (platform === 'darwin' && app.dock && !app.dock.isVisible()) await app.dock.show();
   if (win.isDestroyed() || !win.isVisible()) return;
   app.focus({ steal: true });
+  win.setFocusable?.(true);
+  win.setIgnoreMouseEvents?.(false);
   win.focus();
+  win.webContents?.focus();
 }
 
 function restoreDockPreference({ app, showInDock, platform = process.platform }) {
