@@ -272,6 +272,7 @@ test('immediate source errors are reported without aborting the briefing', async
 
 test('tomorrow calendar filters today, includes all-day events, and reports disconnected Google', async () => {
   const c = Object.create(AskController.prototype);
+  c.store={get:()=>({})};
   c.mac = { calendarEvents: async () => 'Today | Friday, October 30, 2026 at 9:00:00 AM\nTomorrow | Saturday, October 31, 2026 at 12:00:00 AM' };
   c.googleApiIfConnected = () => null;
   const result = await c.tomorrowCalendar(new Date(2026, 9, 30, 18));
@@ -283,4 +284,11 @@ test('tomorrow calendar filters today, includes all-day events, and reports disc
 test('briefing menu retains checked time, source links and unavailable/partial warnings',()=>{
  const {briefingCard}=require('../src/main/briefing');const card=briefingCard({now:new Date('2026-11-02T12:00:00Z'),missing:['mail'],school:{sourceUrl:'https://school.myschoolapp.com/lms-assignment/assignment-center/student',truncated:true}},'A sourced briefing.');assert.equal(card.summary,'A sourced briefing.');assert.equal(card.hold,true);assert.match(card.items[0].subtitle,/mail/);assert.match(card.items[1].title,/limited/);assert.match(card.links[0].url,/myschoolapp/);
  assert.deepEqual(briefingCard({school:{sourceUrl:'https://evil.test/?token=secret'}},'Unavailable.').links,[]);
+});
+
+test('disabled briefing sources make no source calls and are not reported empty or unavailable',async()=>{
+ const c=Object.create(AskController.prototype),sources=Object.fromEntries(Object.keys(require('../src/main/briefing').SOURCE_LABELS).map(k=>[k,false]));let calls=0;
+ c.store={get:k=>k==='settings.briefing'?{sources,city:'London',schoolUrl:'https://school.myschoolapp.com/lms-assignment/assignment-center/student'}:[]};c.mac={calendarEvents:async()=>{calls++;},remindersDue:async()=>{calls++;}};c.googleApiIfConnected=()=>({calEvents:async()=>{calls++;},gmailSearch:async()=>{calls++;}});c.bridge={};
+ const f=await c.briefingFacts(),tomorrow=await c.tomorrowCalendar(f.now);assert.equal(calls,0);assert.deepEqual(f.missing,[]);assert.equal(f.school,undefined);assert.equal(f.disabled.length,6);assert.equal(tomorrow.disabled.length,2);
+ const text=buildBriefing(f);assert.match(text,/turned off/);assert.doesNotMatch(text,/clear today|No reminders|Nothing is due|could not check|not configured/);
 });

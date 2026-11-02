@@ -1372,30 +1372,31 @@ class AskController {
   async briefingFacts({ includeGreeting = true, signal } = {}) {
     const cfg = this.store.get('settings.briefing') || {};
     const now = new Date();
+    const on = key => cfg.sources?.[key] !== false;
+    const disabled = Object.keys(require('./briefing').SOURCE_LABELS).filter(key => !on(key));
     const missing = [];
     const within = (fn, ms = 7000) => {
       let timer;
       return Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('too slow')), ms); })]).finally(() => clearTimeout(timer));
     };
     const g = this.googleApiIfConnected();
-    if (!g) missing.push('google-calendar', 'mail');
+    if (!g) {if(on('google-calendar'))missing.push('google-calendar');if(on('mail'))missing.push('mail');}
     const school = require('./school');
     const schoolProvider = this.store.get('settings.model.provider');
     const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
-      within(() => this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
-      within(() => this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
-      g ? within(() => g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
-      g ? within(() => g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
-      cfg.city ? within(() => fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
-      cfg.schoolUrl ? school.checkSchoolAssignments(this.bridge, cfg.schoolUrl, (prompt, system) => this.askOnce(prompt, system), { signal, stillCurrent: () => this.store.get('settings.model.provider') === schoolProvider }) : { problem: 'School assignments are not configured in briefing settings.' }
+      on('calendar') ? within(() => this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }) : [],
+      on('reminders') ? within(() => this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }) : [],
+      g && on('google-calendar') ? within(() => g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
+      g && on('mail') ? within(() => g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
+      on('weather') && cfg.city ? within(() => fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
+      !on('school') ? undefined : cfg.schoolUrl ? school.checkSchoolAssignments(this.bridge, cfg.schoolUrl, (prompt, system) => this.askOnce(prompt, system), { signal, stillCurrent: () => this.store.get('settings.model.provider') === schoolProvider }) : { problem: 'School assignments are not configured in briefing settings.' }
     ]);
-    if (!cfg.city) missing.push('weather');
-    else if (!weather) missing.push('weather-unavailable');
+    if(on('weather')) {if (!cfg.city) missing.push('weather');else if (!weather) missing.push('weather-unavailable');}
     const since = now.getTime() - 24 * 60 * 60 * 1000;
     const history = this.store.get('history');
     const unfinished = (Array.isArray(history) ? history : []).filter((h) => h.ts >= since && h.ts <= now.getTime() && ['failed', 'stopped'].includes(h.status) && h.text).slice(0, 3).map((h) => ({ text: h.text, status: h.status }));
     const memories = this.store.get('settings.memory') === false ? [] : this.store.get('memories');
-    return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, unfinished, memories: Array.isArray(memories) ? memories : [], overnight: (this.store.get('overnight') || {}).report || null, includeGreeting };
+    return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, disabled, school: schoolItems, unfinished, memories: Array.isArray(memories) ? memories : [], overnight: (this.store.get('overnight') || {}).report || null, includeGreeting };
   }
 
   async schoolAssignments({signal}={}) {
@@ -1427,9 +1428,11 @@ class AskController {
       ['weather', !missing.has('weather') && !missing.has('weather-unavailable')],
       ['school', !!facts.school && !facts.school.problem]
     ];
-    const unavailable = status.filter(([, ok]) => !ok).map(([name]) => name);
-    const checked = status.filter(([, ok]) => ok).map(([name]) => name);
-    const detail = `Checked: ${checked.join(', ') || 'none'}. Unavailable or not configured: ${unavailable.join(', ') || 'none'}.${facts.school?.problem ? ` School: ${facts.school.problem}` : ''}${facts.tomorrow?.missing?.length ? ` Tomorrow unavailable: ${facts.tomorrow.missing.join(', ')}.` : ''}`;
+    const disabledNames=(facts.disabled||[]).map(key=>require('./briefing').SOURCE_LABELS[key]);
+    const active=status.filter(([name])=>!disabledNames.includes(name));
+    const unavailable = active.filter(([, ok]) => !ok).map(([name]) => name);
+    const checked = active.filter(([, ok]) => ok).map(([name]) => name);
+    const detail = `Disabled: ${disabledNames.join(', ') || 'none'}. Checked: ${checked.join(', ') || 'none'}. Unavailable or not configured: ${unavailable.join(', ') || 'none'}.${facts.school?.problem ? ` School: ${facts.school.problem}` : ''}${facts.tomorrow?.missing?.length ? ` Tomorrow unavailable: ${facts.tomorrow.missing.join(', ')}.` : ''}`;
     this.store.addAction({ id: crypto.randomUUID(), requestId, tool: 'check_daily_sources', input: { report }, result: detail, ok: unavailable.length === 0, ts: Date.now() });
   }
 
@@ -1504,16 +1507,17 @@ class AskController {
     const end = new Date(start); end.setDate(end.getDate() + 1);
     const missing = [];
     const within = (fn) => { let timer; return Promise.race([Promise.resolve().then(fn), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 7000); })]).finally(() => clearTimeout(timer)); };
+    const on=key=>this.store.get('settings.briefing')?.sources?.[key]!==false;
     const google = this.googleApiIfConnected();
     const [mac, remote] = await Promise.all([
-      within(() => this.mac.calendarEvents(2)).then(parseMacEvents).catch(() => { missing.push('Mac calendar'); return []; }),
-      google ? within(() => google.calEvents(null, 2)).then((events) => events.map((e) => {
+      on('calendar') ? within(() => this.mac.calendarEvents(2)).then(parseMacEvents).catch(() => { missing.push('Mac calendar'); return []; }) : [],
+      on('google-calendar') ? google ? within(() => google.calEvents(null, 2)).then((events) => events.map((e) => {
         const value = String(e.start || '');
         const date = /^\d{4}-\d\d-\d\d$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
         return { title: e.title, start: date, allDay: !value.includes('T') };
-      })).catch(() => { missing.push('Google calendar'); return []; }) : (missing.push('Google calendar'), [])
+      })).catch(() => { missing.push('Google calendar'); return []; }) : (missing.push('Google calendar'), []) : []
     ]);
-    return { events: mergeEvents(mac, remote).filter((e) => e.start instanceof Date && Number.isFinite(e.start.getTime()) && e.start >= start && e.start < end), missing };
+    return { events: mergeEvents(mac, remote).filter((e) => e.start instanceof Date && Number.isFinite(e.start.getTime()) && e.start >= start && e.start < end), missing, disabled: ['calendar','google-calendar'].filter(key=>!on(key)) };
   }
 
   async dailyPlanCommand(close = false, requestId = null) {

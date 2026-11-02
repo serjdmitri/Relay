@@ -837,6 +837,10 @@ const PAGES = {
         const row = h(`<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">Morning briefing</div><div class="d">Say “good morning” or “brief me”: the weather, today's calendar (this Mac's and Google's), what is due, and important unread email. To hear it every day, say “every weekday at 7 brief me”. Your city is only used to look up the weather.</div></div><input class="field" id="bcity" style="width:170px" placeholder="City, e.g. Hollywood, Florida" value="${esc(b.city || '')}"><input class="field" id="bname" style="width:110px;margin-left:8px" placeholder="Your name" value="${esc(b.name || '')}"></div>`);
         $('#bcity', row).onchange = (e) => relay.set('settings.briefing.city', e.target.value.trim().slice(0, 80));
         $('#bname', row).onchange = (e) => relay.set('settings.briefing.name', e.target.value.trim().slice(0, 30));
+        const sources=h('<div style="flex-basis:100%;margin-top:10px"><div class="t">Sources for briefings and daily plans</div><div class="d">Turn off sources you do not want checked. This also applies to close-of-day calendar checks.</div><div data-briefing-sources style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px"></div></div>');
+        for(const [key,label] of Object.entries({calendar:'Mac calendar','google-calendar':'Google calendar',reminders:'Reminders',mail:'Important inbox items',weather:'Weather',school:'School assignments'})){
+          const item=h(`<label><input type="checkbox" ${b.sources?.[key]!==false?'checked':''}> ${label}</label>`);item.querySelector('input').onchange=e=>relay.set('settings.briefing.sources.'+key,e.target.checked);sources.querySelector('[data-briefing-sources]').append(item);
+        }row.append(sources);
         return row;
       })(),
       (() => {
