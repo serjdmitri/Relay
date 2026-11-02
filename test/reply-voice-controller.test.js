@@ -40,6 +40,22 @@ test('spoken answers and failures are spoken, while typed requests and stopped w
   }
 });
 
+test('an explicit replay speaks once with automatic speech off and preserves the last answer', () => {
+  const spoken = [], writes = [];
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, {
+    voiceAsk: false, state: 'working', queue: [], tasks: [],
+    store: { get: key => key === 'settings' ? {} : false, set: (...args) => writes.push(args), addHistory() {} },
+    speaker: { speak: text => spoken.push(text) }, overlay: { endRequest() {}, workDone() {} },
+    onChange() {}, push() {}, sound() {}, close() {}, followUpSoon() { assert.fail('replay must not start a follow-up'); }
+  });
+  c.finish({ id: 'replay', text: 'read your last answer', ts: Date.now() }, { status: 'done', reply: 'The answer is ready.', preserveLastReply: true, forceSpeak: true, noFollowUp: true });
+  clearTimeout(c.doneTimer);
+  assert.deepEqual(spoken, ['The answer is ready, Sir.']);
+  assert.equal(writes.some(([key]) => key === 'lastReply'), false);
+  assert.equal(c.followFor, null);
+});
+
 test('yes listens again and no closes only during a spoken follow-up', async () => {
   for (const [text, expected] of [['no thank you', 'close'], ['yes', 'listen'], ['open Notes', 'command']]) {
     const c = Object.create(AskController.prototype);

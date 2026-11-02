@@ -1904,6 +1904,10 @@ class AskController {
       case 'routine-run':
         return this.runRoutine(cmd.routine, entry);
       default: {
+        if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?(?:read|say|speak|repeat) (?:your |the )?(?:last |previous )(?:answer|reply|response)(?: (?:again|aloud|out loud))?[.!?]*$/i.test(text.trim())) {
+          const previous = this.store.get('lastReply');
+          return this.finish(entry, { status: previous ? 'done' : 'failed', reply: previous || 'There is no reply to read yet.', actions: 0, preserveLastReply: true, forceSpeak: !entry.remote, noFollowUp: true });
+        }
         if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?copy (?:your |the )?(?:last |previous )(?:answer|reply|response)[.!?]*$/i.test(text.trim())) {
           return this.finish(entry, await this.copyLastReply());
         }
@@ -3101,11 +3105,11 @@ class AskController {
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
-    const askAgain = ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false;
-    this.followFor = ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote && this.store.get('settings.followUp')?.enabled !== false ? entry.id : null;
+    const askAgain = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false;
+    this.followFor = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote && this.store.get('settings.followUp')?.enabled !== false ? entry.id : null;
     this.awaitingFollowAnswer = !!askAgain;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if (this.store.get('settings.speakReplies') && this.voiceAsk && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(spokenReply(reply, askAgain), { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
+    if ((res.forceSpeak || (this.store.get('settings.speakReplies') && this.voiceAsk)) && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(spokenReply(reply, askAgain), { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     clearTimeout(this.holdTimer);
