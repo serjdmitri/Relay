@@ -15,7 +15,7 @@
   .card::-webkit-scrollbar { display: none; }
   body.show .card { pointer-events: auto; animation: pop .62s cubic-bezier(.2, .9, .25, 1) forwards; }
   body.hide .card { animation: tuck .42s cubic-bezier(.5, 0, .75, .4) forwards; }
-  @keyframes pop { 0% { opacity: 0; transform: translateX(60px) scale(.2, .55); filter: blur(14px); border-radius: 80px; } 38% { opacity: 1; transform: translateX(-6px) scale(1.06, 1.03); filter: blur(2px); border-radius: 32px; } 62% { transform: translateX(2px) scale(.99); filter: blur(0); } 100% { opacity: 1; transform: none; filter: blur(0); border-radius: 26px; } }
+  @keyframes pop { 0% { opacity: 0; transform: translateX(60px) scale(.2, .55); filter: blur(14px); border-radius: 80px; } 38% { opacity: 1; transform: translateX(-6px) scale(1.06, 1.03); filter: blur(2px); border-radius: 32px; } 62% { transform: translateX(2px) scale(.99); filter: blur(0); } 100% { opacity: 1; transform: none; filter: blur(0); border-radius: 4px; } }
   @keyframes tuck { 0% { opacity: 1; transform: none; filter: blur(0); } 35% { opacity: 1; transform: translateX(-6px) scale(1.03); filter: blur(1px); } 100% { opacity: 0; transform: translateX(64px) scale(.16, .5); filter: blur(14px); border-radius: 90px; } }
   .hero { position: relative; height: 236px; background: #0b1218; }
   .hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -65,6 +65,14 @@
   .weather-day-temps { font-size: 14px; font-weight: 700; } .weather-day-rain { color: #a9eaff; font-size: 9px; }
   @media (max-width: 580px) { .weather-main { align-items: stretch; flex-direction: column; } .weather-metrics { flex-basis: auto; grid-template-columns: repeat(3, 1fr); } .weather-inner { padding: 17px; } }
   @media (prefers-reduced-motion: reduce) { body.show .card, body.hide .card { animation-duration: .01ms; } }
+  /* Shared JARVIS treatment for floating answer cards; the separate side menu keeps its shape. */
+  .card:not(.weather) { border-radius: 4px; border: 1px solid #2ba8d8; background: linear-gradient(145deg, #08243e, #0c3a60 70%, #07203b); box-shadow: inset 0 0 32px #0a2645, 0 0 18px #00c9ff44; }
+  .card:not(.weather) .body { background-image: linear-gradient(#45d6ff0d 1px, transparent 1px), linear-gradient(90deg, #45d6ff0d 1px, transparent 1px); background-size: 32px 32px; }
+  .card:not(.weather) .item, .card:not(.weather) .facts { border-radius: 3px; background: #082e50b8; box-shadow: inset 0 0 0 1px #49b7db88; }
+  .card:not(.weather) .thumb { border-radius: 2px; }
+  .card:not(.weather) .link, .card:not(.weather) .x { border-radius: 2px; }
+  .card h1, .weather-kicker, .weather-source { -webkit-app-region: drag; cursor: grab; user-select: none; }
+  .card .x, .weather-close { -webkit-app-region: no-drag; }
 </style>
 </head>
 <body>
