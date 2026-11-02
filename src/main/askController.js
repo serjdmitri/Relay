@@ -1387,7 +1387,7 @@ class AskController {
         return { status: 'done', reply, actions: 0 };
       }
       const unit = result.units.toUpperCase();
-      if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'weather', ...result });
+      if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'weather', hold: true, ...result });
       const today = result.days[0];
       return { status: 'done', reply: `The forecast for ${result.location} starts with ${today.conditions || 'conditions unavailable'}, a high of ${Math.round(today.high)} and a low of ${Math.round(today.low)} degrees ${unit}.`, actions: 0 };
     } catch {

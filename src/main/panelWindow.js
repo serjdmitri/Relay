@@ -40,7 +40,7 @@ class PanelWindows {
       webPreferences: { preload: this.preload, contextIsolation: true, sandbox: true }
     });
     this.windows.set(id, w);
-    w.setAlwaysOnTop(true, 'floating');
+    w.setAlwaysOnTop(true, 'screen-saver', -1);
     w.setHiddenInMissionControl?.(true);
     w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
