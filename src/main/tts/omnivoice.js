@@ -22,7 +22,7 @@ class OmniVoice {
     const died = () => { if (this.child !== child) return; this.child = null; for (const p of this.pending.values()) { p.cleanup(); try { fs.unlinkSync(p.file); } catch {} p.reject(new Error('OmniVoice stopped')); } this.pending.clear(); };
     child.on('error', died); child.on('exit', died);
   }
-  synthesize(text, { signal } = {}) {
+  synthesize(text, { signal, rate = 'normal' } = {}) {
     if (!this.installed()) return Promise.reject(new Error('OmniVoice is not installed'));
     if (signal?.aborted) return Promise.reject(Object.assign(new Error('Stopped'), { name: 'AbortError' }));
     this.start();
@@ -33,7 +33,7 @@ class OmniVoice {
       const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', cancel); };
       this.pending.set(id, { resolve, reject, file, cleanup });
       signal?.addEventListener('abort', cancel, { once: true });
-      this.child.stdin.write(JSON.stringify({ id, text, path: file }) + '\n');
+      this.child.stdin.write(JSON.stringify({ id, text, path: file, speed: ({slower:.9,normal:1,faster:1.15})[rate] || 1 }) + '\n');
     });
   }
   stop(reason = Object.assign(new Error('Stopped'), { name: 'AbortError' })) {

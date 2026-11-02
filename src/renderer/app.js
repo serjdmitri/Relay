@@ -993,12 +993,22 @@ const PAGES = {
     };
     vcard.append(jrow);
     const softOn = ((S.settings.voices && S.settings.voices.quiet && S.settings.voices.quiet.volume) ?? 0.55) < 1;
-    const qrow = h(`<div class="row"><div class="grow"><div class="t">Soft voice for confirmations</div><div class="d">“Timer set for 5 minutes” and similar are spoken quietly. Long answers are read a little slower.</div></div><div class="toggle ${softOn ? 'on' : ''}"></div></div>`);
+    const qrow = h(`<div class="row"><div class="grow"><div class="t">Soft voice for confirmations</div><div class="d">Brief acknowledgements are spoken quietly. Choose each reply speed below.</div></div><div class="toggle ${softOn ? 'on' : ''}"></div></div>`);
     qrow.onclick = () => relay.set('settings.voices.quiet.volume', softOn ? 1 : 0.55);
     vcard.append(qrow);
     const rrow = h(`<div class="row"><div class="grow"><div class="t" style="font-weight:600">Speed</div></div><div class="seg sm">${[['slower', 'Slower'], ['normal', 'Normal'], ['faster', 'Faster']].map(([v, l]) => `<button data-v="${v}" class="${(S.settings.voiceRate || 'normal') === v ? 'on' : ''}" style="width:78px">${l}</button>`).join('')}</div></div>`);
     rrow.onclick = (e) => e.target.dataset.v && relay.set('settings.voiceRate', e.target.dataset.v);
     vcard.append(rrow);
+    const setRates=rates=>{const voices={...S.settings.voices};for(const [job,rate] of Object.entries(rates))voices[job]={...(voices[job]||{}),rate};S.settings.voices=voices;return relay.set('settings.voices',voices);};
+    const presetRow=h('<div class="row"><div class="grow"><div class="t">Quick replies, calm reading</div><div class="d">Use faster acknowledgements and short replies, with slower long answers.</div></div><button class="btn">Apply preset</button></div>');
+    $('button',presetRow).onclick=()=>setRates({quiet:'faster',reply:'faster',reading:'slower'});
+    vcard.append(presetRow);
+    for(const [job,label,fallback] of [['quiet','Brief acknowledgements','normal'],['reply','Short replies','normal'],['reading','Long replies','slower']]){
+      const selected=S.settings.voices?.[job]?.rate || (S.settings.voiceRate && S.settings.voiceRate!=='normal'?S.settings.voiceRate:fallback);
+      const row=h(`<div class="row" style="flex-wrap:wrap;gap:8px"><div class="grow"><div class="t">${label}</div></div><div class="seg sm">${[['slower','Slower'],['normal','Normal'],['faster','Faster']].map(([v,l])=>`<button data-rate="${v}" class="${selected===v?'on':''}" style="width:66px">${l}</button>`).join('')}</div></div>`);
+      row.onclick=e=>{if(e.target.dataset.rate)setRates({[job]:e.target.dataset.rate});};
+      vcard.append(row);
+    }
     c.append(vcard);
     // ---- more natural voices ----
     c.append(h('<div class="section-title">More natural voices</div>'));

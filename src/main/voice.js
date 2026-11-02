@@ -113,7 +113,7 @@ class Speaker {
     if (this.ackAudio?.key === key) return Promise.resolve();
     if (this.preparing) return this.preparing;
     this.preparing = (async () => {
-      const file = await (engine === 'omnivoice' ? this.omni.synthesize('On it, Sir.')
+      const file = await (engine === 'omnivoice' ? this.omni.synthesize('On it, Sir.', { rate })
         : this.kokoro.synthesize('On it, Sir.', { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate }));
       try { this.ackAudio = { key, bytes: fs.readFileSync(file) }; } finally { this.discard(file); }
     })().catch(() => {}).finally(() => { this.preparing = null; });
@@ -199,7 +199,7 @@ class Speaker {
 
   // Makes and plays a reply with one engine. Throws when the engine fails.
   async speakWith(engine, tts, say, rate, token, signal, { volume = 1, kokoroVoice, cachedAudio } = {}) {
-    const make = (piece) => cachedAudio ? Promise.resolve(this.writeTemp(cachedAudio, 'wav')) : (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal }) : engine === 'kokoro'
+    const make = (piece) => cachedAudio ? Promise.resolve(this.writeTemp(cachedAudio, 'wav')) : (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal, rate }) : engine === 'kokoro'
       ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate })
       : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
     const pieces = cloud.sentences(say, 160);
