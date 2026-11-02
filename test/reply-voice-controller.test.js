@@ -8,6 +8,22 @@ Module._load = function (name, ...args) {
 let AskController;
 try { ({ AskController } = require('../src/main/askController')); } finally { Module._load = original; }
 
+test('copying the last answer preserves it and reports missing or failed copies', async () => {
+  const copied = [];
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, { store: { get: () => 'The original answer.' }, mac: { clipboardWrite: async (text) => copied.push(text) } });
+  const result = await c.copyLastReply();
+  assert.deepEqual(copied, ['The original answer.']);
+  assert.equal(result.status, 'done');
+  assert.equal(result.preserveLastReply, true);
+  c.store.get = () => '';
+  assert.equal((await c.copyLastReply()).status, 'failed');
+  assert.equal(copied.length, 1);
+  c.store.get = () => 'Answer';
+  c.mac.clipboardWrite = async () => { throw new Error('clipboard unavailable'); };
+  assert.equal((await c.copyLastReply()).status, 'failed');
+});
+
 test('spoken answers and failures are spoken, while typed requests and stopped work stay silent', () => {
   for (const [byVoice, status] of [[true, 'done'], [true, 'failed'], [true, 'stopped'], [false, 'done'], [false, 'failed']]) {
     const spoken = [];
