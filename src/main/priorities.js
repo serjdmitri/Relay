@@ -52,6 +52,9 @@ function buildPriorities(facts, { schoolUrl = '' } = {}) {
     add({ title: clean(m.subject), source: 'Email', group: 'soon', when: `from ${from}`, order: 7, detail: 'Important and unread, from the last two days.', open: m.id ? { url: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(String(m.id))}` } : { app: 'Mail' } });
   }
 
+  const ov = facts.overnight;
+  if (ov && ov.summary && now.getTime() - ov.ts < 20 * HOUR && ov.ts <= now.getTime() + HOUR) add({ title: `Overnight: ${clean(ov.summary, 140)}`, source: 'Relay', group: ov.counts && ov.counts.problem ? 'now' : 'today', when: 'last night', order: ov.counts && ov.counts.problem ? 0.2 : 4.5, detail: 'Say "what happened overnight" for the full report.' });
+
   for (const h of facts.unfinished || []) if (h && h.text) add({ title: `Review: ${clean(h.text, 100)}`, source: 'Relay', group: 'soon', when: h.status === 'stopped' ? 'stopped before it finished' : 'did not work', order: 7.5 });
 
   items.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.order - b.order);

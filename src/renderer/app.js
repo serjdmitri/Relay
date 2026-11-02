@@ -1180,6 +1180,17 @@ const PAGES = {
     }
     fpCard.append(h('<div class="d" style="padding:6px 14px 10px">A tool that already asks you still asks. These rules only add questions or refuse; they never skip one. "At this Mac only" means a phone or a text cannot approve it. Background agents cannot ask, so anything above Allow is refused for them.</div>'));
     c.append(fpCard);
+    c.append(h('<div class="section-title">Overnight tasks</div>'));
+    const onCard = h('<div class="card"></div>');
+    onCard.append(toggleRow('Run my overnight list while I sleep', 'Say “tonight, organize my Downloads” and it waits on tonight\'s list. Between the hours below Relay does the list one task at a time, only if the Mac is awake and Relay is open. Nobody can approve a question then, so anything risky is skipped, and in the morning Relay reports what it could check itself, what it only reported, what failed and what needed you.', 'settings.overnight.enabled'));
+    const on = S.settings.overnight || { from: 1, to: 6 };
+    const hrs = Array.from({ length: 24 }, (_, i) => `<option value="${i}">${i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</option>`).join('');
+    const onRow = h(`<div class="row"><div class="grow"><div class="t">Overnight hours</div><div class="d">From and until (the report comes after it ends).</div></div><select id="ovf">${hrs}</select><span class="d" style="padding:0 8px">to</span><select id="ovt">${hrs}</select></div>`);
+    $('#ovf', onRow).value = String(Number.isInteger(on.from) ? on.from : 1); $('#ovt', onRow).value = String(Number.isInteger(on.to) ? on.to : 6);
+    $('#ovf', onRow).onchange = (e) => relay.set('settings.overnight.from', Number(e.target.value));
+    $('#ovt', onRow).onchange = (e) => relay.set('settings.overnight.to', Number(e.target.value));
+    onCard.append(onRow);
+    c.append(onCard);
     if (Object.keys(S.flagList || {}).length) c.append(h('<div class="section-title">Experimental</div>'));
     const ex = h('<div class="card"></div>');
     for (const [name, f] of Object.entries(S.flagList || {})) {

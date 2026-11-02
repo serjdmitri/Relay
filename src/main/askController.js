@@ -71,6 +71,7 @@ const { parseExplainCommand, explainPrompt, needsDevices } = require('./explain'
 const { parseDoctorCommand } = require('./doctor');
 const { parseAuditCommand, parseWatchCommand } = require('./securityAudit');
 const { parsePrioritiesCommand } = require('./priorities');
+const { parseOvernightCommand } = require('./overnight');
 const lessons = require('./lessons');
 const toolCategories = require('./agent/toolCategories');
 const { ConfirmHub } = require('./confirmHub');
@@ -1352,7 +1353,7 @@ class AskController {
     const history = this.store.get('history');
     const unfinished = (Array.isArray(history) ? history : []).filter((h) => h.ts >= since && h.ts <= now.getTime() && ['failed', 'stopped'].includes(h.status) && h.text).slice(0, 3).map((h) => ({ text: h.text, status: h.status }));
     const memories = this.store.get('settings.memory') === false ? [] : this.store.get('memories');
-    return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, unfinished, memories: Array.isArray(memories) ? memories : [], includeGreeting };
+    return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, unfinished, memories: Array.isArray(memories) ? memories : [], overnight: (this.store.get('overnight') || {}).report || null, includeGreeting };
   }
 
   async briefingText(options = {}) {
@@ -1984,6 +1985,7 @@ class AskController {
         if (!opts.shown && !opts.scheduled) {
           if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }
+          if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
           const menus = require('./menuIntent').menuRequests(effective);

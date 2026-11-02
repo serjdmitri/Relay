@@ -81,3 +81,16 @@ test('"show my priorities" and similar are understood, and other requests are le
   for (const t of ['show my priorities', 'priority menu', 'what should I do today', 'Jarvis, what needs my attention', 'what are my priorities', "what's my top priority", "what's most important today", 'what do I need to do first', 'open my priority list', "today's priorities", "what's due soon", 'what should I work on next', 'bring up my priorities']) assert.equal(parsePrioritiesCommand(t), true, t);
   for (const t of ['good morning', 'give me my briefing', 'plan today', 'close the day', "what's the weather", 'what should I eat for dinner', 'priorities of the Roman empire in 50 words please explain thoroughly', 'what is the priority queue in computer science', 'what is the capital of France', 'security audit', 'show network radar', '']) assert.equal(parsePrioritiesCommand(t), false, t);
 });
+
+test('last night\'s overnight report shows up for the morning, urgent only when something needs attention', () => {
+  const rep = (counts, summary) => ({ ts: NOW.getTime() - 3 * 3600e3, counts, summary, text: 'x' });
+  const ok = buildPriorities(facts({ overnight: rep({ checked: 1, recorded: 1, problem: 0, skipped: 0 }, '1 checked, 1 done but not independently checked') }));
+  const okItem = ok.items.find((i) => i.title.startsWith('Overnight:'));
+  assert.equal(okItem.group, 'today'); assert.equal(okItem.title, 'Overnight: 1 checked, 1 done but not independently checked'); assert.match(okItem.detail, /what happened overnight/);
+  const bad = buildPriorities(facts({ overnight: rep({ checked: 0, recorded: 0, problem: 2, skipped: 0 }, '2 need attention') }));
+  assert.equal(bad.items.find((i) => i.title.startsWith('Overnight:')).group, 'now');
+  assert.equal(titles(bad, 'now')[0].startsWith('Pay phone bill') || titles(bad, 'now').includes('Overnight: 2 need attention'), true);
+  const old = buildPriorities(facts({ overnight: { ...rep({ problem: 0 }, 'x done'), ts: NOW.getTime() - 30 * 3600e3 } }));
+  assert.ok(!old.items.some((i) => i.title.startsWith('Overnight:')), 'a report older than 20 hours is not shown');
+  assert.ok(!buildPriorities(facts()).items.some((i) => i.title.startsWith('Overnight:')));
+});

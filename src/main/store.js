@@ -21,6 +21,7 @@ const DEFAULTS = {
     failover: { codex: true, until: 0 }, // when Claude is out of usage, carry on with Codex (signed in with ChatGPT) without a word; `until` is when Claude is tried again
     recap: { enabled: true, hour: 20, minute: 30, lastRun: '' }, // each evening: a notification with what Relay did today, and what can be undone
     robotics: { lists: {}, sheetId: '' }, // checklists you edited (the standard ones are built in), and the Google Sheet that "log this" adds a line to
+    overnight: { enabled: true, from: 1, to: 6 }, // work you hand Relay for the night runs between these hours (24-hour clock), one task at a time, only if the Mac is awake and Relay is open; the report comes in the morning
     filePermissions: { levels: { low: 'allow', medium: 'allow', high: 'ask', critical: 'ask-mac' } }, // how risky a file operation is (low, medium, high, critical) and what to do about each: allow | ask | ask-mac (only at this Mac) | deny
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead
     homework: { full: true, explain: true, format: 'docx', voiceSample: '', voiceStyle: '' }, // the homework helper: allow whole solutions, add a "How it works" section, Word | PDF | text, a sample of your writing and how you describe your voice
