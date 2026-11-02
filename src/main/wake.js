@@ -21,19 +21,18 @@ const same = (heard, want) => heard === want || (want.length >= 5 && heard.lengt
 // Levels are sampled about 20 times per second, so a real microphone check is needed.
 class ClapGate {
   constructor() { this.reset(); }
-  reset() { this.high = false; this.first = null; this.until = 0; this.floor = .025; }
-  level(value, now) {
+  reset() { this.high = false; this.highSince=null; this.first = null; this.until = 0; this.floor = .025; }
+  level(value, now, minimum=.18) {
     const sample = Number(value);
     if (!Number.isFinite(sample)) return false;
-    const threshold = Math.max(.18, Math.min(.75, this.floor * 4 + .07));
-    if (sample < threshold * .8) { this.high = false; this.floor = this.floor * .94 + Math.max(0, sample) * .06; return false; }
+    const threshold = Math.max(Math.max(.05,Math.min(.7,Number(minimum)||.18)), Math.min(.9, this.floor * 4 + .07));
+    if (sample < threshold * .8) { if(this.high){this.first=now-this.highSince<=180?this.highSince:null;}this.high = false; this.highSince=null; this.floor = this.floor * .94 + Math.max(0, sample) * .06; return false; }
     if (sample < threshold) return false;
     if (this.high) return false;
-    this.high = true;
+    this.high = true;this.highSince=now;
     if (this.first !== null && now - this.first >= 120 && now - this.first <= 900) {
       this.first = null; this.until = now + 5000; return true;
     }
-    this.first = now;
     return false;
   }
   ready(now) { return this.until > 0 && now <= this.until; }
@@ -66,7 +65,7 @@ function heardWake(text, phrase) {
 class WakeWord {
   // speech: the Speech wrapper (events 'partial', and listen()/cancel()).
   // getConfig(): { enabled, phrase }. canListen(): false while Relay is busy, speaking or being configured.
-  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout, handoffMs = 300 }) {
+  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout, handoffMs = 450 }) {
     this.speech = speech;
     this.getConfig = getConfig;
     this.canListen = canListen;
@@ -91,7 +90,7 @@ class WakeWord {
     speech.on('partial', this.onPartial);
     speech.on('level', (level) => {
       if (!this.armed || !this.getConfig().requireClaps) return;
-      if (this.claps.level(level, Date.now())) this.clapPrefix = clean(this.lastPartial);
+      if (this.claps.level(level, Date.now(),this.getConfig().clapThreshold)) this.clapPrefix = clean(this.lastPartial);
     });
   }
 
@@ -163,9 +162,10 @@ class WakeWord {
     if (!heardWake(candidate, c.phrase)) return;
     if (Date.now() - this.lastWake < 1500) return;
     this.pendingText = candidate;
-    if (this.handoff !== null) return;
+    this.clearTimer(this.handoff);
+    const revision=this.handoffRevision=(this.handoffRevision||0)+1;
     const fire = () => {
-      if (!this.armed || !this.wanted) return;
+      if (!this.armed || !this.wanted || revision!==this.handoffRevision) return;
       const heard = this.pendingText;
       this.lastWake = Date.now(); this.disarm(); this.onWake(heard);
     };
