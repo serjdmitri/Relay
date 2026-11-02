@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('relay', {
   onAssist: (cb) => on('assist:state', (k, p) => cb(k, p)),
   cardClose: () => invoke('card:close'),
   cardAction: (action) => invoke('card:action', action),
+  onTrash: (cb) => on('trash:state', cb),
   onCardPin: (cb) => on('card:pin', cb),
   cardOpen: (u) => invoke('card:open', u),
   cardSize: (h) => invoke('card:size', h),

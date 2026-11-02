@@ -12,6 +12,6 @@ function velocity(trail, now) {
 function step(p, v, bounds, dt = 16) {
   const x = p.x + v.vx * dt, y = p.y + v.vy * dt;
   const close = v.vx > 0 && x >= bounds.x + bounds.width - 1;
-  return { point: { x: Math.max(bounds.x, Math.min(bounds.x + bounds.width - 1, x)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.height - 1, y)) }, velocity: { vx: v.vx * 0.88, vy: v.vy * 0.88 }, close };
+  return { point: { x: Math.max(bounds.x, Math.min(bounds.x + bounds.width - 1, x)), y: Math.max(bounds.y, Math.min(bounds.y + bounds.height - 1, y)) }, velocity: { vx: v.vx * 0.94, vy: v.vy * 0.94 }, close };
 }
 module.exports = { velocity, step };

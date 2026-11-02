@@ -9,8 +9,8 @@ const W = 300;
 const H = 260;
 
 class PanelWindows {
-  constructor({ preload, getLayouts = () => ({}), saveLayouts = () => {}, onArrange = () => {} }) {
-    Object.assign(this, { getLayouts, saveLayouts, onArrange });
+  constructor({ preload, motion = null, getLayouts = () => ({}), saveLayouts = () => {}, onArrange = () => {} }) {
+    Object.assign(this, { getLayouts, saveLayouts, onArrange, motion });
     this.preload = preload;
     this.specs = new Map();
     this.closers = new Map();
@@ -67,6 +67,9 @@ class PanelWindows {
     let onClosed = () => {};
     w.on('closed', () => { this.specs.delete(id); this.closers.delete(id); this.windows.delete(id); onClosed(); });
     this.closers.set(id, () => { if (!w.isDestroyed()) w.close(); });
+    let savedBounds;
+    w.on('close', () => { savedBounds = w.getBounds(); });
+    this.motion?.watchWindow(w, { key: `panel:${id}`, close: () => this.closers.get(id)?.(), undo: () => this.onRestore?.(spec, savedBounds) });
     return { reveal: () => { if (!w.isDestroyed()) { w.showInactive(); w.moveTop(); } }, send: (data) => { latestData = data; if (loaded && !w.isDestroyed()) w.webContents.send('panel:data', id, data); }, close: () => { if (!w.isDestroyed()) w.close(); }, onClosed: (fn) => { onClosed = fn; } };
   }
 }

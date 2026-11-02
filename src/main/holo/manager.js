@@ -13,7 +13,8 @@ const MAX_ITEMS = 4;
 class HoloManager {
   // createWindow(): a window-like object; cursor(): { x, y }; area(): the work area to place new ones in; download(url) -> Buffer;
   // saved(): the stored list; save(list): store it.
-  constructor({ createWindow, cursor, area, displayFor = null, getUi = () => ({ controls: 'menu', spin: true, spinDelay: 10 }), download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, library = null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
+  constructor({ createWindow, cursor, area, motion = null, displayFor = null, getUi = () => ({ controls: 'menu', spin: true, spinDelay: 10 }), download, fit = async () => null, putFile = () => '', generate = async () => { throw new Error('No generator.'); }, readFile = () => null, library = null, saved, save, setTimer = setInterval, clearTimer = clearInterval }) {
+    this.motion = motion;
     this.createWindow = createWindow;
     this.cursor = cursor;
     this.area = area;
@@ -294,9 +295,14 @@ class HoloManager {
   }
 
   // ----- moving by the name -----
+  motionTarget(h) {
+    const original = { title: h.title, items: h.items, options: h.options, pinned: h.pinned, x: h.x, y: h.y, scale: h.scale, solid: h.solid, annotations: h.annotations };
+    return { key: `holo:${h.id}`, alive: () => this.holos.has(h.id) && !h.win.isDestroyed(), undo: () => this.show(original), position: () => ({x:h.x,y:h.y}), move: (x,y) => { h.x=Math.round(x);h.y=Math.round(y);this.place(h);if(!h.win.isDestroyed())h.win.webContents.send('holo:state','pos',this.local(h)); }, finish: () => this.persist(), close: () => this.close(h.id) };
+  }
   startDrag(h) {
     this.stopDrag();
     const c = this.cursor();
+    this.motion?.begin(this.motionTarget(h), c, 'holo');
     this.dragging = { id: h.id, ax: c.x - h.x, ay: c.y - h.y, target: null, started: Date.now() };
     this.dragging.timer = this.setTimer(() => this.tickDrag(), 10);
   }
@@ -310,6 +316,7 @@ class HoloManager {
     h.y = Math.round(c.y - d.ay);
     this.place(h);
     if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'pos', this.local(h));
+    this.motion?.update(`holo:${h.id}`, c);
     const others = [...this.holos.values()].filter((o) => o !== h && !o.win.isDestroyed()).map((o) => ({ id: o.id, bounds: this.rect(o) }));
     this.hint(d, mergeTarget(this.rect(h), others));
   }
@@ -328,10 +335,13 @@ class HoloManager {
     this.clearTimer(d.timer);
     this.dragging = null;
     const h = this.holos.get(d.id);
+    if (this.motion && h && !h.win.isDestroyed() && this.motion.inTrash?.(`holo:${h.id}`)) { this.motion.release(`holo:${h.id}`); return; }
     if (d.target) {
+      this.motion?.release(`holo:${d.id}`, true);
       this.merge(d.id, d.target).catch(() => {});
     } else if (h && !h.win.isDestroyed()) {
-      this.persist();
+      if (this.motion) this.motion.release(`holo:${h.id}`);
+      else this.persist();
     }
   }
 
@@ -419,7 +429,8 @@ class HoloManager {
   close(id) {
     const h = this.holos.get(id);
     if (!h) return;
-    if (this.dragging?.id === id) this.stopDrag();
+    this.motion?.cancel(`holo:${id}`);
+    if (this.dragging?.id === id) { this.clearTimer(this.dragging.timer); this.dragging=null; }
     this.holos.delete(id);
     this.byWindow.delete(h.win.webContents.id);
     if (!h.win.isDestroyed()) h.win.close();

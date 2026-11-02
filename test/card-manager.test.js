@@ -54,3 +54,13 @@ test('saved geometry is clamped to the connected display and manual changes are 
   await new Promise(resolve => setTimeout(resolve, 230));
   assert.equal(layouts[a.key].x,100);
 });
+
+test('hand targeting finds every held or pinned card, not only the latest one',async()=>{
+ const m=new CardPanel({});m.onArrange=()=>{};
+ const a=await m.show({kind:'weather',location:'Paris',hold:true}),b=await m.show({kind:'weather',location:'London',hold:true});
+ a.win.setBounds({x:0,y:0,width:300,height:300});b.win.setBounds({x:400,y:0,width:300,height:300});
+ await m.action(a.win.webContents,'pin');
+ assert.equal(m.handTarget({x:100,y:100}).key,a.motionKey);
+ assert.equal(m.handTarget({x:500,y:100}).key,b.motionKey);
+ m.handTarget({x:100,y:100}).close();assert.equal(m.live().length,1);assert.equal(b.card.location,'London');
+});
