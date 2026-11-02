@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Owner recognition rebuilt the way Glance does it, and it can no longer lock you out.** The first version aligned faces on four rough points and flagged the owner as a stranger straight away. Faces are now aligned on five landmarks (both pupils, nose tip, mouth corners) from MediaPipe's face landmarker, onto the standard ArcFace template, exactly as Glance's own `FaceAligner` does, and the camera runs at 640x480 for more detail. **You need to say "enroll my face" again** (faces saved with the old alignment are ignored). New safety rule: it only *arms* once it has recognised you (alive) for three frames in a row in a session; until then it never sounds the alarm, blanks the screen or locks. "Owner recognition status" says whether it is armed and shows your best match score against the threshold. Glance's own enrolled face data is encrypted inside Glance (and its model weights are research-licensed), so Relay does not read or copy them: Relay keeps its own enrollment.
+
 ## 0.37.1
 
 - **Liveness check: a photo of you no longer passes.** Owner recognition now also wants a blink. A face that matches yours but has not blinked for 15 seconds (it gets 6 seconds' grace when it first appears, so sitting down is fine) is treated as a picture: it counts as a stranger, starts the alarm, and cannot stop one. Uses MediaPipe's face landmarker (Apache-2.0, on this Mac) looking several times a second only while owner recognition is on. "Turn off the liveness check" / "turn on the liveness check". Honest limits: a video of you blinking can still fool it, a very still stare may be flagged until you blink, and enrollment itself does not check liveness. If the blink finder cannot load, you are told and faces count as alive.

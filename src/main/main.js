@@ -1448,10 +1448,10 @@ app.whenReady().then(() => {
     if (c.type === 'on') {
       if (!ownerState.templates.length) return { status: 'failed', reply: 'I do not know your face yet. Say "enroll my face" first.' };
       const note = await needCamera(); setOwner({ enabled: true }); ownerGuard.reset(); broadcast();
-      return done(`Owner recognition is on. If a face that is not yours is in view while you are not, I will sound the alarm and lock the screen after ${cfg().seconds} seconds.${note} A still photo of you will not pass (it must blink), but a video of you could, and it may flag you in poor light for a moment; coming back into view stops it.`);
+      return done(`Owner recognition is on, and arms itself once it has recognised you. If a face that is not yours is in view while you are not, I will sound the alarm and lock the screen after ${cfg().seconds} seconds.${note} A still photo of you will not pass (it must blink), but a video of you could, and it may flag you in poor light for a moment; coming back into view stops it.`);
     }
     const t = ownerState.templates.length;
-    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
+    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. ${ownerGuard.armed ? 'It has recognised you this session, so it is armed.' : 'It has not recognised you yet this session, so it is not armed and will not sound the alarm or lock'}${ownerGuard.lastScore !== null ? ` (best match so far ${ownerGuard.lastScore.toFixed(2)}; it needs ${cfg().threshold.toFixed(2)})` : ''}. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
   };
   ask.viewerGuardCommand = async (c) => {
     const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';

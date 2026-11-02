@@ -1,7 +1,7 @@
 // Owner recognition, camera side: turns a face the finder found into 128 numbers with the SFace model (on this Mac, through onnxruntime-web). Used by
 // presence.js only while owner recognition is on or you are enrolling. A picture is never kept or sent; only these numbers (and, for matching, a score) are.
 import * as ort from './vendor/faceid/ort.wasm.min.mjs';
-import { alignFromKeypoints, toPlanar } from './facealign.js';
+import { alignFromKeypoints, alignFromLandmarks, toPlanar } from './facealign.js';
 
 export async function createEmbedder() {
   ort.env.wasm.wasmPaths = new URL('./vendor/faceid/', import.meta.url).href;
@@ -12,9 +12,10 @@ export async function createEmbedder() {
   const canvas = document.createElement('canvas'); canvas.width = 112; canvas.height = 112;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-  // detection: one entry of FaceDetector's result (with its keypoints). Returns an array of 128 numbers, or null when the face is too small or turned away.
-  return async function embed(video, detection) {
-    const t = alignFromKeypoints(detection?.keypoints, video.videoWidth, video.videoHeight);
+  // face: { lm } (the 478 landmarks from the face landmarker, the accurate way, as Glance does) or a FaceDetector result with keypoints (the coarse fallback).
+  // Returns an array of 128 numbers, or null when the face is too small or turned away.
+  return async function embed(video, face) {
+    const t = face?.lm ? alignFromLandmarks(face.lm, video.videoWidth, video.videoHeight) : alignFromKeypoints(face?.keypoints, video.videoWidth, video.videoHeight);
     if (!t) return null;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, 112, 112);
     ctx.setTransform(t.a, t.b, -t.b, t.a, t.tx, t.ty);
