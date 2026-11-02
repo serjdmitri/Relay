@@ -1,0 +1,11 @@
+:root{--ag-line:#42bcdf55;--ag-ink:#e6f7ff;--ag-muted:#9ec7d7;--ag-accent:#52ddff;--ag-tint:#041e3488;--ag-ok:#7ee0a6;--ag-bad:#ff9a8a;--ag-warn:#ffda9e}
+#body h3{margin:16px 0 6px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ag-accent)}
+#starter{border:1px solid var(--ag-line);background:var(--ag-tint);padding:10px;margin-top:10px}#starter label{font-size:11px;letter-spacing:.06em;color:var(--ag-muted);display:block;margin-bottom:4px}
+#jobs{width:100%;box-sizing:border-box;font:12px/1.4 system-ui;resize:vertical}#starter button{margin-top:8px}#startnote{font-size:11px;color:var(--ag-muted);margin-left:8px}
+.job{border:1px solid var(--ag-line);background:var(--ag-tint);margin:6px 0;padding:8px 10px;border-left-width:4px}.job.running{border-left-color:var(--ag-accent)}.job.queued{border-left-style:dashed;border-left-color:var(--ag-warn)}
+.job.st-done{border-left-color:var(--ag-ok)}.job.st-failed{border-left-color:var(--ag-bad)}.job.st-stopped{border-left-color:var(--ag-muted)}
+.jtask{color:var(--ag-ink);overflow-wrap:anywhere}.jstep{font-size:12px;color:var(--ag-muted);margin-top:3px}.cancel{margin-top:8px;font-size:12px}
+.finhead{display:flex;justify-content:space-between;align-items:center}.finhead button{font-size:11px}
+details.fin>summary{cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.badge{flex:none;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:1px 6px;border:1px solid currentColor;border-radius:3px}
+.st-done .badge{color:var(--ag-ok)}.st-failed .badge{color:var(--ag-bad)}.st-stopped .badge{color:var(--ag-muted)}
+.jresult{white-space:pre-wrap;font:12px/1.5 system-ui;color:var(--ag-ink);margin:8px 0 0;max-height:260px;overflow:auto;user-select:text}.empty{font-size:12px;color:var(--ag-muted);padding:6px 0}

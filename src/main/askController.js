@@ -41,7 +41,7 @@ const { McpRemote, mcpTools } = require('./connectors/mcp');
 const { corrections, noteCorrection } = require('./learn');
 const mem = require('./memory');
 const sched = require('./schedule');
-const { AgentManager, parseAgentCommand } = require('./agents');
+const { AgentManager, parseAgentCommand, parseAgentsDashboardCommand } = require('./agents');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -2054,6 +2054,7 @@ class AskController {
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
+          if (this.openAgentsDashboard && parseAgentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAgentsDashboard()); }
           if (this.openAssignments && parseAssignmentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAssignments()); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
