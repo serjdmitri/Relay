@@ -37,5 +37,5 @@ test('treemap preserves total area at narrow and wide sizes without overlaps or 
 });
 test('storage commands work independently of Claude or Codex; unrelated disk actions stay separate',()=>{
  for(const text of ['whats taking up my storage', 'what’s taking up my storage?', 'what is using my disk', 'check my storage', 'show my storage chart', 'show storage map','Open my disk map','Jarvis, what is filling up my space?','what\'s taking up my disk space','please show me the storage map'])assert.equal(isStorageRequest(text),true,text);
- for(const text of ['delete disk','weather in London','move my documents','show disk cpu and weather', 'show my storage and delete old files', 'what is taking up my storage then email my files'])assert.equal(isStorageRequest(text),false,text);
+ for(const text of ['delete disk','weather in London','move my documents','show my storage and delete old files', 'what is taking up my storage then email my files'])assert.equal(isStorageRequest(text),false,text);
 });

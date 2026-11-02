@@ -97,3 +97,42 @@ test('storage map opens through the local command path for both Claude and Codex
     assert.equal(opened, 1); assert.equal(result.status, 'done');
   }
 });
+
+test('natural menu phrases and multiple menus route locally with both providers', async t => {
+  for (const provider of ['claude', 'codex']) {
+    const c = make(), opened = [];
+    t.after(() => { clearTimeout(c.doneTimer); clearTimeout(c.holdTimer); });
+    const get = c.store.get;
+    c.store.get = k => k === 'settings.model.provider' ? provider : k === 'settings' ? { flags: { panels: true } } : get(k);
+    c.openStorageMap = () => { opened.push('storage'); return { status: 'done', reply: 'Storage open.' }; };
+    c.panelHub = { show: async spec => { opened.push(spec.builtin || spec.sources[0]); return { ok: true }; } };
+    c.forecastCommand = async query => { opened.push('weather:' + query.place); return { status: 'done', reply: 'Weather open.' }; };
+    c.runRequest = () => { throw Error('Menus should bypass the model'); };
+    const result = await c.handleText('can I see my storage and weather in Miami and calculator plus battery and wifi please');
+    assert.equal(result.status, 'done'); assert.deepEqual(opened, ['storage', 'weather:Miami', 'calculator', 'battery', 'network']);
+  }
+});
+test('a slow weather source does not delay opening other requested menus', async () => {
+  const c = make(), opened = [];
+  c.panelHub = { show: async () => { opened.push('calculator'); return { ok: true }; } };
+  let release;
+  c.forecastCommand = () => new Promise(resolve => { release = () => resolve({ status: 'done', reply: 'Weather.' }); });
+  const pending = c.openMenuRequests([{ kind: 'weather', query: { place: 'Miami' } }, { kind: 'calculator' }]);
+  assert.deepEqual(opened, ['calculator']); release(); await pending;
+});
+test('cancelling a group does not report it as a completed request after weather settles', async () => {
+  const c = make();
+  c.forecastCommand = (_q, { parentSignal }) => new Promise(resolve => parentSignal.addEventListener('abort', () => resolve({ status: 'stopped', reply: 'Stopped.' }), { once: true }));
+  const pending = c.openMenuRequests([{ kind: 'weather', query: { place: 'Miami' } }]);
+  c.abort.abort();
+  assert.equal((await pending).status, 'stopped');
+});
+test('again repeats the last keyword menu instead of an older model task', async t => {
+  const c = make(); let opened = 0;
+  t.after(() => { clearTimeout(c.doneTimer); clearTimeout(c.holdTimer); });
+  c.openStorageMap = () => { opened++; return { status: 'done', reply: 'Storage open.' }; };
+  c.runRequest = () => { throw Error('A repeated menu should not call the model'); };
+  await c.handleText('my computer has no free space');
+  await c.handleText('again');
+  assert.equal(opened, 2);
+});
