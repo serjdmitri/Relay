@@ -37,9 +37,17 @@ const usageOpen = { claude: false, codex: false };
 
 // A menu-bar window can receive a click without macOS activating the app.
 // Ensure keyboard input follows the field the user chose.
-document.addEventListener('focusin', (event) => {
-  if (event.target.matches('input, textarea, [contenteditable="true"]')) relay.focusMain();
-});
+let activatingField = false;
+const activateField = event => {
+  const field = event.target.closest?.('input, textarea, [contenteditable="true"]');
+  if (!field || field.disabled || activatingField) return;
+  activatingField = true;
+  Promise.resolve(relay.focusMain()).then(() => {
+    if (field.isConnected && document.activeElement === field) field.focus({ preventScroll: true });
+  }).catch(() => {}).finally(() => { activatingField = false; });
+};
+document.addEventListener('focusin', activateField);
+document.addEventListener('pointerdown', activateField, true);
 
 function ready() {
   if (!S) return { ok: false, text: 'Loading' };
