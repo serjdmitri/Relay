@@ -9,6 +9,7 @@ const { Store } = require('./store');
 const { DriveAccess } = require('./drive/access');
 const { FileWorkspace } = require('./drive/workspace');
 const { StorageWindow } = require('./storageWindow');
+const { FitnessWindow } = require('./fitnessWindow');
 const { NetworkWindow } = require('./networkWindow');
 const { SecurityWindow } = require('./securityWindow');
 const { PrioritiesWindow } = require('./prioritiesWindow');
@@ -85,7 +86,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let callService, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let fitnessPanel, callService, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -136,6 +137,7 @@ function openOnboarding() {
 }
 
 function broadcast() {
+  fitnessPanel?.syncPrivacy();
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send('state-changed');
   holos?.refreshUi();
   rebuildTray();
@@ -449,6 +451,8 @@ function registerIpc() {
     const r=await storagePanel.trashSelected();
     return {status:r.cancelled?'stopped':r.error||r.failed?.length&&!r.count?'failed':'done',reply:r.cancelled?'Cancelled. No files were moved.':r.error||`I moved ${r.count} selected files to Trash, Sir.${r.failed?.length?` ${r.failed.length} could not be moved; check the storage menu.`:''}`,actions:r.count||0};
   };
+  fitnessPanel = new FitnessWindow({store, motion:floatingMotion, getApi:()=>ask.googleApiIfConnected(), openSettings:()=>openMain('connectors')});
+  ask.openFitness = () => {fitnessPanel.open();return {status:'done',reply:'Your Fitbit stats menu is open, Sir. Connect Fitbit / Google Health in Connections if needed.',actions:1};};
   networkPanel = new NetworkWindow({ store, motion: floatingMotion });
   ask.openNetworkRadar = () => { networkPanel.open(); return { status: 'done', reply: 'Your network radar is open, Sir. It shows cached neighbors and local security checks.', actions: 1 }; };
   securityPanel = new SecurityWindow({
@@ -1225,6 +1229,7 @@ app.whenReady().then(() => {
     },
     saveMargin: (margin) => { store.set('settings.hands.margin', margin); hands?.cam?.syncConfig?.(); broadcast(); },
     floatingAt: (pt) => {
+      const fitness = fitnessPanel?.handTarget(pt); if (fitness) return fitness;
       const network = networkPanel?.handTarget(pt); if (network) return network;
       const security = securityPanel?.handTarget(pt); if (security) return security;
       const priorities = prioritiesPanel?.handTarget(pt); if (priorities) return priorities;
