@@ -675,6 +675,19 @@ const PAGES = {
         };
         c.append(card);
       }
+      const sk = S.skills || [];
+      c.append(h('<div class="section-title">Saved skills</div>'));
+      c.append(h('<div class="d" style="margin:-6px 4px 10px">When Relay solves something with a script that could be reused, it saves it here. A skill is only text until you approve it, and even then it is shown to the model as an example: running anything still asks you first.</div>'));
+      if (!sk.length) c.append(h('<div class="note" style="font-size:15px">Nothing yet.</div>'));
+      else {
+        const card = h(`<div class="card">${sk.map((x) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="grow"><div class="t">${esc(x.name)}${x.status === 'approved' ? ' <span class="d" style="display:inline">· in use</span>' : ' <span class="d" style="display:inline">· waiting for you</span>'}</div><div class="d">${esc(x.goal)}</div><pre class="code" style="margin:6px 0 0;white-space:pre-wrap;max-height:90px;overflow:auto">${esc(x.code)}</pre></div><div style="display:flex;gap:6px">${x.status === 'approved' ? '' : `<button class="btn" data-sa="${x.id}">Approve</button>`}<button class="btn" data-sd="${x.id}">Delete</button></div></div>`).join('')}</div>`);
+        card.onclick = (e) => {
+          const t = e.target.dataset;
+          if (t.sa) relay.memoryAct('skill-approve', t.sa);
+          else if (t.sd) relay.memoryAct('skill-delete', t.sd);
+        };
+        c.append(card);
+      }
     }
     const all = $('#mall', c);
     if (all) all.onclick = () => confirm('Forget everything Relay remembers about you?') && relay.clearMemory();
