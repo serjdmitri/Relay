@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('relay', {
   runRoutine: (id) => invoke('routine:run', id),
   setNotionToken: (t) => invoke('connectors:notion:set', t),
   clearNotion: () => invoke('connectors:notion:clear'),
+  sessionNotes: (action, value) => invoke('notes:session', action, value),
   schoolConnection: (action, value) => invoke('connectors:school:' + action, value),
   notionConnection: (action, value) => invoke('connectors:notion:' + action, value),
   setApps: (url, key, header) => invoke('connectors:apps:set', url, key, header),
