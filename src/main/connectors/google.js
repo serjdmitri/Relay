@@ -3,7 +3,8 @@
 // directly and keeps only a refresh token per account, encrypted on this Mac. Reading needs no approval; sending an email does.
 
 const crypto = require('crypto');
-const http = require('http');
+const {authorize}=require('./oauthLoopback');
+const {scopesFor}=require('./googleSetup');
 const { URL, URLSearchParams } = require('url');
 
 const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose', 'https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/spreadsheets'];
@@ -18,49 +19,29 @@ function pkce() {
   return { verifier, challenge: b64url(crypto.createHash('sha256').update(verifier).digest()) };
 }
 
-function authUrl({ clientId, redirectUri, challenge, state }) {
-  const q = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: SCOPES.join(' '), code_challenge: challenge, code_challenge_method: 'S256', state, access_type: 'offline', prompt: 'consent' });
+function authUrl({ clientId, redirectUri, challenge, state, scopes = SCOPES, email }) {
+  const q = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: scopes.join(' '), code_challenge: challenge, code_challenge_method: 'S256', state, access_type: 'offline', prompt: 'consent' });
+  if(email)q.set('login_hint',email);
   return `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
 }
 
 async function tokenCall(fetchImpl, params) {
-  const res = await fetchImpl('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString() });
+  const res = await fetchImpl('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params).toString(), redirect:'error', signal:AbortSignal.timeout(15000) });
   const j = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(j.error === 'invalid_grant' ? 'Google no longer accepts this account. Remove it and connect again.' : `Google sign-in failed: ${j.error_description || j.error || res.status}`);
+  if (!res.ok) throw new Error(j.error === 'invalid_grant' ? 'Google no longer accepts this account. Remove it and connect again.' : 'Google sign-in failed. Check the app credentials and approved permissions, then try again.');
   return j;
 }
 
 // The whole sign-in: open the browser, catch the answer on a loopback port, trade the code for tokens, find out which account it is.
-async function connectAccount({ clientId, clientSecret, openUrl, fetchImpl = fetch, timeoutMs = 3 * 60 * 1000 }) {
-  const { verifier, challenge } = pkce();
-  const state = b64url(crypto.randomBytes(16));
-  let done;
-  const result = new Promise((resolve, reject) => { done = { resolve, reject }; });
-  result.catch(() => {}); // the answer can fail before anything is waiting for it
-  const server = http.createServer((req, res) => {
-    const u = new URL(req.url, 'http://127.0.0.1');
-    if (u.pathname !== '/cb') { res.writeHead(404); return res.end(); }
-    const ok = u.searchParams.get('state') === state && u.searchParams.get('code');
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(`<!doctype html><meta charset="utf-8"><title>Relay</title><body style="font:16px -apple-system,system-ui;background:#0d131a;color:#e6fbff;display:grid;place-items:center;height:100vh;margin:0"><div>${ok ? 'Relay is connected. You can close this tab.' : 'That did not work. Go back to Relay and try again.'}</div>`);
-    if (ok) done.resolve(u.searchParams.get('code'));
-    else done.reject(new Error(u.searchParams.get('error') ? `Google said: ${u.searchParams.get('error')}` : 'The sign-in answer did not match.'));
-  });
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const redirectUri = `http://127.0.0.1:${server.address().port}/cb`;
-  const timer = setTimeout(() => done.reject(new Error('The sign-in took too long. Try again.')), timeoutMs);
-  try {
-    await openUrl(authUrl({ clientId, redirectUri, challenge, state }));
-    const code = await result;
-    const tok = await tokenCall(fetchImpl, { code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: 'authorization_code', code_verifier: verifier });
-    if (!tok.refresh_token) throw new Error('Google did not give Relay long-term access. Remove Relay at myaccount.google.com/permissions and connect again.');
-    const me = await fetchImpl('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${tok.access_token}` } }).then((r) => r.json());
-    if (!me.email) throw new Error('Could not tell which Google account that was.');
-    return { email: me.email, refreshToken: tok.refresh_token };
-  } finally {
-    clearTimeout(timer);
-    server.close();
-  }
+async function connectAccount({ clientId, clientSecret, openUrl, fetchImpl = fetch, timeoutMs = 180000, signal, services, email }) {
+  const {verifier,challenge}=pkce();
+  const {code,redirectUri}=await authorize({openUrl,timeoutMs,signal,buildUrl:({state,redirectUri})=>authUrl({clientId,redirectUri,challenge,state,scopes:scopesFor(services),email})});
+  const tok=await tokenCall(fetchImpl,{code,client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code',code_verifier:verifier});
+  if(signal?.aborted)throw Error('Sign-in cancelled.');
+  if(!tok.refresh_token)throw Error('Google did not give Relay long-term access. Reconnect and approve offline access.');
+  const response=await fetchImpl('https://openidconnect.googleapis.com/v1/userinfo',{headers:{authorization:`Bearer ${tok.access_token}`},signal:signal||AbortSignal.timeout(15000),redirect:'error'});
+  const me=await response.json();if(!response.ok||!me.email)throw Error('Could not verify the signed-in Google account.');
+  return {email:me.email,refreshToken:tok.refresh_token,...(typeof tok.scope==='string'?{scopes:tok.scope.split(/\s+/).filter(Boolean)}:{})};
 }
 
 // ----- Gmail and Calendar -----
@@ -126,7 +107,7 @@ class GoogleApi {
   }
 
   async call(acct, method, url, body) {
-    const res = await this.fetch(url, { method, headers: { authorization: `Bearer ${await this.token(acct)}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const res = await this.fetch(url, { method, signal: AbortSignal.timeout(15000), redirect: 'error', headers: { authorization: `Bearer ${await this.token(acct)}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     if (res.status === 403) throw new Error('Google says Relay is not allowed to do that. Check that the Gmail, Calendar, Drive and Sheets APIs are turned on in your Google Cloud project, and that this account was connected after Drive and Sheets were added (remove it and connect it again).');
     if (!res.ok) throw new Error(`Google error ${res.status}: ${(await res.text()).slice(0, 160)}`);
     return res.json();
