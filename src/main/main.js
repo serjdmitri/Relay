@@ -46,6 +46,7 @@ const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { ViewerGuard, config } = require('./viewerGuard');
+const { ProposalWorkspace } = require('./selfImprove');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
@@ -1365,6 +1366,20 @@ app.whenReady().then(() => {
   presence.onChange = broadcast;
   // Second-viewer guard (opt-in, locks only): more faces in view than expected starts a countdown. It counts faces; it cannot tell who anyone is.
   viewerGuard = new ViewerGuard({ lock: () => ask.mac.lockScreen(), notify: (m) => ask.notice(m, 'failed'), getConfig: () => store.get('settings.presence.guard') });
+  // Self-improvement workspace: proposals for changes to Relay's own code live in separate git worktrees; tests run there; a passing change becomes one commit. Never merges, pushes or installs.
+  const proposals = new ProposalWorkspace({
+    store, getConfig: () => store.get('settings.selfImprove'),
+    run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
+  });
+  ask.selfImproveCommand = async (c) => {
+    const done = (reply) => ({ status: 'done', reply, actions: 1 });
+    const fail = (r) => ({ status: 'failed', reply: r.error });
+    if (c.type === 'list') { const l = proposals.list().filter((p) => !p.discarded); return done(l.length ? `Your proposals: ${l.map((p) => proposals.describe(p)).join('; ')}.` : 'There are no open proposals.'); }
+    if (c.type === 'start') { const r = await proposals.create(c.title); return r.error ? fail(r) : done(`Workspace ready on branch ${r.proposal.branch}, in ${r.proposal.dir}. Make the changes there, then say "test the proposal". Your running Relay and your main branch are untouched.`); }
+    if (c.type === 'test') { const r = await proposals.test(c.ref); return r.error ? fail(r) : done(r.ok ? `The tests passed in the proposal (${r.passed} passed, none failed). Say "save the proposal" to keep it as one commit.` : `The tests did not pass in the proposal${r.failed ? ` (${r.failed} failed)` : ''}. Nothing was saved.`); }
+    if (c.type === 'commit') { const r = await proposals.commit(c.ref, c.message); return r.error ? fail(r) : done(`Saved as commit ${r.sha.slice(0, 8)} on ${r.branch}. To undo it, revert that commit. I have not merged, pushed or installed anything; review it and merge it yourself if you want it.`); }
+    const r = await proposals.discard(c.ref); return r.error ? fail(r) : done('The proposal folder is removed. Its branch is kept in case you want it back.');
+  };
   ask.viewerGuardCommand = async (c) => {
     const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';
     if (c.type === 'snooze') { viewerGuard.snooze(30); return { status: 'done', reply: 'Understood, Sir. The viewer guard is paused for 30 minutes.', actions: 1 }; }
