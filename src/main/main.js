@@ -11,6 +11,7 @@ const { FileWorkspace } = require('./drive/workspace');
 const { StorageWindow } = require('./storageWindow');
 const { NetworkWindow } = require('./networkWindow');
 const { SecurityWindow } = require('./securityWindow');
+const { PrioritiesWindow } = require('./prioritiesWindow');
 const { gatherFacts } = require('./auditFacts');
 const securityAudit = require('./securityAudit');
 const { Bland } = require('./calls/bland');
@@ -79,7 +80,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let callService, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let callService, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -434,6 +435,13 @@ function registerIpc() {
     })
   });
   ask.auditRun = async () => { const r = await securityPanel.run(true); securityPanel.open(); return `${securityAudit.summarize(r)} The full list is open on screen.`; };
+  prioritiesPanel = new PrioritiesWindow({
+    motion: floatingMotion,
+    facts: () => ask.briefingFacts({ includeGreeting: false }),
+    schoolUrl: () => store.get('settings.briefing.schoolUrl') || '',
+    openTarget: ({ app: name, url }) => name ? new Promise((resolve, reject) => execFile('/usr/bin/open', ['-a', name], { timeout: 5000 }, (err) => (err ? reject(new Error(`Could not open ${name}.`)) : resolve()))) : shell.openExternal(url)
+  });
+  ask.openPriorities = () => { prioritiesPanel.open(); return { status: 'done', reply: "Your priorities are open, Sir. I'm checking your calendar, reminders, school and email now.", actions: 1 }; };
   ask.securityWatchSet = (on) => { store.set('settings.securityWatch.enabled', !!on); return on ? 'Security warnings are on. I will tell you when something new needs attention.' : 'Security warnings are off. You can still ask me for a security audit.'; };
   ask.openStorageMap = () => { storagePanel.open({ scan: true }); return { status: 'done', reply: 'Your interactive storage map is open, Sir.', actions: 1 }; };
   const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
@@ -1170,6 +1178,8 @@ app.whenReady().then(() => {
     saveMargin: (margin) => { store.set('settings.hands.margin', margin); hands?.cam?.syncConfig?.(); broadcast(); },
     floatingAt: (pt) => {
       const network = networkPanel?.handTarget(pt); if (network) return network;
+      const security = securityPanel?.handTarget(pt); if (security) return security;
+      const priorities = prioritiesPanel?.handTarget(pt); if (priorities) return priorities;
       const storage = storagePanel?.handTarget(pt); if (storage) return storage;
       const panel = panelWins?.handTarget(pt);
       if (panel) {
