@@ -46,6 +46,9 @@ const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { ViewerGuard, config } = require('./viewerGuard');
+const { ProposalWorkspace } = require('./selfImprove');
+const { OwnerGuard, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
+const { IntruderWindow } = require('./intruderWindow');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
 const { HoloLibrary } = require('./holo/library');
@@ -89,7 +92,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -154,7 +157,7 @@ function quickState() {
 }
 
 function publicState() {
-  const { sessionNotes: _sessionNotes, ...publicData } = store.data;
+  const { sessionNotes: _sessionNotes, ownerFace: _ownerFace, ...publicData } = store.data;
   const d = JSON.parse(JSON.stringify(publicData)); // session notes use protected Memory IPC, not broadcasts
   if (d.settings.calls) { delete d.settings.calls.keyEnc; delete d.settings.calls.twilioTokenEnc; }
   if (d.settings.quick) delete d.settings.quick.keyEnc;
@@ -241,7 +244,7 @@ async function setPresence(on) {
   if (on) {
     const r = await presence.enable();
     if (!r.ok) { store.set('settings.presence.enabled', false); ask.notice(r.error, 'failed'); }
-  } else { presence.disable(); viewerGuard?.reset(); }
+  } else { presence.disable(); viewerGuard?.reset(); ownerGuard?.reset(); intruder?.hide(); }
   broadcast();
 }
 
@@ -962,8 +965,37 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
-  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); if (presence?.enabled) viewerGuard?.frame(f || {}); });
-  ipcMain.handle('presence:status', (_e, st) => { presence?.setStatus(st); });
+  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [] }); } });
+  ipcMain.handle('presence:status', (_e, st) => {
+    if (st?.state === 'faceid-error') { ask.notice(String(st.message || 'Owner recognition could not start.').slice(0, 200), 'failed'); return; }
+    presence?.setStatus(st);
+  });
+  // Owner recognition: the camera page asks what to do (match faces, or enroll yours) and gets your saved numbers only when they changed. Only the camera page may ask.
+  const fromCameraPage = (e) => /\/presence\.html$/.test(String(e.senderFrame?.url || '').split(/[?#]/)[0]);
+  ipcMain.handle('presence:config', (e, have) => {
+    if (!fromCameraPage(e) || !ownerState) return { faceId: false };
+    const enrolling = !!ownerState.enroll && Date.now() < ownerState.enroll.until;
+    const faceId = enrolling || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0);
+    const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness };
+    if (faceId && have !== ownerState.version) out.templates = ownerState.templates;
+    return out;
+  });
+  ipcMain.handle('presence:enroll', (e, s) => {
+    const en = ownerState?.enroll;
+    if (!fromCameraPage(e) || !en || Date.now() > en.until) return { ok: false };
+    const r = addOwnerSample(en.samples, s?.embedding);
+    if (r.added) { en.samples = r.samples; if (en.samples.length === 4 || en.samples.length === 7) ask.notice(`Good, ${en.samples.length} angles so far. Keep turning your head slowly, and tilt it a little.`, 'done'); }
+    const n = en.samples.length, secs = (Date.now() - en.start) / 1000;
+    if (n >= 8 || (n >= 4 && secs >= 45)) {
+      ownerState.enroll = null;
+      if (!ownerState.save(en.samples)) { ask.notice('Your face could not be saved: this Mac cannot encrypt it right now.', 'failed'); return { ok: false }; }
+      store.set('settings.owner', { ...ownerConfig(store.get('settings.owner')), enabled: true });
+      ownerGuard.reset(); broadcast();
+      ask.notice(`Your face is enrolled (${n} angles) and owner recognition is on. If someone else sits down, I will sound the alarm and lock after ${ownerConfig(store.get('settings.owner')).seconds} seconds. Say "test the access denied screen" to see it.`, 'done');
+      return { ok: true, done: true };
+    }
+    return { ok: true, count: n };
+  });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
   ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
@@ -1381,6 +1413,62 @@ app.whenReady().then(() => {
   presence.onChange = broadcast;
   // Second-viewer guard (opt-in, locks only): more faces in view than expected starts a countdown. It counts faces; it cannot tell who anyone is.
   viewerGuard = new ViewerGuard({ lock: () => ask.mac.lockScreen(), notify: (m) => ask.notice(m, 'failed'), getConfig: () => store.get('settings.presence.guard') });
+  // Self-improvement workspace: proposals for changes to Relay's own code live in separate git worktrees; tests run there; a passing change becomes one commit. Never merges, pushes or installs.
+  const proposals = new ProposalWorkspace({
+    store, getConfig: () => store.get('settings.selfImprove'),
+    run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
+  });
+  ask.selfImproveCommand = async (c) => {
+    const done = (reply) => ({ status: 'done', reply, actions: 1 });
+    const fail = (r) => ({ status: 'failed', reply: r.error });
+    if (c.type === 'list') { const l = proposals.list().filter((p) => !p.discarded); return done(l.length ? `Your proposals: ${l.map((p) => proposals.describe(p)).join('; ')}.` : 'There are no open proposals.'); }
+    if (c.type === 'start') { const r = await proposals.create(c.title); return r.error ? fail(r) : done(`Workspace ready on branch ${r.proposal.branch}, in ${r.proposal.dir}. Make the changes there, then say "test the proposal". Your running Relay and your main branch are untouched.`); }
+    if (c.type === 'test') { const r = await proposals.test(c.ref); return r.error ? fail(r) : done(r.ok ? `The tests passed in the proposal (${r.passed} passed, none failed). Say "save the proposal" to keep it as one commit.` : `The tests did not pass in the proposal${r.failed ? ` (${r.failed} failed)` : ''}. Nothing was saved.`); }
+    if (c.type === 'commit') { const r = await proposals.commit(c.ref, c.message); return r.error ? fail(r) : done(`Saved as commit ${r.sha.slice(0, 8)} on ${r.branch}. To undo it, revert that commit. I have not merged, pushed or installed anything; review it and merge it yourself if you want it.`); }
+    const r = await proposals.discard(c.ref); return r.error ? fail(r) : done('The proposal folder is removed. Its branch is kept in case you want it back.');
+  };
+  // Owner recognition (opt-in): your face, as numbers encrypted on this Mac. A face that is not yours, while you are not there, starts the access-denied alarm and then the lock.
+  intruder = new IntruderWindow();
+  ownerState = { templates: [], version: 1, enroll: null };
+  const loadOwner = () => { try { ownerState.templates = safeStorage.isEncryptionAvailable() ? openTemplates(store.get('ownerFace'), (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64'))) : []; } catch { ownerState.templates = []; } ownerState.version++; };
+  ownerState.save = (templates) => { if (!safeStorage.isEncryptionAvailable()) return false; store.set('ownerFace', sealTemplates(templates, (txt) => safeStorage.encryptString(txt).toString('base64'))); ownerState.templates = templates; ownerState.version++; return true; };
+  loadOwner();
+  ownerGuard = new OwnerGuard({
+    lock: () => ask.mac.lockScreen(),
+    hasTemplates: () => ownerState.templates.length > 0,
+    getConfig: () => store.get('settings.owner'),
+    onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); },
+    onClear: () => intruder.hide(),
+    onLocked: () => intruder.hide(),
+    onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
+  });
+  setInterval(() => ownerGuard.step(), 1000);
+  ask.ownerCommand = async (c) => {
+    const cfg = () => ownerConfig(store.get('settings.owner'));
+    const done = (reply) => ({ status: 'done', reply, actions: 1 });
+    const setOwner = (patch) => store.set('settings.owner', { ...cfg(), ...patch });
+    const needCamera = async () => { if (store.get('settings.presence.enabled')) return ''; store.set('settings.presence.enabled', true); await setPresence(true); return ' I turned Presence on, because it uses the same camera.'; };
+    if (c.type === 'enroll') {
+      if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
+      const note = await needCamera();
+      ownerState.enroll = { samples: [], start: Date.now(), until: Date.now() + 120000 }; broadcast();
+      return done(`Look at the camera. Slowly turn your head left and right, and tilt it up and down a little. It takes about ten seconds, and I will tell you when it is done.${note} Your face is kept as numbers, encrypted on this Mac; no picture is saved.`);
+    }
+    if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
+    if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }
+    if (c.type === 'seconds') { const s = ownerConfig({ enabled: true, seconds: c.seconds }).seconds; setOwner({ seconds: s }); return done(`${s === c.seconds ? '' : `That is outside 5 to 120, so I used ${s}. `}The lock countdown is ${s} seconds.`); }
+    if (c.type === 'away-on' || c.type === 'away-off') { setOwner({ awayScreen: c.type === 'away-on' }); if (c.type === 'away-off' && ownerGuard.state !== 'alarm') intruder.hide(); return done(c.type === 'away-on' ? `The away screen is on: after ${cfg().awaySeconds} seconds with nobody in view, the screen blurs and I say the owner will be back soon, until you are seen again.` : 'The away screen is off.'); }
+    if (c.type === 'liveness-on' || c.type === 'liveness-off') { setOwner({ liveness: c.type === 'liveness-on' }); return done(c.type === 'liveness-on' ? 'The liveness check is on: a face that matches yours but has not blinked for a while is treated as a picture, not as you.' : 'The liveness check is off. A photo of you can now pass as you.'); }
+    if (c.type === 'away-demo') { intruder.showAway(); setTimeout(() => { if (!ownerGuard.awayActive && ownerGuard.state === 'idle') intruder.hide(); }, 8000); return done('Showing the away screen for eight seconds.'); }
+    if (c.type === 'demo') { ownerGuard.startDemo(6); return done('Showing the access denied screen for six seconds. Nothing will lock.'); }
+    if (c.type === 'on') {
+      if (!ownerState.templates.length) return { status: 'failed', reply: 'I do not know your face yet. Say "enroll my face" first.' };
+      const note = await needCamera(); setOwner({ enabled: true }); ownerGuard.reset(); broadcast();
+      return done(`Owner recognition is on. If a face that is not yours is in view while you are not, I will sound the alarm and lock the screen after ${cfg().seconds} seconds.${note} A still photo of you will not pass (it must blink), but a video of you could, and it may flag you in poor light for a moment; coming back into view stops it.`);
+    }
+    const t = ownerState.templates.length;
+    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
+  };
   ask.viewerGuardCommand = async (c) => {
     const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';
     if (c.type === 'snooze') { viewerGuard.snooze(30); return { status: 'done', reply: 'Understood, Sir. The viewer guard is paused for 30 minutes.', actions: 1 }; }

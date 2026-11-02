@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; media-src 'none'">
+<title>Access denied</title>
+<link rel="stylesheet" href="intruder.css">
+</head>
+<body class="alarm">
+<!-- Two screens over a blurred desktop, one reactor: ALARM (red: a face that is not yours is here, with a countdown to the lock) and AWAY (blue: you stepped away, standing by until you are back). -->
+<main id="wrap" role="alert" aria-live="assertive">
+  <canvas id="reactor" aria-hidden="true"></canvas>
+  <h1 id="line1">THIS IS NOT YOUR COMPUTER</h1>
+  <h2 id="line2">ACCESS DENIED</h2>
+  <p id="count" aria-live="off"></p>
+  <p id="note"></p>
+</main>
+<script src="intruder.js"></script>
+</body>
+</html>
