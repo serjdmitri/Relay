@@ -95,3 +95,30 @@ test('interrupted speech removes a prefetched sentence even if synthesis finishe
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(discarded, ['first', 'second']);
 });
+
+test('Speaking starts with playback, not synthesis, and stops when audio exits', async () => {
+  let release, child; const states=[];
+  const sp=new Spk({getTts:()=>({engine:'kokoro'}),kokoro:{installed:()=>true,synthesize:()=>new Promise(resolve=>{release=resolve})},spawnFn:()=>{child=new EventEmitter();child.kill=()=>child.emit('exit',0);return child}});
+  sp.discard=()=>{};sp.onState=on=>states.push(on);
+  const done=sp.speak('Hello Sir');
+  assert.equal(sp.speaking,true);assert.deepEqual(states,[]);
+  release('test.wav');await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(states,[]);
+  child.emit('spawn');assert.deepEqual(states,[true]);
+  child.emit('exit',0);await done;
+  assert.deepEqual(states,[true,false]);assert.equal(sp.speaking,false);
+});
+
+test('failed audio playback falls back to the Mac voice instead of silently succeeding', async () => {
+  const commands=[],problems=[];
+  const spawnFn=(cmd)=>{commands.push(cmd);const child=new EventEmitter();child.stdin={on(){},end(){}};child.kill=()=>{};setImmediate(()=>{child.emit('spawn');child.emit('exit',cmd==='afplay'?1:0)});return child};
+  const sp=new Spk({spawnFn,exec:(_c,_a,_o,cb)=>cb(null,''),log:{error(){}},onProblem:m=>problems.push(m),getTts:()=>({engine:'kokoro'}),kokoro:{installed:()=>true,synthesize:async()=>'test.wav'}});
+  sp.discard=()=>{};await sp.speak('Your notes are open, Sir.');
+  assert.deepEqual(commands,['afplay','say']);assert.match(problems[0],/playback failed/);assert.equal(sp.talking,false);
+});
+
+test('the system voice test reports device/process failures and clears Speaking', async()=>{
+ const sp=new Spk({exec:(_c,_a,_o,cb)=>cb(null,''),spawnFn:()=>{const c=new EventEmitter();c.stdin={on(){},end(){}};setImmediate(()=>c.emit('error',new Error('Output unavailable')));return c}});
+ assert.deepEqual(await sp.test('Hello'),{ok:false,message:'Output unavailable'});
+ assert.equal(sp.talking,false);assert.equal(sp.speaking,false);
+});

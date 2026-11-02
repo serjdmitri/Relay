@@ -119,18 +119,22 @@ class Speaker {
     this.currentText = say;
     const tts = this.getTts() || { engine: 'system' };
     const engine = this.engineFor(tts, lang);
-    if (engine === 'system') return this.speakSystem(say, { voice, rate, volume, lang });
+    if (engine === 'system') {
+      try { await this.speakSystem(say, { voice, rate, volume, lang }); }
+      catch (e) { this.onProblem?.(e.message); this.log.error?.('voice:', e.message); }
+      return;
+    }
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
-    this.setTalking(true);
     try {
       await this.speakWith(engine, tts, say, rate, token, this.abort.signal, { volume, kokoroVoice });
     } catch (e) {
       if ((e && e.name === 'AbortError') || token !== this.token) return;
       this.log.error?.('voice:', e.message);
       if (this.onProblem) this.onProblem(e.message);
-      await this.speakSystem(say, { voice, rate, volume, lang }); // never leave the user without an answer
+      try { await this.speakSystem(say, { voice, rate, volume, lang }); }
+      catch (error) { this.onProblem?.(error.message); this.log.error?.('voice:', error.message); }
     } finally {
       if (token === this.token) { this.busy = false; if (!this.child) this.setTalking(false); }
     }
@@ -146,7 +150,10 @@ class Speaker {
       if (this.getLocalOnly() && (wanted === 'openai' || wanted === 'elevenlabs')) return { ok: false, message: 'Cloud voices are paused while Relay uses a local model.' };
       return { ok: false, message: wanted === 'kokoro' ? 'The on-device voice is not downloaded yet.' : `Add your ${cloud.NAMES[wanted] || wanted} key first.` };
     }
-    if (engine === 'system') { await this.speakSystem(speakable(text), { voice, rate }); return { ok: true }; }
+    if (engine === 'system') {
+      try { await this.speakSystem(speakable(text), { voice, rate }); return { ok: true }; }
+      catch (e) { return { ok: false, message: e.message }; }
+    }
     const token = ++this.token;
     this.abort = new AbortController();
     this.busy = true;
@@ -167,18 +174,18 @@ class Speaker {
       : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, 'mp3')));
     const pieces = cloud.sentences(say);
     let pending = make(pieces[0]);
-    for (let i = 0; i < pieces.length; i++) {
-      const file = await pending;
-      if (token !== this.token) { this.discard(file); return; }
-      pending = i + 1 < pieces.length ? make(pieces[i + 1]) : null; // the next sentence is made while this one plays
-      if (pending) pending.catch(() => {});
-      await this.play(file, token, volume);
-      this.discard(file);
-      if (token !== this.token) {
-        // The next sentence may still finish after playback was interrupted.
-        if (pending) pending.then((next) => this.discard(next), () => {});
-        return;
+    try {
+      for (let i = 0; i < pieces.length; i++) {
+        const file = await pending;
+        pending = null;
+        if (token !== this.token) { this.discard(file); return; }
+        pending = i + 1 < pieces.length ? make(pieces[i + 1]) : null;
+        if (pending) pending.catch(() => {});
+        try { await this.play(file, token, volume); } finally { this.discard(file); }
+        if (token !== this.token) return;
       }
+    } finally {
+      if (pending) pending.then(file => this.discard(file), () => {});
     }
   }
 
@@ -193,30 +200,42 @@ class Speaker {
   }
 
   play(file, token, volume = 1) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (token !== this.token) return resolve();
       const child = this.spawnFn('afplay', volume < 1 ? ['-v', String(volume), file] : [file], { stdio: 'ignore' });
       this.child = child;
-      const done = () => { if (this.child === child) this.child = null; resolve(); };
-      child.on('exit', done);
-      child.on('error', (e) => { this.log.error?.('afplay:', e.message); done(); });
+      child.once('spawn', () => { if (token === this.token) this.setTalking(true); });
+      let settled = false;
+      const done = error => {
+        if (settled) return; settled = true;
+        if (this.child === child) this.child = null;
+        if (token === this.token) this.setTalking(false);
+        if (error && token === this.token) reject(error); else resolve();
+      };
+      child.once('exit', code => done(code ? new Error('Audio playback failed. Check your sound output device.') : null));
+      child.once('error', e => done(e));
     });
   }
 
   async speakSystem(say, { voice, rate, volume = 1, lang = 'en' }) {
     const token = this.token;
     this.busy = true;
-    this.setTalking(true);
     try {
       const name = await this.resolve(voice, lang);
       if (token !== this.token) return;
       const args = [...(name ? ['-v', name] : []), '-r', String(RATES[rate] || RATES.normal)];
       const child = this.spawnFn('say', args, { stdio: ['pipe', 'ignore', 'ignore'] });
       this.child = child;
-      await new Promise((resolve) => {
-        const done = () => { if (this.child === child) this.child = null; resolve(); };
-        child.once('exit', done);
-        child.once('error', (e) => { this.log.error?.('say:', e.message); done(); });
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const done = error => {
+          if (settled) return; settled = true;
+          if (this.child === child) this.child = null;
+          if (error && token === this.token) reject(error); else resolve();
+        };
+        child.once('spawn', () => { if (token === this.token) this.setTalking(true); });
+        child.once('exit', code => done(code ? new Error('The Mac voice could not play. Check your sound output device.') : null));
+        child.once('error', e => done(e));
         child.stdin.on('error', () => {});
         child.stdin.end(volume < 1 ? `[[volm ${volume}]] ${say}` : say);
       });
