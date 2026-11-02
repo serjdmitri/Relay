@@ -32,7 +32,7 @@ test('scan nudges the subnet, names devices by MAC, and does not run twice at on
   const [a,b]=await Promise.all([r.scan(),r.scan()]);
   assert.equal(probed,253);assert.equal(browsed,1);assert.strictEqual(a,b);
   assert.equal(a.devices.find(d=>d.ip==='192.168.1.7').name,"Sergey's iPad");assert.equal(a.devices.find(d=>d.ip==='192.168.1.1').name,undefined);
-  assert.equal(a.scan.hosts,253);assert.equal(a.scan.named,1);
+  assert.equal(a.scan.hosts,253);assert.equal(a.scan.named,2);const only=a.devices.find(d=>d.ip==='192.168.1.99');assert.equal(only.source,'bonjour');assert.equal(only.mac,null);assert.equal(a.neighborRows,2);assert.equal(a.scan.note,undefined);
   assert.equal((await r.snapshot()).devices.find(d=>d.ip==='192.168.1.7').kind,'iPad');
 });
 test('scan with no private network says so and failed probes do not break the radar',async()=>{
@@ -45,7 +45,15 @@ test('bonjour merges one device advertised under several services and drops the 
   const run=async args=>{if(args[0]==='-B')return args[1]==='_airplay._tcp'?"10:20:00.4  Add        2   4 local.               _airplay._tcp.  Eitan's MacBook Air\n":args[1]==='_raop._tcp'?"10:20:00.4  Add        2   4 local.               _raop._tcp.  EED8D3F3C53F@Eitan's MacBook Air\n":'';if(args[0]==='-L')return `${args[1]} can be reached at Mac.local.:7000 (interface 4)\n model=${args[1].includes('@')?'':'Mac14,2'}`;return '10:20:01.0  Add  2  4 Mac.local.  10.1.2.3  120';};
   const found=await bonjour({run});assert.equal(found.length,1);assert.equal(found[0].name,"Eitan's MacBook Air");assert.equal(found[0].model,'Mac14,2');assert.deepEqual(found[0].services.sort(),['_airplay._tcp','_raop._tcp']);
 });
-test('a scan that finds no neighbors points at the Local Network permission instead of saying nothing is there',async()=>{
+test('a scan that finds no neighbor list still shows the devices Bonjour named, and says how to see the rest',async()=>{
   const r=make({exec:async file=>file.endsWith('/arp')?'':{route:' gateway: 10.1.1.1\n interface: en0'}[file.split('/').pop()]||'',interfaces:()=>({en0:[{internal:false,family:'IPv4',address:'10.1.1.5',netmask:'255.255.255.0'}]}),probe:async()=>{},browse:async()=>[{ip:'10.1.1.9',name:'x',kind:null,model:null,services:[]}]});
-  const res=await r.scan();assert.equal(res.devices.length,0);assert.equal(res.scan.advertising,1);assert.match(res.scan.note,/Local Network/);assert.match(res.scan.note,/1 device advertise/);
+  const res=await r.scan();assert.equal(res.neighborRows,0);assert.equal(res.devices.length,1);assert.equal(res.devices[0].source,'bonjour');assert.equal(res.scan.advertising,1);assert.match(res.scan.note,/Local Network/);assert.match(res.scan.note,/quit Relay completely/);assert.match(res.scan.note,/1 device that advertise/);
+});
+
+test('devices only Bonjour can see survive a refresh, can be labelled by name, and expire after ten minutes',async()=>{
+  let clock=1000000;const r=make({now:()=>clock,exec:async file=>file.endsWith('/arp')?'':'' ,interfaces:()=>({en0:[{internal:false,family:'IPv4',address:'10.1.1.5',netmask:'255.255.255.0'}]}),probe:async()=>{},browse:async()=>[{ip:'10.1.1.9',name:"Sergey's iPad",kind:'iPad',model:null,services:['_companion-link._tcp']}]});
+  await r.scan();clock+=60000;const again=await r.snapshot();assert.equal(again.devices.length,1);assert.equal(again.devices[0].id,"name:sergey's ipad");
+  assert.deepEqual(r.mark("name:sergey's ipad",true),{ok:true});assert.equal((await r.snapshot()).devices[0].recognized,true);
+  assert.throws(()=>r.mark('name:someone else',true),/current/);assert.throws(()=>r.mark('not a device',true),/Choose/);
+  clock+=11*60000;assert.equal((await r.snapshot()).devices.length,0);
 });
