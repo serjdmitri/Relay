@@ -46,6 +46,7 @@ class PluginProcess {
       this.buf = this.buf.slice(i + 1);
       if (!line) continue;
       let msg; try { msg = JSON.parse(line); } catch { continue; }
+      if (msg.method === 'notifications/relay/event') { if (msg.params?.title) this.onEvent?.({ title: String(msg.params.title).slice(0, 80), importance: msg.params.importance }); continue; }
       const w = this.waiting.get(msg.id);
       if (!w) continue;
       this.waiting.delete(msg.id);

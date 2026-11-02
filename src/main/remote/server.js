@@ -190,6 +190,8 @@ class RemoteServer {
       if ((level !== undefined && !Number.isFinite(level)) || (b.mute !== undefined && typeof b.mute !== 'boolean') || (level === undefined && b.mute === undefined)) return this.json(res, 400, { error: 'Send a level from 0 to 100, or mute true or false.' });
       return this.json(res, 200, (await this.control.volume?.({ level, mute: b.mute })) || {});
     }
+
+    if (p === '/api/confirm' && req.method === 'POST') { const b = await this.body(req).catch(() => null); return this.json(res, 200, { ok: !!this.control.confirm?.(b?.yes === true) }); }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });

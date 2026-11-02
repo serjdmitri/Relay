@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { heardStop, interruption, shouldFollowUp, wakeAllowedIn } = require('../src/main/conversation');
+const { heardStop, interruption, shouldFollowUp, wakeAllowedIn, mayCloseAnswer } = require('../src/main/conversation');
 const { jobFor, profileFor, pickJarvis, LONG_REPLY } = require('../src/main/voiceProfile');
 const { pickVoice } = require('../src/main/voice');
 
@@ -153,4 +153,11 @@ test('ending a short reply while interruption listening opens cannot leave it ar
  const pending=b.arm();assert.equal(b.arming,true);
  b.disarm();release();await pending;
  assert.equal(cancels,1);assert.equal(b.armed,false);assert.equal(b.arming,false);
+});
+
+test('the reactor stays while Relay is still speaking and while it is about to listen for your reply', () => {
+  assert.equal(mayCloseAnswer({ state: 'done', speaking: true, followPending: false }), false);
+  assert.equal(mayCloseAnswer({ state: 'done', speaking: false, followPending: true }), false);
+  assert.equal(mayCloseAnswer({ state: 'listening', speaking: false, followPending: false }), false);
+  assert.equal(mayCloseAnswer({ state: 'done', speaking: false, followPending: false }), true);
 });

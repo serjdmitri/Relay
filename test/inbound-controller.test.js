@@ -101,3 +101,14 @@ test('the phone volume bar sets the level, mutes and unmutes, and unmutes when t
   await c.remoteVolume({ level: 500 });
   assert.ok(log.includes('set volume output volume 100'), 'kept between 0 and 100');
 });
+
+test('the phone page can answer a question the Mac is asking, the first answer wins, and with nothing waiting it does nothing', async () => {
+  const { hub } = service();
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, { hub, inbound: null, currentRemote: null, win: { setFocusable() {} }, push() {}, reveal() {}, sound() {}, statusChanged() {}, unattended: false });
+  assert.equal(c.remoteConfirm(true), false, 'nothing is waiting');
+  const p = c.askConfirm({ question: 'Send it?' });
+  assert.equal(c.remoteConfirm(true), true);
+  assert.equal(await p, true);
+  assert.equal(c.remoteConfirm(false), false, 'already answered');
+});

@@ -625,7 +625,7 @@ function registerIpc() {
       await applyFix(r.fix).catch(() => {});
     }
     const meta = { version: app.getVersion(), os: process.getSystemVersion?.() || '', arch: process.arch, signing: env._signing, flags: Object.keys(flagsMod.FLAGS).filter((n) => flagsMod.isOn(store.get('settings'), n)), errors: env.recentErrors() };
-    return { results: out, worst: doctor.worst(results), meta, report: doctor.buildReport(results, meta, { home: app.getPath('home') }), fixMode: mode, fullDisk: fullDisk() };
+    return { results: out, summary: doctor.summarize(results), worst: doctor.worst(results), meta, report: doctor.buildReport(results, meta, { home: app.getPath('home') }), fixMode: mode, fullDisk: fullDisk() };
   };
   const applyFix = async (fix) => {
     const a = fix.action;
@@ -1146,7 +1146,7 @@ app.whenReady().then(() => {
   remote.sync().then(broadcast);
   inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
   ask.inbound = inbound;
-  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, sandbox: false });
+  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: false });
   ask.plugins = pluginMgr;
   // Live panels
   const arrangeOpenMenus = (onlyIfOverlapping = false) => {
@@ -1226,9 +1226,25 @@ app.whenReady().then(() => {
     if (d.phone) ask.phone?.send({ title: 'Relay', body: d.text }).catch(() => {});
   };
   ask.onProactive = surface;
+  // Watched folders (Settings > Speak up on its own): a new file in one is an event.
+  const watchers = new Map();
+  const syncWatch = () => {
+    const want = new Set(store.get('settings.proactive.folders') || []);
+    for (const [d, w] of watchers) if (!want.has(d)) { w.close(); watchers.delete(d); }
+    for (const d of want) if (!watchers.has(d)) { try { watchers.set(d, require('fs').watch(d, (ev, name) => { if (ev === 'rename' && name && !name.startsWith('.') && require('fs').existsSync(path.join(d, name))) surface({ type: 'folder', title: path.basename(d), name }); })); } catch { /* a folder that is gone */ } }
+  };
+  syncWatch();
+  ipcMain.handle('proactive:add-folder', async () => {
+    const r = await dialog.showOpenDialog({ title: 'Watch a folder', properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return { ok: false };
+    store.set('settings.proactive.folders', [...new Set([...(store.get('settings.proactive.folders') || []), r.filePaths[0]])].slice(0, 5));
+    syncWatch(); broadcast();
+    return { ok: true };
+  });
   let tickN = 0;
   setInterval(async () => {
     if (!flagsMod.isOn(store.get('settings'), 'proactive')) return;
+    syncWatch();
     const b = batteryEvent(await panelSampler.sample('battery').catch(() => null));
     if (b) surface(b);
     if (tickN++ % 5 === 0) { try { for (const e of calendarEvents(parseCalendar(await ask.mac.calendarEvents(1)))) surface(e); } catch { /* no calendar access: Doctor and Permissions say so */ } }

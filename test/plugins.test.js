@@ -14,6 +14,7 @@ process.stdin.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\\n'
   if (m.method === 'initialize') out(m.id, { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'x', version: '1' } });
   else if (m.method === 'tools/call') { if (m.params.name === 'die' && !require('fs').existsSync(__dirname + '/.died')) { require('fs').writeFileSync(__dirname + '/.died', '1'); process.exit(3); }
     if (m.params.name === 'hang') continue;
+    if (m.params.name === 'ping') { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/relay/event', params: { title: 'Build done', importance: 0.8 } }) + '\\n'); process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/relay/event', params: { importance: 0.9 } }) + '\\n'); }
     out(m.id, { content: [{ type: 'text', text: 'echo ' + JSON.stringify(m.params.arguments) }] }); } } });
 function out(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n'); }
 `;
@@ -261,4 +262,14 @@ test('macOS sandbox denies undeclared home reads while allowing approved folders
   assert.equal(cat(path.join(plugin, 'plugin.txt')), 'plugin');
   assert.equal(cat(path.join(approved, 'allowed.txt')), 'allowed');
   assert.throws(() => cat(hidden), /Operation not permitted/);
+});
+
+test('a plugin can tell Relay something happened; an event with no title is ignored', async () => {
+  const events = [];
+  const { m } = mgr({ onEvent: (name, e) => events.push([name, e]) });
+  await m.install((await m.inspect(makePlugin())).token);
+  await m.call('echo-plugin', 'ping', {});
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(events, [['echo-plugin', { title: 'Build done', importance: 0.8 }]]);
+  m.stopAll();
 });

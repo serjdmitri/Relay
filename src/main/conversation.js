@@ -72,4 +72,7 @@ function wakeAllowedIn(apps, front) {
   return !!f && list.some((a) => f === a || f.startsWith(a) || a.startsWith(f));
 }
 
-module.exports = { heardStop, interruption, shouldFollowUp, followUpAnswer, spokenReply, wakeAllowedIn, STOP_WORDS };
+// The reactor goes once the answer has been read, but not while Relay is still speaking or about to listen for your reply.
+const mayCloseAnswer = ({ state, speaking, followPending }) => state === 'done' && !speaking && !followPending;
+
+module.exports = { heardStop, interruption, shouldFollowUp, followUpAnswer, spokenReply, wakeAllowedIn, mayCloseAnswer, STOP_WORDS };
