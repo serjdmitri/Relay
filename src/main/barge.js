@@ -19,21 +19,25 @@ class BargeIn {
     const c = this.getConfig() || {};
     if (!c.enabled || this.armed || this.arming) return;
     this.arming = true;
+    const epoch = this.epoch = (this.epoch || 0) + 1;
     try {
       await this.speech.listen(this.getDevice());
+      if (this.epoch !== epoch) return;
       this.armed = true;
       this.since = Date.now();
     } catch (e) {
       this.log.error?.('interrupt by talking:', e.message); // the microphone may be busy: it simply does not listen this time
     } finally {
-      this.arming = false;
+      if (this.epoch === epoch) this.arming = false;
     }
   }
 
   disarm() {
     this.clearTimer(this.timer);
-    if (!this.armed) return;
-    this.armed = false;
+    this.epoch = (this.epoch || 0) + 1;
+    const active = this.armed || this.arming;
+    this.armed = this.arming = false;
+    if (!active) return;
     try { this.speech.cancel(); } catch {}
   }
 

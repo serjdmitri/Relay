@@ -122,3 +122,26 @@ test('the system voice test reports device/process failures and clears Speaking'
  assert.deepEqual(await sp.test('Hello'),{ok:false,message:'Output unavailable'});
  assert.equal(sp.talking,false);assert.equal(sp.speaking,false);
 });
+
+test('prepared local acknowledgements reuse audio without restarting synthesis', async()=>{
+ const fs=require('fs'),path=require('path'),os=require('os');
+ let made=0;const calls=[];
+ const sp=new Spk({spawnFn:fakeSpawn(calls),exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'omnivoice'}),omni:{installed:()=>true,synthesize:async()=>{made++;const file=path.join(os.tmpdir(),`relay-ack-test-${process.pid}.wav`);fs.writeFileSync(file,'audio');return file;}}});
+ await sp.prepare({rate:'faster'});
+ await sp.speak('On it, Sir.',{rate:'faster',quick:true});
+ await sp.speak('On it, Sir.',{rate:'faster',quick:true});
+ assert.equal(made,1);assert.deepEqual(calls.map(c=>c.cmd),['afplay','afplay']);
+});
+
+test('cold acknowledgements start with a Mac voice without launching slow synthesis', async()=>{
+ const calls=[];let made=0;
+ const sp=new Spk({spawnFn:fakeSpawn(calls),exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'omnivoice'}),omni:{installed:()=>true,synthesize:()=>{made++;throw Error('Should not run');}}});
+ await sp.speak('On it, Sir.',{quick:true});
+ assert.equal(made,0);assert.equal(calls[0].cmd,'say');
+});
+
+test('voice warmup never sends text to a cloud service',async()=>{
+ let fetched=0;
+ const sp=new Spk({exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'openai',openai:{key:'test'}}),fetchFn:()=>{fetched++;throw Error('No background cloud request')}});
+ await sp.prepare();assert.equal(fetched,0);
+});

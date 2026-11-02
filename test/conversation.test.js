@@ -145,3 +145,12 @@ test('the speaker uses the loudness and voice it is given: system voice gets a v
   assert.equal(made[0].rate, 'slower');
   assert.deepEqual(calls.find((c) => c.cmd === 'afplay').args.slice(0, 2), ['-v', '0.5']);
 });
+
+test('ending a short reply while interruption listening opens cannot leave it armed', async()=>{
+ const speech=new EventEmitter();let release,cancels=0;
+ speech.listen=()=>new Promise(resolve=>{release=resolve});speech.cancel=()=>cancels++;
+ const b=new BargeIn({speech,getConfig:()=>({enabled:true}),getSpoken:()=>'',onInterrupt(){},log:{error(){}}});
+ const pending=b.arm();assert.equal(b.arming,true);
+ b.disarm();release();await pending;
+ assert.equal(cancels,1);assert.equal(b.armed,false);assert.equal(b.arming,false);
+});

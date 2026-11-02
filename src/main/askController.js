@@ -1859,8 +1859,8 @@ class AskController {
     if (this.voiceAsk && !opts.remote && !opts.scheduled && !opts.shown && this.store.get('settings.speakReplies') && this.speaker) {
       const task = this.runningTask;
       this.ackTimer = setTimeout(() => {
-        if (this.runningTask === task && this.state === 'working' && !this.speaker.speaking) Promise.resolve(this.speaker.speak('On it, Sir.', profileFor('quiet', this.store.get('settings') || {}))).catch(() => {});
-      }, 700);
+        if (this.runningTask === task && this.state === 'working' && !this.speaker.speaking) Promise.resolve(this.speaker.speak('On it, Sir.', { ...profileFor('quiet', this.store.get('settings') || {}), quick: true })).catch(() => {});
+      }, 400);
     }
 
     if (!opts.scheduled) this.unattended = false;
