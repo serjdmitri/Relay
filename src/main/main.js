@@ -1423,7 +1423,8 @@ app.whenReady().then(() => {
     getConfig: () => store.get('settings.owner'),
     onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); },
     onClear: () => intruder.hide(),
-    onLocked: () => intruder.hide()
+    onLocked: () => intruder.hide(),
+    onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
   });
   setInterval(() => ownerGuard.step(), 1000);
   ask.ownerCommand = async (c) => {
@@ -1440,6 +1441,8 @@ app.whenReady().then(() => {
     if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
     if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }
     if (c.type === 'seconds') { const s = ownerConfig({ enabled: true, seconds: c.seconds }).seconds; setOwner({ seconds: s }); return done(`${s === c.seconds ? '' : `That is outside 5 to 120, so I used ${s}. `}The lock countdown is ${s} seconds.`); }
+    if (c.type === 'away-on' || c.type === 'away-off') { setOwner({ awayScreen: c.type === 'away-on' }); if (c.type === 'away-off' && ownerGuard.state !== 'alarm') intruder.hide(); return done(c.type === 'away-on' ? `The away screen is on: after ${cfg().awaySeconds} seconds with nobody in view, the screen blurs and I say the owner will be back soon, until you are seen again.` : 'The away screen is off.'); }
+    if (c.type === 'away-demo') { intruder.showAway(); setTimeout(() => { if (!ownerGuard.awayActive && ownerGuard.state === 'idle') intruder.hide(); }, 8000); return done('Showing the away screen for eight seconds.'); }
     if (c.type === 'demo') { ownerGuard.startDemo(6); return done('Showing the access denied screen for six seconds. Nothing will lock.'); }
     if (c.type === 'on') {
       if (!ownerState.templates.length) return { status: 'failed', reply: 'I do not know your face yet. Say "enroll my face" first.' };
@@ -1447,7 +1450,7 @@ app.whenReady().then(() => {
       return done(`Owner recognition is on. If a face that is not yours is in view while you are not, I will sound the alarm and lock the screen after ${cfg().seconds} seconds.${note} It can be fooled by a photo of you, and may flag you in poor light for a moment; coming back into view stops it.`);
     }
     const t = ownerState.templates.length;
-    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. It only locks; it never unlocks the Mac.`);
+    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
   };
   ask.viewerGuardCommand = async (c) => {
     const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';

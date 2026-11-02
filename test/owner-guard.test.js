@@ -13,7 +13,7 @@ function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) 
 const events = (m, kind) => m.log.filter((e) => e[0] === kind);
 
 test('the time is adjustable within safe limits, and it is off unless turned on', () => {
-  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363 });
+  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45 });
   assert.equal(config({ seconds: 1 }).seconds, 5); assert.equal(config({ seconds: 9999 }).seconds, 120); assert.equal(config({ seconds: 45 }).seconds, 45);
   assert.equal(config({ threshold: 5 }).threshold, 0.7); assert.equal(config({ enabled: 'true' }).enabled, false);
   const m = make({ enabled: false }); m.feed([0.01], 60);
@@ -128,4 +128,35 @@ test('voice commands: enroll, forget, on, off, set the countdown, status and the
     ['owner recognition status', { type: 'status' }], ['test the access denied screen', { type: 'demo' }], ['show the intruder alarm', { type: 'demo' }]
   ]) assert.deepEqual(parseOwnerCommand(t), want, t);
   for (const t of ['set a timer for 5 minutes', 'lock my screen', 'whose face is this', 'turn on the lights', 'set the volume to 30', '']) assert.equal(parseOwnerCommand(t), null, t);
+});
+
+test('the away screen: nobody in view for a while puts it on standby, and you being seen again ends it', () => {
+  const away = [];
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4, awayScreen: true, awaySeconds: 30 }, { onAway: (on) => away.push(on) });
+  m.feed([0.9], 5); m.feed([], 29); assert.deepEqual(away, [], 'not yet');
+  m.feed([], 2); assert.deepEqual(away, [true]);
+  m.feed([], 300); assert.deepEqual(away, [true], 'it stays up once, without repeating');
+  m.feed([0.9]); assert.deepEqual(away, [true], 'one frame is not enough');
+  m.feed([0.9]); assert.deepEqual(away, [true, false]);
+});
+
+test('the away screen: a stranger appearing while you are away becomes the alarm, and a face that is not yours does not end the standby', () => {
+  const away = [];
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4, awayScreen: true, awaySeconds: 10 }, { onAway: (on) => away.push(on) });
+  m.feed([], 12); assert.deepEqual(away, [true]);
+  m.feed([0.1], 2); assert.equal(m.g.state, 'idle'); assert.deepEqual(away, [true], 'a stranger alone does not end it');
+  m.feed([0.1]); assert.equal(m.g.state, 'alarm'); assert.deepEqual(events(m, 'alarm').length, 1);
+  assert.deepEqual(away, [true], 'the alarm took the screen over; main.js shows it in place of the standby');
+  m.feed([0.9], 2); assert.equal(m.g.state, 'idle'); assert.deepEqual(events(m, 'clear'), [['clear', 'owner']]);
+});
+
+test('the away screen can be turned off, needs owner recognition on, and is not shown by the test alarm', () => {
+  const away = [];
+  const off = make({ enabled: true, awayScreen: false, awaySeconds: 10 }, { onAway: (on) => away.push(on) }); off.feed([], 60);
+  const dis = make({ enabled: false, awaySeconds: 10 }, { onAway: (on) => away.push(on) }); dis.feed([], 60);
+  assert.deepEqual(away, []);
+  assert.deepEqual(config({ enabled: true }).awayScreen, true); assert.equal(config({ awaySeconds: 1 }).awaySeconds, 10); assert.equal(config({ awaySeconds: 99999 }).awaySeconds, 600);
+  assert.deepEqual(parseOwnerCommand('turn off the away screen'), { type: 'away-off' });
+  assert.deepEqual(parseOwnerCommand('test the away screen'), { type: 'away-demo' });
+  assert.deepEqual(parseOwnerCommand('enable standby mode'), { type: 'away-on' }); assert.equal(parseOwnerCommand('turn on the lights mode'), null);
 });

@@ -6,11 +6,11 @@
 // Honest limits: recognition can be wrong (poor light, glasses, a different angle: you may be flagged for a few seconds, which is why two frames of
 // you cancel it), a photo or video of you can fool it (no liveness check), and covering the camera makes it blind rather than suspicious.
 
-const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363 }; // 0.363 is the published cosine threshold for the SFace model
+const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45 }; // 0.363 is the published cosine threshold for the SFace model
 const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 function config(raw) {
   const c = raw && typeof raw === 'object' ? raw : {};
-  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold) };
+  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)) };
 }
 
 // ---- matching ----
@@ -39,30 +39,36 @@ function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 3, ownerFrames = 2, calmFrames = 10 }) {
-    Object.assign(this, { lock, onAlarm, onCount, onClear, onLocked, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 3, ownerFrames = 2, calmFrames = 10 }) {
+    Object.assign(this, { lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
     this.reset();
   }
-  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; }
+  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   frame({ faces = 0, scores = [] } = {}) {
     const cfg = config(this.getConfig());
-    if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); return null; }
+    if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; return null; }
     const known = scores.filter((s) => Number.isFinite(s));
     const owner = known.some((s) => s >= cfg.threshold), stranger = known.some((s) => s < cfg.threshold);
     this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
     this.owners = owner ? this.owners + 1 : 0;
     this.strangers = stranger && !owner ? this.strangers + 1 : 0;
     this.calm = stranger ? 0 : this.calm + 1;
+    this.noFaceSince = faces > 0 ? null : (this.noFaceSince ?? this.now());
     return this.step(cfg);
   }
 
   // Called every second as well, so the countdown ends on time even if the camera stops sending pictures.
   step(cfg = config(this.getConfig())) {
     const t = this.now();
+    // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again.
+    if (cfg.enabled && cfg.awayScreen && !this.demo) {
+      if (!this.awayActive && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000) { this.awayActive = true; this.onAway(true); }
+      else if (this.awayActive && this.owners >= this.ownerFrames) { this.awayActive = false; this.onAway(false); }
+    } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
-      if (cfg.enabled && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
+      if (cfg.enabled && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
       return null;
     }
     if (this.state === 'alarm') {
@@ -98,6 +104,9 @@ function parseOwnerCommand(text) {
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:owner|face) (?:recognition|check|guard|lock)$|^(?:owner|face) (?:recognition|guard) off$/.test(n)) return { type: 'off' };
   const m = /^(?:set|change|make) (?:the )?(?:lock |access denied |intruder )?(?:countdown|timer|delay|time)(?: (?:for|of) (?:the )?(?:owner|face|access denied|lock)[a-z ]*)? (?:to|at) (\d{1,3})(?: ?(s|sec|secs|seconds?|m|min|mins|minutes?))?$/.exec(n);
   if (m) { const v = Number(m[1]); return { type: 'seconds', seconds: /^m/.test(m[2] || '') ? v * 60 : v }; }
+  if (/^(?:turn on|enable|start|switch on) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-on' };
+  if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-off' };
+  if (/^(?:test|show|preview|try) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-demo' };
   if (/^(?:owner|face) (?:recognition|guard) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recognition|guard) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
   if (/^(?:test|show|preview|try) (?:the )?(?:access denied|intruder|not your computer)(?: screen| alarm| warning)?$/.test(n)) return { type: 'demo' };
   return null;
