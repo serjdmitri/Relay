@@ -1,5 +1,6 @@
 /* global relay */
-// Counts the faces in the camera picture once a second (Google's MediaPipe face finder, on this Mac) and sends only that number.
+// Counts the faces in the camera picture once a second (Google's MediaPipe face finder, on this Mac) and sends only that number. With Owner recognition on (opt-in),
+// it also compares each face with your enrolled face (faceid.js) and sends a match score per face, or, while enrolling, 128 numbers describing your face. No picture leaves this page.
 import { FaceDetector, FilesetResolver } from './vendor/mediapipe/vision_bundle.mjs';
 
 const video = document.getElementById('v');
@@ -8,6 +9,9 @@ let detector = null;
 let stream = null;
 let timer = 0;
 let stopped = false;
+let busy = false, embed = null, embedFailed = false, templates = [], version = 0;
+const cosine = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x) * Math.sqrt(y) || 1); };
+const bestScore = (e, list) => list.reduce((best, t) => { const s = t.length === e.length ? cosine(e, t) : null; return s !== null && (best === null || s > best) ? s : best; }, null);
 
 async function start() {
   try {
@@ -18,9 +22,29 @@ async function start() {
     video.srcObject = stream;
     await video.play();
     status('running');
-    timer = setInterval(() => {
-      if (stopped || video.readyState < 2) return;
-      try { relay.presenceFrame({ faces: detector.detectForVideo(video, performance.now()).detections.length }); } catch { /* a bad picture: skip it */ }
+    timer = setInterval(async () => {
+      if (stopped || busy || video.readyState < 2) return;
+      busy = true;
+      try {
+        const dets = detector.detectForVideo(video, performance.now()).detections;
+        const frame = { faces: dets.length };
+        // Owner recognition (opt-in): only when asked for. The main process says whether to match faces or to enroll yours.
+        const c = await relay.presenceConfig(version);
+        if (c?.templates) { templates = c.templates; version = c.version; }
+        if (c?.faceId && dets.length) {
+          if (!embed && !embedFailed) { try { embed = await (await import('./faceid.js')).createEmbedder(); } catch (e) { embedFailed = true; relay.presenceStatus({ state: 'faceid-error', message: 'Owner recognition could not load its face model: ' + String(e?.message || e).slice(0, 120) }); } }
+          if (embed) {
+            const area = (d) => (d.boundingBox?.width || 0) * (d.boundingBox?.height || 0);
+            if (c.mode === 'enroll') {
+              if (dets.length === 1) { const e = await embed(video, dets[0]); if (e) await relay.presenceEnroll({ embedding: e }); }
+            } else {
+              const big = dets.slice().sort((a, b) => area(b) - area(a)).slice(0, 3);
+              frame.scores = await Promise.all(big.map(async (d) => { const e = await embed(video, d); return e ? bestScore(e, templates) : null; }));
+            }
+          }
+        }
+        relay.presenceFrame(frame);
+      } catch { /* a bad picture: skip it */ } finally { busy = false; }
     }, 1000);
   } catch (e) {
     status('error', { message: /denied|NotAllowed|Permission/i.test(String(e)) ? 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.' : /NotFound|Requested device/i.test(String(e)) ? 'No camera was found.' : `Presence could not start: ${String(e.message || e).slice(0, 120)}` });
