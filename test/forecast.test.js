@@ -25,7 +25,7 @@ test('forecast identifies the matching location and does not invent missing days
   assert.match(urls[1], /latitude=48/);
   assert.match(urls[1], /forecast_days=7/);
   assert.equal(await forecast('Paris, Atlantis', { fetchFn: async () => ({ ok: true, json: async () => ({ results: [] }) }) }), null);
-  assert.equal(await forecast('Russia', { fetchFn: async () => ({ ok: true, json: async () => ({ results: [{ name: 'Russia', country: 'Russia', feature_code: 'PCLI', latitude: 60, longitude: 90 }] }) }) }), null, 'a whole country needs a city');
+  assert.deepEqual(await forecast('Russia', { fetchFn: async () => ({ ok: true, json: async () => ({ results: [{ name: 'Russia', country: 'Russia', feature_code: 'PCLI', latitude: 60, longitude: 90 }] }) }) }), { needsCity: true, country: 'Russia' }, 'a whole country needs a city');
   await assert.rejects(forecast('Paris', { fetchFn: async () => ({ ok: false }) }));
 });
 

@@ -50,7 +50,7 @@ function frameDocument(spec) {
   const src = spec.hosts.map((h) => `https://${h}`).join(' ');
   const csp = `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: ${src}; font-src data:; connect-src ${src || "'none'"}`;
   const bridge = '<script>window.relayPanel={_f:[],onData(f){this._f.push(f)}};addEventListener("message",function(e){if(e.source!==parent)return;(relayPanel._f).forEach(function(f){try{f(e.data)}catch(x){}})});</script>';
-  return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp.replace(/"/g, '&quot;')}">${bridge}${spec.html}`;
+  return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp.replace(/"/g, '&quot;')}">${bridge}${spec.html}<style>html,body{background:transparent!important;color:#e6f7ff;font-family:system-ui,sans-serif}button,input,section,article{border-radius:2px!important}</style>`;
 }
 
 class PanelHub {

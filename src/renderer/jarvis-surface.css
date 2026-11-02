@@ -1,0 +1,6 @@
+/* Shared floating-menu surface. Text stays fully opaque. */
+:root { --menu-blue: rgba(7, 31, 53, .88); --menu-glow: rgba(12, 67, 106, .88); --menu-line: #42bcdf; --menu-ink: #e6f7ff; }
+#card { background: linear-gradient(145deg, var(--menu-blue), var(--menu-glow)) !important; color: var(--menu-ink); border: 1px solid var(--menu-line); border-radius: 4px; box-shadow: 0 0 18px #00c9ff35, inset 0 0 0 1px #5adfff18 !important; }
+#bar { background: rgba(7, 35, 57, .4); color: var(--menu-ink); }
+#x { border-radius: 2px; }
+@media (prefers-reduced-transparency: reduce) { :root { --menu-blue: #071f35; --menu-glow: #0c436a; } }
