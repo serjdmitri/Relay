@@ -6,7 +6,7 @@ class NetworkWindow {
     Object.assign(this,{radar,motion});
     ipcMain.handle('network:action',async(e,action,value)=>{
       if(!this.win||e.sender!==this.win.webContents)return{error:'Open the network radar first.'};
-      try{if(action==='refresh')return await radar.snapshot();if(action==='recognize')return radar.mark(value?.mac,!!value?.on);if(action==='close')this.win.close();return{ok:true};}catch(err){return{error:err.message};}
+      try{if(action==='refresh')return await radar.snapshot();if(action==='scan')return await radar.scan();if(action==='recognize')return radar.mark(value?.mac,!!value?.on);if(action==='close')this.win.close();return{ok:true};}catch(err){return{error:err.message};}
     });
   }
   open(){
