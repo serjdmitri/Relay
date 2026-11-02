@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('relay', {
   onStorageChanged: cb => on('storage:changed', cb),
   onStorageScanRequested: cb => on('storage:scan-requested', cb),
   networkAction: (action, value) => invoke('network:action', action, value),
+  securityAction: (action) => invoke('security:action', action),
   storageAction: (action, value) => invoke('storage:action', action, value),
   previewFiles: id => invoke('files:preview', id),
   applyFiles: id => invoke('files:apply', id),

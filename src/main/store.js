@@ -27,6 +27,7 @@ const DEFAULTS = {
     proactive: { mode: 'silent-urgent', quiet: { on: true, from: 22, to: 7 } }, // Relay speaking up on its own: silent | silent-urgent | speak, and quiet hours
     notes: { folders: [] }, // folders "ask my notes" may read (Settings > Doctor > Ask my notes)
     inbound: { unanswered: 'expire' }, // a question nobody answers (on the Mac or by text): expire after 30 minutes | reask (hourly, 3 times) | forever
+    securityWatch: { enabled: true, min: 'medium', hours: 6 }, // Relay warns you on its own when a new security problem turns up (medium and worse); say "turn off security warnings" to stop
     doctor: { fix: 'ask' }, // when Relay Doctor finds something fixable: ask | small (small fixes run themselves) | never
     recentDelay: 140, // milliseconds the pointer must rest on the left-edge tab before the Recent menu opens (0 to 1500)
     welcome: { enabled: true, name: 'Sir', minAwayMin: 5, repeatMin: 10, speak: true, show: true }, // "Welcome back, Sir" with what happened, when you unlock after being away a while
@@ -182,7 +183,7 @@ class Store {
     clearTimeout(this._timer);
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const tmp = this.file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), { mode: 0o600 }); // settings hold encrypted keys and your history: owner only
     fs.renameSync(tmp, this.file);
   }
 

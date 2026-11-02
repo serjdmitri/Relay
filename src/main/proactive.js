@@ -16,6 +16,7 @@ function scoreEvent(e) {
     case 'battery': return e.percent <= 5 ? 0.95 : e.percent <= 10 ? 0.9 : e.percent <= 20 ? 0.6 : 0;
     case 'job': return e.status === 'failed' ? 0.7 : 0.5;
     case 'plugin': return Math.max(0, Math.min(1, Number(e.importance) || 0.5));
+    case 'security': return e.severity === 'critical' ? 1 : e.severity === 'high' ? 0.9 : e.severity === 'medium' ? 0.6 : 0;
     case 'folder': return 0.5;
     default: return 0.3;
   }
@@ -27,12 +28,13 @@ const textFor = (e) => {
     case 'battery': return `The battery is at ${e.percent} percent. Plug in soon.`;
     case 'job': return e.status === 'failed' ? `That did not work: ${e.title}.` : `Finished: ${e.title}.`;
     case 'folder': return `New in ${e.title}: ${e.name}.`;
+    case 'security': return e.summary ? String(e.title) : `Security warning: ${e.title}.`;
     default: return String(e.title || '');
   }
 };
 
 // The event's own identity, so the same thing is not told twice.
-const keyOf = (e) => (e.type === 'calendar' ? `cal:${e.title}:${e.start}` : e.type === 'battery' ? `bat:${e.percent <= 10 ? 10 : 20}` : e.type === 'job' ? `job:${e.id || e.title}` : e.type === 'folder' ? `folder:${e.title}:${e.name}` : `${e.type}:${e.title}`);
+const keyOf = (e) => (e.type === 'calendar' ? `cal:${e.title}:${e.start}` : e.type === 'battery' ? `bat:${e.percent <= 10 ? 10 : 20}` : e.type === 'job' ? `job:${e.id || e.title}` : e.type === 'folder' ? `folder:${e.title}:${e.name}` : e.type === 'security' ? `sec:${e.id}:${e.severity}` : `${e.type}:${e.title}`);
 
 const inQuiet = (q, date) => { if (!q?.on) return false; const h = date.getHours(); return q.from > q.to ? h >= q.from || h < q.to : h >= q.from && h < q.to; };
 
