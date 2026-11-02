@@ -105,8 +105,9 @@
   #tip.show { opacity: 1; }
   #err { position: absolute; left: 0; right: 0; top: 46%; text-align: center; color: #ffcc66; }
 </style>
+<link rel="stylesheet" href="jarvis-surface.css">
 </head>
-<body>
+<body data-menu="holo">
 <canvas id="cv"></canvas>
 <div id="stage">
   <div id="merge" class="glow">Release to combine</div>
@@ -143,5 +144,6 @@
 <div id="cad"><div id="cadL" class="cadcol"></div><div id="cadR" class="cadcol"></div></div>
 <div id="tip"></div>
 <script type="module" src="holo.js"></script>
+<script src="menu-opacity.js"></script>
 </body>
 </html>
