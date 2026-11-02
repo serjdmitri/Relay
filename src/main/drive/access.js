@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const inside = (root, p) => p === root || p.startsWith(root + path.sep);
+const inside = (root, p) => p === root || p.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 class DriveAccess {
   constructor({ store, home, io = fs, volumes = '/Volumes' }) { Object.assign(this, { store, home, io, volumes }); }
   roots() { return this.store.get('settings.driveRoots') || []; }

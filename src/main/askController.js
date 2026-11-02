@@ -1971,6 +1971,7 @@ class AskController {
           this.push({ label: 'Doing it again', text: effective });
         }
         if (!opts.shown && !opts.scheduled) {
+          if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
           const menus = require('./menuIntent').menuRequests(effective);
           if (menus.length) {
             const result = await this.openMenuRequests(menus);
