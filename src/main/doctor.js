@@ -22,6 +22,11 @@ function parseFreeMb(output) {
   return Number.isSafeInteger(number) ? number : null;
 }
 
+function parseFirewall(output) {
+  const match = /\bstate\s*=\s*([012])\b/i.exec(String(output || ''));
+  return match ? Number(match[1]) : null;
+}
+
 // How the running app is signed, from `codesign -dv --verbose=2` output: adhoc | local (the "Relay Local Signing" certificate) | developer | unknown.
 function parseSigning(output) {
   const t = String(output || '');
@@ -32,6 +37,14 @@ function parseSigning(output) {
 }
 
 const CHECKS = [
+  {
+    id: 'firewall', title: 'macOS application firewall', run: (env) => {
+      const state = env.firewall?.();
+      if (state === 0) return warn('The macOS application firewall is off. Review Firewall in System Settings > Network.');
+      if (state === 1 || state === 2) return ok('The macOS application firewall is on. This does not check your router or prove the network is secure.');
+      return warn('Relay could not determine whether the macOS application firewall is on.');
+    }
+  },
   {
     id: 'claude', title: 'Claude sign-in', run: (env) => {
       const c = env.claude?.();
@@ -275,4 +288,4 @@ function summarize(results) {
   return `${order.length} thing${order.length === 1 ? ' needs' : 's need'} a look. ${first}${more}`;
 }
 
-module.exports = { parseDoctorCommand, summarize, CHECKS, runChecks, worst, fixPolicy, scrub, buildReport, issueUrl, parseSigning, parseFreeMb, REPO };
+module.exports = { parseDoctorCommand, summarize, CHECKS, runChecks, worst, fixPolicy, scrub, buildReport, issueUrl, parseSigning, parseFreeMb, parseFirewall, REPO };
