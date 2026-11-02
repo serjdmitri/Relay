@@ -66,6 +66,7 @@ const { downloadStl } = require('./models/lookup');
 const { ModelCache } = require('./models/cache');
 const { RemoteService } = require('./remote/service');
 const { registerNotionConnection } = require('./connectors/notionOAuth');
+const { registerSchoolConnection } = require('./connectors/schoolConnection');
 const { McpRemote } = require('./connectors/mcp');
 const { registerGoogleConnections, publicGoogle } = require('./connectors/googleConnection');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand, missedMessage, acknowledgeUnknown, recordScheduledOutcome } = require('./schedule');
@@ -852,6 +853,7 @@ function registerIpc() {
   });
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
   const googleConnections = registerGoogleConnections({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
+  registerSchoolConnection({ ipcMain, store, getWindow: () => mainWin, getBridge: () => bridge, openFirefox: url => new Promise((resolve, reject) => execFile('/usr/bin/open', ['-a', 'Firefox', url], { timeout: 5000 }, e => e ? reject(e) : resolve())), checkAssignments: () => ask.showSchoolAssignments(), onChange: broadcast });
   // Relay Remote: the phone page, served by Relay on this Mac.
   ipcMain.handle('remote:set', async (_e, patch) => {
     for (const [k, v] of Object.entries(patch || {})) if (['enabled', 'lan'].includes(k)) store.set(`settings.remote.${k}`, !!v);

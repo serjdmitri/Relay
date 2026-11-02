@@ -1378,25 +1378,13 @@ class AskController {
     if (!g) missing.push('google-calendar', 'mail');
     const school = require('./school');
     const schoolProvider = this.store.get('settings.model.provider');
-    const schoolDeadline = Date.now() + 15000;
     const [mac, due, gev, mail, weather, schoolItems] = await Promise.all([
       within(() => this.mac.calendarEvents(1)).then(parseMacEvents).catch(() => { missing.push('calendar'); return []; }),
       within(() => this.mac.remindersDue()).then((t) => parseMacDue(t, now)).catch(() => { missing.push('reminders'); return []; }),
       g ? within(() => g.calEvents(null, 1)).then((l) => l.map((e) => ({ title: e.title, start: /T/.test(String(e.start)) ? new Date(e.start) : null, allDay: !/T/.test(String(e.start)) }))).catch(() => { missing.push('google-calendar'); return []; }) : [],
       g ? within(() => g.gmailSearch(null, 'is:unread is:important newer_than:2d', 5)).catch(() => { missing.push('mail'); return null; }) : null,
       cfg.city ? within(() => fetchWeather(cfg.city, { units: cfg.units === 'c' ? 'c' : 'f' })).catch(() => null) : null,
-      cfg.schoolUrl ? within(async () => {
-        const page = await school.readSchoolPage(this.bridge, cfg.schoolUrl);
-        if (!page.ok) return { problem: school.schoolProblem(page.reason) };
-        if (signal?.aborted || Date.now() >= schoolDeadline) return { problem: 'School assignment check stopped before sending the page to a model.' };
-        if (this.store.get('settings.model.provider') !== schoolProvider) return { problem: 'The selected model changed while reading school assignments. Run the briefing again.' };
-        const assignments = await school.extractSchoolAssignments(page.text, (prompt, system) => {
-          if (signal?.aborted || Date.now() >= schoolDeadline) throw new Error('school check stopped');
-          if (this.store.get('settings.model.provider') !== schoolProvider) throw new Error('model changed');
-          return this.askOnce(prompt, system);
-        });
-        return assignments ? { assignments, truncated: page.truncated } : { problem: school.schoolProblem('extract-failed') };
-      }, 15000).catch(() => ({ problem: school.schoolProblem('timeout') })) : { problem: 'School assignments are not configured in briefing settings.' }
+      cfg.schoolUrl ? school.checkSchoolAssignments(this.bridge, cfg.schoolUrl, (prompt, system) => this.askOnce(prompt, system), { signal, stillCurrent: () => this.store.get('settings.model.provider') === schoolProvider }) : { problem: 'School assignments are not configured in briefing settings.' }
     ]);
     if (!cfg.city) missing.push('weather');
     else if (!weather) missing.push('weather-unavailable');
@@ -1405,6 +1393,21 @@ class AskController {
     const unfinished = (Array.isArray(history) ? history : []).filter((h) => h.ts >= since && h.ts <= now.getTime() && ['failed', 'stopped'].includes(h.status) && h.text).slice(0, 3).map((h) => ({ text: h.text, status: h.status }));
     const memories = this.store.get('settings.memory') === false ? [] : this.store.get('memories');
     return { now, name: cfg.name, weather, events: mergeEvents(mac, gev), due, mail: mail || [], mailChecked: !!mail, missing, school: schoolItems, unfinished, memories: Array.isArray(memories) ? memories : [], overnight: (this.store.get('overnight') || {}).report || null, includeGreeting };
+  }
+
+  async schoolAssignments({signal}={}) {
+    const school=require('./school'),provider=this.store.get('settings.model.provider');
+    return school.checkSchoolAssignments(this.bridge,this.store.get('settings.briefing.schoolUrl'),(prompt,system)=>this.askOnce(prompt,system),{signal,stillCurrent:()=>this.store.get('settings.model.provider')===provider});
+  }
+  async showSchoolAssignments() {
+    const abort=new AbortController();this.abort=abort;
+    const result=await this.schoolAssignments({signal:abort.signal});
+    this.store.addAction?.({ id: crypto.randomUUID(), tool: 'check_school_assignments', input: { source: require('./school').schoolUrl(this.store.get('settings.briefing.schoolUrl'))?.href || 'not configured' }, result: result.problem || `${result.assignments?.length || 0} visible assignments identified; full list not verified`, ok: !result.problem && !abort.signal.aborted, ts: Date.now() });
+    if(abort.signal.aborted)return{status:'stopped',reply:'Stopped checking school assignments.'};
+    if(result.problem)return{status:'failed',reply:result.problem};
+    const title='School assignments',summary=result.assignments.length?`${result.assignments.length} visible incomplete assignment(s). Check the school page for the full list.`:'No incomplete assignments were identified on the visible page. Filters or unloaded items may hide more.';
+    await this.cardPanel?.show({kind:'list',hold:true,title,subtitle:`Checked ${new Date(result.checkedAt).toLocaleString()}`,summary:summary+(result.truncated?' This result is limited.':''),items:result.assignments.map(a=>({title:a.title,subtitle:a.due?'Due: '+a.due:'Due date not visible'})),facts:[],links:[{label:'Open assignment center',url:result.sourceUrl}]});
+    return{status:'done',reply:summary,actions:1};
   }
 
   async briefingText(options = {}) {
@@ -2033,6 +2036,7 @@ class AskController {
           const cc = require('./calls/service').parseCallCommand(effective);
           if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
         }
+        if (!opts.shown && !opts.scheduled && require('./school').parseSchoolCommand(effective)) return this.finish(entry, await this.showSchoolAssignments());
         if (!opts.shown && !opts.scheduled) {
           if (this.trashStorageSelection && require('./drive/storageScan').parseStorageTrash(effective)) return this.finish(entry, await this.trashStorageSelection());
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }

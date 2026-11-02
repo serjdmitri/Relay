@@ -540,6 +540,7 @@ const PAGES = {
     C.apps = C.apps || {};
     c.append(h('<div class="lead">Connect the services you choose on this Mac. Relay can send retrieved information to your selected AI provider to answer a request; check the active provider before using sensitive information. New credentials require macOS secure storage; older credentials may have been saved without it. Background agents can use connected services too.</div>'));
 
+    renderSchoolConnection(c, S.settings.briefing?.schoolUrl || '');
     renderNotionConnection(c, C.notion);
 
     renderGoogleConnections(c, C.google);

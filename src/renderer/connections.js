@@ -45,3 +45,15 @@ function renderNotionConnection(c,n){
  q('[data-notion-token-save]').onclick=async()=>{try{const r=await relay.setNotionToken(q('[data-notion-token]').value);if(r.ok){q('[data-notion-token]').value='';status('Integration token connected.');}else status(r.error);}catch{status('Could not connect that integration token.');}};
  c.append(box);
 }
+
+let schoolActionPending=false;
+function renderSchoolConnection(c,savedUrl){
+ c.append(h('<div class="section-title" style="margin-top:0">School · Blackbaud</div>'));
+ const box=h('<div class="card" style="padding:16px"><div class="ttl">Connect your school assignment center</div><p class="d" style="margin:8px 0">Sign in in Firefox using your school’s normal login. Relay uses that browser session; it does not store your school password. Keep the Relay Firefox extension connected.</p><input class="field" data-school-url aria-label="School assignment-center URL" placeholder="https://your-school.myschoolapp.com/lms-assignment/assignment-center/student"><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button class="btn" data-school-save>Save school link</button><button class="btn primary" data-school-connect>Connect school</button><button class="btn" data-school-check>Check connection</button><button class="btn" data-school-assignments>Show assignments</button></div><div class="note" data-school-status role="status"></div><div class="d">Show assignments sends the visible page to your selected model to identify incomplete work. The result may be limited by page filters or unloaded items. Check the school page for the full list. Briefings and Plan today reuse this source.</div></div>');
+ const q=s=>box.querySelector(s),status=t=>{const el=document.querySelector('[data-school-status]')||q('[data-school-status]');if(el)el.textContent=t;};q('[data-school-url]').value=savedUrl;
+ const busy=on=>{schoolActionPending=on;for(const el of[box,document])for(const b of el.querySelectorAll('[data-school-connect],[data-school-check],[data-school-assignments]'))b.disabled=on;};busy(schoolActionPending);
+ const save=async()=>{const r=await relay.schoolConnection('save',q('[data-school-url]').value.trim());if(!r.ok)throw Error(r.error);};
+ q('[data-school-save]').onclick=()=>save().then(()=>status('School link saved.')).catch(e=>status(e.message));
+ for(const action of['connect','check','assignments'])q('[data-school-'+action+']').onclick=async e=>{busy(true);status(action==='assignments'?'Checking visible assignments with the selected model…':'Checking school connection…');try{await save();const r=await relay.schoolConnection(action);status(r.ok?r.message:r.error);}catch(e){status(e.message||'Could not finish the school check.');}finally{busy(false);}};
+ c.append(box);
+}
