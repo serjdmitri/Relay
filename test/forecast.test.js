@@ -72,3 +72,9 @@ test('an ambiguous city offers real region choices instead of silently guessing'
  const result=await forecast('Hollywood',{fetchFn:async()=>({ok:true,json:async()=>data})});
  assert.equal(result.needsChoice,true);assert.deepEqual(result.choices.map(x=>x.place),['Hollywood, Florida, United States','Hollywood, California, United States']);
 });
+
+test('seven-day hourly readings retain future days and omit invalid, past and unlisted dates',async()=>{
+ const data={current:{time:'2026-11-01T12:15'},daily:{time:['2026-11-01','2026-11-02'],temperature_2m_max:[20,22],temperature_2m_min:[10,12]},hourly:{time:['2026-11-01T12:00','2026-11-01T13:00','2026-11-02T00:00','2026-11-02T01:00','2026-11-03T00:00','not-a-time'],temperature_2m:[19,20,15,null,16,17]}};
+ const result=await forecast('London',{fetchFn:async url=>({ok:true,json:async()=>url.includes('geocoding')?{results:[{name:'London',latitude:51,longitude:0}]}:data})});
+ assert.deepEqual(result.hourly,[{time:'2026-11-01T13:00',temperature:20},{time:'2026-11-02T00:00',temperature:15}]);
+});

@@ -47,7 +47,7 @@ async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
   if (!days.length) return null;
   const current = data.current || {};
   const h = data.hourly || {};
-  const hourly = (h.time || []).map((time, i) => ({ time, temperature: h.temperature_2m?.[i] })).filter((x) => x.time >= String(current.time || '') && Number.isFinite(x.temperature)).slice(0, 12);
+  const hourly = (h.time || []).map((time, i) => ({ time, temperature: h.temperature_2m?.[i] })).filter((x) => typeof x.time === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(x.time) && days.some(d => x.time.startsWith(d.date + 'T')) && x.time >= String(current.time || '') && Number.isFinite(x.temperature)).slice(0, 168);
   return { location: [...new Set([p.name, p.admin1, p.country].filter(Boolean))].join(', '), units, days, fetchedAt: new Date().toISOString(), current: { temperature: current.temperature_2m, feels: current.apparent_temperature, humidity: current.relative_humidity_2m, wind: current.wind_speed_10m, code: current.weather_code, conditions: weatherWord(current.weather_code), time: current.time, sunrise: d.sunrise?.[0], sunset: d.sunset?.[0], uv: d.uv_index_max?.[0] }, hourly };
 }
 
