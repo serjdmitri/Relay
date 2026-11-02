@@ -57,3 +57,9 @@ test('school results retain the source and checked time; voice matches preserve 
  const result=await checkSchoolAssignments(b,url,async()=>'[{"title":"Essay","due":"Friday"}]');assert.equal(result.sourceUrl,url);assert.ok(result.checkedAt);assert.equal(result.assignments[0].title,'Essay');
  for(const s of ['check my assignments','show my school assignments','what assignments are left']){assert.equal(parseSchoolCommand(s),true,s);}assert.equal(parseSchoolCommand('delete my assignments'),false);assert.equal(parseSchoolCommand('submit my homework'),false);
 });
+
+test('school environment routing is safely canonicalized without accepting login tokens',()=>{
+ assert.equal(schoolUrl(url+'?svcid=edu&envid=p-fixture_school-id').href,url+'?svcid=edu');
+ assert.equal(schoolUrl(url+'?svcid=edu&envId=p-fixture&access_token=secret'),null);
+ assert.equal(schoolUrl(url+'?envId=arbitrary-secret'),null);
+});

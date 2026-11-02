@@ -4,7 +4,10 @@ function schoolUrl(value) {
   try {
     const url = new URL(String(value || ''));
     if (url.protocol !== 'https:' || url.username || url.password || url.hash) return null;
-    if ([...url.searchParams].some(([key, val]) => key.toLowerCase() !== 'svcid' || val.toLowerCase() !== 'edu')) return null;
+    for (const [key,val] of [...url.searchParams]) {
+      if (key.toLowerCase() === 'envid' && /^p-[A-Za-z0-9_-]{1,100}$/.test(val)) url.searchParams.delete(key); // stable environment routing, not a login token
+      else if (key.toLowerCase() !== 'svcid' || val.toLowerCase() !== 'edu') return null;
+    }
     if (!url.hostname.toLowerCase().endsWith('.myschoolapp.com')) return null;
     if (!url.pathname.startsWith('/lms-assignment/assignment-center/')) return null;
     return url;
