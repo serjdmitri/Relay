@@ -1,14 +1,14 @@
-const { BrowserWindow, screen, ipcMain, dialog } = require('electron');
+const { BrowserWindow, screen, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { StorageScan } = require('./drive/storageScan');
 class StorageWindow {
-  constructor({ access, motion, reveal, settings }) {
-    Object.assign(this, { access, motion, settings });
+  constructor({ access, motion, reveal, settings, trashItem = p => shell.trashItem(p), confirmTrash = null }) {
+    Object.assign(this, { access, motion, settings, trashItem, confirmTrash }); this.selected = [];
     this.scan = new StorageScan({ access, reveal });
     ipcMain.handle('storage:action', async (e, action, value) => {
       if (!this.win || e.sender !== this.win.webContents) return { error: 'Open the storage map first.' };
       try {
-        if (action === 'roots') return { ...access.status(), preferredRoot: this.scan.rootId };
+        if (action === 'roots') return { ...access.status(), computer: true, preferredRoot: this.scan.rootId };
         if (action === 'choose') {
           const owner = this.win;
           const r = await dialog.showOpenDialog(owner, { title: 'Choose a folder to measure storage', properties: ['openDirectory'] });
@@ -16,9 +16,11 @@ class StorageWindow {
           const data = access.add(r.filePaths[0]);
           return { ...data, selectedRoot: data.roots.find(root => root.path === r.filePaths[0])?.id };
         }
-        if (action === 'start') return this.scan.start(String(value));
+        if (action === 'start') { this.selected=[]; return this.scan.start(String(value)); }
+        if (action === 'select') { if(value?.length)this.scan.trashItems(value);this.selected=Array.isArray(value)?value:[];return{ok:true}; }
+        if (action === 'trash') return await this.trashSelected();
         if (action === 'view') return this.scan.view(value);
-        if (action === 'status') { if (this.scan.rootId) access.require(this.scan.rootId); return this.scan.state; }
+        if (action === 'status') { if (this.scan.rootId) this.scan.requireRoot(); return this.scan.state; }
         if (action === 'cancel') return this.scan.cancel();
         if (action === 'reveal') return this.scan.revealNode(value);
         if (action === 'settings') { settings(); return { ok: true }; }
@@ -26,6 +28,21 @@ class StorageWindow {
         return { ok: true };
       } catch (err) { this.scan.cancel(); return { error: err.message }; }
     });
+  }
+  async trashSelected() {
+    const owner=this.win;
+    if(!owner||owner.isDestroyed()||!owner.isVisible())return{error:'Open the storage menu and select files first.'};
+    try { const result = await this.scan.trash([...this.selected], {
+      trashItem:this.trashItem,
+      confirm:async items=>{
+        const approved=this.confirmTrash?await this.confirmTrash(items):(await dialog.showMessageBox(owner,{type:'warning',buttons:['Move to Trash','Cancel'],defaultId:1,cancelId:1,message:`Move ${items.length} selected file${items.length===1?'':'s'} to Trash?`,detail:items.map(n=>n.path).join('\n')+'\n\nOnly these scanned files will be moved. You can restore them from Trash. Relay never empties Trash.'})).response===0;
+        return approved&&this.win===owner&&!owner.isDestroyed();
+      }
+    });
+      if(this.win===owner&&!owner.isDestroyed())owner.webContents.send('storage:changed',result);
+      return result;
+    } catch(err) { return{error:err.message}; }
+    finally { this.selected=[]; }
   }
   open({ scan = false } = {}) {
     if (this.win && !this.win.isDestroyed()) {

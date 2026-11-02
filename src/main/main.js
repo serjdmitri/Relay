@@ -367,6 +367,10 @@ function registerIpc() {
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
   storagePanel = new StorageWindow({ access, motion: floatingMotion, reveal: p => shell.showItemInFolder(p), settings: () => openMain('permissions') });
+  ask.trashStorageSelection = async () => {
+    const r=await storagePanel.trashSelected();
+    return {status:r.cancelled?'stopped':r.error||r.failed?.length&&!r.count?'failed':'done',reply:r.cancelled?'Cancelled. No files were moved.':r.error||`I moved ${r.count} selected files to Trash, Sir.${r.failed?.length?` ${r.failed.length} could not be moved; check the storage menu.`:''}`,actions:r.count||0};
+  };
   networkPanel = new NetworkWindow({ store, motion: floatingMotion });
   ask.openNetworkRadar = () => { networkPanel.open(); return { status: 'done', reply: 'Your network radar is open, Sir. It shows cached neighbors and local security checks.', actions: 1 }; };
   ask.openStorageMap = () => { storagePanel.open({ scan: true }); return { status: 'done', reply: 'Your interactive storage map is open, Sir.', actions: 1 }; };

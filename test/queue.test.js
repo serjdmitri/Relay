@@ -141,3 +141,8 @@ test('network keywords use the radar when available without requiring the legacy
   c.openNetworkRadar=()=>{opened++;return{status:'done',reply:'Radar open.'};};c.runRequest=()=>assert.fail('Network radar is a local command');
   const result=await c.handleText('can I see what my network is doing');assert.equal(opened,1);assert.equal(result.status,'done');
 });
+test('voice removal of a storage selection uses the same permission-gated local action', async t => {
+  const c=make();let called=0;t.after(()=>{clearTimeout(c.doneTimer);clearTimeout(c.holdTimer);});
+  c.trashStorageSelection=async()=>{called++;return{status:'stopped',reply:'Cancelled. No files moved.'};};c.runRequest=()=>assert.fail('Selected storage files must use the local confirmation path');
+  const result=await c.handleText('delete the selected files');assert.equal(called,1);assert.equal(result.status,'stopped');
+});
