@@ -59,12 +59,14 @@ class HandControl {
 
   async enable() {
     if (this.enabled) return { ok: true };
+    const enableVersion=this.enableVersion=(this.enableVersion||0)+1;
     this.status = 'starting'; this.message = ''; this.onChange();
     if (!(await this.askAccess())) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
+    if(this.enableVersion!==enableVersion)return{ok:false,cancelled:true};
     this.enabled = true;
     this.trackLimit=Math.max(2,Math.min(6,Math.round(Number(this.maxHands())||4)));this.tracks=new HandTracks(this.trackLimit);
     this.externalDrag?.start();
-    this.cam = await this.createCamera();
+    const camera=await this.createCamera();if(this.enableVersion!==enableVersion||!this.enabled){camera?.close?.();return{ok:false,cancelled:true};}this.cam=camera;
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor(0);
     if (!this.secondary) {
@@ -83,6 +85,7 @@ class HandControl {
   }
 
   disable() {
+    this.enableVersion=(this.enableVersion||0)+1;
     this.enabled = false;
     this.status = 'off'; this.message = '';
     clearTimeout(this.calibration?.timer); this.calibration = null; this.paused = false; this.pauseHold = null; this.pauseLatched = false;
@@ -311,7 +314,7 @@ class HandControl {
       return;
     }
     if (e.type === 'move') {
-      if (this.externalHeld) { if(this.externalDrag?.owner!==this){this.externalHeld=false;this.ringState('open');return;}this.externalDrag?.move(this, pt); this.ringState('held'); return; }
+      if (this.externalHeld) { if(this.externalDrag?.move(this, pt)===false){this.externalHeld=false;this.ringState('open');return;} this.ringState('held'); return; }
       if (this.drag) {
         this.drag.target.move(pt.x - this.drag.ax, pt.y - this.drag.ay);
         this.motion?.update(this.drag.target.key, pt);

@@ -411,3 +411,4 @@ test('pausing gestures preserves the running camera and preview',async()=>{
  assert.equal(hc.paused,true);assert.equal(hc.enabled,true);assert.equal(hc.cam,cam);assert.equal(hc.preview,true);
  hc.setPaused(false);assert.equal(hc.paused,false);assert.equal(hc.cam,cam);
 });
+test('disabling while camera opens disposes the late camera instead of reviving hands',async()=>{let ready,closed=false;const hc=new HandControl({holos:{holos:new Map()},display:()=>({}),askAccess:async()=>true,createCamera:()=>new Promise(r=>ready=r),createCursor:()=>({})});const pending=hc.enable();await new Promise(r=>setImmediate(r));hc.disable();ready({close:()=>closed=true});const result=await pending;assert.equal(result.cancelled,true);assert.equal(closed,true);assert.equal(hc.enabled,false);assert.equal(hc.cam,null);});
