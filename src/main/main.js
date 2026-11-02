@@ -1,7 +1,7 @@
 // Keep a launch-provided phone key out of every child model/tool process.
 const blandLaunchKey = process.env.BLAND_API_KEY || '';
 delete process.env.BLAND_API_KEY;
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor, safeStorage } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -10,6 +10,9 @@ const { DriveAccess } = require('./drive/access');
 const { FileWorkspace } = require('./drive/workspace');
 const { StorageWindow } = require('./storageWindow');
 const { NetworkWindow } = require('./networkWindow');
+const { SecurityWindow } = require('./securityWindow');
+const { gatherFacts } = require('./auditFacts');
+const securityAudit = require('./securityAudit');
 const { Bland } = require('./calls/bland');
 const { Calls, quiet: callsQuiet } = require('./calls/service');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
@@ -76,7 +79,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let callService, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let callService, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -422,6 +425,16 @@ function registerIpc() {
   };
   networkPanel = new NetworkWindow({ store, motion: floatingMotion });
   ask.openNetworkRadar = () => { networkPanel.open(); return { status: 'done', reply: 'Your network radar is open, Sir. It shows cached neighbors and local security checks.', actions: 1 }; };
+  securityPanel = new SecurityWindow({
+    version: app.getVersion(), motion: floatingMotion,
+    gather: () => gatherFacts({
+      store, perms, safeStorage, home: app.getPath('home'), fullDisk: () => fullDisk() === true, flagOn: (n) => flagsMod.isOn(store.get('settings'), n), plugins: pluginMgr,
+      phoneInfo: () => remote ? { ...remote.info(), pairingActive: !!remote.pairing?.active?.() } : null,
+      textsInfo: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), paired: !!inbound?.status?.().paired })
+    })
+  });
+  ask.auditRun = async () => { const r = await securityPanel.run(true); securityPanel.open(); return `${securityAudit.summarize(r)} The full list is open on screen.`; };
+  ask.securityWatchSet = (on) => { store.set('settings.securityWatch.enabled', !!on); return on ? 'Security warnings are on. I will tell you when something new needs attention.' : 'Security warnings are off. You can still ask me for a security audit.'; };
   ask.openStorageMap = () => { storagePanel.open({ scan: true }); return { status: 'done', reply: 'Your interactive storage map is open, Sir.', actions: 1 }; };
   const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
     if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use file access controls.' };
@@ -1310,7 +1323,7 @@ app.whenReady().then(() => {
     if (event.type === 'job' && callService?.config().enabled && callService.config().offerOnCompletion && !callService.privateMode() && !callsQuiet(callService.config(), Date.now())) {
       try { callService.prepare(`Review the task status: ${event.title}. Relay reported ${event.status}. Do not claim details beyond that status.`, { source: 'job', occurrence: `job:${event.id}` }); } catch {}
     }
-    if (!flagsMod.isOn(store.get('settings'), 'proactive')) return;
+    if (event.type !== 'security' && !flagsMod.isOn(store.get('settings'), 'proactive')) return; // security warnings do not wait for the experimental switch
     const o = store.get('settings.proactive') || {};
     const d = alerts.decide(event, { mode: o.mode, quiet: o.quiet, busy: !!ask.meeting?.active || ask.state === 'listening' || !!ask.speaker?.speaking, away: !!ask.lockWatch?.locked });
     if (d.how === 'drop') return;
@@ -1319,6 +1332,20 @@ app.whenReady().then(() => {
     if (d.phone) ask.phone?.send({ title: 'Relay', body: d.text }).catch(() => {});
   };
   ask.onProactive = surface;
+  // Security warnings on their own: check a minute and a half after start, then every few hours, and tell you about anything new that is medium or worse.
+  const securityWatch = async () => {
+    const w = store.get('settings.securityWatch') || {};
+    if (w.enabled === false) return;
+    try {
+      const report = await securityPanel.run(true);
+      const { warn, more, state } = securityAudit.selectWarnings(report, store.get('securityWatchState'), { min: w.min || 'medium' });
+      store.set('securityWatchState', state);
+      for (const x of warn) surface({ type: 'security', id: x.id, severity: x.severity, title: x.title });
+      if (more) surface({ type: 'security', id: 'more', severity: 'medium', summary: true, title: `${more} more security finding${more === 1 ? '' : 's'}. Say "security audit" to see them.` });
+    } catch { /* a failed check is not a warning; the next one tries again */ }
+  };
+  setTimeout(securityWatch, 90000);
+  setInterval(securityWatch, Math.max(1, Number((store.get('settings.securityWatch') || {}).hours) || 6) * 3600e3);
   // Watched folders (Settings > Speak up on its own): a new file in one is an event.
   const watchers = new Map();
   const syncWatch = () => {

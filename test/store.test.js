@@ -73,3 +73,13 @@ test('dictation counts toward words', () => {
   s.addDictation({ id: 'd', text: 'can we move our call to Thursday', ts: 1 });
   assert.equal(s.stats().words, 7);
 });
+
+test('the settings file is written readable by its owner only, even when an older loose one is replaced', () => {
+  const dir = tmp();
+  const s = new Store(dir);
+  s.set('settings.look', 'jarvis'); s.flush();
+  assert.equal(fs.statSync(path.join(dir, 'relay.json')).mode & 0o077, 0, 'no group or other access');
+  fs.chmodSync(path.join(dir, 'relay.json'), 0o644);
+  s.set('settings.look', 'jarvis2'); s.flush();
+  assert.equal(fs.statSync(path.join(dir, 'relay.json')).mode & 0o777, 0o600, 'the next save tightens an older loose file');
+});
