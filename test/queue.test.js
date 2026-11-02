@@ -136,3 +136,8 @@ test('again repeats the last keyword menu instead of an older model task', async
   await c.handleText('again');
   assert.equal(opened, 2);
 });
+test('network keywords use the radar when available without requiring the legacy live panel switch', async t => {
+  const c=make();let opened=0;t.after(()=>{clearTimeout(c.doneTimer);clearTimeout(c.holdTimer);});
+  c.openNetworkRadar=()=>{opened++;return{status:'done',reply:'Radar open.'};};c.runRequest=()=>assert.fail('Network radar is a local command');
+  const result=await c.handleText('can I see what my network is doing');assert.equal(opened,1);assert.equal(result.status,'done');
+});

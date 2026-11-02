@@ -6,6 +6,7 @@ const { Store } = require('./store');
 const { DriveAccess } = require('./drive/access');
 const { FileWorkspace } = require('./drive/workspace');
 const { StorageWindow } = require('./storageWindow');
+const { NetworkWindow } = require('./networkWindow');
 const { Hotkeys, withAuxiliaryShortcuts } = require('./hotkeys');
 const { label } = require('./shortcuts');
 const { FirefoxBridge } = require('./firefoxBridge');
@@ -70,7 +71,7 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -366,6 +367,8 @@ function registerIpc() {
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
   storagePanel = new StorageWindow({ access, motion: floatingMotion, reveal: p => shell.showItemInFolder(p), settings: () => openMain('permissions') });
+  networkPanel = new NetworkWindow({ store, motion: floatingMotion });
+  ask.openNetworkRadar = () => { networkPanel.open(); return { status: 'done', reply: 'Your network radar is open, Sir. It shows cached neighbors and local security checks.', actions: 1 }; };
   ask.openStorageMap = () => { storagePanel.open({ scan: true }); return { status: 'done', reply: 'Your interactive storage map is open, Sir.', actions: 1 }; };
   const filesIpc = (channel, run) => ipcMain.handle(channel, async (e, ...args) => {
     if (!mainWin || e.sender !== mainWin.webContents) return { error: 'Open Relay Settings to use file access controls.' };
@@ -1099,6 +1102,7 @@ app.whenReady().then(() => {
     },
     saveMargin: (margin) => { store.set('settings.hands.margin', margin); hands?.cam?.syncConfig?.(); broadcast(); },
     floatingAt: (pt) => {
+      const network = networkPanel?.handTarget(pt); if (network) return network;
       const storage = storagePanel?.handTarget(pt); if (storage) return storage;
       const panel = panelWins?.handTarget(pt);
       if (panel) {
