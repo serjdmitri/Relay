@@ -65,7 +65,7 @@ const holoWin = require('./holo/windows');
 const { downloadStl } = require('./models/lookup');
 const { ModelCache } = require('./models/cache');
 const { RemoteService } = require('./remote/service');
-const { NotionApi } = require('./connectors/notion');
+const { registerNotionConnection } = require('./connectors/notionOAuth');
 const { McpRemote } = require('./connectors/mcp');
 const { registerGoogleConnections, publicGoogle } = require('./connectors/googleConnection');
 const { Scheduler, describe: describeSchedule, parseScheduleCommand, missedMessage, acknowledgeUnknown, recordScheduledOutcome } = require('./schedule');
@@ -152,7 +152,7 @@ function publicState() {
   const hasHfToken = !!decryptKey(d.settings.hfTokenEnc);
   delete d.settings.hfTokenEnc;
   const cn = d.settings.connectors || {};
-  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '' }, google: { ...publicGoogle(cn.google), hasSecret: !!decryptKey(cn.google?.clientSecretEnc) }, apps: { connected: !!(cn.apps?.url && decryptKey(cn.apps?.keyEnc)), url: cn.apps?.url ? (() => { try { return new URL(cn.apps.url).host; } catch { return ''; } })() : '', count: cn.apps?.count || 0, headerName: cn.apps?.headerName || 'x-api-key' } };
+  const connectors = { notion: { connected: !!decryptKey(cn.notion?.tokenEnc), name: cn.notion?.name || '', clientId: cn.notion?.clientId || '', hasSecret: !!decryptKey(cn.notion?.clientSecretEnc) }, google: { ...publicGoogle(cn.google), hasSecret: !!decryptKey(cn.google?.clientSecretEnc) }, apps: { connected: !!(cn.apps?.url && decryptKey(cn.apps?.keyEnc)), url: cn.apps?.url ? (() => { try { return new URL(cn.apps.url).host; } catch { return ''; } })() : '', count: cn.apps?.count || 0, headerName: cn.apps?.headerName || 'x-api-key' } };
   delete d.settings.connectors;
   const hasKeys = {};
   for (const [id, s] of Object.entries(d.settings.model.presets)) {
@@ -478,6 +478,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('state:set', (_e, key, value) => {
+    if (key === 'settings.model.provider' && value === 'ollama') { googleConnections.cancel(); notionConnection.cancel(); }
     if (key === 'settings.calls' || key.startsWith('settings.calls.')) throw Error('Use Calls settings to change calling permissions.');
     if (key === 'settings.driveRoots' || key.startsWith('settings.driveRoots.')) throw new Error('Use the folder chooser for file access.');
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
@@ -836,18 +837,7 @@ function registerIpc() {
     broadcast();
   });
   // Connectors: Notion token, and Google sign-in (the user's own OAuth app; several accounts).
-  ipcMain.handle('connectors:notion:set', async (_e, token) => {
-    const t = String(token || '').trim();
-    if (!t) return { ok: false, error: 'Paste the integration token first.' };
-    try {
-      const me = await new NotionApi({ token: t }).me();
-      store.set('settings.connectors.notion', { tokenEnc: encryptKey(t), name: me.name });
-      broadcast();
-      return { ok: true, name: me.name };
-    } catch (e) { return { ok: false, error: e.message }; }
-  });
-  ipcMain.handle('connectors:notion:clear', () => { store.set('settings.connectors.notion', { tokenEnc: '', name: '' }); broadcast(); });
-  // Your other apps: a Composio (or other MCP server) address and key. It is tried before it is kept.
+  const notionConnection = registerNotionConnection({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, privateMode: () => store.get('settings.model.provider') === 'ollama' });
   ipcMain.handle('connectors:apps:set', async (_e, url, key, headerName) => {
     const u = String(url || '').trim(), k = String(key || '').trim(), hn = String(headerName || 'x-api-key').trim() || 'x-api-key';
     if (!u || !k) return { ok: false, error: 'Paste the server address and the key.' };
@@ -861,7 +851,7 @@ function registerIpc() {
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
-  registerGoogleConnections({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
+  const googleConnections = registerGoogleConnections({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
   // Relay Remote: the phone page, served by Relay on this Mac.
   ipcMain.handle('remote:set', async (_e, patch) => {
     for (const [k, v] of Object.entries(patch || {})) if (['enabled', 'lan'].includes(k)) store.set(`settings.remote.${k}`, !!v);

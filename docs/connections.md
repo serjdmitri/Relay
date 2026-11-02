@@ -11,3 +11,11 @@ OAuth uses a loopback listener on 127.0.0.1, random state and PKCE, a timeout an
 Disconnect removes the local account and attempts to revoke its Google refresh token. If revocation fails, Relay reports that you may need to remove access in your Google account. Replacing app credentials with connected accounts asks before removing those local connections.
 
 Tests use fake browsers/providers and isolated local data. Real consent, API enablement, school administrator restrictions and account capabilities still require the user's registered app and sign-in. No messages are sent, events created or personal files changed during tests.
+
+## Notion
+
+Create a public Notion connection in its developer portal and register `http://127.0.0.1:18790/notion/cb` exactly as its redirect URI. In Relay’s Notion App credentials, save the OAuth client ID and secret once. Then click **Connect with Notion**, sign in, and choose pages to share. If the provider rejects the local redirect for your app configuration, use the existing integration-token option while adjusting that registration; a hosted callback is not silently substituted.
+
+Notion access/refresh tokens are encrypted, rotated on refresh and never sent to the renderer. Token renewal is shared between concurrent requests and cancelled if the connection changed. Existing internal integration tokens remain supported under Advanced. Check connection reads only the bot/workspace identity; actual page access depends on pages selected/shared and app capabilities. Disconnect removes local access but does not claim to revoke the provider’s grant: remove Relay in Notion too if you want to revoke it there.
+
+Selecting local/private mode cancels pending browser sign-ins and removes cloud connector tools. A completed callback after cancellation cannot save a new connection. Real Notion public-app registration, browser consent and granted page access remain unverified without the user’s app credentials.

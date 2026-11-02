@@ -540,26 +540,7 @@ const PAGES = {
     C.apps = C.apps || {};
     c.append(h('<div class="lead">Connect the services you choose on this Mac. Relay can send retrieved information to your selected AI provider to answer a request; check the active provider before using sensitive information. New credentials require macOS secure storage; older credentials may have been saved without it. Background agents can use connected services too.</div>'));
 
-    // Notion
-    c.append(h('<div class="section-title" style="margin-top:0">Notion</div>'));
-    const n = h('<div class="card" style="padding:14px"></div>');
-    if (C.notion.connected) {
-      n.append(h(`<div class="row" style="padding:0;min-height:36px"><div class="grow"><div class="t">Connected to ${esc(C.notion.name || 'Notion')}</div><div class="d">Relay can search, read, add to and create pages that you shared with it.</div></div><button class="btn" id="nout">Disconnect</button></div>`));
-      $('#nout', n).onclick = () => relay.clearNotion();
-    } else {
-      n.append(h('<div class="note" style="margin:0 0 10px;line-height:1.5">1. Open notion.so/profile/integrations and make a new internal integration (any name, e.g. Relay). 2. Copy its secret. 3. In Notion, open the pages you want Relay to see, choose ••• > Connections, and add the integration. 4. Paste the secret here.</div>'));
-      const row = h('<div class="field-row"><input class="field" id="ntok" type="password" placeholder="Integration secret"><button class="btn primary" id="nset" style="height:28px">Connect</button></div>');
-      const go = async () => {
-        const btn = $('#nset', row); btn.textContent = 'Checking…';
-        const r = await relay.setNotionToken($('#ntok', row).value);
-        btn.textContent = 'Connect';
-        if (!r.ok) alert(r.error);
-      };
-      $('#nset', row).onclick = go;
-      $('#ntok', row).onkeydown = (e) => e.key === 'Enter' && go();
-      n.append(row);
-    }
-    c.append(n);
+    renderNotionConnection(c, C.notion);
 
     renderGoogleConnections(c, C.google);
 

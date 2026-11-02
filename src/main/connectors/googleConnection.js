@@ -31,7 +31,7 @@ function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,s
   const ac=pending=new AbortController();
   try{
    const r=await connectAccount({clientId:g.clientId,clientSecret:secret,services,email:typeof options.email==='string'?options.email:undefined,signal:ac.signal,openUrl:u=>shell.openExternal(u)});
-   if(ac.signal.aborted||config().clientId!==g.clientId)return{ok:false,error:'Sign-in cancelled; no account was saved.'};
+   if(ac.signal.aborted||local()||config().clientId!==g.clientId)return{ok:false,error:'Sign-in cancelled; no account was saved.'};
    const encrypted=encryptKey(r.refreshToken),rest=(config().accounts||[]).filter(a=>a.email.toLowerCase()!==r.email.toLowerCase());
    store.set('settings.connectors.google.accounts',[...rest,{email:r.email,refreshEnc:encrypted,...(r.scopes?{scopes:r.scopes}:{})}]);store.flush();resetApi();onChange();return{ok:true,email:r.email,services:r.scopes?grantedServices(r.scopes):null};
   }catch(e){return{ok:false,error:ac.signal.aborted?'Sign-in cancelled.':e.message};}finally{if(pending===ac)pending=null;}

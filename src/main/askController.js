@@ -1322,6 +1322,7 @@ class AskController {
 
   // Notion and Google tools exist only for what is connected in Settings > Connectors.
   connectorTools() {
+    if (this.store.get('settings.model.provider') === 'ollama') return []; // Private mode never calls connected cloud services.
     const c = this.store.get('settings.connectors') || {};
     const tools = [];
     const sentientAllowed = () => this.store.get('settings.memory') !== false && this.store.get('settings.sentient.enabled') === true && this.store.get('settings.model.provider') !== 'ollama' && !(this.offline && flagsMod.isOn(this.store.get('settings'), 'offline'));
@@ -1331,7 +1332,11 @@ class AskController {
       tools.push(...sentientTools(this.sentientReader, { allowed: sentientAllowed, onRead: () => { this.tainted = true; } }));
     }
     const notion = decryptKey(c.notion?.tokenEnc);
-    if (notion) tools.push(...notionTools(new NotionApi({ token: notion })));
+    if (notion) {
+      const { NotionTokens } = require('./connectors/notionOAuth');
+      if (!this.notionTokens) this.notionTokens = new NotionTokens({ store: this.store, encrypt: encryptKey, decrypt: decryptKey, privateMode: () => this.store.get('settings.model.provider') === 'ollama' });
+      tools.push(...notionTools(new NotionApi({ token: () => this.notionTokens.token(), refreshToken: c.notion?.refreshEnc ? () => this.notionTokens.refresh() : undefined })));
+    }
     const appKey = decryptKey(c.apps?.keyEnc);
     if (c.apps?.url && appKey) {
       try {
