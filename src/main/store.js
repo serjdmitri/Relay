@@ -26,6 +26,8 @@ const DEFAULTS = {
     homeOnly: true, // ask before a tool touches anything outside the home folder (a drive in /Volumes, /Applications, /etc); background agents are refused instead
     homework: { full: true, explain: true, format: 'docx', voiceSample: '', voiceStyle: '' }, // the homework helper: allow whole solutions, add a "How it works" section, Word | PDF | text, a sample of your writing and how you describe your voice
     flags: { panels: true }, // custom panels require approval; other experimental features are off by default
+    notifications: { enabled: false, speak: false }, // read the Mac's notifications (notifications.js); needs Full Disk Access
+    mail: { enabled: false, everyMin: 3, vip: [] }, // tell me about new email (mailWatch.js); needs a connected Google account
     proactive: { mode: 'silent-urgent', quiet: { on: true, from: 22, to: 7 } }, // Relay speaking up on its own: silent | silent-urgent | speak, and quiet hours
     notes: { folders: [] }, // folders "ask my notes" may read (Settings > Doctor > Ask my notes)
     inbound: { unanswered: 'expire' }, // a question nobody answers (on the Mac or by text): expire after 30 minutes | reask (hourly, 3 times) | forever
@@ -71,11 +73,12 @@ const DEFAULTS = {
     glass: true, // draw the pill as real see-through glass when this Mac can
     voice: 'auto', // auto, or a voice name from `say -v ?`
     voiceRate: 'normal', // slower | normal | faster
-    tts: { // which voice speaks replies: system | kokoro (on this Mac) | openai | elevenlabs (your own key)
+    tts: { // which voice speaks replies: system | kokoro (on this Mac) | openai | elevenlabs | gemini (your own key)
       engine: 'system',
       kokoro: { voice: 'af_heart' },
       openai: { model: 'gpt-4o-mini-tts', voice: 'coral', instructions: 'Speak naturally and warmly, like a helpful friend. Keep a relaxed pace.', keyEnc: '' },
-      elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' }
+      elevenlabs: { voiceId: 'JBFqnCBsd6RMkjVDRZzb', model: 'eleven_multilingual_v2', keyEnc: '' },
+      gemini: { model: 'gemini-3.8-flash-tts', voice: 'Charon', style: 'Calm, dry and polite, like a British butler', keyEnc: '' }
     },
     notify: { enabled: false, channel: 'ntfy', ntfyTopic: '', ntfyServer: 'https://ntfy.sh', imessageTo: '', minSeconds: 30, includeText: false }, // tell the phone when a long job finishes (see notify.js)
     remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone

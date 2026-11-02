@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, homework = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, skills = null, homework = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -284,6 +284,26 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
     }
   ];
 
+  // Scripts that worked, kept for next time (skills.js). Saving waits for the user's approval; finding only shows approved ones as examples.
+  if (skills) {
+    tools.push(
+      {
+        name: 'find_skills',
+        description: 'Look for a saved script that solved a similar task before. Call it before writing a new AppleScript or shell command for a task that might have come up before.',
+        input_schema: obj({ task: str('What the user wants done, in a few words') }, ['task']),
+        describe: () => 'Checking my saved skills',
+        run: (i) => skills.find(String(i.task || ''))
+      },
+      {
+        name: 'save_skill',
+        description: 'After an AppleScript or shell script you wrote WORKED and could be reused for a similar request, save it. It waits for the user to approve it in Settings. Never include passwords, keys or personal data.',
+        input_schema: obj({ name: str('Short name'), goal: str('What it does, in one sentence'), kind: str('applescript or shell'), code: str('The script that worked') }, ['name', 'goal', 'kind', 'code']),
+        describe: () => 'Saving a skill for approval',
+        run: (i) => skills.save(i)
+      }
+    );
+  }
+
   // Things the user wants Relay to remember about them (kept on this Mac, shown with every request).
   if (memory) {
     tools.push(
@@ -302,6 +322,15 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
         run: (i) => memory.remove(i.match)
       }
     );
+    if (memory.recall) {
+      tools.push({
+        name: 'recall_memory',
+        description: 'Look up remembered facts about the user by a few words (a name, a place, a habit). Use it when the request might involve something older than the facts already shown, e.g. a person or a preference you were not told about.',
+        input_schema: obj({ words: str('A few words to look for') }, ['words']),
+        describe: () => 'Checking what I remember',
+        run: (i) => memory.recall(String(i.words || ''))
+      });
+    }
   }
 
   // A 3D model you can turn and zoom: a real one from Wikimedia Commons (an STL, when someone has made one), else built from shapes.

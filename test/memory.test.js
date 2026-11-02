@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseMemory, isSecret, addFact, removeFacts, memoryContext } = require('../src/main/memory');
+const mem = require('../src/main/memory');
+const { parseMemory, isSecret, addFact, removeFacts, memoryContext } = mem;
 
 test('remember, forget and recall are understood, the way speech writes them', () => {
   assert.deepEqual(parseMemory('Remember that my name is Sergey.'), { type: 'remember', fact: 'my name is Sergey' });
@@ -51,4 +52,14 @@ test('the model sees the newest facts within a budget', () => {
   assert.match(ctx, /^What the user has told Relay to remember/);
   assert.ok(ctx.length < 700);
   assert.equal(memoryContext([]), '');
+});
+
+test('facts that do not fit the request are counted, and recall finds them by words', () => {
+  const list = Array.from({ length: 40 }, (_, i) => ({ id: String(i), text: `fact number ${i} about something long enough to fill the budget`, ts: i }));
+  list.push({ id: 'x', text: 'Sister Anna lives in Boston', ts: 0 });
+  const ctx = mem.memoryContext(list, 400);
+  assert.match(ctx, /older facts are also remembered. Use recall_memory/);
+  assert.equal(mem.memoryContext(list.slice(0, 2), 400).includes('recall_memory'), false);
+  assert.deepEqual(mem.searchFacts(list, 'my sisters in boston').map((f) => f.id), ['x']);
+  assert.deepEqual(mem.searchFacts(list, ''), []);
 });

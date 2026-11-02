@@ -675,6 +675,19 @@ const PAGES = {
         };
         c.append(card);
       }
+      const sk = S.skills || [];
+      c.append(h('<div class="section-title">Saved skills</div>'));
+      c.append(h('<div class="d" style="margin:-6px 4px 10px">When Relay solves something with a script that could be reused, it saves it here. A skill is only text until you approve it, and even then it is shown to the model as an example: running anything still asks you first.</div>'));
+      if (!sk.length) c.append(h('<div class="note" style="font-size:15px">Nothing yet.</div>'));
+      else {
+        const card = h(`<div class="card">${sk.map((x) => `<div class="row" style="min-height:40px;padding:8px 14px"><div class="grow"><div class="t">${esc(x.name)}${x.status === 'approved' ? ' <span class="d" style="display:inline">· in use</span>' : ' <span class="d" style="display:inline">· waiting for you</span>'}</div><div class="d">${esc(x.goal)}</div><pre class="code" style="margin:6px 0 0;white-space:pre-wrap;max-height:90px;overflow:auto">${esc(x.code)}</pre></div><div style="display:flex;gap:6px">${x.status === 'approved' ? '' : `<button class="btn" data-sa="${x.id}">Approve</button>`}<button class="btn" data-sd="${x.id}">Delete</button></div></div>`).join('')}</div>`);
+        card.onclick = (e) => {
+          const t = e.target.dataset;
+          if (t.sa) relay.memoryAct('skill-approve', t.sa);
+          else if (t.sd) relay.memoryAct('skill-delete', t.sd);
+        };
+        c.append(card);
+      }
     }
     const all = $('#mall', c);
     if (all) all.onclick = () => confirm('Forget everything Relay remembers about you?') && relay.clearMemory();
@@ -1024,13 +1037,14 @@ const PAGES = {
     const ecard = h('<div class="card"></div>');
     if (S.settings.model.provider === 'ollama') c.append(h('<div class="note">Ollama is selected: cloud voices are paused and Relay uses a voice on this Mac. Other connected services may still use the internet.</div>'));
     else c.append(h('<div class="note">If Relay falls back to a local model while offline, cloud voices pause and an on-device voice is used.</div>'));
-    const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['omnivoice', 'OmniVoice'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs']];
+    const ENGINES = [['system', 'System'], ['kokoro', 'On-device (beta)'], ['omnivoice', 'OmniVoice'], ['openai', 'OpenAI'], ['elevenlabs', 'ElevenLabs'], ['gemini', 'Gemini']];
     const eseg = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Voice engine</div><div class="seg">${ENGINES.map(([v, l]) => `<button data-v="${v}" class="${T.engine === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">${{
       system: 'The voice chosen above. Free and instant.',
       kokoro: 'A natural voice that runs on this Mac. Free, no key, and your replies never leave your Mac. Apple Silicon only.',
       omnivoice: 'A British voice generated locally on this Mac. The first reply may take longer while the model loads.',
       openai: 'Natural voices from OpenAI, using your own OpenAI API key. OpenAI bills your account; Relay takes nothing.',
-      elevenlabs: 'Some of the most human-sounding voices, using your own ElevenLabs key. ElevenLabs bills your account; Relay takes nothing.'
+      elevenlabs: 'Some of the most human-sounding voices, using your own ElevenLabs key. ElevenLabs bills your account; Relay takes nothing.',
+      gemini: 'Google Gemini voices (Charon, Puck, Kore and more), using your own Gemini API key. Google bills your account (there is a free tier); Relay takes nothing.'
     }[T.engine] || ''}</div></div>`);
     eseg.onclick = (e) => e.target.dataset.v && relay.set('settings.tts.engine', e.target.dataset.v);
     ecard.append(eseg);
@@ -1051,6 +1065,13 @@ const PAGES = {
       const vsel = h(`<div class="row"><div class="grow"><div class="t">Voice</div></div><div class="select" style="margin:0"><span>${esc(T.openai.voice)}</span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select>${['coral', 'marin', 'cedar', 'alloy', 'ash', 'ballad', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'].map((v) => `<option ${v === T.openai.voice ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>`);
       $('select', vsel).onchange = (e) => relay.set('settings.tts.openai.voice', e.target.value);
       ecard.append(vsel, field('Model', T.openai.model, 'settings.tts.openai.model'), field('Style', T.openai.instructions, 'settings.tts.openai.instructions', { ph: 'How it should speak', wide: 320 }));
+    } else if (T.engine === 'gemini') {
+      const G = T.gemini || { voice: 'Charon', model: 'gemini-3.8-flash-tts', style: '' };
+      const GV = ['Charon', 'Puck', 'Kore', 'Fenrir', 'Aoede', 'Zephyr', 'Leda', 'Orus', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'];
+      ecard.append(keyRow('gemini', 'Gemini', 'https://aistudio.google.com/apikey'));
+      const gsel = h(`<div class="row"><div class="grow"><div class="t">Voice</div></div><div class="select" style="margin:0"><span>${esc(G.voice)}</span><svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select>${GV.map((v) => `<option ${v === G.voice ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>`);
+      $('select', gsel).onchange = (e) => relay.set('settings.tts.gemini.voice', e.target.value);
+      ecard.append(gsel, field('Model', G.model, 'settings.tts.gemini.model'), field('Style', G.style, 'settings.tts.gemini.style', { ph: 'How it should speak', wide: 320 }));
     } else if (T.engine === 'elevenlabs') {
       ecard.append(keyRow('elevenlabs', 'ElevenLabs', 'https://elevenlabs.io/app/settings/api-keys'));
       const vrow2 = field('Voice ID', T.elevenlabs.voiceId, 'settings.tts.elevenlabs.voiceId', { ph: 'Copy it from your voice library' });
@@ -1217,6 +1238,28 @@ const PAGES = {
       if (wf.length) $('#pwc', wrow).onclick = () => relay.set('settings.proactive.folders', []);
       bx.append(wrow);
       c.append(bx);
+    }
+    if (S.settings.connectors?.google?.accounts?.length) {
+      const ml = S.settings.mail || { enabled: false, everyMin: 3, vip: [] };
+      c.append(h('<div class="section-title">New email</div>'));
+      const mb = h(`<div class="card"><div class="row"><div class="grow"><div class="t">Tell me about new email</div><div class="d">Checks your connected Gmail every few minutes. People you name and words like "deadline" are spoken; ads stay quiet. Uses the loudness and quiet hours of Speak up on its own.</div></div><div class="toggle ${ml.enabled ? 'on' : ''}" id="mle"></div></div><div class="row"><div class="grow"><div class="t">Check every</div></div><input class="field" id="mlm" type="number" min="1" max="60" style="width:70px" value="${ml.everyMin || 3}"> <span class="d">minutes</span></div><div class="row"><div class="grow"><div class="t">People who always count</div><div class="d">Names or addresses, separated by commas.</div></div><input class="field" id="mlv" style="width:240px" placeholder="coach, mom, teacher@school.org" value="${esc((ml.vip || []).join(', '))}"></div></div>`);
+      $('#mle', mb).onclick = () => { relay.set('settings.mail.enabled', !ml.enabled); if (!ml.enabled) relay.set('settings.flags.proactive', true); };
+      $('#mlm', mb).onchange = (e) => relay.set('settings.mail.everyMin', Math.max(1, Math.min(60, Number(e.target.value) || 3)));
+      $('#mlv', mb).onchange = (e) => relay.set('settings.mail.vip', e.target.value.split(',').map((x) => x.trim()).filter(Boolean));
+      c.append(mb);
+    }
+    {
+      const nt = S.settings.notifications || { enabled: false, speak: false };
+      c.append(h('<div class="section-title">Notifications</div>'));
+      const nb = h('<div class="card"></div>');
+      nb.append(toggleRow('Let Relay read my notifications', 'Say "read my notifications" or "what did I miss from Messages". Needs Full Disk Access (System Settings > Privacy & Security). Nothing leaves this Mac.', 'settings.notifications.enabled'));
+      if (nt.enabled) {
+        const sp = toggleRow('Speak important ones', 'Messages from people and security alerts are told to you out loud, using the loudness and quiet hours of Speak up on its own (turned on for you).', 'settings.notifications.speak');
+        const flip = sp.onclick;
+        sp.onclick = () => { flip(); if (!nt.speak) relay.set('settings.flags.proactive', true); };
+        nb.append(sp);
+      }
+      c.append(nb);
     }
     if (S.settings.flags?.offline) {
       c.append(h('<div class="section-title">Offline mode</div>'));
