@@ -40,3 +40,29 @@ test('spoken city and country without a comma can correct the Moscow transcripti
   assert.equal(result.location, 'Moscow, Russia');
   assert.equal(calls[1].searchParams.get('name'), 'Moscow');
 });
+
+test('region-first dictation and comma locations resolve the correct Hollywood', async () => {
+  for (const place of ['Florida Hollywood', 'Florida, Hollywood', 'Hollywood Florida', 'Hollywood, Florida']) {
+    const fetchFn = async url => {
+      const u = new URL(url);
+      return { ok: true, json: async () => u.hostname.startsWith('geocoding') ? { results: u.searchParams.get('name').toLowerCase() === 'hollywood' ? [
+        { name: 'Hollywood', admin1: 'California', country: 'United States', latitude: 34, longitude: -118 },
+        { name: 'Hollywood', admin1: 'Florida', country: 'United States', latitude: 26, longitude: -80 }
+      ] : [] } : { daily: { time: ['2026-11-01'], temperature_2m_max: [80], temperature_2m_min: [70] } } };
+    };
+    assert.equal((await forecast(place, { fetchFn })).location, 'Hollywood, Florida, United States', place);
+  }
+});
+
+test('fallback geocoding runs concurrently and matches unaccented spoken cities', async () => {
+  let active = 0, peak = 0;
+  const fetchFn = async url => {
+    const u = new URL(url);
+    if (!u.hostname.startsWith('geocoding')) return { ok: true, json: async () => ({ daily: { time: ['2026-11-01'], temperature_2m_max: [80], temperature_2m_min: [70] } }) };
+    active++; peak = Math.max(peak, active);
+    await new Promise(resolve => setImmediate(resolve)); active--;
+    return { ok: true, json: async () => ({ results: u.searchParams.get('name') === 'Sao Paulo' ? [{ name: 'São Paulo', country: 'Brazil', latitude: -23, longitude: -46 }] : [] }) };
+  };
+  assert.equal((await forecast('Sao Paulo Brazil', { fetchFn })).location, 'São Paulo, Brazil');
+  assert.ok(peak > 1, 'independent fallback lookups should overlap');
+});
