@@ -55,11 +55,13 @@ class Overlay {
     const live = new Map(screen.getAllDisplays().map((d) => [d.id, d]));
     for (const [id, e] of this.wins) {
       if (!live.has(id)) {
+        if (e.blurWin && !e.blurWin.isDestroyed()) e.blurWin.destroy();
         if (!e.win.isDestroyed()) e.win.destroy();
         this.wins.delete(id);
       } else {
         e.display = live.get(id);
         if (!e.win.isDestroyed()) e.win.setBounds(e.display.bounds);
+        if (e.blurWin && !e.blurWin.isDestroyed()) e.blurWin.setBounds(e.display.bounds);
       }
     }
   }
@@ -285,7 +287,18 @@ class Overlay {
 
   setHudBlur(entry, on) {
     if (!entry || entry.win.isDestroyed() || entry.blur === !!on) return;
-    try { entry.win.setVibrancy(on ? 'hud' : null); entry.blur = !!on; } catch { /* unsupported on this platform */ }
+    try {
+      if (on && (!entry.blurWin || entry.blurWin.isDestroyed())) {
+        entry.blurWin = new BrowserWindow({ ...entry.win.getBounds(), show: false, frame: false, transparent: true, backgroundColor: '#00000000', focusable: false, skipTaskbar: true, resizable: false, type: 'panel', vibrancy: 'hud', visualEffectState: 'active', webPreferences: { sandbox: true, contextIsolation: true } });
+        entry.blurWin.setIgnoreMouseEvents(true);
+        entry.blurWin.setAlwaysOnTop(true, 'screen-saver', -2);
+        entry.blurWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        entry.blurWin.setHiddenInMissionControl?.(true);
+      }
+      if (on) entry.blurWin.showInactive();
+      else entry.blurWin?.hide();
+      entry.blur = !!on;
+    } catch { /* unsupported on this platform */ }
   }
 
   refreshHudBlur() {

@@ -22,10 +22,12 @@ class CardPanel {
     if (this.win && !this.win.isDestroyed()) return this.win;
     this.win = new BrowserWindow({
       width: WIDTH, height: 400, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
-      resizable: false, movable: true, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
+      resizable: true, minWidth: 320, minHeight: 220, movable: true, minimizable: false, maximizable: false, fullscreenable: false, focusable: false, skipTaskbar: true, type: 'panel',
       webPreferences: { preload: this.preload, contextIsolation: true }
     });
-    this.win.setAlwaysOnTop(true, 'screen-saver');
+    this.win.setAlwaysOnTop(true, 'screen-saver', -1);
+    this.win.on('will-resize', () => { this.manualSize = true; });
+    this.win.on('will-move', () => { this.manualMove = true; });
     this.win.setHiddenInMissionControl?.(true);
     this.win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.ready = new Promise((resolve) => this.win.webContents.once('did-finish-load', resolve));
@@ -39,6 +41,7 @@ class CardPanel {
     await this.ready;
     if (this.card && this.card !== card) this.onDismiss?.(this.card);
     this.card = card;
+    this.manualSize = this.manualMove = false;
     const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     this.display = d;
     this.place(d, 320);
@@ -57,6 +60,7 @@ class CardPanel {
 
   // The page measures itself once it has laid out the card.
   setSize(h) {
+    if (this.manualSize || this.manualMove) return;
     if (this.display && Number.isFinite(h)) this.place(this.display, h);
   }
 
