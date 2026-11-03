@@ -84,3 +84,19 @@ test('a camera startup error is reported instead of leaving presence stuck start
   assert.equal(c.status, 'error');
   assert.equal(c.enabled, false);
 });
+
+test('a camera that fails to start for a passing reason is tried again, and only a refusal or running out of tries leaves it off', () => {
+  const { cameraStartPlan: plan } = require('../src/main/presence');
+  assert.deepEqual(plan({ ok: true }), { action: 'on' });
+  assert.deepEqual(plan({ ok: false, permission: 'granted', tries: 0 }), { action: 'retry', afterMs: 15000 });
+  assert.deepEqual(plan({ ok: false, permission: 'granted', tries: 2 }), { action: 'retry', afterMs: 45000 });
+  assert.deepEqual(plan({ ok: false, permission: 'granted', tries: 3 }), { action: 'give-up', why: 'tries' });
+  assert.deepEqual(plan({ ok: false, permission: 'denied', tries: 0 }), { action: 'give-up', why: 'permission' });
+  assert.deepEqual(plan({ ok: false, permission: 'restricted', tries: 1 }), { action: 'give-up', why: 'permission' });
+});
+
+test('with owner recognition on and your face enrolled, launching starts the camera even if Presence was left off, and a failed start no longer switches Presence off at once', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(src, /if \(store\.get\('settings\.presence\.enabled'\) \|\| \(ownerConfig\(store\.get\('settings\.owner'\)\)\.enabled && ownerState\.templates\.length > 0\)\) startCamera\(\);/);
+  assert.doesNotMatch(src, /presence\.enable\(\)\.then\(\(r\) => \{ if \(!r\.ok\) store\.set\('settings\.presence\.enabled', false\); broadcast\(\); \}\)/, 'the old line that turned Presence off on any failed start is gone');
+});

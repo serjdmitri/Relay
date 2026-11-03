@@ -100,4 +100,13 @@ class PresenceControl {
   }
 }
 
-module.exports = { PresenceTracker, PresenceControl };
+// What to do after a try to start the camera at launch. A failure that is not a refusal (the camera was busy, Relay was still starting, the Keychain was waiting) must not
+// switch Presence off for good: it is tried again a few times. Only a refused permission, or running out of tries, gives up.
+function cameraStartPlan({ ok, permission = 'granted', tries = 0, max = 3, waitMs = 15000 } = {}) {
+  if (ok) return { action: 'on' };
+  if (permission === 'denied' || permission === 'restricted') return { action: 'give-up', why: 'permission' };
+  if (tries >= max) return { action: 'give-up', why: 'tries' };
+  return { action: 'retry', afterMs: waitMs * (tries + 1) };
+}
+
+module.exports = { PresenceTracker, PresenceControl, cameraStartPlan };

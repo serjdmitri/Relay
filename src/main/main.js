@@ -1605,7 +1605,19 @@ app.whenReady().then(() => {
     broadcast();
     return { status: 'done', reply: `The viewer guard is on: if another face stays in view, I will warn you and lock the screen after ${config(store.get('settings.presence.guard')).seconds} seconds.${note}${limits}`, actions: 1 };
   };
-  if (store.get('settings.presence.enabled')) presence.enable().then((r) => { if (!r.ok) store.set('settings.presence.enabled', false); broadcast(); });
+  // The camera at launch. Owner recognition cannot work without it, so if recognition is on and your face is enrolled the camera is started even when Presence was left off, and a
+  // start that fails for a passing reason is tried again instead of leaving Presence off for good (which silently stopped recognition, with it still reading "on").
+  const startCamera = async (tries = 0) => {
+    const wasOff = !store.get('settings.presence.enabled');
+    const r = await presence.enable().catch(() => ({ ok: false }));
+    const plan = require('./presence').cameraStartPlan({ ok: r.ok, permission: systemPreferences.getMediaAccessStatus?.('camera'), tries });
+    if (plan.action === 'on') { if (wasOff) { store.set('settings.presence.enabled', true); ask.notice('Owner recognition needs the camera, so I turned Presence back on. To stop the camera, turn owner recognition off.', 'done'); } broadcast(); return; }
+    if (plan.action === 'retry') { setTimeout(() => startCamera(tries + 1), plan.afterMs).unref?.(); return; }
+    store.set('settings.presence.enabled', false);
+    if (ownerConfig(store.get('settings.owner')).enabled) ask.notice(plan.why === 'permission' ? 'Owner recognition cannot watch: Camera access is off for Relay. Turn it on in System Settings > Privacy & Security > Camera.' : 'Owner recognition cannot watch: the camera would not start. Say "relay health" to see why.', 'failed');
+    broadcast();
+  };
+  if (store.get('settings.presence.enabled') || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0)) startCamera();
   ask.onHands = handsCommand;
   if (store.get('settings.hands.enabled')) hands.enable().then((r) => { if (!r.ok) store.set('settings.hands.enabled', false); });
   holos.onChange = () => { rebuildTray(); ask.holosChanged(); };
