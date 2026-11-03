@@ -3321,7 +3321,9 @@ class AskController {
   failedReply(e) {
     const provider = this.store.get('settings.model.provider');
     console.error('request failed:', e && e.message);
-    return { status: 'failed', reply: failureMod.explainBrainFailure(e && e.message, { brain: failureMod.brainName(provider, !!this.failover?.active) }).message, actions: 0 };
+    const why = failureMod.explainBrainFailure(e && e.message, { brain: failureMod.brainName(provider, !!this.failover?.active) });
+    this.lastFailure = { at: Date.now(), kind: why.kind, message: why.message }; // shown in Doctor
+    return { status: 'failed', reply: why.message, actions: 0 };
   }
 
   // What goes with every request: the front app, running apps, marked area, files, memory, language, and (for a fresh process) the last exchanges.

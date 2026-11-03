@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.5
+
+- **A startup check now guards every build.** `scripts/make-dmg.sh` launches the built app (a copy, with a throwaway profile, beside your running Relay) and refuses to make the .dmg unless it really starts: no startup errors in its log, the window's page has content, and the bridge to the app is there. If the app never answers it says a Keychain prompt is probably waiting. Run it yourself with `npm run startup-check`. Checked against the real broken 0.38.1: it fails it with "ReferenceError: fs is not defined".
+- **`scripts/install-local.sh` (`npm run install-local`).** Installs the build into /Applications signed with your local "Relay Local Signing" certificate (the same identity every time, so macOS keeps the Keychain access, Accessibility, Camera and other permissions across updates), keeps the old app as a backup in ~/Downloads, tells you if this build would make macOS ask for the Keychain once (and to click Always Allow), and opens it.
+- **Relay health in Doctor.** Doctor now also reports: Startup (how long it took, and any errors since, or that it never finished), the Keychain (can Relay read and write its saved keys), the last request that failed, the Voice, Owner recognition (enrolled, camera running, armed, best match score against the threshold), Ollama (and whether the search model is installed) and the `gh` tool. Ask "relay health", "show the health report" or "is Relay healthy".
+
 ## 0.38.3
 
 - **Relay's window can no longer stay blank.** If the main window's page crashes, fails to load, stops responding, or comes up empty (for example after one of Chromium's helper processes died and restarted, or after the Mac woke up), Relay now loads it again by itself. It also checks the window each time it is shown again and a moment after the network helper restarts.
