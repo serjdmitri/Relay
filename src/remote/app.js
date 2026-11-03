@@ -260,10 +260,10 @@
   async function ask(text) {
     const t = String(text || '').trim();
     if (!t) return;
-    const navigation=/^(?:(?:hey )?jarvis[, ]+)?(?:take me to|navigate to|directions to|walk to|drive to)\s+(.{1,200})$/i.exec(t);
+    const navigation=/^(?:(?:hey )?jarvis[, ]+)?(?:take me to|navigate to|directions to|route to|walk(?: me)? to|drive(?: me)? to)\s+(.{1,200})$/i.exec(t);
     if(navigation){
-      if ('speechSynthesis' in window) speechSynthesis.cancel(); showAsked(t); showReply('Open the native Jarvis Navigation app to choose a destination and preview the route. It must be installed first.');
-      const link=document.createElement('a');link.textContent='Open Jarvis Navigation';link.href='relay-navigation://navigate?destination='+encodeURIComponent(navigation[1])+'&transport='+(/\bwalk to\b/i.test(t)?'walking':'driving');link.style.color='#60dcff';$('reply').append(document.createElement('br'),link);setMode('idle');return;
+      if ('speechSynthesis' in window) speechSynthesis.cancel(); showAsked(t); showReply('Choose Apple Maps for navigation now, or Jarvis Navigation for an in-app route preview if installed. Apple Maps needs no separate Jarvis app setup.');
+      const walking=/\bwalk(?: me)? to\b/i.test(t),destination=encodeURIComponent(navigation[1]);for(const [label,url]of [['Open Apple Maps','https://maps.apple.com/?daddr='+destination+'&dirflg='+(walking?'w':'d')],['Preview in Jarvis Navigation','relay-navigation://navigate?destination='+destination+'&transport='+(walking?'walking':'driving')]]){const link=document.createElement('a');link.textContent=label;link.href=url;link.style.color='#60dcff';$('reply').append(document.createElement('br'),link);}setMode('idle');return;
     }
     unlockSpeech();
     try {

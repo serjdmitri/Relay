@@ -44,7 +44,7 @@ struct NavigationView: View {
             .overlay(Rectangle().stroke(.cyan.opacity(0.6), lineWidth: 1))
             if let route = model.route {
                 Text("Route to \(model.destination?.name ?? model.query)").font(.subheadline)
-                Text("\(Int((route.expectedTravelTime / 60).rounded())) min • \(route.distance / 1609.344, specifier: "%.1f") mi")
+                Text("Estimated \(Int((route.expectedTravelTime / 60).rounded())) min • \(route.distance / 1609.344, specifier: "%.1f") mi")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(route.steps.filter { !$0.instructions.isEmpty }.enumerated()), id: \.offset) { _, step in
@@ -54,7 +54,10 @@ struct NavigationView: View {
                 }
                 .frame(maxHeight: 140)
                 Text("Preview only; live guidance is not active.").font(.caption)
-                Button("End route") { model.cancel() }
+                HStack {
+                    Button("Start in Apple Maps") { model.destination?.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: model.walking ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving]) }
+                    Button("End route") { model.cancel() }
+                }
             } else {
                 Text(model.status).font(.caption)
                 if !model.matches.isEmpty {
@@ -79,6 +82,9 @@ struct NavigationView: View {
         .padding()
         .foregroundStyle(.white)
         .background(.black)
+        .onChange(of: model.walking) { _, _ in
+            if let destination = model.destination { Task { await model.route(to: destination, from: origin) } }
+        }
         .onChange(of: model.routeReady) { _, _ in
             if voice.usedVoice, let route = model.route { voice.say("Your route to \(model.destination?.name ?? model.query) is ready, Sir. About \(Int(ceil(route.expectedTravelTime / 60))) minutes. This is a route preview.") }
         }

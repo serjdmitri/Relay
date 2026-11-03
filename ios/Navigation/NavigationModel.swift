@@ -62,7 +62,7 @@ final class NavigationModel: ObservableObject {
         requestID = id
         loading = true
         route = nil
-        destination = nil
+        destination = place
         status = "Finding a route…"
         defer { if requestID == id { loading = false } }
         do {
@@ -74,7 +74,7 @@ final class NavigationModel: ObservableObject {
             directionsRequest = pending
             let response = try await pending.calculate()
             guard requestID == id else { return }
-            guard let found = response.routes.first else { status = "No driving route found."; return }
+            guard let found = response.routes.first else { status = "No route found for this travel mode."; return }
             destination = place
             route = found
             matches = []
