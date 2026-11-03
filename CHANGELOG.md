@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.38.5
 
 - **A startup check now guards every build.** `scripts/make-dmg.sh` launches the built app (a copy, with a throwaway profile, beside your running Relay) and refuses to make the .dmg unless it really starts: no startup errors in its log, the window's page has content, and the bridge to the app is there. If the app never answers it says a Keychain prompt is probably waiting. Run it yourself with `npm run startup-check`. Checked against the real broken 0.38.1: it fails it with "ReferenceError: fs is not defined".
 - **`scripts/install-local.sh` (`npm run install-local`).** Installs the build into /Applications signed with your local "Relay Local Signing" certificate (the same identity every time, so macOS keeps the Keychain access, Accessibility, Camera and other permissions across updates), keeps the old app as a backup in ~/Downloads, tells you if this build would make macOS ask for the Keychain once (and to click Always Allow), and opens it.
