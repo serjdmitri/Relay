@@ -47,7 +47,7 @@ const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
-const { OwnerGuard, authenticateOwner, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
+const { OwnerGuard, authenticateOwner, acceptEnrollment, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
 const { IntruderWindow } = require('./intruderWindow');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
@@ -95,7 +95,7 @@ function rememberThrow(undo) {
 const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
-let mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let enrollWin, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -315,6 +315,7 @@ function rebuildTray() {
   tray.setContextMenu(Menu.buildFromTemplate(uiText.localizeMenu([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
     { label: 'Type a Request…', click: () => ask.open() },
+    { label: 'Set Up Owner Recognition…', click: () => { Promise.resolve(ask.ownerCommand?.({ type: 'enroll' })).then((r) => { if (r?.status === 'failed') ask.notice(r.reply, 'failed'); }).catch((e) => ask.notice(e.message, 'failed')); } },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
     { label: holos?.holos.size ? `Clear ${holos.holos.size} Hologram${holos.holos.size === 1 ? '' : 's'}` : 'No Holograms', enabled: !!holos?.holos.size, click: () => holos.closeAll() },
     { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: (item) => setHands(item.checked) },
@@ -1066,8 +1067,8 @@ function registerIpc() {
         await trustedPeople.authorize();
         if(!safeStorage.isEncryptionAvailable()) throw Error('Encrypted storage is unavailable.');
         store.set('settings.presence.enabled',true); await setPresence(true);
-        ownerState.enroll={name,samples:[],start:Date.now(),until:Date.now()+120000};
-        ask.notice(`Enrolling ${name}: only that person should face the camera. Slowly turn and tilt your head.`, 'done');
+        enrollWin.open({name});
+        ask.notice(`Adding ${name}: only that person should face the camera in the setup window, then turn their head toward each part of the ring.`, 'done');
       } else throw Error('Unknown profile action.');
       broadcast(); return {ok:true};
     } catch(err) { return {error:err.message}; }
@@ -1581,6 +1582,25 @@ app.whenReady().then(() => {
     onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
   });
   setInterval(() => ownerGuard.step(), 1000);
+  // The face setup window (camera in a circle, ring of eight directions): it returns the finished set of numbers, and this decides whether it is a full set and keeps it.
+  enrollWin = new (require('./enrollWindow').EnrollWindow)({
+    motion: floatingMotion,
+    save: async (samples, name) => {
+      if (!safeStorage.isEncryptionAvailable()) return { ok: false, message: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
+      const firstPerPose = (list) => { const seen = new Set(); return list.filter((x) => x && !seen.has(x.pose) && seen.add(x.pose)); }; // trusted people keep one numbers set per pose
+      const r = acceptEnrollment(name ? firstPerPose(samples) : samples);
+      if (!r.ok) return { ok: false, message: r.why };
+      if (name) { try { trustedPeople.save(name, r.templates); } catch (e) { return { ok: false, message: e.message }; } }
+      else if (!ownerState.save(r.templates)) return { ok: false, message: 'Your face could not be saved: this Mac cannot encrypt it right now.' };
+      store.set('settings.owner', { ...ownerConfig(store.get('settings.owner')), enabled: true });
+      ownerGuard.reset();
+      if (!store.get('settings.presence.enabled')) { store.set('settings.presence.enabled', true); await setPresence(true); }
+      broadcast();
+      const seconds = ownerConfig(store.get('settings.owner')).seconds;
+      ask.notice(`${name || 'Your face'} is enrolled (${r.templates.length} angles) and owner recognition is on. If someone else sits down, I will sound the alarm and lock after ${seconds} seconds. Say "test the access denied screen" to see it.`, 'done');
+      return { ok: true, message: `${r.templates.length} angles saved. Owner recognition is on: a stranger at the desk gets the alarm, then the lock after ${seconds} seconds.` };
+    }
+  });
   ask.ownerCommand = async (c) => {
     const cfg = () => ownerConfig(store.get('settings.owner'));
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
@@ -1589,9 +1609,8 @@ app.whenReady().then(() => {
     if (['enroll','forget','off','liveness-off'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
-      const note = await needCamera();
-      ownerState.enroll = { samples: [], start: Date.now(), until: Date.now() + 120000 }; broadcast();
-      return done(`Look at the camera. Slowly turn your head left and right, and tilt it up and down a little. It takes about ten seconds, and I will tell you when it is done.${note} Your face is kept as numbers, encrypted on this Mac; no picture is saved.`);
+      enrollWin.open();
+      return done('The face setup window is open. Look at the camera and follow the glow: turn your head toward each part of the ring until it is all filled. It takes about a minute, and nothing is saved until it is finished. Your face is kept as numbers, encrypted on this Mac; no picture is saved.');
     }
     if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); store.set('trustedFaces',[]); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
     if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }

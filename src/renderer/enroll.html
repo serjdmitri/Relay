@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob: data:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'">
+<title>Face setup</title>
+<link rel="stylesheet" href="enroll.css">
+</head>
+<body>
+<!-- The face setup window. The camera picture is drawn here, on this Mac, and never saved or sent: only the finished set of face numbers goes back to Relay. -->
+<header id="bar">
+  <span id="title">SET UP OWNER RECOGNITION</span>
+  <button id="x" type="button" aria-label="Close">×</button>
+</header>
+<main>
+  <div id="stage">
+    <svg id="ring" viewBox="-120 -120 240 240" aria-hidden="true"></svg>
+    <div id="disc"><video id="v" autoplay muted playsinline></video><div id="cue"></div></div>
+    <div id="check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none" stroke="currentColor" stroke-width="3"/><path d="M14 27l8 8 16-17" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </div>
+  <h1 id="line1">Getting ready…</h1>
+  <p id="line2">Starting the camera and the face model on this Mac.</p>
+  <div id="dots" aria-hidden="true"></div>
+  <p id="count">0 of 18 captured</p>
+  <p id="debug" hidden></p>
+  <p id="privacy">Your face is turned into numbers and kept encrypted on this Mac. No picture is saved or sent anywhere.</p>
+  <div id="buttons">
+    <button id="again" type="button" hidden>Start over</button>
+    <button id="cancel" type="button">Cancel</button>
+  </div>
+</main>
+<script type="module" src="enroll.js"></script>
+</body>
+</html>

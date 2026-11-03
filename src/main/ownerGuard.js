@@ -36,6 +36,22 @@ function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
   return { samples: [...samples, embedding.map((x) => Math.round(x * 1e5) / 1e5)], added: true };
 }
 
+// What the enrollment window sends back: [{ pose, embedding }] for the nine poses. Only a set that really covers your face from around is kept: straight ahead plus at least six of
+// the eight directions, every embedding 128 finite numbers, nothing else. Returns { ok, templates, poses } or { ok: false, why } in words.
+const ENROLL_POSES = ['center', 'left', 'topLeft', 'top', 'topRight', 'right', 'bottomRight', 'bottom', 'bottomLeft'];
+function acceptEnrollment(samples, { minDirections = 6, max = 24 } = {}) {
+  if (!Array.isArray(samples) || !samples.length) return { ok: false, why: 'No face samples arrived.' };
+  const templates = [], poses = new Set();
+  for (const s of samples.slice(0, max)) {
+    if (!s || !ENROLL_POSES.includes(s.pose) || !Array.isArray(s.embedding) || s.embedding.length !== 128 || s.embedding.some((x) => typeof x !== 'number' || !Number.isFinite(x))) continue;
+    templates.push(s.embedding.map((x) => Math.round(x * 1e5) / 1e5)); poses.add(s.pose);
+  }
+  if (!poses.has('center')) return { ok: false, why: 'The straight-ahead pose is missing.' };
+  const directions = [...poses].filter((p) => p !== 'center').length;
+  if (directions < minDirections) return { ok: false, why: `Only ${directions} of the 8 directions were captured; at least ${minDirections} are needed.` };
+  return { ok: true, templates, poses: [...poses] };
+}
+
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
@@ -170,4 +186,4 @@ function openTemplates(rec, decrypt) {
   } catch { return []; }
 }
 
-module.exports = { OwnerGuard, authenticateOwner, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
+module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
