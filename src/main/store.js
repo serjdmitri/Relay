@@ -90,6 +90,8 @@ const DEFAULTS = {
       apps: { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 } // Composio (or any MCP server): its address and key
     },
     holoUi: { controls: 'menu', spin: true, spinDelay: 10, dragFormat: 'stl', pointsPerInch: 125 }, // holograms: where the controls are (menu, side, bar), slow turning, and how long to leave it alone after a touch
+    news: { feeds: [] }, // RSS/Atom feeds you added (https only); "my news" reads them, "what's on Hacker News" needs none
+    obsidian: { vault: '' }, // your Obsidian vault folder (inside your home folder); "find my Obsidian vault" sets it
     owner: { enabled: false, seconds: 20, threshold: 0.363 }, // owner recognition (opt-in): a face that is not yours while you are away starts the access-denied alarm, then locks after this many seconds
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
