@@ -29,7 +29,7 @@ class EnrollWindow {
       frame: false, transparent: true, backgroundColor: '#00000000', vibrancy: 'hud', visualEffectState: 'active', resizable: true, show: false, skipTaskbar: true,
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false }
     });
-    win.setAlwaysOnTop(true, 'floating');
+    win.setAlwaysOnTop(true, 'screen-saver', 1); // above the reactor and the answer card, below the access-denied alarm (which is at 2)
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', (e) => e.preventDefault());
     win.loadFile(path.join(__dirname, '../renderer/enroll.html')); win.once('ready-to-show', () => win.show());
     win.on('closed', () => { this.win = null; });

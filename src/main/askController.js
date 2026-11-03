@@ -3444,14 +3444,14 @@ class AskController {
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     clearTimeout(this.holdTimer);
-    this.holdAnswer = shouldHoldAnswer({ reply, status: res.status, model: res.model, remote: !!entry.remote, unattended: !!this.unattended, busy: !!(this.quiz || this.checklist), setting: this.store.get('settings.answerStays') !== false });
+    this.holdAnswer = shouldHoldAnswer({ reply, status: res.status, model: res.model, remote: !!entry.remote, unattended: !!this.unattended, busy: !!(this.quiz || this.checklist), setting: this.store.get('settings.answerStays') !== false, noHold: !!res.noHold });
     if (this.holdAnswer) { // it stays until you say "ok", press Esc or ask the next thing (and goes by itself after ten minutes if you walked away)
       this.holdTimer = setTimeout(() => { if (this.holdAnswer && ['done', 'listening'].includes(this.state)) this.close(); }, DISMISS_MAX_MS);
       return res;
     }
     this.holdForHolos = !!this.holos?.hasUnpinned();
     if (this.holdForHolos) return res; // holograms are up: the reactor stays until you close them (say "close", or Esc) or pin the ones to keep
-    this.doneTimer = setTimeout(() => this.closeDoneWhenReady(), Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes
+    this.doneTimer = setTimeout(() => this.closeDoneWhenReady(), res.noHold ? 1500 : Math.min(9000, 2200 + reply.length * 45)); // long enough to read the answer, then it goes
     return res;
   }
 

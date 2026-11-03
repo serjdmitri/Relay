@@ -1613,7 +1613,8 @@ app.whenReady().then(() => {
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
       enrollWin.open();
-      return done('The face setup window is open. Look at the camera and follow the glow: turn your head toward each part of the ring until it is all filled. It takes about a minute, and nothing is saved until it is finished. Your face is kept as numbers, encrypted on this Mac; no picture is saved.');
+      // short, and told not to stay: the reactor card would otherwise sit on the screen in front of the setup window until dismissed, and nothing should ask "anything else?" over it
+      return { ...done('The face setup window is open. Follow the glow around the ring.'), noHold: true, noFollowUp: true };
     }
     if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); store.set('trustedFaces',[]); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
     if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }
