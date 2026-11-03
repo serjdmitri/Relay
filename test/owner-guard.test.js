@@ -257,3 +257,17 @@ test('a fingerprint also ends the standby screen and keeps it from coming straig
   const k = make(); k.feed([0.1], 3); k.feed([0.1], 21); assert.equal(k.g.state, 'locked');
   k.g.dismiss('fingerprint'); assert.equal(k.g.state, 'locked', 'once the Mac is locked, macOS is in charge of getting back in');
 });
+
+const { authenticateOwner } = require('../src/main/ownerGuard');
+test('confirming it is you: Touch ID first; a failed or cancelled attempt never falls back; a system problem falls back to the macOS prompt and says so', async () => {
+  const ok = async () => {}, no = (m) => async () => { throw new Error(m); };
+  assert.deepEqual(await authenticateOwner({ touchId: ok, admin: no('should not run') }), { ok: true, via: 'touchid' });
+  await assert.rejects(authenticateOwner({ touchId: no('Canceled by user.'), admin: ok }), /Cancelled/);
+  await assert.rejects(authenticateOwner({ touchId: no('Authentication failed.'), admin: ok }), /not recognised/);
+  await assert.rejects(authenticateOwner({ touchId: no('Fingerprint did not match.'), admin: ok }), /not recognised/);
+  const problems = [];
+  assert.deepEqual(await authenticateOwner({ touchId: no('Biometry is not available on this device.'), admin: ok, onProblem: (m) => problems.push(m) }), { ok: true, via: 'macos' });
+  assert.deepEqual(problems, ['Biometry is not available on this device.']);
+  await assert.rejects(authenticateOwner({ touchId: no('The app is not entitled.'), admin: no('execution error: User canceled. (-128)') }), /Cancelled/);
+  await assert.rejects(authenticateOwner({ touchId: no('The app is not entitled.'), admin: no('some other failure') }), /Could not confirm it is you: The app is not entitled/);
+});

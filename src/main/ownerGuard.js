@@ -133,6 +133,20 @@ function parseOwnerCommand(text) {
   return null;
 }
 
+// Ask macOS to confirm it is the owner: the Touch ID sheet first. If the system cannot show that sheet at all (an error that is not "cancelled" or "not recognised"), fall
+// back to macOS's own authorization prompt, which also takes Touch ID or the password. A finger that is not recognised never falls back. Throws a short, readable message.
+async function authenticateOwner({ touchId, admin, onProblem = () => {} }) {
+  try { await touchId(); return { ok: true, via: 'touchid' }; } catch (e) {
+    const m = String((e && e.message) || e || '');
+    if (/cancel/i.test(m)) throw new Error('Cancelled.');
+    if (/fail|not recogni|not match|did not match/i.test(m)) throw new Error('Fingerprint not recognised.');
+    onProblem(m.slice(0, 120));
+    try { await admin(); return { ok: true, via: 'macos' }; } catch (e2) {
+      throw new Error(/cancel|-128/i.test(String((e2 && e2.message) || e2)) ? 'Cancelled.' : `Could not confirm it is you: ${m.slice(0, 60)}`);
+    }
+  }
+}
+
 // Your enrolled face on disk: only ever encrypted (the Mac's keychain-backed safeStorage, passed in), as { v, enc, count, at }. v is 2: version 1 was made with a rougher
 // face alignment that does not match the current one, so it is ignored and you enroll again.
 function sealTemplates(templates, encrypt, at = Date.now()) { return { v: 2, enc: encrypt(JSON.stringify({ templates })), count: templates.length, at }; }
@@ -144,4 +158,4 @@ function openTemplates(rec, decrypt) {
   } catch { return []; }
 }
 
-module.exports = { OwnerGuard, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
+module.exports = { OwnerGuard, authenticateOwner, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
