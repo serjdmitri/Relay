@@ -69,6 +69,7 @@ class Speech extends EventEmitter {
   _onEvent(msg) {
     switch (msg.event) {
       case 'partial': this.emit('partial', msg.text || ''); return;
+      case 'acoustic': this.emit('acoustic', {rms:msg.rms,peak:msg.peak}); return;
       case 'level': this.emit('level', msg.value || 0); return;
       case 'preparing': this.emit('preparing', msg.fraction ?? 0); return;
       case 'listening': this.listening = true; break;
