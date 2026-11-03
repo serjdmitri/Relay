@@ -60,6 +60,67 @@ const CHECKS = [
       return warn('Relay could not determine whether the macOS application firewall is on.');
     }
   },
+  // ---- Relay health: did it start, and is each feature really working? ----
+  {
+    id: 'startup', title: 'Startup', run: (env) => {
+      const s = env.startup?.();
+      if (!s) return ok('Not recorded.');
+      const errs = s.errors || [];
+      if (!s.completedAt) return fail(`Relay has not finished starting${errs.length ? `: ${errs[errs.length - 1].message}` : ''}. Quit it and open it again; if this stays, copy the Doctor report and send it.`);
+      const took = ((s.completedAt - s.startedAt) / 1000).toFixed(1);
+      if (errs.length) return warn(`Started in ${took} s, but ${errs.length} error${errs.length === 1 ? '' : 's'} happened since. The latest: ${errs[errs.length - 1].message}`);
+      return ok(`Started in ${took} s with no errors.`);
+    }
+  },
+  {
+    id: 'keychain', title: 'Saved keys (Keychain)', run: (env) => {
+      const k = env.keychain?.();
+      if (!k) return ok('Not checked.');
+      if (k.available === null) return warn('Could not check whether Relay can use the Keychain.');
+      return k.available ? ok('Relay can read and write its saved keys.') : fail('Relay cannot use the Keychain, so it cannot save or read your keys and tokens. Open Keychain Access and allow Relay, or restart the Mac.');
+    }
+  },
+  {
+    id: 'lastfail', title: 'Last request that failed', run: (env) => {
+      const f = env.lastFailure?.();
+      if (!f) return ok('None since Relay started.');
+      const mins = Math.max(0, Math.round((Date.now() - f.at) / 60000));
+      return (Date.now() - f.at < 3600e3 ? warn : ok)(`${mins < 1 ? 'Just now' : `${mins} minute${mins === 1 ? '' : 's'} ago`}: ${f.message}`);
+    }
+  },
+  {
+    id: 'voice', title: 'Voice', run: (env) => {
+      const v = env.voice?.();
+      if (!v) return ok('Not recorded.');
+      if (v.problem) return warn(require('./failureMessage').explainVoiceFailure(v.problem, { engine: v.engine }));
+      return ok(`${{ system: 'The system voice', elevenlabs: 'ElevenLabs', openai: 'OpenAI voice', gemini: 'Gemini voice', kokoro: 'The local voice (Kokoro)' }[v.engine] || 'The voice'} is working.`);
+    }
+  },
+  {
+    id: 'owner', title: 'Owner recognition', run: (env) => {
+      const o = env.owner?.();
+      if (!o || !o.enabled) return ok('Off.');
+      if (!o.enrolled) return warn('On, but your face is not enrolled. Say "enroll my face".');
+      if (!o.cameraRunning) return warn('On and enrolled, but the camera is not running, so it cannot watch. Turn on Presence in Settings, or check the Camera permission.');
+      if (!o.armed) return warn(`Enrolled, but it has not recognised you yet this session, so it will not sound the alarm or lock. Look at the camera${o.lastScore != null ? ` (best match so far ${o.lastScore.toFixed(2)}; it needs ${o.threshold.toFixed(2)})` : ''}.`);
+      return ok(`Armed and watching${o.lastScore != null ? ` (best match ${o.lastScore.toFixed(2)})` : ''}${o.liveness ? ', with the blink check on' : ''}.`);
+    }
+  },
+  {
+    id: 'ollama', title: 'Ollama (local model and meaning search)', run: async (env) => {
+      const o = await env.ollamaLive?.();
+      if (!o) return ok('Not checked.');
+      return o.ok ? ok('Running, with the search model installed.') : warn(o.why);
+    }
+  },
+  {
+    id: 'gh', title: 'GitHub tool (gh)', run: async (env) => {
+      const g = await env.gh?.();
+      if (!g) return ok('Not checked.');
+      if (!g.installed) return warn('Not installed. GitHub notifications need it: brew install gh');
+      return g.signedIn ? ok('Installed and signed in.') : warn('Installed but not signed in. Run "gh auth login" in Terminal.');
+    }
+  },
   {
     id: 'claude', title: 'Claude sign-in', run: (env) => {
       const c = env.claude?.();
@@ -288,6 +349,10 @@ function parseDoctorCommand(text) {
   return /^(?:run|start|open) (?:the |relay )?(?:doctor|diagnostics|health check|self[- ]?check)$/i.test(n)
     || /^(?:run |do )?(?:a )?(?:health check|self[- ]?check|diagnostic|diagnostics)(?: on (?:yourself|relay))?$/i.test(n)
     || /^check (?:yourself|your health|relay(?:'s)? health)$/i.test(n)
+    || /^(?:show|open|give me|what(?:'s| is)) (?:the |your )?(?:relay |jarvis )?health(?: report| screen| status)?$/i.test(n)
+    || /^(?:relay|jarvis) health(?: report| screen| status)?$/i.test(t)
+    || /^(?:is|are) (?:relay|jarvis|you) (?:healthy|ok|okay|working(?: ok| properly)?)$/i.test(n)
+    || /^how(?:'s| is) (?:relay|jarvis|your health)(?: doing)?$/i.test(n)
     || /^what(?:'s| is) wrong with (?:you|relay)$/i.test(n)
     || /^diagnose (?:yourself|relay|jarvis)$/i.test(n)
     || /^fix (?:yourself|relay|jarvis)$/i.test(n);
