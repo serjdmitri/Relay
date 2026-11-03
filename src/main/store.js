@@ -176,6 +176,7 @@ class Store {
   }
 
   set(key, value) {
+    if(!require('./ipcSecurity').safeKey(key)) throw Error('Invalid storage path.');
     const parts = key.split('.');
     const last = parts.pop();
     const target = parts.reduce((o, k) => o[k], this.data);

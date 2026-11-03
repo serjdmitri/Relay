@@ -92,6 +92,9 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
+const ipcSecurity=require('./ipcSecurity');
+ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
+ipcSecurity.protectNavigation(app);
 let trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
@@ -558,7 +561,12 @@ function registerIpc() {
   });
   modeActions=new(require('./workModes').WorkModeActions)({store,openApp:name=>ask.mac.openApp(name),queueRoutine:r=>setImmediate(()=>ask.handleText('run '+r.name).catch(e=>ask.notice(e.message,'failed'))),onChange:()=>{ask.dropWarm(true);broadcast();}});
   ask.applyWorkMode=mode=>modeActions.apply(mode);
-  ipcMain.handle('state:set', (_e, key, value) => {
+  ipcMain.handle('state:set', async (_e, key, value) => {
+    if(!ipcSecurity.safeKey(key)) throw Error('Invalid setting path.');
+    if(_e.sender!==mainWin?.webContents && _e.sender!==onboardWin?.webContents) throw Error('Open Relay Settings first.');
+    if(ownerConfig(store.get('settings.owner')).enabled && (key==='settings.presence'||key==='settings.presence.enabled') && (key==='settings.presence'?value?.enabled!==true:value!==true)) await trustedPeople.authorize();
+    if(key==='settings.owner'||key.startsWith('settings.owner.')) throw Error('Use authenticated owner-recognition controls.');
+
     if(key==='settings.workMode'){if(_e.sender!==mainWin?.webContents)throw Error('Open General settings first.');return modeActions.apply(value);}
     if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
     if (key === 'settings.model.provider' && value === 'ollama') { googleConnections.cancel(); notionConnection.cancel(); }
@@ -1520,7 +1528,7 @@ app.whenReady().then(() => {
   remote.sync().then(broadcast);
   inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
   ask.inbound = inbound;
-  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: false });
+  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: process.platform==='darwin' && fs.existsSync('/usr/bin/sandbox-exec') });
   ask.plugins = pluginMgr;
   // Live panels
   const arrangeOpenMenus = (onlyIfOverlapping = false) => {
