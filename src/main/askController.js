@@ -50,6 +50,7 @@ const skillImportMod = require('./skillImport');
 const extrasMod = require('./connectors/extras');
 const researchMod = require('./research');
 const hybridMod = require('./hybridSearch');
+const safeFetchMod = require('./safeFetch');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -934,7 +935,7 @@ class AskController {
   // What a background agent may use: reading and writing, never the screen, and nothing that sends or deletes (so nothing needs asking).
   agentTools(vision) {
     const ok = new Set(['notion_search', 'notion_read', 'notion_create', 'notion_append', 'gmail_search', 'gmail_read', 'gmail_draft', 'gcal_events', 'gcal_create', 'web_search', 'fetch_page', 'notes_create', 'notes_list', 'notes_read', 'notes_append', 'reminders_add', 'reminders_list', 'calendar_events', 'list_folder', 'read_file']);
-    return this.makeTools(vision).filter((t) => ok.has(t.name)).map((t) => agentSafe(t)).filter(Boolean);
+    return [...this.makeTools(vision).filter((t) => ok.has(t.name)).map((t) => agentSafe(t)).filter(Boolean), this.knowledgeTool()];
   }
 
   async runAgentTask(a, signal) {
@@ -1148,8 +1149,8 @@ class AskController {
     return docs.filter((d) => d.text && !mem.isSecret(`${d.title} ${d.text}`));
   }
 
-  // "search my notes for X": keyword search always, plus meaning search when Ollama has the embedding model (see hybridSearch.js).
-  async searchMemory(c) {
+  // The search itself: keyword always, plus meaning when Ollama has the embedding model (see hybridSearch.js). -> { hits, used, note }
+  async searchKnowledge(query, k = 5) {
     const index = this.semanticIndex || (this.semanticIndex = new hybridMod.HybridIndex());
     const file = this.semanticPath();
     if (!this.semanticLoaded) { this.semanticLoaded = true; try { if (file) index.import(JSON.parse(require('fs').readFileSync(file, 'utf8'))); } catch { /* no saved index yet */ } }
@@ -1161,17 +1162,36 @@ class AskController {
       try { const e = await index.embedMissing(embed, { limit: 40 }); if (e.remaining) note = ` Still learning ${e.remaining} notes for meaning search; it improves with each search.`; } catch { embed = null; note = ' Meaning search stopped partway, so these are keyword results.'; }
     } else note = ` ${st.why}`;
     if (index.changed && file) { try { require('fs').writeFileSync(file, JSON.stringify(index.export()), { mode: 0o600 }); } catch { /* the index is a convenience */ } }
-    const hits = await index.search(c.query, { embed, k: 5 });
-    const used = [...new Set(docs.map((d) => d.source))];
+    return { hits: await index.search(query, { embed, k }), used: [...new Set(docs.map((d) => d.source))], note };
+  }
+
+  // "search my notes for X"
+  async searchMemory(c) {
+    const { hits, used, note } = await this.searchKnowledge(c.query, 5);
     if (!hits.length) return { status: 'done', actions: 0, reply: `I found nothing about ${c.query} in ${used.length ? `your ${used.join(', ')}` : 'anything I can search (turn on memory or set your Obsidian vault)'}.${note}` };
     return { status: 'done', actions: 1, reply: `Found ${hits.length}: ${hits.map((h, i) => `${i + 1}. [${h.doc.source}] ${h.doc.title ? `${h.doc.title} — ` : ''}${h.snippet}`).join('; ')}.${note}` };
+  }
+
+  // For the background agents (deep research): the same search, as a read-only tool whose results are scanned like anything else that comes from notes.
+  knowledgeTool() {
+    return {
+      name: 'search_knowledge',
+      description: "Search the user's own saved knowledge: remembered facts, session notes and their Obsidian vault, by keyword and (when available) by meaning. Try several keyword variants (synonyms, names, abbreviations). Returns the best matches as [source] title: text.",
+      input_schema: { type: 'object', properties: { query: { type: 'string', description: 'What to look for' } }, required: ['query'] },
+      describe: (i) => `Searching your notes for ${String(i.query || '').slice(0, 40)}`,
+      run: async (i) => {
+        const { hits, used } = await this.searchKnowledge(String(i.query || ''), 8);
+        if (!hits.length) return `Nothing found for that in ${used.join(', ') || 'your saved knowledge'}.`;
+        return shieldMod.guardResult('search_knowledge', hits.map((h) => `[${h.doc.source}] ${h.doc.title ? `${h.doc.title}: ` : ''}${h.snippet}`).join('\n')).result;
+      }
+    };
   }
 
   // News (Hacker News, RSS), GitHub notifications (through gh) and Obsidian: read-only, see connectors/extras.js.
   async extrasCommand(c) {
     return extrasMod.runCommand(c, {
       store: this.store, home: os.homedir(), fs: require('fs'),
-      json: (u) => this.httpGet(u, true), text: (u) => this.httpGet(u, false),
+      json: (u) => this.httpGet(u, true), text: (u) => safeFetchMod.safeGet(u), // feeds are fetched with the private-network and redirect checks (safeFetch.js)
       run: (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { timeout: 15000, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, out, errOut) => (err ? reject(new Error(`${err.code === 'ENOENT' ? 'ENOENT ' : ''}${String(errOut || err.message)}`)) : resolve(String(out))))),
     });
   }

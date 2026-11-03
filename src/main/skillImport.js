@@ -9,6 +9,8 @@ const { isSecret } = require('./memory');
 
 const MAX_FILE = 24000; // bytes of SKILL.md read
 const MAX_IMPORT = 8; // skills taken in one go
+// The open standard's rules (as OpenJarvis's parser enforces them): a name of lowercase letters, digits and single hyphens, up to 64 characters; a description of 1 to 1024 characters.
+const NAME_RE = /^[a-z0-9](?:[a-z0-9]|-(?!-))*[a-z0-9]$|^[a-z0-9]$/;
 const clean = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 // Header (--- key: value ---) and body of a SKILL.md. Handles quoted values and the folded ">" / "|" forms.
@@ -22,9 +24,11 @@ function parseSkillMd(text) {
     if (kv && !/^\s/.test(line)) { key = kv[1].toLowerCase(); const v = kv[2].trim(); meta[key] = /^[>|][+-]?$/.test(v) ? '' : v.replace(/^(['"])(.*)\1$/, '$2'); }
     else if (key && /^\s+\S/.test(line)) meta[key] = `${meta[key]} ${line.trim()}`.trim();
   }
-  const name = clean(meta.name, 60), description = clean(meta.description, 200);
-  if (!name || !description) return null;
-  return { name, description, license: clean(meta.license, 40), body: String(m[2] || '').trim() };
+  const name = clean(meta.name, 200), description = clean(meta.description, 5000);
+  if (!name || !description || name.length > 64 || !NAME_RE.test(name) || description.length > 1024) return null;
+  if (meta.compatibility && String(meta.compatibility).length > 500) return null;
+  const caps = clean(`${meta['allowed-tools'] || ''} ${meta.required_capabilities || ''}`, 400);
+  return { name, description, license: clean(meta.license, 40), capabilities: caps, body: String(m[2] || '').trim() };
 }
 
 // Is it safe to keep? -> { ok, why, warnings }
@@ -36,6 +40,11 @@ function vet(skill) {
   if (!skill.body || skill.body.length < 40) return { ok: false, why: 'it has no real instructions' };
   const warnings = s.findings.map((f) => f.name);
   if (/\b(?:scripts?\/|\.sh\b|\.py\b|npm\s+(?:i|install)|pip\s+install)\b/i.test(skill.body)) warnings.push('mentions scripts or installs, which Relay will not run for it');
+  // the capabilities the skill says it needs (OpenJarvis treats shell, network listening and file writing as dangerous); a playbook cannot grant any of them
+  const caps = String(skill.capabilities || '');
+  if (/shell:execute|\bBash\b/i.test(caps)) warnings.push('asks for shell commands');
+  if (/filesystem:write|\b(?:Write|Edit)\b/.test(caps)) warnings.push('asks to write files');
+  if (/network:listen/i.test(caps)) warnings.push('asks to listen on the network');
   return { ok: true, warnings };
 }
 
@@ -75,7 +84,7 @@ async function importFrom(sourceText, list, { json, text, addSkill, id = () => M
     if (!sk) { results.push({ name: f.path, added: false, why: 'it is not a valid SKILL.md (it needs a name and a description in its header)' }); continue; }
     const v = vet(sk);
     if (!v.ok) { results.push({ name: sk.name, added: false, why: `refused: ${v.why}` }); continue; }
-    const r = addSkill(cur, { name: sk.name, goal: sk.description, kind: 'playbook', code: sk.body, source: `github.com/${src.owner}/${src.repo}/${f.path}` }, { id: id(), now: now() });
+    const r = addSkill(cur, { name: sk.name, goal: sk.description, kind: 'playbook', code: sk.description.length > 200 ? `${sk.description}\n\n${sk.body}` : sk.body, source: `github.com/${src.owner}/${src.repo}/${f.path}` }, { id: id(), now: now() });
     if (r.added) { cur = r.list; results.push({ name: sk.name, added: true, warnings: v.warnings }); } else results.push({ name: sk.name, added: false, why: r.why });
   }
   const added = results.filter((r) => r.added), skipped = results.filter((r) => !r.added);

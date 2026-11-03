@@ -18,8 +18,8 @@ const decode = (s) => String(s ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1
 const text = (s) => clean(decode(decode(s)).replace(/<[^>]+>/g, ' '), 300);
 const tag = (block, name) => { const m = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'i').exec(block); return m ? m[1] : ''; };
 
-// xml -> { title, items: [{ title, link, date }] } (at most 30 items)
-function parseFeed(xml) {
+// xml -> { title, items: [{ title, link, date, ts, summary }] } (at most 30 items); { since } (ms) keeps only items published after that time.
+function parseFeed(xml, { since = null } = {}) {
   const x = String(xml || '').slice(0, 2000000);
   const first = x.search(/<(?:item|entry)[\s>]/i);
   const feedTitle = text(tag(first > 0 ? x.slice(0, first) : x, 'title'));
@@ -27,8 +27,10 @@ function parseFeed(xml) {
   const items = blocks.slice(0, 30).map((b) => {
     let link = text(tag(b, 'link'));
     if (!link) { const alt = /<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["']/i.exec(b) || /<link[^>]*href=["']([^"']+)["']/i.exec(b); link = alt ? decode(alt[1]) : ''; }
-    return { title: text(tag(b, 'title')), link: /^https?:\/\//i.test(link) ? link : '', date: text(tag(b, 'pubDate') || tag(b, 'published') || tag(b, 'updated') || tag(b, 'dc:date')) };
-  }).filter((i) => i.title);
+    const date = text(tag(b, 'pubDate') || tag(b, 'published') || tag(b, 'updated') || tag(b, 'dc:date')), ts = Date.parse(date);
+    const summary = clean(decode(decode(tag(b, 'description') || tag(b, 'summary') || tag(b, 'content:encoded') || tag(b, 'content'))).replace(/<[^>]+>/g, ' '), 500);
+    return { title: text(tag(b, 'title')), link: /^https?:\/\//i.test(link) ? link : '', date, ts: Number.isFinite(ts) ? ts : null, summary };
+  }).filter((i) => i.title && (since === null || i.ts === null || i.ts > since));
   return { title: feedTitle, items };
 }
 
@@ -42,7 +44,7 @@ function isPublicHttps(u) {
   return String(u).length <= 300;
 }
 
-async function hackerNews({ json }, n = 8) {
+async function hackerNews({ json }, n = 5) {
   const ids = (await json('https://hacker-news.firebaseio.com/v0/topstories.json')).slice(0, n);
   const items = await Promise.all(ids.map((id) => json(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).catch(() => null)));
   return items.filter((i) => i && i.title).map((i) => ({ title: clean(i.title), url: i.url || `https://news.ycombinator.com/item?id=${i.id}`, score: i.score || 0, comments: i.descendants || 0 }));
@@ -109,9 +111,28 @@ function walkNotes(vault, { fs }, { max = 1500, maxDepth = 6 } = {}) {
   return out;
 }
 const recentNotes = (vault, deps, n = 8) => walkNotes(vault, deps).sort((a, b) => b.mtime - a.mtime).slice(0, n);
-// For searching: [{ id, title, text, mtime }]
+// The header of a note (--- title / tags ---) and the rest: the title is the header's, else the first heading, else the file name; tags come from the header.
+function readNote(raw, fallbackTitle) {
+  let body = String(raw || ''), title = '', tags = [];
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(body);
+  if (m) {
+    body = body.slice(m[0].length);
+    const t = /^title\s*:\s*(.+)$/im.exec(m[1]); if (t) title = clean(t[1].replace(/^['"]|['"]$/g, ''), 120);
+    const inline = /^tags\s*:\s*\[(.*?)\]\s*$/im.exec(m[1]);
+    if (inline) tags = inline[1].split(',').map((s) => clean(s.replace(/^['"]|['"]$/g, ''), 40)).filter(Boolean);
+    else { const block = /^tags\s*:\s*\n((?:\s*-\s*.+\n?)+)/im.exec(m[1]); if (block) tags = block[1].split('\n').map((l) => clean(l.replace(/^\s*-\s*/, '').replace(/^['"]|['"]$/g, ''), 40)).filter(Boolean); else { const one = /^tags\s*:\s*(.+)$/im.exec(m[1]); if (one) tags = one[1].split(/[,\s]+/).map((s) => clean(s.replace(/^#/, ''), 40)).filter(Boolean); } }
+  }
+  if (!title) { const h = /^#\s+(.+)$/m.exec(body); title = h ? clean(h[1], 120) : fallbackTitle; }
+  return { title, tags, body };
+}
+
+// For searching: [{ id, title, tags, text, mtime }] (the tags are also part of the text, so a search for a tag finds the note)
 function loadNotes(vault, deps) {
-  return walkNotes(vault, deps).map((f) => { let t = ''; try { t = deps.fs.readFileSync(f.path, 'utf8').slice(0, 20000); } catch { /* unreadable */ } return { id: `obsidian:${f.rel}`, title: path.basename(f.rel, path.extname(f.rel)), text: t, mtime: f.mtime }; });
+  return walkNotes(vault, deps).map((f) => {
+    let raw = ''; try { raw = deps.fs.readFileSync(f.path, 'utf8').slice(0, 20000); } catch { /* unreadable */ }
+    const n = readNote(raw, path.basename(f.rel, path.extname(f.rel)));
+    return { id: `obsidian:${f.rel}`, title: n.title, tags: n.tags, text: n.tags.length ? `${n.body}\nTags: ${n.tags.join(', ')}` : n.body, mtime: f.mtime };
+  });
 }
 
 // ---- what you can say ----
@@ -140,7 +161,7 @@ async function runCommand(c, deps) {
   const { store, home } = deps, done = (reply, actions = 1) => ({ status: 'done', reply, actions }), fail = (reply) => ({ status: 'failed', reply });
   const feeds = () => (Array.isArray(store.get('settings.news.feeds')) ? store.get('settings.news.feeds') : []);
   if (c.type === 'hn') {
-    try { const s = await hackerNews(deps, 6); return s.length ? done(`Top on Hacker News: ${s.map((x, i) => `${i + 1}. ${x.title} (${x.score} points, ${x.comments} comments)`).join('; ')}.`) : fail('Hacker News returned nothing.'); } catch { return fail('I could not reach Hacker News.'); }
+    try { const s = await hackerNews(deps); return s.length ? done(`Top on Hacker News: ${s.map((x, i) => `${i + 1}. ${x.title} (${x.score} points, ${x.comments} comments)`).join('; ')}.`) : fail('Hacker News returned nothing.'); } catch { return fail('I could not reach Hacker News.'); }
   }
   if (c.type === 'news') {
     const list = feeds(); if (!list.length) return done('You have not added any news feeds yet. Say "add news feed" followed by the address of the feed, or ask "what\'s on Hacker News".', 0);
@@ -177,4 +198,4 @@ async function runCommand(c, deps) {
   return fail('I did not understand that.');
 }
 
-module.exports = { parseFeed, isPublicHttps, hackerNews, feedHeadlines, githubNotifications, findVaults, vaultCheck, walkNotes, recentNotes, loadNotes, parseExtrasCommand, runCommand, MAX_FEEDS };
+module.exports = { readNote, parseFeed, isPublicHttps, hackerNews, feedHeadlines, githubNotifications, findVaults, vaultCheck, walkNotes, recentNotes, loadNotes, parseExtrasCommand, runCommand, MAX_FEEDS };
