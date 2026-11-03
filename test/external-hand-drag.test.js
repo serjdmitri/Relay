@@ -42,3 +42,19 @@ test('a stalled camera stream releases a held mouse button', async () => {
   assert.equal(x.lines().at(-1).op, 'up'); assert.equal(x.drag.owner, null);
   x.drag.close();
 });
+
+// Bad tracking samples must not replace the last safe release coordinate.
+test('invalid coordinates cannot start or prolong an external drag', () => {
+  const x = rig(); x.drag.start(); x.child.stdout.write('ready\n'); const hand = {};
+  assert.equal(x.drag.begin(hand, {x: NaN, y: 20}), false);
+  assert.equal(x.drag.begin(hand, {x: 10, y: 20}), true);
+  x.child.stdout.write('down\n');
+  assert.equal(x.drag.move(hand, {x: Infinity, y: 30}), false);
+  x.drag.end(hand);
+  assert.deepEqual(x.lines().at(-1), {op:'up',x:10,y:20}); x.drag.close();
+});
+test('late helper output after closing cannot rearm dragging', () => {
+  const x = rig(); x.drag.start(); x.drag.close();
+  x.child.stdout.write('ready\n');
+  assert.equal(x.drag.ready, false);
+});
