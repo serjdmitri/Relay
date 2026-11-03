@@ -537,6 +537,7 @@ function registerIpc() {
   const godsEyeServer=new(require('./godsEyeServer').GodsEyeServer)({configFile:path.join(app.getPath('userData'),'gods-eye-runtime.json')});
   app.once('before-quit',()=>godsEyeServer.stop());
   mapPanel=new(require('./mapWindow').MapWindow)({store,motion:floatingMotion,server:godsEyeServer,onWorldView:on=>overlay.setWorldView(on)});
+  ask.runWorldCommand=async(command,signal)=>{try{return require('./worldCommands').worldReply(command,await mapPanel.command(command,{signal}));}catch(e){return {status:signal?.aborted?'stopped':'failed',reply:signal?.aborted?'Stopped, Sir.':e.message,actions:0};}};
   ask.openWorldMap=kind=>{try{mapPanel.open(kind);return {status:'done',reply:kind==='godseye'?'Your God’s Eye workspace is opening, Sir. The local engine will start automatically.':'Your Argos Atlas map is open, Sir.',actions:1};}catch(e){return {status:'failed',reply:e.message,actions:0};}};
   fitnessPanel = new FitnessWindow({store, motion:floatingMotion, getApi:()=>ask.googleApiIfConnected(), openSettings:()=>openMain('connectors')});
   ask.openFitness = () => {fitnessPanel.open();return {status:'done',reply:'Your Fitbit stats menu is open, Sir. Connect Fitbit / Google Health in Connections if needed.',actions:1};};
@@ -1161,6 +1162,18 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle('assistant:activate', async (_e, action) => {
+    if (!['show','talk','type'].includes(action)) throw Error('Unknown assistant action.');
+    if (!['idle','done','input'].includes(ask.state)) return {error:'Finish or stop the current request first.'};
+    mainWin?.hide();
+    if (action === 'show') {
+      if (ask.state !== 'idle') ask.close();
+      ask.reactorIdle = true;
+      overlay.hud({state:'reactor-idle',idlePosition:store.get('settings.reactorIdlePosition') === 'corner' ? 'corner' : 'center'});
+    } else if (action === 'type') await ask.open({typed:true});
+    else await ask.listen('ask',false,{auto:store.get('settings.autoSend.enabled') !== false});
+    return {ok:true};
+  });
   ipcMain.handle('ask:open', async (_e, text) => {
     await ask.open();
     if (text) await ask.submit(text);
@@ -1226,11 +1239,11 @@ app.whenReady().then(() => {
   const omni = new OmniVoice({ python: path.join(app.getPath('userData'), 'omnivoice', 'venv', 'bin', 'python'), worker: app.isPackaged ? path.join(process.resourcesPath, 'native', 'omni-worker.py') : path.join(__dirname, 'tts', 'omni-worker.py') });
   app.once('before-quit', () => omni.stop());
   speaker = new Speaker({
-    kokoro, omni,
+    kokoro, omni, phraseCacheDir:path.join(app.getPath('userData'),'voices','fixed-phrases'),
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
     getTts: () => {
       const t = store.get('settings.tts');
-      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) }, gemini: { ...t.gemini, key: decryptKey(t.gemini?.keyEnc) } };
+      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: t.engine==='openai'?decryptKey(t.openai.keyEnc):'' }, elevenlabs: { ...t.elevenlabs, key: t.engine==='elevenlabs'?decryptKey(t.elevenlabs.keyEnc):'' }, gemini: { ...t.gemini, key: t.engine==='gemini'?decryptKey(t.gemini?.keyEnc):'' } };
     },
     // a better voice failed: say so in plain words (once per problem per ten minutes), so a silent reply is never a mystery
     onProblem: (m) => {
@@ -1242,7 +1255,7 @@ app.whenReady().then(() => {
     }
   });
   speaker.prepare(profileFor('quiet', store.get('settings') || {}));
-  const prepareGreeting=()=>speaker.prepare({...profileFor('reply',store.get('settings')||{}),text:welcome.greetingFor(Date.now(),store.get('settings.welcome.name')||'Sir')});
+  const prepareGreeting=async()=>{const profile=profileFor('reply',store.get('settings')||{}),name=store.get('settings.welcome.name')||'Sir';for(const text of new Set([welcome.greetingFor(Date.now(),name),...['morning','afternoon','evening','night'].map(part=>`Good ${part}, ${name}.`)]))await speaker.prepare({...profile,text});};
   prepareGreeting();
   timers = new Timers({
     store,
@@ -1911,6 +1924,7 @@ app.on('before-quit', () => {
   try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
   quitting = true;
   try { ask.assistStop(); assistPanel?.destroy(); } catch {}
+  mapPanel?.close();
   recent?.stop();
   remote?.stop();
   holos?.persist?.();

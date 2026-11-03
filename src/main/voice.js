@@ -71,7 +71,8 @@ function speakable(text) {
 class Speaker {
   // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
   // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
-  constructor({ ladder = new Ladder(), spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  constructor({ ladder = new Ladder(), spawnFn = spawn, exec = execFile, log = console, getTts = () => ({ engine: 'system' }), getLocalOnly = () => false, kokoro = null, omni = null, fetchFn = (...a) => fetch(...a), onProblem = null, setTimer = setTimeout, clearTimer = clearTimeout, phraseCacheDir = null } = {}) {
+    this.phraseCacheDir=phraseCacheDir;
     this.ladder = ladder; // online voices that failed rest for a while (see ladder.js) so the next replies do not wait on them again
     this.spawnFn = spawnFn; this.setTimer = setTimer; this.clearTimer = clearTimer;
     this.exec = exec;
@@ -105,6 +106,13 @@ class Speaker {
     return JSON.stringify([engine, rate, kokoroVoice || tts.kokoro?.voice || '']);
   }
 
+  phraseFile(key) { return this.phraseCacheDir && path.join(this.phraseCacheDir,require('crypto').createHash('sha256').update('fixed-phrases-v1'+key).digest('hex')+'.wav'); }
+  prepared(key) {
+    const memory=this.preparedAudio?.get(key);if(memory)return memory;
+    try{const file=this.phraseFile(key),size=file&&fs.statSync(file).size;if(size>0&&size<2000000)return fs.readFileSync(file);}catch{}
+    return null;
+  }
+
   // Warm only an already-installed local voice. Cache short fixed acknowledgements/greetings in memory,
   // never conversations, and never make a paid/cloud request in the background.
   prepare({ rate = 'normal', kokoroVoice, text = 'On it, Sir.' } = {}) {
@@ -114,12 +122,12 @@ class Speaker {
     text=speakable(text);if(!text||text.length>160)return Promise.resolve();
     const key = JSON.stringify([this.acknowledgementKey(engine, tts, rate, kokoroVoice),text]);
     this.preparedAudio ||= new Map();
-    if (this.preparedAudio.has(key)) return Promise.resolve();
+    const saved=this.prepared(key);if(saved){this.preparedAudio.set(key,saved);return Promise.resolve();}
     if (this.preparing) return this.preparing.then(()=>this.prepare({rate,kokoroVoice,text}));
     this.preparing = (async () => {
       const file = await (engine === 'omnivoice' ? this.omni.synthesize(text, { rate })
         : this.kokoro.synthesize(text, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate }));
-      try { this.preparedAudio.set(key,fs.readFileSync(file));if(this.preparedAudio.size>8)this.preparedAudio.delete(this.preparedAudio.keys().next().value); } finally { this.discard(file); }
+      try { const audio=fs.readFileSync(file);this.preparedAudio.set(key,audio);const cached=this.phraseFile(key);if(cached){try{fs.mkdirSync(this.phraseCacheDir,{recursive:true,mode:0o700});fs.writeFileSync(cached+'.tmp',audio,{mode:0o600});fs.renameSync(cached+'.tmp',cached);}catch{}}if(this.preparedAudio.size>8)this.preparedAudio.delete(this.preparedAudio.keys().next().value); } finally { this.discard(file); }
     })().catch(() => {}).finally(() => { this.preparing = null; });
     return this.preparing;
   }
@@ -148,7 +156,7 @@ class Speaker {
     this.currentText = say;
     const tts = this.getTts() || { engine: 'system' };
     const selected = this.engineFor(tts, lang);
-    const cachedAudio = quick ? this.preparedAudio?.get(JSON.stringify([this.acknowledgementKey(selected, tts, rate, kokoroVoice),say])) : null;
+    const cachedAudio = quick ? this.prepared(JSON.stringify([this.acknowledgementKey(selected, tts, rate, kokoroVoice),say])) : null;
     // Acknowledgements must not start a slow synthesis that completion would cancel.
     const engine = quick && !cachedAudio ? 'system' : selected;
     if (engine === 'system') {

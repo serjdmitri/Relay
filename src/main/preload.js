@@ -9,6 +9,7 @@ const on = (channel, cb) => {
 
 contextBridge.exposeInMainWorld('relay', {
   getState: () => invoke('state:get'),
+  activateAssistant: action => invoke('assistant:activate', action),
   callAction: (action, value) => invoke('calls:' + action, value),
   quickAction: (action, value) => invoke('quick:' + action, value),
   openStorageMap: () => invoke('files:storage'),

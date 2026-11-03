@@ -10,3 +10,26 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:3;back
 .floating-panel-rail,.first-run-panel{border-radius:0!important}
 @media(min-width:900px){#corner-actions{right:270px!important}}
 @media(max-width:899px){#corner-actions{bottom:240px!important}}
+/* Full-bleed world: clear space around the globe, terrain fills in on approach. */
+:root{--left-stack-x:72px!important;--right-rail-x:72px!important;--world-fill:0}
+html,body,#app,#cesiumContainer,.cesium-widget,.cesium-viewer{background:transparent!important}
+.cesium-widget canvas{mask-image:none;-webkit-mask-image:none}
+body::after{opacity:var(--world-fill);transition:opacity .2s linear}
+#left-panel-stack{top:110px!important;bottom:150px!important;max-height:calc(100vh - 260px)!important}
+#right-context-rail{top:110px!important;max-height:calc(100vh - 360px)!important}
+#left-panel-stack > [data-panel-id],#right-context-rail > [data-panel-id]{max-height:calc(100vh - 300px)!important;max-width:calc(100vw - 160px)!important}
+#relay-world-toolbar{position:fixed;top:16px;right:18px;display:flex;gap:8px;z-index:10000}
+#relay-world-toolbar button,.relay-edge{background:#05283bd9;color:#9deaff;border:1px solid #40cfee88;border-radius:0;cursor:pointer;min-width:38px;min-height:38px;font:18px system-ui}
+.relay-edge{position:fixed;top:42%;z-index:9999;writing-mode:vertical-rl;letter-spacing:2px;font-size:11px;padding:14px 4px;min-width:22px}
+.relay-edge-left{left:0}.relay-edge-right{right:0}
+body[data-relay-controls='pinned'] .relay-edge{display:none}
+body[data-relay-controls='hover']:not(.relay-left-open) #left-panel-stack:not(:focus-within),body[data-relay-controls='hover']:not(.relay-right-open) #right-context-rail:not(:focus-within){opacity:0;visibility:hidden;pointer-events:none}
+#left-panel-stack,#right-context-rail{transition:opacity .2s ease,visibility .2s ease!important}
+.relay-orbit #intel-hud{opacity:0!important;pointer-events:none!important}
+@media(prefers-reduced-motion:reduce){#left-panel-stack,#right-context-rail,body::after{transition:none!important}}
+#title-bar{display:none!important}
+#style-indicator{top:64px!important;right:24px!important;font-size:10px!important}
+.relay-orbit #style-indicator{opacity:0;pointer-events:none}
+/* Upstream's scope canvas paints a dark rectangle even when WebGL is clear. */
+#scope-mask{opacity:var(--world-fill)!important;transition:opacity .2s linear}
+body::after{opacity:var(--world-fill)!important}
