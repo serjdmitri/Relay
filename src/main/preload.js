@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('relay', {
   presenceFrame: (f) => invoke('presence:frame', f),
   presenceStatus: (s) => invoke('presence:status', s),
   presenceConfig: (have) => invoke('presence:config', have),
+  trustedPeople: (action,value) => invoke('owner:trusted',action,value),
   presenceEnroll: (s) => invoke('presence:enroll', s),
   intruderState: () => invoke('intruder:state'),
   setHands: (on) => invoke('hands:set', on),

@@ -12,6 +12,7 @@
 import Cocoa
 import ApplicationServices
 import Vision
+import LocalAuthentication
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
@@ -115,6 +116,15 @@ let args = CommandLine.arguments
 guard args.count >= 2 else { fail("usage: relay-ax find|list|press <app> ... | ocr <png> <text> | focused") }
 
 switch args[1] {
+case "authenticate-owner":
+    let context = LAContext()
+    var error: NSError?
+    guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { fail("Mac owner authentication is unavailable") }
+    context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Manage Jarvis authorized face profiles") { success, _ in
+        print(success ? "authenticated" : "cancelled")
+        exit(success ? 0 : 1)
+    }
+    RunLoop.main.run()
 case "border-geometry":
     // Only geometry is returned; window titles and screen contents never leave this process.
     let mainTop = NSScreen.screens.first?.frame.maxY ?? 0
