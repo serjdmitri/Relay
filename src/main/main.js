@@ -1912,6 +1912,7 @@ app.on('before-quit', () => {
   try { ask.ducker.restoreNow((script) => require('child_process').execFileSync('osascript', ['-e', script], { timeout: 3000 }).toString().trim()); } catch {} // never quit with the volume left low
   quitting = true;
   try { ask.assistStop(); assistPanel?.destroy(); } catch {}
+  mapPanel?.close();
   recent?.stop();
   remote?.stop();
   holos?.persist?.();
