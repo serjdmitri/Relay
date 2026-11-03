@@ -5,23 +5,37 @@ const path = require('path');
 // main.js decides when to show and hide it (see ownerGuard.js); the pages ask for the state, so they cannot be told anything else by anyone else.
 class IntruderWindow {
   // touchId(): is Touch ID available? fingerprint(): asks for it and, if it is you, stops the alarm (main.js); it throws when the fingerprint is not accepted.
-  constructor({ touchId = () => false, fingerprint = async () => ({ ok: false }) } = {}) {
-    Object.assign(this, { touchId, fingerprint });
+  // autoDelayMs: how long after the alarm starts the Touch ID sheet comes up by itself, so just touching the sensor stops it (no button to click first).
+  constructor({ touchId = () => false, fingerprint = async () => ({ ok: false }), autoDelayMs = 900 } = {}) {
+    Object.assign(this, { touchId, fingerprint, autoDelayMs });
     this.wins = [];
     this.state = { active: false };
     ipcMain.handle('intruder:fingerprint', async (e) => {
-      if (this.busy || !this.state.active || !this.wins.some((w) => !w.isDestroyed() && w.webContents === e.sender)) return { ok: false };
-      this.busy = true; this.hold();
-      try { const r = await this.fingerprint(); if (!r?.ok) this.release(); return { ok: !!r?.ok }; }
-      catch (err) { this.release(); return { ok: false, error: String(err?.message || 'Not recognised.').slice(0, 90) }; }
-      finally { this.busy = false; }
+      if (!this.state.active || !this.wins.some((w) => !w.isDestroyed() && w.webContents === e.sender)) return { ok: false };
+      return this.askFingerprint();
     });
     ipcMain.handle('intruder:state', (e) => (this.wins.some((w) => !w.isDestroyed() && w.webContents === e.sender) ? this.state : { active: false }));
+  }
+
+  // Asks for the fingerprint. The alarm windows step aside while the system sheet is up and come back if it is not accepted. -> { ok, error? }
+  async askFingerprint() {
+    if (this.busy || !this.state.active) return { ok: false };
+    this.busy = true; this.hold();
+    // an accepted fingerprint always takes the screen down, whatever started it (the guard also clears its own state, which hides it too; doing it here as well covers the screens it does not own, such as the standby test)
+    try { const r = await this.fingerprint(); if (r?.ok) this.hide(); else this.release(); return { ok: !!r?.ok }; }
+    catch (err) { this.release(); return { ok: false, error: String(err?.message || 'Not recognised.').slice(0, 90) }; }
+    finally { this.busy = false; }
   }
 
   show({ seconds, demo = false }) {
     this.state = { active: true, touchId: this.touchId(), mode: 'alarm', endsAt: Date.now() + seconds * 1000, total: seconds, demo };
     this.open();
+    // The alarm is the moment the owner needs Touch ID, so the sheet comes up on its own (once). If it is cancelled or not accepted the alarm comes back with its button.
+    clearTimeout(this.autoTimer);
+    if (this.state.touchId) {
+      this.autoTimer = setTimeout(() => { if (this.state.active && this.state.mode === 'alarm' && !this.state.paused) this.askFingerprint().catch(() => {}); }, this.autoDelayMs);
+      this.autoTimer.unref?.();
+    }
   }
 
   // The standby screen: you stepped away. Calm, blue, no siren; it stays until main.js hides it.
@@ -31,9 +45,10 @@ class IntruderWindow {
     this.open();
   }
 
-  // While the system's Touch ID sheet is up, the alarm windows step aside (and the siren stops), so the sheet is not hidden behind them; they come back if it fails.
-  hold() { this.state = { ...this.state, paused: true }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.hide(); } catch { /* gone */ } } }
-  release() { if (!this.state.active) return; this.state = { ...this.state, paused: false }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.showInactive(); } catch { /* gone */ } } }
+  // While the system's Touch ID sheet is up the alarm screen STAYS, but drops to a lower window level (and its siren stops), so the sheet is not hidden behind it; when the sheet is
+  // done and it was not accepted, the screen goes back to the top.
+  hold() { this.state = { ...this.state, paused: true }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.setAlwaysOnTop(true, 'floating'); } catch { /* gone */ } } }
+  release() { if (!this.state.active) return; this.state = { ...this.state, paused: false }; for (const w of this.wins) { try { if (!w.isDestroyed()) { w.setAlwaysOnTop(true, 'screen-saver', 2); w.showInactive(); } } catch { /* gone */ } } }
 
   open() {
     if (this.wins.some((w) => !w.isDestroyed())) return;
@@ -54,6 +69,7 @@ class IntruderWindow {
   }
 
   hide() {
+    clearTimeout(this.autoTimer);
     this.state = { active: false };
     for (const w of this.wins) { try { if (!w.isDestroyed()) w.close(); } catch { /* gone */ } }
     this.wins = [];
