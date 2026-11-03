@@ -40,7 +40,7 @@ class NightlyMaintenance {
       if(!lines.length)lines.push('No proposals or local source-review task configured.');
       lines.push('Live Relay was not changed. Nothing was merged, pushed or installed.');
       const text=lines.join('\n');this.store.set('nightlyMaintenance',{key,status:'done',at:this.now(),text});this.exportReport('Nightly maintenance',text);return true;
-    }catch(e){this.store.set('nightlyMaintenance',{key,status:'failed',at:this.now(),text:String(e.message).slice(0,500)});return true;}
+    }catch(e){const text=[...lines,'Could not finish: '+String(e.message).slice(0,500),'Live Relay was not changed. Nothing was merged, pushed or installed.'].join('\n');this.store.set('nightlyMaintenance',{key,status:'failed',at:this.now(),text});return true;}
     finally{this.busy=false;}
   }
 }
