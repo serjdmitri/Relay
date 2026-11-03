@@ -15,4 +15,11 @@ body.away h1 { font-size: clamp(20px, 3.4vw, 46px); text-shadow: 0 0 22px rgba(0
 body.away h2 { font-size: clamp(14px, 2.2vw, 30px); letter-spacing: .3em; font-weight: 600; color: #66e0ff; text-shadow: 0 0 16px rgba(0, 200, 255, .8); }
 #count { margin: 2.4vh 0 0; font-size: clamp(18px, 2.6vw, 34px); letter-spacing: .12em; font-variant-numeric: tabular-nums; text-transform: uppercase; }
 #note { margin: 1vh 0 0; font-size: clamp(13px, 1.4vw, 18px); opacity: .85; letter-spacing: .06em; }
+/* the fingerprint button, bottom right: the owner's way to stop the screen */
+#touch { position: fixed; right: 3.2vw; bottom: 4.2vh; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 18px; border-radius: 22px; cursor: pointer; font: 600 13px -apple-system, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: inherit; background: rgba(0, 0, 0, .28); border: 1px solid currentColor; }
+#touch[hidden] { display: none; }
+#touch svg { width: 64px; height: 64px; filter: drop-shadow(0 0 10px currentColor); animation: touchpulse 1.6s ease-in-out infinite; }
+#touch:hover { background: rgba(255, 255, 255, .14); } #touch:active { transform: scale(.97); }
+body.alarm #touch { color: #ffb3aa; } body.away #touch { color: #9fe9ff; }
+@keyframes touchpulse { 0%, 100% { opacity: .6; transform: scale(.96); } 50% { opacity: 1; transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) { body.alarm #wrap { animation: none; } }
