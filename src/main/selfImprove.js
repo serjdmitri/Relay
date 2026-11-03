@@ -53,6 +53,7 @@ class ProposalWorkspace {
   async test(ref) {
     const p = this.find(ref); if (!p) return { error: 'No such proposal.' };
     const before = await this.status(p);
+    if(p.generated && (!p.reviewed || p.reviewState!==before)) return {error:'Review the generated diff in Settings before testing. It has not been executed.'};
     if (before === null) return { error: 'The proposal folder is not readable. It may have been moved or removed.' };
     const r = await this.run(['npm', 'test'], { cwd: p.dir, timeout: 600000 });
     const out = `${r.stdout}\n${r.stderr}`;

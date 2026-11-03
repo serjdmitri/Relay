@@ -95,7 +95,7 @@ function rememberThrow(undo) {
 const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
-let trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -185,6 +185,7 @@ function publicState() {
     ...d,
     connectors,
     trustedPeople: trustedPeople?.list() || [],
+    nightlyMaintenance: store.get('nightlyMaintenance') || null,
     remote: remote ? remote.info() : null,
     schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
@@ -1257,6 +1258,7 @@ app.whenReady().then(() => {
     const win = overnightMod.windowBounds(new Date(), ask.overnight.conf());
     const routines = (store.get('history') || []).filter((h) => /^(?:scheduled|missed):/.test(String(h.id)) && h.ts >= win.start && h.ts <= win.end + 2 * 3600e3).map((h) => ({ text: h.text, status: h.status })).reverse();
     const report = overnightMod.buildReport(tasks, routines);
+    const maintenance=store.get('nightlyMaintenance');if(maintenance)report.text+='\n\nNightly maintenance ('+maintenance.status+'):\n'+maintenance.text;
     try { ask.outputExport('Overnight report', report.text); } catch { /* the report is still kept in Relay and can be read by voice */ }
     ask.overnight.markReported(tasks, report);
     if (Notification.isSupported()) new Notification({ title: 'Overnight report', body: report.summary.charAt(0).toUpperCase() + report.summary.slice(1) + '. Say "what happened overnight" to hear it.', silent: true }).show();
@@ -1272,6 +1274,16 @@ app.whenReady().then(() => {
       for (const t of st.interrupted) { ask.overnight.interrupt(t, (store.get('actions') || []).filter((a) => a.requestId === t.runId)); changed = true; }
       if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
       if (st.run) { await runOvernightTask(st.run); changed = true; }
+      const conf=ask.overnight.conf(), now=new Date(), key=String(overnightMod.windowBounds(now,conf).start);
+      if(!changed && !ask.overnight.queued().length && ask.canRunScheduled() && conf.enabled && overnightMod.inWindow(now,conf)) {
+        if(store.get('overnightPlannedKey')!==key){
+          store.set('overnightPlannedKey',key);
+          const planned=String(store.get('settings.overnight.planned')||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,3);
+          for(const task of planned)ask.overnight.add(task);
+          changed=planned.length>0;
+        }
+        if(!changed && nightlyMaintenance) changed=await nightlyMaintenance.run(key);
+      }
       if (!changed && st.report) overnightReport(st.report);
     } catch (e) { console.error('Overnight tick failed:', e); } finally { overnightBusy = false; }
   };
@@ -1446,6 +1458,17 @@ app.whenReady().then(() => {
   const proposals = new ProposalWorkspace({
     store, getConfig: () => store.get('settings.selfImprove'),
     run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
+  });
+  nightlyMaintenance=new(require('./nightlyMaintenance').NightlyMaintenance)({store,proposals,settings:()=>({...store.get('settings.selfImprove'),model:store.get('settings.model.ollamaModel'),url:store.get('settings.model.ollamaUrl')}),exportReport:(title,text)=>{try{ask.outputExport(title,text);}catch{}}});
+  ipcMain.handle('proposal:review',async(e,id)=>{
+    if(e.sender!==mainWin?.webContents)return {error:'Open Settings first.'};
+    const p=proposals.find(id);if(!p?.generated)return {error:'No generated proposal to review.'};
+    const diff=await proposals.git(['diff','--no-ext-diff','--', 'src'],p.dir);if(diff.code!==0||!diff.stdout.trim())return {error:'No readable source diff.'};
+    const reviewedState=await proposals.status(p);if(!reviewedState)return {error:'Cannot verify proposal files.'};
+    const answer=await dialog.showMessageBox(mainWin,{type:'warning',message:'Review the generated source change before allowing tests',detail:diff.stdout.slice(0,100000),buttons:['Cancel','Approve testing'],defaultId:0,cancelId:0});
+    if(answer.response!==1)return {cancelled:true};
+    if(reviewedState!==await proposals.status(p))return {error:'Files changed during review. Review again.'};
+    proposals.patch(p.id,{reviewed:true,reviewState:reviewedState});broadcast();return {ok:true};
   });
   ask.selfImproveCommand = async (c) => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
