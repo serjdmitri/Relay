@@ -202,3 +202,33 @@ test('Doctor reports camera access needed for presence even when hand control is
   assert.match(camera.cause, /presence detection/);
   assert.equal(camera.fix.action.name, 'camera');
 });
+
+test('Relay health: startup, Keychain, voice, owner recognition, Ollama, gh and the last failed request are each reported in plain words', async () => {
+  const { runChecks } = require('../src/main/doctor');
+  const run = async (env) => Object.fromEntries((await runChecks(env)).map((r) => [r.id, r]));
+  const fine = await run({ startup: () => ({ startedAt: 1000, completedAt: 4200, errors: [] }), keychain: () => ({ available: true }), lastFailure: () => null, voice: () => ({ engine: 'system', problem: '' }), owner: () => ({ enabled: true, enrolled: true, cameraRunning: true, armed: true, lastScore: 0.61, threshold: 0.363, liveness: true }), ollamaLive: async () => ({ ok: true }), gh: async () => ({ installed: true, signedIn: true }) });
+  assert.match(fine.startup.cause, /Started in 3\.2 s with no errors/); assert.equal(fine.keychain.status, 'ok'); assert.equal(fine.lastfail.status, 'ok'); assert.match(fine.voice.cause, /system voice is working/);
+  assert.match(fine.owner.cause, /Armed and watching \(best match 0\.61\), with the blink check on/); assert.equal(fine.ollama.status, 'ok'); assert.equal(fine.gh.status, 'ok');
+
+  const bad = await run({
+    startup: () => ({ startedAt: 1000, completedAt: 0, errors: [{ message: 'fs is not defined' }] }), keychain: () => ({ available: false }), lastFailure: () => ({ at: Date.now() - 120000, message: 'I could not reach Groq. Check the internet connection and try again.' }),
+    voice: () => ({ engine: 'elevenlabs', problem: 'quota_exceeded' }), owner: () => ({ enabled: true, enrolled: true, cameraRunning: true, armed: false, lastScore: 0.2, threshold: 0.363, liveness: true }),
+    ollamaLive: async () => ({ ok: false, why: 'Ollama is not running.' }), gh: async () => ({ installed: true, signedIn: false })
+  });
+  assert.equal(bad.startup.status, 'fail'); assert.match(bad.startup.cause, /has not finished starting: fs is not defined/);
+  assert.equal(bad.keychain.status, 'fail'); assert.match(bad.lastfail.cause, /2 minutes ago: I could not reach Groq/); assert.equal(bad.lastfail.status, 'warn');
+  assert.match(bad.voice.cause, /ElevenLabs did not work because its credit is used up/); assert.equal(bad.voice.status, 'warn');
+  assert.match(bad.owner.cause, /has not recognised you yet this session.*best match so far 0\.20; it needs 0\.36/); assert.equal(bad.ollama.status, 'warn'); assert.match(bad.gh.cause, /gh auth login/);
+
+  assert.match((await run({ startup: () => ({ startedAt: 1000, completedAt: 3000, errors: [{ message: 'x', at: 1 }] }) })).startup.cause, /1 error happened since\. The latest: x/);
+  assert.match((await run({ owner: () => ({ enabled: true, enrolled: false }) })).owner.cause, /not enrolled.*enroll my face/);
+  assert.match((await run({ owner: () => ({ enabled: true, enrolled: true, cameraRunning: false }) })).owner.cause, /camera is not running/);
+  assert.equal((await run({ owner: () => ({ enabled: false }) })).owner.cause, 'Off.');
+  assert.match((await run({ gh: async () => ({ installed: false }) })).gh.cause, /brew install gh/);
+});
+
+test('"relay health" and similar questions open the Doctor, and everyday talk does not', () => {
+  const { parseDoctorCommand } = require('../src/main/doctor');
+  for (const t of ['relay health', 'show the health report', 'Jarvis, what is your health', 'is Relay healthy', 'are you working properly', "how's Relay doing", 'run the doctor']) assert.equal(parseDoctorCommand(t), true, t);
+  for (const t of ['how is the weather', 'how is my health', 'show me my health data', 'is it raining', 'check my email']) assert.equal(parseDoctorCommand(t), false, t);
+});
