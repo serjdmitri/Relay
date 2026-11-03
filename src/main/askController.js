@@ -2069,6 +2069,8 @@ class AskController {
           if (this.openAssignments && parseAssignmentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAssignments()); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
+          const worldMap=require('./mapWindow').mapIntent(effective);
+          if(worldMap && this.openWorldMap)return this.finish(entry,await this.openWorldMap(worldMap));
           if (this.openFitness && require('./connectors/fitness').fitnessIntent(effective)) return this.finish(entry, await this.openFitness());
           const menus = require('./menuIntent').menuRequests(effective);
           if (menus.length) {

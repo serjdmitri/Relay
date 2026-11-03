@@ -95,7 +95,7 @@ function rememberThrow(undo) {
 const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
-let nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -498,6 +498,8 @@ function registerIpc() {
     const r=await storagePanel.trashSelected();
     return {status:r.cancelled?'stopped':r.error||r.failed?.length&&!r.count?'failed':'done',reply:r.cancelled?'Cancelled. No files were moved.':r.error||`I moved ${r.count} selected files to Trash, Sir.${r.failed?.length?` ${r.failed.length} could not be moved; check the storage menu.`:''}`,actions:r.count||0};
   };
+  mapPanel=new(require('./mapWindow').MapWindow)({store,motion:floatingMotion});
+  ask.openWorldMap=kind=>{try{mapPanel.open(kind);return {status:'done',reply:(kind==='argos'?'Argos Atlas':'God’s Eye')+' map menu is open, Sir. Check its source status for availability.',actions:1};}catch(e){return {status:'failed',reply:e.message,actions:0};}};
   fitnessPanel = new FitnessWindow({store, motion:floatingMotion, getApi:()=>ask.googleApiIfConnected(), openSettings:()=>openMain('connectors')});
   ask.openFitness = () => {fitnessPanel.open();return {status:'done',reply:'Your Fitbit stats menu is open, Sir. Connect Fitbit / Google Health in Connections if needed.',actions:1};};
   networkPanel = new NetworkWindow({ store, motion: floatingMotion });
@@ -582,7 +584,7 @@ function registerIpc() {
     if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.sentient.enabled' || key === 'settings.memory' || key === 'settings.model.provider') ask.dropWarm(true);
     if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
-    if (key === 'settings.model.provider' && value === 'ollama') speaker?.stop();
+    if (key === 'settings.model.provider' && value === 'ollama') {speaker?.stop();mapPanel?.close();}
     if(key==='settings.hands.maxHands'&&hands?.enabled){hands.disable();hands.enable().catch(e=>ask.notice(e.message,'failed'));}
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
