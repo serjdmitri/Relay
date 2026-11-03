@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.38.3
 
 - **Relay's window can no longer stay blank.** If the main window's page crashes, fails to load, stops responding, or comes up empty (for example after one of Chromium's helper processes died and restarted, or after the Mac woke up), Relay now loads it again by itself. It also checks the window each time it is shown again and a moment after the network helper restarts.
 - **Honest failures (idea from Darwin).** When a model fails, Relay now says which brain and why, in plain words, instead of showing a raw error: "Claude is not installed on this Mac…", "Claude refused the request because the sign-in or key is not valid (it may have expired). Sign in again in Account", "Claude has used up its usage limit; it resets around 4:10 PM", "I could not reach Groq. Check the internet connection", "Ollama is not running. Open the Ollama app", "took too long", "empty reply", "request too long", "does not offer that model". A momentary rate limit (429) is told apart from a usage limit, Codex is named when it took over from Claude, and anything that looks like a key is hidden. When a better voice fails (ElevenLabs credit used up, a key refused, a missing permission), Relay now says so out loud in a notice and still answers in text or the system voice, once per problem every ten minutes.
