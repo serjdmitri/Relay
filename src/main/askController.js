@@ -49,6 +49,7 @@ const shieldMod = require('./injectionShield');
 const skillImportMod = require('./skillImport');
 const extrasMod = require('./connectors/extras');
 const researchMod = require('./research');
+const hybridMod = require('./hybridSearch');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -1118,6 +1119,54 @@ class AskController {
     return { status: 'done', reply: r.summary, actions: r.results.some((x) => x.added) ? 1 : 0 };
   }
 
+  // A JSON POST to Ollama on this Mac only (127.0.0.1): used to turn notes into meaning vectors for hybrid search.
+  async httpPost(url, body) {
+    if (!/^http:\/\/127\.0\.0\.1:\d+\//.test(String(url))) throw new Error('local only');
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 60000);
+    try {
+      const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } finally { clearTimeout(timer); }
+  }
+
+  semanticPath() { if (this.semanticFile !== undefined) return this.semanticFile; try { return path.join(app.getPath('userData'), 'semantic-index.json'); } catch { return null; } }
+
+  // What can be searched: your remembered facts and session notes (only while memory is on), and your Obsidian vault. Anything that looks like a secret is left out.
+  searchDocs() {
+    const docs = [];
+    if (this.store.get('settings.memory') !== false) {
+      for (const f of this.store.get('memories') || []) docs.push({ id: `memory:${f.id}`, source: 'memory', title: '', text: f.text, ts: f.ts });
+      for (const s of this.store.get('sessionNotes') || []) for (const e of s.entries || []) docs.push({ id: `session:${e.id}`, source: 'session notes', title: s.title, text: `${e.request}\n${e.reply}`, ts: e.ts });
+    }
+    const vault = this.store.get('settings.obsidian.vault');
+    const deps = { fs: require('fs'), home: os.homedir() };
+    if (vault && !extrasMod.vaultCheck(vault, deps)) {
+      if (!this._obsCache || this._obsCache.vault !== vault || Date.now() - this._obsCache.at > 300000) this._obsCache = { vault, at: Date.now(), docs: extrasMod.loadNotes(vault, deps).map((n) => ({ id: n.id, source: 'Obsidian', title: n.title, text: n.text, ts: n.mtime })) };
+      docs.push(...this._obsCache.docs);
+    }
+    return docs.filter((d) => d.text && !mem.isSecret(`${d.title} ${d.text}`));
+  }
+
+  // "search my notes for X": keyword search always, plus meaning search when Ollama has the embedding model (see hybridSearch.js).
+  async searchMemory(c) {
+    const index = this.semanticIndex || (this.semanticIndex = new hybridMod.HybridIndex());
+    const file = this.semanticPath();
+    if (!this.semanticLoaded) { this.semanticLoaded = true; try { if (file) index.import(JSON.parse(require('fs').readFileSync(file, 'utf8'))); } catch { /* no saved index yet */ } }
+    const docs = this.searchDocs(); index.set(docs);
+    let embed = null, note = '';
+    const st = await hybridMod.ollamaStatus({ get: (u) => this.httpGet(u, true) });
+    if (st.ok) {
+      embed = hybridMod.ollamaEmbedder({ post: (u, b) => this.httpPost(u, b) });
+      try { const e = await index.embedMissing(embed, { limit: 40 }); if (e.remaining) note = ` Still learning ${e.remaining} notes for meaning search; it improves with each search.`; } catch { embed = null; note = ' Meaning search stopped partway, so these are keyword results.'; }
+    } else note = ` ${st.why}`;
+    if (index.changed && file) { try { require('fs').writeFileSync(file, JSON.stringify(index.export()), { mode: 0o600 }); } catch { /* the index is a convenience */ } }
+    const hits = await index.search(c.query, { embed, k: 5 });
+    const used = [...new Set(docs.map((d) => d.source))];
+    if (!hits.length) return { status: 'done', actions: 0, reply: `I found nothing about ${c.query} in ${used.length ? `your ${used.join(', ')}` : 'anything I can search (turn on memory or set your Obsidian vault)'}.${note}` };
+    return { status: 'done', actions: 1, reply: `Found ${hits.length}: ${hits.map((h, i) => `${i + 1}. [${h.doc.source}] ${h.doc.title ? `${h.doc.title} — ` : ''}${h.snippet}`).join('; ')}.${note}` };
+  }
+
   // News (Hacker News, RSS), GitHub notifications (through gh) and Obsidian: read-only, see connectors/extras.js.
   async extrasCommand(c) {
     return extrasMod.runCommand(c, {
@@ -2132,6 +2181,7 @@ class AskController {
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
+          if (hybridMod.parseSearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.searchMemory(hybridMod.parseSearchCommand(effective))); }
           if (researchMod.parseResearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, this.researchCommand(researchMod.parseResearchCommand(effective))); }
           if (extrasMod.parseExtrasCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.extrasCommand(extrasMod.parseExtrasCommand(effective))); }
           if (skillImportMod.parseSkillImportCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.importSkills(skillImportMod.parseSkillImportCommand(effective))); }
