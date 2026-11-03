@@ -300,6 +300,7 @@
     if (typeof msg.name === 'string' && msg.name) name = msg.name;
     visual = msg.visual === 'orb' ? 'orb' : 'reactor';
     hud.classList.toggle('frame', msg.border !== false);
+    hud.classList.toggle('world-view',!!msg.worldView);
     if (!on) hud.classList.add('snap'); // appearing from nothing: take its place at once, with no sliding
     const s = msg.state;
     if (s === 'listening' || s === 'input') {

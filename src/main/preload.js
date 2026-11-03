@@ -162,6 +162,7 @@ contextBridge.exposeInMainWorld('relay', {
   presenceStatus: (s) => invoke('presence:status', s),
   presenceConfig: (have) => invoke('presence:config', have),
   mapsAction: (action,value) => invoke('maps:action',action,value),
+  onMapSettings: fn => ipcRenderer.on('maps:settings',(_e,data)=>fn(data)),
   onMapStatus: fn => ipcRenderer.on('maps:status',(_e,data)=>fn(data)),
   reviewProposal: id => invoke('proposal:review',id),
   trustedPeople: (action,value) => invoke('owner:trusted',action,value),
