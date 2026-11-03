@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Honest failures (idea from Darwin).** When a model fails, Relay now says which brain and why, in plain words, instead of showing a raw error: "Claude is not installed on this Mac…", "Claude refused the request because the sign-in or key is not valid (it may have expired). Sign in again in Account", "Claude has used up its usage limit; it resets around 4:10 PM", "I could not reach Groq. Check the internet connection", "Ollama is not running. Open the Ollama app", "took too long", "empty reply", "request too long", "does not offer that model". A momentary rate limit (429) is told apart from a usage limit, Codex is named when it took over from Claude, and anything that looks like a key is hidden. When a better voice fails (ElevenLabs credit used up, a key refused, a missing permission), Relay now says so out loud in a notice and still answers in text or the system voice, once per problem every ten minutes.
+
 ## 0.38.2
 
 - **Fixed: Relay's window opened blank and the app did not finish starting.** A line added in 0.38.0 (the plugin sandbox check) used `fs` without importing it, so startup stopped partway with "fs is not defined" and the window had nothing to show. Fixed, and a new test now reads every main-process file and fails if one uses `fs`, `path`, `os`, `crypto` and similar without declaring it.

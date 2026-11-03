@@ -50,6 +50,7 @@ const skillImportMod = require('./skillImport');
 const extrasMod = require('./connectors/extras');
 const researchMod = require('./research');
 const hybridMod = require('./hybridSearch');
+const failureMod = require('./failureMessage');
 const safeFetchMod = require('./safeFetch');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
@@ -3289,14 +3290,14 @@ class AskController {
         return result;
       } catch (e) {
         if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: 0 };
-        return { status: 'failed', reply: e.message, actions: 0 };
+        return this.failedReply(e);
       } finally {
         if (session) this.keepConversation(session, result);
       }
     }
     let provider, vision;
     try { ({ provider, vision } = this.buildProvider()); }
-    catch (e) { return { status: 'failed', reply: e.message, actions: 0 }; }
+    catch (e) { return this.failedReply(e); }
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
@@ -3310,8 +3311,15 @@ class AskController {
       return await runAgent({ text: followUp ? `${followUp}\n\nRequest: ${text}` : text, tools, system: workSystem, signal, confirm, onEvent, provider });
     } catch (e) {
       if (signal.aborted) return { status: 'stopped', reply: 'Stopped.', actions: 0 };
-      return { status: 'failed', reply: e.message, actions: 0 };
+      return this.failedReply(e);
     }
+  }
+
+  // A failed request, said honestly: which brain, and why (see failureMessage.js). The raw error is kept in the log, not shown.
+  failedReply(e) {
+    const provider = this.store.get('settings.model.provider');
+    console.error('request failed:', e && e.message);
+    return { status: 'failed', reply: failureMod.explainBrainFailure(e && e.message, { brain: failureMod.brainName(provider, !!this.failover?.active) }).message, actions: 0 };
   }
 
   // What goes with every request: the front app, running apps, marked area, files, memory, language, and (for a fresh process) the last exchanges.
