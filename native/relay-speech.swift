@@ -275,9 +275,11 @@ final class Mic: @unchecked Sendable {
     // Measure every buffer so brief claps are not lost between level updates.
     if let ch = buffer.floatChannelData?[0] {
       var sum: Float = 0
+      var peak: Float = 0
       let n = Int(buffer.frameLength)
-      for i in 0..<n { sum += ch[i] * ch[i] }
+      for i in 0..<n { sum += ch[i] * ch[i]; peak = max(peak, abs(ch[i])) }
       let rms = n > 0 ? (sum / Float(n)).squareRoot() : 0
+      emit(["event": "acoustic", "rms": rms, "peak": peak])
       if let level = levelWindow.push(rms: rms, now: Date.timeIntervalSinceReferenceDate) {
         emit(["event": "level", "value": level])
       }

@@ -265,7 +265,7 @@ class AskController {
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
+      getConfig: () => ({ mode:this.store.get('settings.wake.mode'), enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
       canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
