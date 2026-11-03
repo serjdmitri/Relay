@@ -1,6 +1,7 @@
 // A single guarded system drag for ordinary Mac window title bars and browser tabs.
 // The native helper checks Accessibility and hit-tests the title/tab region before pressing.
 const { spawn } = require('child_process');
+const validPoint = pt => pt && Number.isFinite(pt.x) && Number.isFinite(pt.y);
 class ExternalDrag {
   constructor({ bin, allowed, enabled = () => true, notify = () => {}, spawnFn = spawn, watchdogMs = 1000 }) {
     Object.assign(this, { bin, allowed, enabled, notify, spawnFn });
@@ -13,6 +14,7 @@ class ExternalDrag {
       const c = this.spawnFn(this.bin, ['hand-drag'], { stdio: ['pipe', 'pipe', 'pipe'] });
       this.child = c; this.ready = false; this.buf = '';
       c.stdout.on('data', data => {
+        if (this.child !== c) return;
         this.buf += String(data); let i;
         while ((i = this.buf.indexOf('\n')) >= 0) {
           const line = this.buf.slice(0, i).trim(); this.buf = this.buf.slice(i + 1);
@@ -31,11 +33,11 @@ class ExternalDrag {
   send(op, pt) { if (this.child && this.ready && pt && Number.isFinite(pt.x) && Number.isFinite(pt.y)) this.child.stdin.write(JSON.stringify({ op, x: pt.x, y: pt.y }) + '\n'); }
   arm() { clearTimeout(this.watchdog); this.watchdog = setTimeout(() => { if (this.owner) this.end(this.owner); }, this.watchdogMs); this.watchdog.unref?.(); }
   begin(owner, pt) {
-    if (!this.enabled() || this.owner) return false;
+    if (!owner || !validPoint(pt) || !this.enabled() || this.owner) return false;
     if (!this.ready) { this.start(); return false; }
     this.owner = owner;this.accepted=false;this.startPoint=pt; this.point = pt; this.send('down', pt); this.arm(); return true;
   }
-  move(owner, pt) { if (this.owner !== owner) return false; this.point = pt; if(this.accepted)this.send('move', pt); this.arm(); return true; }
+  move(owner, pt) { if (this.owner !== owner || !validPoint(pt)) return false; this.point = pt; if(this.accepted)this.send('move', pt); this.arm(); return true; }
   end(owner) { if (this.owner !== owner) return; this.send('up', this.point); clearTimeout(this.watchdog); this.watchdog = null; this.owner = null; this.point = null; }
   close() {
     if (this.owner) this.end(this.owner);
