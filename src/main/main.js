@@ -1239,11 +1239,11 @@ app.whenReady().then(() => {
   const omni = new OmniVoice({ python: path.join(app.getPath('userData'), 'omnivoice', 'venv', 'bin', 'python'), worker: app.isPackaged ? path.join(process.resourcesPath, 'native', 'omni-worker.py') : path.join(__dirname, 'tts', 'omni-worker.py') });
   app.once('before-quit', () => omni.stop());
   speaker = new Speaker({
-    kokoro, omni,
+    kokoro, omni, phraseCacheDir:path.join(app.getPath('userData'),'voices','fixed-phrases'),
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
     getTts: () => {
       const t = store.get('settings.tts');
-      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) }, gemini: { ...t.gemini, key: decryptKey(t.gemini?.keyEnc) } };
+      return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: t.engine==='openai'?decryptKey(t.openai.keyEnc):'' }, elevenlabs: { ...t.elevenlabs, key: t.engine==='elevenlabs'?decryptKey(t.elevenlabs.keyEnc):'' }, gemini: { ...t.gemini, key: t.engine==='gemini'?decryptKey(t.gemini?.keyEnc):'' } };
     },
     // a better voice failed: say so in plain words (once per problem per ten minutes), so a silent reply is never a mystery
     onProblem: (m) => {
@@ -1255,7 +1255,7 @@ app.whenReady().then(() => {
     }
   });
   speaker.prepare(profileFor('quiet', store.get('settings') || {}));
-  const prepareGreeting=()=>speaker.prepare({...profileFor('reply',store.get('settings')||{}),text:welcome.greetingFor(Date.now(),store.get('settings.welcome.name')||'Sir')});
+  const prepareGreeting=async()=>{const profile=profileFor('reply',store.get('settings')||{}),name=store.get('settings.welcome.name')||'Sir';for(const text of new Set([welcome.greetingFor(Date.now(),name),...['morning','afternoon','evening','night'].map(part=>`Good ${part}, ${name}.`)]))await speaker.prepare({...profile,text});};
   prepareGreeting();
   timers = new Timers({
     store,

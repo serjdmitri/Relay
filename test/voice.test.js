@@ -189,3 +189,9 @@ test('a warmed greeting starts playback without a synthesis request; a cold gree
  const sp=new Spk({spawnFn:fakeSpawn(calls),exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'omnivoice'}),omni:{installed:()=>true,synthesize:async()=>{made++;const f=path.join(os.tmpdir(),`relay-greet-test-${process.pid}.wav`);fs.writeFileSync(f,'fixture');return f;}}});
  await sp.prepare({text:'Good evening, Sir.'});await sp.speak('Good evening, Sir.',{quick:true});assert.equal(made,1);assert.equal(calls[0].cmd,'afplay');await sp.speak('Good morning, Sir.',{quick:true});assert.equal(made,1);assert.equal(calls[1].cmd,'say');
 });
+
+test('fixed local greetings survive a restart without synthesis or a cloud request',async()=>{
+ const fs=require('fs'),path=require('path'),os=require('os'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'relay-fixed-test-'));let made=0;const calls=[];
+ const opts={phraseCacheDir:dir,spawnFn:fakeSpawn(calls),exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'omnivoice'}),omni:{installed:()=>true,synthesize:async()=>{made++;const f=path.join(dir,'generated.wav');fs.writeFileSync(f,'fixed greeting');return f;}}};
+ try{await new Spk(opts).prepare({text:'Good morning, Sir.'});await new Spk(opts).speak('Good morning, Sir.',{quick:true});assert.equal(made,1);assert.equal(calls[0].cmd,'afplay');assert.equal(fs.statSync(path.join(dir,fs.readdirSync(dir)[0])).mode&0o777,0o600);await new Spk(opts).speak('Good morning, Sir.',{quick:true,rate:'faster'});assert.equal(calls[1].cmd,'say');}finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
