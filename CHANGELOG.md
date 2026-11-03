@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.3
 
 - **Touch ID stops the "not your computer" screen.** A fingerprint button sits in the bottom right of the access-denied and away screens (only on Macs with Touch ID). Click it, touch the sensor, and if it is you the siren stops, the screen goes away, and the guard stays quiet for five minutes, so a friend sitting next to you does not set it off again. While the system's Touch ID sheet is up, the alarm steps aside so the sheet is not hidden. A rejected fingerprint brings the screen back with a short note. It cannot undo a lock that already happened: once the Mac is locked, macOS (and Glance) are in charge of getting back in.
 - **Owner recognition is less trigger-happy, and knows when you are looking down.**
