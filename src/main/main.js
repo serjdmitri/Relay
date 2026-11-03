@@ -1397,6 +1397,8 @@ app.whenReady().then(() => {
   ask.lockWatch = lockWatch;
   let lockedAt = 0;
   let lastWelcome = 0;
+  // After the Mac wakes (the lid was closed) the camera stream is often dead: start the camera again, so recognition and the standby screen see you and not a frozen picture.
+  powerMonitor.on('resume', () => { if (presence?.enabled) { presence.disable(); setTimeout(() => { if (store.get('settings.presence.enabled') || ownerConfig(store.get('settings.owner')).enabled) presence.enable().then(() => broadcast()).catch(() => {}); }, 2500).unref?.(); } });
   powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     lockWatch.set(false);

@@ -100,3 +100,14 @@ test('with owner recognition on and your face enrolled, launching starts the cam
   assert.match(src, /if \(store\.get\('settings\.presence\.enabled'\) \|\| \(ownerConfig\(store\.get\('settings\.owner'\)\)\.enabled && ownerState\.templates\.length > 0\)\) startCamera\(\);/);
   assert.doesNotMatch(src, /presence\.enable\(\)\.then\(\(r\) => \{ if \(!r\.ok\) store\.set\('settings\.presence\.enabled', false\); broadcast\(\); \}\)/, 'the old line that turned Presence off on any failed start is gone');
 });
+
+test('a camera that dies when the Mac sleeps is started again: the page restarts itself when the stream ends or freezes (with a limit), and the app restarts it on wake', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(page, /track\?\.addEventListener\('ended', restart\)/, 'a stream that ends is restarted');
+  assert.match(page, /Date\.now\(\) - lastMove > 12000\) restart\(\)/, 'a picture that has not moved for 12 seconds is restarted');
+  assert.match(page, /log\.length >= 4/, 'four restarts in two minutes and it gives up and says so, so a dead camera cannot loop');
+  assert.match(page, /status\('error', \{ message: 'The camera keeps stopping/);
+  assert.match(page, /status\('running'\);\n    watchStream\(\);/, 'the watch starts once the camera is running');
+  assert.match(main, /powerMonitor\.on\('resume', \(\) => \{ if \(presence\?\.enabled\) \{ presence\.disable\(\); setTimeout\(/, 'on wake the camera is restarted');
+});
