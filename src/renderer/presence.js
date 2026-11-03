@@ -20,6 +20,12 @@ let busy = false, embed = null, embedFailed = false, templates = [], version = 0
 const cosine = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x) * Math.sqrt(y) || 1); };
 const bestScore = (e, list) => list.reduce((best, t) => { const s = t.length === e.length ? cosine(e, t) : null; return s !== null && (best === null || s > best) ? s : best; }, null);
 
+let embedLoading = false;
+async function loadEmbedder() {
+  embedLoading = true;
+  try { embed = await (await import('./faceid.js')).createEmbedder(); } catch (e) { embedFailed = true; relay.presenceStatus({ state: 'faceid-error', message: 'Owner recognition could not load its face model: ' + String(e?.message || e).slice(0, 120) }); } finally { embedLoading = false; }
+}
+
 async function loadLandmarker() {
   lmLoading = true;
   try {
@@ -54,8 +60,12 @@ async function start() {
     video.srcObject = stream;
     await video.play();
     status('running');
-    timer = setInterval(async () => {
-      if (stopped || busy || video.readyState < 2) return;
+    // Looks once a second, or faster while the main process is waiting to see you (it says so in the config: c.pace), so a return is recognised in under a second.
+    let pace = 1000;
+    const tick = async () => {
+      const began = Date.now();
+      if (stopped) return;
+      if (busy || video.readyState < 2) { timer = setTimeout(tick, 200); return; }
       busy = true;
       try {
         const dets = detector.detectForVideo(video, performance.now()).detections;
@@ -64,9 +74,12 @@ async function start() {
         const c = await relay.presenceConfig(version);
         if (c?.templates) { templates = c.templates; version = c.version; }
         recogOn = !!c?.faceId; livenessOn = recogOn && !!c?.liveness && c.mode !== 'enroll';
+        pace = Math.min(1000, Math.max(250, Number(c?.pace) || 1000));
         if (recogOn && !landmarker && !lmFailed && !lmLoading) loadLandmarker();
+        // load the face model before the first face appears, not when it does, so the first recognition after starting is not delayed by it
+        if (recogOn && !embed && !embedFailed && !embedLoading) loadEmbedder();
         if (recogOn && dets.length) {
-          if (!embed && !embedFailed) { try { embed = await (await import('./faceid.js')).createEmbedder(); } catch (e) { embedFailed = true; relay.presenceStatus({ state: 'faceid-error', message: 'Owner recognition could not load its face model: ' + String(e?.message || e).slice(0, 120) }); } }
+          if (!embed && !embedFailed && !embedLoading) await loadEmbedder();
           if (embed) {
             // the accurate way: faces with their landmarks from the last few moments; the rough way (the face finder's four points) if the landmark finder is not running
             const fresh = landmarker && Date.now() - lastLm.t < 700 && lastLm.faces.length;
@@ -85,12 +98,13 @@ async function start() {
           }
         }
         relay.presenceFrame(frame);
-      } catch { /* a bad picture: skip it */ } finally { busy = false; }
-    }, 1000);
+      } catch { /* a bad picture: skip it */ } finally { busy = false; if (!stopped) timer = setTimeout(tick, Math.max(50, pace - (Date.now() - began))); }
+    };
+    timer = setTimeout(tick, 1000);
   } catch (e) {
     status('error', { message: /denied|NotAllowed|Permission/i.test(String(e)) ? 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.' : /NotFound|Requested device/i.test(String(e)) ? 'No camera was found.' : `Presence could not start: ${String(e.message || e).slice(0, 120)}` });
   }
 }
 
-addEventListener('beforeunload', () => { stopped = true; clearInterval(timer); clearInterval(lmTimer); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
+addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
 start();

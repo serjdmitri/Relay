@@ -271,3 +271,41 @@ test('confirming it is you: Touch ID first; a failed or cancelled attempt never 
   await assert.rejects(authenticateOwner({ touchId: no('The app is not entitled.'), admin: no('execution error: User canceled. (-128)') }), /Cancelled/);
   await assert.rejects(authenticateOwner({ touchId: no('The app is not entitled.'), admin: no('some other failure') }), /Could not confirm it is you: The app is not entitled/);
 });
+
+test('the camera looks quickly only while waiting to see you, and slowly the rest of the time', () => {
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4, awaySeconds: 10 }, { unarmed: true });
+  assert.equal(m.g.pace(), 1000, 'nothing seen yet: the countdown for quick looking has not started');
+  m.clock.t += 1000; m.g.frame({ faces: 1, scores: [0.1] });
+  assert.equal(m.g.pace(), 400, 'just turned on and you are not recognised yet: look quickly');
+  m.clock.t += 31000; assert.equal(m.g.pace(), 1000, 'still not recognised after 30 seconds: back to slow, so a face that never matches does not keep the camera busy');
+  const armed = make(); armed.feed([0.9], 3);
+  assert.equal(armed.g.pace(), 1000, 'recognised and idle: slow');
+  const off = make({ enabled: false }); assert.equal(off.g.pace(), 1000);
+  assert.equal(make({ enabled: true, threshold: 0.4 }, { unarmed: true }).g.pace(), 1000);
+});
+
+test('quick looking brings you back from the away screen and the alarm in under a second, and never changes how many frames an alarm or a lock takes', () => {
+  const away = make({ enabled: true, seconds: 20, threshold: 0.4, awaySeconds: 10 });
+  away.feed([], 11); away.g.step(); assert.equal(away.g.awayActive, true, 'nobody for 10 seconds: the away screen');
+  assert.equal(away.g.pace(), 400);
+  const start = away.clock.t; let back = null;
+  for (let i = 1; i <= 5 && back === null; i++) { away.clock.t += 400; away.g.frame({ faces: 1, scores: [0.9] }); if (!away.g.awayActive) back = away.clock.t - start; }
+  assert.equal(back, 800, 'two frames of you at the quick pace: 0.8 seconds, not 2');
+  assert.equal(away.g.pace(), 1000, 'and slow again once you are back');
+  // a stranger is judged while idle and armed, which is the slow pace: five frames, exactly as before
+  const s = make(undefined, { strangerFrames: 5 }); assert.equal(s.g.pace(), 1000);
+  s.feed([0.05], 4); assert.equal(s.g.state, 'idle'); s.feed([0.05], 1); assert.equal(s.g.state, 'alarm');
+  assert.equal(s.g.pace(), 400, 'the alarm counts down at the quick pace so your return clears it fast');
+  // after the lock it is slow again, so the quiet period still takes ten frames of nobody strange
+  s.feed([0.05], 25); assert.equal(s.g.state, 'locked'); assert.equal(s.g.pace(), 1000);
+});
+
+test('the camera page reads the pace the main process sends and loads the face model before the first face appears', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(page, /pace = Math\.min\(1000, Math\.max\(250, Number\(c\?\.pace\) \|\| 1000\)\)/, 'the page clamps what it is told, so a bad value cannot make it spin');
+  assert.match(page, /if \(recogOn && !embed && !embedFailed && !embedLoading\) loadEmbedder\(\);/);
+  assert.match(page, /setTimeout\(tick, Math\.max\(50, pace - /);
+  assert.doesNotMatch(page, /setInterval\(async/, 'the frame loop reschedules itself, so frames never overlap');
+  assert.match(main, /pace: faceId && !enrolling \? ownerGuard\?\.pace\?\.\(\) \|\| 1000 : 1000/);
+});
