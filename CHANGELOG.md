@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.38.0
+
+- **Combined release: Codex's feature batch plus Claude's owner recognition, on Electron 45.2.1** (was 33). From Codex: Fitbit goals and rings, encrypted trusted-person face profiles, a security audit with fixes, planned overnight checks and local improvement drafts, isolated Argos and God's Eye map windows, an iPhone route preview, the Memory field fix, adjustable background blur and images, work modes, scheduled owner check-in calls, wake and clap handling, and six stable hand cursors. Details in docs/release-0.38.0.md.
 
 - **Touch ID button fix.** Clicking the fingerprint button now has Relay ask macOS to confirm it is you: the Touch ID sheet first, and if the system cannot show that sheet at all, macOS's own prompt (Touch ID or your password), so there is always a way to stop the screen. A wrong or cancelled fingerprint never falls back to the password. The button no longer hides the real reason when something fails (it shows it, and "owner recognition status" mentions a Touch ID problem), and the first click on the alarm screen is no longer swallowed by macOS's window activation.
 
