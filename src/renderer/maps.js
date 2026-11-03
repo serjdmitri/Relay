@@ -8,3 +8,7 @@ for(const id of ['server','save'])document.getElementById(id).hidden=kind==='arg
 const action=async(name,value)=>{const result=await window.relay.mapsAction(name,value);if(result?.error)document.querySelector('#status').textContent=result.error;};
 document.querySelector('#x').onclick=()=>action('close');document.querySelector('#reload').onclick=()=>action('reload');document.querySelector('#browser').onclick=()=>action('browser');document.querySelector('#save').onclick=()=>action('url',document.querySelector('#server').value);
 window.relay.onMapStatus(s=>{document.body.classList.toggle('ready',s.status.includes('engine connected'));document.querySelector('#status').textContent=s.status;document.querySelector('#server').value=s.url;});
+
+document.getElementById("controls-mode").hidden=kind!=="godseye";
+window.relay.getState().then(s=>{document.getElementById("rail-mode").value=s.settings?.godsEyeControls==="pinned"?"pinned":"hover";});
+document.getElementById("rail-mode").onchange=e=>action("controls",e.target.value);
