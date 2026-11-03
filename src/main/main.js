@@ -117,12 +117,34 @@ function windowOpts(w, h) {
   };
 }
 
+// A window that shows nothing is worse than an error. If the main window's page crashed, failed to load, hung, or came up empty (after a Chromium helper process died, or
+// the Mac woke up), load it again. Checked when the window is created, when it is shown again, and when the network helper restarts.
+let healTimer = null;
+function healMain(why) {
+  if (!mainWin || mainWin.isDestroyed()) return;
+  console.error('main window reloaded:', why);
+  try { mainWin.webContents.reloadIgnoringCache(); } catch { /* going away */ }
+}
+async function checkMainPainted(why) {
+  if (!mainWin || mainWin.isDestroyed()) return;
+  try {
+    const n = await Promise.race([mainWin.webContents.executeJavaScript('document.body ? document.body.innerText.trim().length : 0'), new Promise((r) => setTimeout(() => r(-1), 4000))]);
+    if (!(n > 0)) healMain(`${why}: ${n < 0 ? 'the page did not answer' : 'the page was empty'}`);
+  } catch (e) { healMain(`${why}: ${e && e.message}`); }
+}
+
 function openMain(page) {
   if (!mainWin || mainWin.isDestroyed()) {
     // vibrancy gives the sidebar the native macOS sidebar material, and follows the system's light or dark
     mainWin = new BrowserWindow({ ...windowOpts(820, 620), vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000' });
     mainWin.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { page: page || 'home' } });
     mainWin.once('ready-to-show', () => { mainWin.show(); activateMainWindow({ app, win: mainWin }).catch(() => {}); });
+    const wc = mainWin.webContents;
+    wc.on('render-process-gone', (_e, d) => healMain(`the page's process ended (${d && d.reason})`));
+    wc.on('did-fail-load', (_e, code, desc, _url, isMain) => { if (isMain && code !== -3) setTimeout(() => healMain(`the page failed to load (${desc})`), 800); });
+    wc.on('unresponsive', () => { clearTimeout(healTimer); healTimer = setTimeout(() => healMain('the page stopped responding'), 6000); });
+    wc.on('responsive', () => clearTimeout(healTimer));
+    wc.once('did-finish-load', () => setTimeout(() => checkMainPainted('after loading'), 2500));
     mainWin.on('hide', () => restoreDockPreference({ app, showInDock: store.get('settings.showInDock') }));
     mainWin.on('close', (e) => {
       if (!quitting) {
@@ -134,6 +156,7 @@ function openMain(page) {
     mainWin.show();
     activateMainWindow({ app, win: mainWin }).catch(() => {});
     if (page) mainWin.webContents.send('navigate', page);
+    setTimeout(() => checkMainPainted('when shown again'), 1200);
   }
   if (store.get('settings.showInDock')) app.dock?.show();
 }
@@ -1148,6 +1171,8 @@ function startBridge() {
   if (fx.enabled) bridge.start();
 }
 
+// If Chromium's network helper dies and restarts, a window that was already open can end up empty: check the main window shortly after.
+app.on('child-process-gone', (_e, d) => { if (d && /network/i.test(`${d.name || ''} ${d.serviceName || ''}`)) setTimeout(() => checkMainPainted('after the network helper restarted'), 2500); });
 app.whenReady().then(() => {
   store = new Store(app.getPath('userData'));
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
