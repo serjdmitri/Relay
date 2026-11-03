@@ -48,6 +48,7 @@ const { parseOwnerCommand } = require('./ownerGuard');
 const shieldMod = require('./injectionShield');
 const skillImportMod = require('./skillImport');
 const extrasMod = require('./connectors/extras');
+const researchMod = require('./research');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -210,6 +211,7 @@ class AskController {
     this.onProactive = null; // the app's way to tell you something on its own
     this.notesService = null; // "ask my notes", set by the app
     this.tainted = false;
+    this.researchIds = new Set(); // background agents that are deep-research jobs: their citations are checked when they finish
     this.inbound = null; // set by the app when "Command Relay by text" is on
     this.currentRemote = null;
     this.prevExchange = null; // the last finished request and its answer, so "that's wrong" has something to refer to
@@ -968,6 +970,15 @@ class AskController {
     return runAgent({ text: prompt, tools: this.agentTools(vision), system, signal, confirm, onEvent, provider, maxSteps: 40 });
   }
 
+  // "deep research on X": a background agent with a research method; its citations are checked when it finishes (research.js).
+  researchCommand(c) {
+    const r = this.agents.submit(researchMod.buildTask(c.topic));
+    if (r.error) return { status: 'failed', reply: r.error, actions: 0 };
+    this.researchIds.add(r.id);
+    if (r.started) this.sound('Tink');
+    return { status: 'done', actions: 1, reply: r.started ? `Started deep research on ${c.topic}. It runs in the background and saves a Note with numbered sources, and I will check every cited link when it finishes.` : `Deep research on ${c.topic} is waiting for a free slot (number ${r.position} in line). It will start on its own.` };
+  }
+
   startAgent(task) {
     const a = this.agents.start(task);
     if (a) this.sound('Tink');
@@ -975,6 +986,16 @@ class AskController {
   }
 
   agentFinished(a) {
+    if (this.researchIds?.has(a.id)) {
+      this.researchIds.delete(a.id);
+      if (a.status === 'done') {
+        try {
+          const note = researchMod.checkNote(researchMod.verifyCitations(a.result, (this.store.get('actions') || []).filter((x) => x.requestId === a.id)));
+          a.result = `${a.result || ''}${note}`;
+          const h = this.agents.history?.find((x) => x.id === a.id); if (h) h.result = String(a.result).slice(0, 8000);
+        } catch { /* the check is a convenience; the answer stands without it */ }
+      }
+    }
     this.onProactive?.({ type: 'job', title: String(a.task).slice(0, 60), status: a.status === 'done' ? 'done' : 'failed', id: a.id || a.task });
     this.store.addHistory({ id: crypto.randomUUID(), text: `Agent: ${a.task}`, status: a.status === 'done' ? 'done' : a.status === 'stopped' ? 'stopped' : 'failed', reply: a.result, actions: a.steps, ts: Date.now() });
     this.onChange();
@@ -2111,6 +2132,7 @@ class AskController {
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
+          if (researchMod.parseResearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, this.researchCommand(researchMod.parseResearchCommand(effective))); }
           if (extrasMod.parseExtrasCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.extrasCommand(extrasMod.parseExtrasCommand(effective))); }
           if (skillImportMod.parseSkillImportCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.importSkills(skillImportMod.parseSkillImportCommand(effective))); }
           if (shieldMod.parseShieldCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: shieldMod.describeLog(this.store.get('shieldLog')), actions: 0 }); }
