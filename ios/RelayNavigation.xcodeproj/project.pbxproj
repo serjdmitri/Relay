@@ -5,16 +5,18 @@
   objectVersion = 56;
   objects = {
     A00000000000000000000001 = {isa = PBXProject; attributes = {LastUpgradeCheck = 1600; }; buildConfigurationList = A00000000000000000000002; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; knownRegions = (en, Base); mainGroup = A00000000000000000000003; productRefGroup = A00000000000000000000004; projectDirPath = ""; projectRoot = ""; targets = (A00000000000000000000005); };
-    A00000000000000000000003 = {isa = PBXGroup; children = (A00000000000000000000010, A00000000000000000000011, A00000000000000000000012, A00000000000000000000013, A00000000000000000000004); sourceTree = "<group>"; };
+    A00000000000000000000003 = {isa = PBXGroup; children = (A00000000000000000000010, A00000000000000000000011, A00000000000000000000012, A00000000000000000000013, A00000000000000000000015, A00000000000000000000004); sourceTree = "<group>"; };
     A00000000000000000000004 = {isa = PBXGroup; children = (A00000000000000000000014); name = Products; sourceTree = "<group>"; };
     A00000000000000000000005 = {isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000006; buildPhases = (A00000000000000000000007, A00000000000000000000008, A00000000000000000000009); buildRules = (); dependencies = (); name = RelayNavigation; productName = RelayNavigation; productReference = A00000000000000000000014; productType = "com.apple.product-type.application"; };
-    A00000000000000000000007 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000020, A00000000000000000000021, A00000000000000000000022, A00000000000000000000023); runOnlyForDeploymentPostprocessing = 0; };
+    A00000000000000000000007 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000020, A00000000000000000000021, A00000000000000000000022, A00000000000000000000023, A00000000000000000000024); runOnlyForDeploymentPostprocessing = 0; };
     A00000000000000000000008 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
     A00000000000000000000009 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
     A00000000000000000000010 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayNavigationApp.swift; sourceTree = "<group>"; };
     A00000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation/NavigationModel.swift; sourceTree = "<group>"; };
     A00000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation/NavigationView.swift; sourceTree = "<group>"; };
     A00000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation/NavigationLocation.swift; sourceTree = "<group>"; };
+    A00000000000000000000015 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation/NavigationIntent.swift; sourceTree = "<group>"; };
+    A00000000000000000000024 = {isa = PBXBuildFile; fileRef = A00000000000000000000015; };
     A00000000000000000000014 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RelayNavigation.app; sourceTree = BUILT_PRODUCTS_DIR; };
     A00000000000000000000020 = {isa = PBXBuildFile; fileRef = A00000000000000000000010; };
     A00000000000000000000021 = {isa = PBXBuildFile; fileRef = A00000000000000000000011; };
@@ -24,8 +26,8 @@
     A00000000000000000000006 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000032, A00000000000000000000033); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
     A00000000000000000000030 = {isa = XCBuildConfiguration; buildSettings = {}; name = Debug; };
     A00000000000000000000031 = {isa = XCBuildConfiguration; buildSettings = {}; name = Release; };
-    A00000000000000000000032 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Relay uses your location to preview a route you request."; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.relay.navigation.preview; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
-    A00000000000000000000033 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Relay uses your location to preview a route you request."; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.relay.navigation.preview; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+    A00000000000000000000032 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Info.plist; INFOPLIST_KEY_NSMicrophoneUsageDescription = "Relay listens only when you tap Speak destination."; INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Relay recognizes navigation commands on this iPhone."; INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Relay uses your location to preview a route you request."; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.relay.navigation.preview; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+    A00000000000000000000033 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Info.plist; INFOPLIST_KEY_NSMicrophoneUsageDescription = "Relay listens only when you tap Speak destination."; INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Relay recognizes navigation commands on this iPhone."; INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Relay uses your location to preview a route you request."; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.relay.navigation.preview; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SWIFT_VERSION = 6.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
   };
   rootObject = A00000000000000000000001;
 }

@@ -49,3 +49,5 @@ test('unlabelled hands stay with the nearest cursor', () => {
   const a = hand('', 0.25), b = hand('', 0.75);
   assert.deepEqual(tracks.update([b, a]), [a, b]);
 });
+test('six hands from several people retain slots when detector order changes',()=>{const t=new HandTracks(6),hands=Array.from({length:6},(_,i)=>({x:.05+i*.17,y:.5,score:1,handed:'Left'}));const first=t.update(hands);assert.equal(first.filter(Boolean).length,6);assert.deepEqual(t.update([...hands].reverse()),first);});
+test('a new hand cannot immediately take a missing hand’s slot',()=>{const t=new HandTracks(2);t.update([{x:.1,y:.1,score:1},{x:.9,y:.9,score:1}]);const epoch=t.epochs[0];assert.equal(t.update([{x:.5,y:.5,score:1}])[0],null);for(let n=0;n<6;n++)t.update([]);t.update([{x:.5,y:.5,score:1}]);assert(t.epochs[0]>epoch);});

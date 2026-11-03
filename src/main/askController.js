@@ -257,7 +257,7 @@ class AskController {
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps') }),
+      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
       canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
@@ -1531,7 +1531,7 @@ class AskController {
     if (close && !abort.signal.aborted) facts.tomorrow = await untilStopped(this.tomorrowCalendar(facts.now), abort.signal);
     if (abort.signal.aborted) return { status: 'stopped', reply: 'Stopped before saving the plan.', actions: 0 };
     const plan = close ? require('./dailyPlan').closeDay({ facts, actions: this.store.get('actions') || [], history: this.store.get('history') || [] }) : require('./dailyPlan').planToday(facts);
-    if (this.cardPanel && this.store.get('settings.cards') !== false) { try { await this.cardPanel.show({ ...require('./briefing').briefingCard(facts, plan), title: close ? 'Close the day' : 'Plan today' }); } catch { /* local reports remain available */ } }
+    if (this.cardPanel && this.store.get('settings.cards') !== false) { try { await this.cardPanel.show({ ...require('./briefing').briefingCard(facts, plan, {report:true}), title: close ? 'Close the day' : 'Plan today' }); } catch { /* local reports remain available */ } }
     let saved;
     try { saved = this.outputExport(close ? 'Close the day' : 'Plan today', plan); }
     catch {
@@ -1694,7 +1694,7 @@ class AskController {
       this.reveal({ state: 'listening', mode: 'ask', partial: '' }, 'inactive');
       await new Promise((r) => setTimeout(r, 120));
       if (this.state !== 'waking') return;
-      await this.speaker.speak('Yes, Sir.', profileFor('reply', this.store.get('settings') || {}));
+      await this.speaker.speak('Yes, Sir.', {...profileFor('reply', this.store.get('settings') || {}),quick:true});
       if (this.state !== 'waking') return; // dismissed while the greeting was spoken
     }
     await new Promise((r) => setTimeout(r, 150)); // let the listening session close before a new one opens
@@ -1906,7 +1906,7 @@ class AskController {
   }
 
   async submit(raw, { voice = false } = {}) {
-    const text = String(raw || '').trim();
+    let text = String(raw || '').trim();
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
     if (this.runningTask && this.state === 'working') return this.enqueue(text, { voice }); // preserve the input method while queued
     if (this.state !== 'input') return;
@@ -1915,6 +1915,7 @@ class AskController {
       const answer = followUpAnswer(text);
       if (answer === 'no') return this.close();
       if (answer === 'yes') return this.listen('ask', false, { auto: true, followUp: true, noSpeechMs: 10000 });
+      text=text.replace(/^(?:yes|yeah|yep|sure)(?:[,!. ]+)(?:sir[,!. ]+)?/i,'').trim();
     }
     this.voiceAsk = voice; // asked out loud: it may go on listening afterwards (follow-up)
 
@@ -2032,7 +2033,7 @@ class AskController {
         if (tier) return this.finish(entry, this.setModelTier(tier));
         let effective = text;
         const mode = !opts.shown && parseWorkMode(text);
-        if (mode) { this.store.set('settings.workMode', mode); this.dropWarm(true); this.onChange(); return this.finish(entry, { status: 'done', reply: `Work mode set to ${mode}.` }); }
+        if (mode) { if(this.applyWorkMode)return this.finish(entry,await this.applyWorkMode(mode));this.store.set('settings.workMode', mode); this.dropWarm(true); this.onChange(); return this.finish(entry, { status: 'done', reply: `Work mode set to ${mode}.` }); }
         if (!opts.shown && isRetry(text)) {
           if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to try again yet.', actions: 0 });
           effective = this.lastRequestText;
@@ -2045,6 +2046,10 @@ class AskController {
           if (!this.lastRequestText) return this.finish(entry, { status: 'failed', reply: 'There is nothing to repeat yet.', actions: 0 });
           effective = this.lastRequestText;
           this.push({ label: 'Doing it again', text: effective });
+        }
+        if (!opts.shown && parseBriefingCommand(effective)) {
+          this.lastRequestText = effective;
+          return this.runBriefingCommand(effective, entry);
         }
         if (!opts.shown && this.onCallCommand) {
           const cc = require('./calls/service').parseCallCommand(effective);
@@ -2064,6 +2069,8 @@ class AskController {
           if (this.openAssignments && parseAssignmentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAssignments()); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
+          const worldMap=require('./mapWindow').mapIntent(effective);
+          if(worldMap && this.openWorldMap)return this.finish(entry,await this.openWorldMap(worldMap));
           if (this.openFitness && require('./connectors/fitness').fitnessIntent(effective)) return this.finish(entry, await this.openFitness());
           const menus = require('./menuIntent').menuRequests(effective);
           if (menus.length) {
@@ -2078,9 +2085,6 @@ class AskController {
           if (ac) return this.finish(entry, this.runAgentCommand(ac));
         }
         if (!opts.shown && /\band\b/i.test(effective) && (effective.match(/\b(?:weather|forecast|calculator|cpu|memory|battery|network|disk)\b/gi) || []).length > 1) return this.runRequest(effective, entry);
-        if (!opts.shown && parseBriefingCommand(effective)) {
-          return this.runBriefingCommand(effective, entry);
-        }
         if (!opts.shown && !opts.scheduled) {
           const query = require('./forecast').parseForecast(effective);
           if (query) return this.finish(entry, await this.forecastCommand(query));
@@ -3063,7 +3067,7 @@ class AskController {
   }
 
   // Said aloud in the chosen voice, outside a request (for things Relay brings up on its own).
-  speakText(text) { this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en' }); }
+  speakText(text, options = {}) { return this.speaker?.speak(text, { ...profileFor(jobFor(text), this.store.get('settings') || {}), lang: 'en', ...options }); }
 
   // Keep the original answer available after acknowledging the copy.
   async copyLastReply() {

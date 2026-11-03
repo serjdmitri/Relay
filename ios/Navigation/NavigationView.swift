@@ -5,16 +5,32 @@ import SwiftUI
 struct NavigationView: View {
     @ObservedObject var model: NavigationModel
     let origin: CLLocationCoordinate2D
-    @State private var destinationText = ""
+    @StateObject private var voice = NavigationVoice()
+    @Environment(\.scenePhase) private var scenePhase
+    let refreshLocation: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("JARVIS NAVIGATION").font(.headline).foregroundStyle(.cyan)
             HStack {
-                TextField("Destination", text: $destinationText).textFieldStyle(.roundedBorder)
-                Button("Search") { Task { await model.search(for: destinationText, near: origin) } }
+                TextField("Destination", text: $model.query).textFieldStyle(.roundedBorder)
+                Button("Search") { Task { await model.search(for: model.query, near: origin) } }
                     .disabled(model.loading)
             }
+            Picker("Travel mode", selection: $model.walking) { Text("Driving").tag(false); Text("Walking").tag(true) }.pickerStyle(.segmented)
+            HStack {
+                Button(voice.listening ? "Send voice command" : "Speak destination") {
+                    if voice.listening { voice.stop(send: true) } else { voice.start { text in
+                        let intent = NavigationIntent.parse(text)
+                        model.query = intent?.destination ?? text
+                        if let intent { model.walking = intent.walking }
+                        Task { await model.search(for: model.query, near: origin) }
+                    } }
+                }
+                Button("Refresh location", action: refreshLocation)
+                if voice.listening { Button("Cancel voice") { voice.stop() } }
+            }.font(.caption)
+            Text(voice.status).font(.caption).accessibilityLabel(voice.status)
             Map {
                 Marker("You", coordinate: origin).tint(.cyan)
                 if let destination = model.destination {
@@ -24,9 +40,10 @@ struct NavigationView: View {
                     MapPolyline(route.polyline).stroke(.cyan, lineWidth: 5)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .mapControls { MapCompass(); MapScaleView() }
+            .overlay(Rectangle().stroke(.cyan.opacity(0.6), lineWidth: 1))
             if let route = model.route {
-                Text("Route to \(model.destination?.name ?? destinationText)").font(.subheadline)
+                Text("Route to \(model.destination?.name ?? model.query)").font(.subheadline)
                 Text("\(Int((route.expectedTravelTime / 60).rounded())) min • \(route.distance / 1609.344, specifier: "%.1f") mi")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
@@ -62,5 +79,10 @@ struct NavigationView: View {
         .padding()
         .foregroundStyle(.white)
         .background(.black)
+        .onChange(of: model.routeReady) { _, _ in
+            if voice.usedVoice, let route = model.route { voice.say("Your route to \(model.destination?.name ?? model.query) is ready, Sir. About \(Int(ceil(route.expectedTravelTime / 60))) minutes. This is a route preview.") }
+        }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { voice.stop(); voice.silence() } }
+        .onDisappear { voice.stop(); voice.silence() }
     }
 }

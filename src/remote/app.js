@@ -260,6 +260,11 @@
   async function ask(text) {
     const t = String(text || '').trim();
     if (!t) return;
+    const navigation=/^(?:(?:hey )?jarvis[, ]+)?(?:take me to|navigate to|directions to|walk to|drive to)\s+(.{1,200})$/i.exec(t);
+    if(navigation){
+      if ('speechSynthesis' in window) speechSynthesis.cancel(); showAsked(t); showReply('Open the native Jarvis Navigation app to choose a destination and preview the route. It must be installed first.');
+      const link=document.createElement('a');link.textContent='Open Jarvis Navigation';link.href='relay-navigation://navigate?destination='+encodeURIComponent(navigation[1])+'&transport='+(/\bwalk to\b/i.test(t)?'walking':'driving');link.style.color='#60dcff';$('reply').append(document.createElement('br'),link);setMode('idle');return;
+    }
     unlockSpeech();
     try {
       showReply('');

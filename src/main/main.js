@@ -92,7 +92,10 @@ function rememberThrow(undo) {
   lastThrown = undo;
   restoreToast?.offer(async () => { await undo(); if (lastThrown === undo) lastThrown = null; });
 }
-let fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+const ipcSecurity=require('./ipcSecurity');
+ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
+ipcSecurity.protectNavigation(app);
+let mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -157,7 +160,7 @@ function quickState() {
 }
 
 function publicState() {
-  const { sessionNotes: _sessionNotes, ownerFace: _ownerFace, ...publicData } = store.data;
+  const { sessionNotes: _sessionNotes, ownerFace: _ownerFace, trustedFaces: _trustedFaces, ...publicData } = store.data;
   const d = JSON.parse(JSON.stringify(publicData)); // session notes use protected Memory IPC, not broadcasts
   if (d.settings.calls) { delete d.settings.calls.keyEnc; delete d.settings.calls.twilioTokenEnc; }
   if (d.settings.quick) delete d.settings.quick.keyEnc;
@@ -181,6 +184,8 @@ function publicState() {
   return {
     ...d,
     connectors,
+    trustedPeople: trustedPeople?.list() || [],
+    nightlyMaintenance: store.get('nightlyMaintenance') || null,
     remote: remote ? remote.info() : null,
     schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
@@ -376,25 +381,33 @@ function syncInbound() {
 async function welcomeBack(lockedAt, lastWelcome) {
   const cfg = store.get('settings.welcome') || {};
   if (!lockedAt || !welcome.shouldGreet({ enabled: cfg.enabled !== false, awayMs: Date.now() - lockedAt, minAwayMs: (cfg.minAwayMin ?? 5) * 60000, minGapMs: (cfg.repeatMin ?? 10) * 60000, sinceLastMs: Date.now() - lastWelcome, busy: !!ask.meeting?.active })) return false;
-  const [day, battery, briefing] = await Promise.all([
-    Promise.race([ask.mac.calendarEvents(1).then(parseCalendar).catch(() => []), new Promise((r) => setTimeout(() => r([]), 2500))]),
-    new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, out) => res(e ? null : require('./panels/sources').parseBattery(String(out))))),
-    ask.briefingText({ includeGreeting: false }).catch(() => '')
-  ]);
-  if (!welcome.canDeliverWelcome({ locked: !!ask.lockWatch?.locked, meeting: !!ask.meeting?.active, state: ask.state })) return false;
-  const w = welcome.buildWelcome({ name: cfg.name || 'Sir', lockedAt, now: Date.now(), history: store.get('history') || [], events: day, battery });
-  const lines = briefing && w.lines[0] === 'Nothing needs your attention.' ? [briefing] : [...w.lines, ...(briefing ? [briefing] : [])];
-  const spoken = briefing ? `${w.spoken.replace(/ Nothing needs your attention\.$/, '')} ${briefing}` : w.spoken;
-  const card = welcome.briefingCard(w, briefing, cfg.name || 'Sir');
-  const showCard = cfg.show !== false && card && !ask.meeting?.active && ['idle', 'done'].includes(ask.state) && !cardPanel?.visible && !ask.lockWatch?.locked;
-  if (cfg.show !== false) {
-    const shown = welcome.showWelcomeReactor(overlay, welcome.greetingFor(Date.now(), cfg.name || 'Sir'), { duration: showCard ? null : 8000 });
-    if (shown && showCard) card.welcomeToken = overlay.hudState.welcomeToken;
-  }
-  if (showCard) cardPanel?.show(card).catch(() => { if (card.welcomeToken && overlay.hudState?.welcomeToken === card.welcomeToken) overlay.hud({ hide: true }); });
-  if (cfg.show !== false && Notification.isSupported()) new Notification({ title: welcome.greetingFor(Date.now(), cfg.name || 'Sir'), body: lines.join(' '), silent: true }).show();
-  if (cfg.speak !== false && !ask.speaker?.speaking && ask.state !== 'listening') ask.speakText(spoken);
-  return true;
+  const name=cfg.name||'Sir',greeting=welcome.greetingFor(Date.now(),name);
+  const requestStamp=(store.get('history')||[])[0]?.id;
+  let welcomeToken,heldByCard=false;
+  const canDeliver=()=>welcome.canDeliverWelcome({locked:!!ask.lockWatch?.locked,meeting:!!ask.meeting?.active,state:ask.state})&&(store.get('history')||[])[0]?.id===requestStamp&&(!welcomeToken||overlay.hudState?.welcomeToken===welcomeToken);
+  return welcome.deliverInStages({canDeliver,
+    begin:()=>{
+      if(cfg.show!==false){const shown=welcome.showWelcomeReactor(overlay,greeting,{duration:null});if(shown)welcomeToken=overlay.hudState.welcomeToken;}
+      return cfg.speak!==false&&!ask.speaker?.speaking?ask.speakText(greeting,{quick:true}):undefined;
+    },
+    collect:async()=>{
+      let facts;
+      const [battery,briefing]=await Promise.all([
+        new Promise(res=>execFile('/usr/bin/pmset',['-g','batt'],{timeout:1500},(e,out)=>res(e?null:require('./panels/sources').parseBattery(String(out))))),
+        ask.briefingText({includeGreeting:false,onFacts:f=>{facts=f;}}).catch(()=>'')
+      ]);
+      return{day:(facts?.events||[]).filter(e=>e.start).map(e=>({...e,start:+e.start})),battery,briefing,facts};
+    },
+    finish:async({day,battery,briefing,facts})=>{
+      const w=welcome.buildWelcome({name,lockedAt,now:Date.now(),history:store.get('history')||[],events:day,battery});
+      const card=welcome.briefingCard(w,briefing,name,facts||{now:new Date(),missing:['briefing sources']});
+      const showCard=cfg.show!==false&&card&&!cardPanel?.visible;
+      if(showCard){if(welcomeToken)card.welcomeToken=welcomeToken;try{await cardPanel?.show(card);heldByCard=!!cardPanel;}catch{}}
+      const details=[...w.priorities.slice(0,3).map(p=>p.text),briefing].filter(Boolean).join(' ');
+      if(cfg.show!==false&&Notification.isSupported())new Notification({title:greeting,body:(card?.sections||[]).flatMap(s=>s.bullets).slice(0,3).join('\n')||'Your briefing is ready.',silent:true}).show();
+      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())ask.speakText(details);
+    }
+  }).finally(()=>{if(!heldByCard&&welcomeToken&&overlay.hudState?.welcomeToken===welcomeToken)overlay.hud({hide:true});});
 }
 
 function registerIpc() {
@@ -485,6 +498,8 @@ function registerIpc() {
     const r=await storagePanel.trashSelected();
     return {status:r.cancelled?'stopped':r.error||r.failed?.length&&!r.count?'failed':'done',reply:r.cancelled?'Cancelled. No files were moved.':r.error||`I moved ${r.count} selected files to Trash, Sir.${r.failed?.length?` ${r.failed.length} could not be moved; check the storage menu.`:''}`,actions:r.count||0};
   };
+  mapPanel=new(require('./mapWindow').MapWindow)({store,motion:floatingMotion});
+  ask.openWorldMap=kind=>{try{mapPanel.open(kind);return {status:'done',reply:(kind==='argos'?'Argos Atlas':'God’s Eye')+' map menu is open, Sir. Check its source status for availability.',actions:1};}catch(e){return {status:'failed',reply:e.message,actions:0};}};
   fitnessPanel = new FitnessWindow({store, motion:floatingMotion, getApi:()=>ask.googleApiIfConnected(), openSettings:()=>openMain('connectors')});
   ask.openFitness = () => {fitnessPanel.open();return {status:'done',reply:'Your Fitbit stats menu is open, Sir. Connect Fitbit / Google Health in Connections if needed.',actions:1};};
   networkPanel = new NetworkWindow({ store, motion: floatingMotion });
@@ -532,6 +547,7 @@ function registerIpc() {
   });
   filesIpc('files:mode', (id, mode) => access.mode(id, mode));
   filesIpc('files:remove', id => access.remove(id));
+  assistantBackdrop=require('./assistantBackdrop').registerBackdrop({ipcMain,dialog,nativeImage,dir:app.getPath('userData'),getWindow:()=>mainWin,onChange:()=>{overlay.refreshHudBlur();broadcast();}});
   ipcMain.handle('state:get', () => publicState());
   ipcMain.handle('skills:review', (_e, id, approve) => {
     const list = store.get('skillSuggestions') || [];
@@ -546,7 +562,15 @@ function registerIpc() {
     broadcast();
     return { ok: true };
   });
-  ipcMain.handle('state:set', (_e, key, value) => {
+  modeActions=new(require('./workModes').WorkModeActions)({store,openApp:name=>ask.mac.openApp(name),queueRoutine:r=>setImmediate(()=>ask.handleText('run '+r.name).catch(e=>ask.notice(e.message,'failed'))),onChange:()=>{ask.dropWarm(true);broadcast();}});
+  ask.applyWorkMode=mode=>modeActions.apply(mode);
+  ipcMain.handle('state:set', async (_e, key, value) => {
+    if(!ipcSecurity.safeKey(key)) throw Error('Invalid setting path.');
+    if(_e.sender!==mainWin?.webContents && _e.sender!==onboardWin?.webContents) throw Error('Open Relay Settings first.');
+    if(ownerConfig(store.get('settings.owner')).enabled && (key==='settings.presence'||key==='settings.presence.enabled') && (key==='settings.presence'?value?.enabled!==true:value!==true)) await trustedPeople.authorize();
+    if(key==='settings.owner'||key.startsWith('settings.owner.')) throw Error('Use authenticated owner-recognition controls.');
+
+    if(key==='settings.workMode'){if(_e.sender!==mainWin?.webContents)throw Error('Open General settings first.');return modeActions.apply(value);}
     if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
     if (key === 'settings.model.provider' && value === 'ollama') { googleConnections.cancel(); notionConnection.cancel(); }
     if (key === 'settings.calls' || key.startsWith('settings.calls.')) throw Error('Use Calls settings to change calling permissions.');
@@ -555,12 +579,13 @@ function registerIpc() {
     store.set(key, value);
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
-    if (key === 'settings.assistantBlur') overlay.refreshHudBlur();
+    if (key === 'settings.assistantBlur' || key === 'settings.assistantBlurStrength') overlay.refreshHudBlur();
     if (key === 'settings.language.ui') rebuildTray();
     if (key === 'settings.workMode') ask.dropWarm(true);
     if (key === 'settings.sentient.enabled' || key === 'settings.memory' || key === 'settings.model.provider') ask.dropWarm(true);
     if (key === 'settings.memory' && value === false) ask.sessionNotes?.stop();
-    if (key === 'settings.model.provider' && value === 'ollama') speaker?.stop();
+    if (key === 'settings.model.provider' && value === 'ollama') {speaker?.stop();mapPanel?.close();}
+    if(key==='settings.hands.maxHands'&&hands?.enabled){hands.disable();hands.enable().catch(e=>ask.notice(e.message,'failed'));}
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
@@ -952,19 +977,20 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
-  ipcMain.handle('presence:frame', (_e, f) => { presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [], down: f?.down === true }); } });
-  ipcMain.handle('presence:status', (_e, st) => {
+  ipcMain.handle('presence:frame', (e, f) => { if(e.sender!==presenceSender) return; presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [], down: f?.down === true }); } });
+  ipcMain.handle('presence:status', (e, st) => {
+    if(e.sender!==presenceSender) return;
     if (st?.state === 'faceid-error') { ask.notice(String(st.message || 'Owner recognition could not start.').slice(0, 200), 'failed'); return; }
     presence?.setStatus(st);
   });
   // Owner recognition: the camera page asks what to do (match faces, or enroll yours) and gets your saved numbers only when they changed. Only the camera page may ask.
-  const fromCameraPage = (e) => /\/presence\.html$/.test(String(e.senderFrame?.url || '').split(/[?#]/)[0]);
+  const fromCameraPage = (e) => e.sender === presenceSender && /\/presence\.html$/.test(String(e.senderFrame?.url || '').split(/[?#]/)[0]);
   ipcMain.handle('presence:config', (e, have) => {
     if (!fromCameraPage(e) || !ownerState) return { faceId: false };
     const enrolling = !!ownerState.enroll && Date.now() < ownerState.enroll.until;
     const faceId = enrolling || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0);
     const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness };
-    if (faceId && have !== ownerState.version) out.templates = ownerState.templates;
+    if (faceId && have !== ownerState.version) out.templates = [...ownerState.templates, ...(trustedPeople?.templates() || [])];
     return out;
   });
   ipcMain.handle('presence:enroll', (e, s) => {
@@ -975,13 +1001,30 @@ function registerIpc() {
     const n = en.samples.length, secs = (Date.now() - en.start) / 1000;
     if (n >= 8 || (n >= 4 && secs >= 45)) {
       ownerState.enroll = null;
-      if (!ownerState.save(en.samples)) { ask.notice('Your face could not be saved: this Mac cannot encrypt it right now.', 'failed'); return { ok: false }; }
+      if (!(en.name ? (()=>{ try { trustedPeople.save(en.name,en.samples); return true; } catch { return false; } })() : ownerState.save(en.samples))) { ask.notice('Your face could not be saved: this Mac cannot encrypt it right now.', 'failed'); return { ok: false }; }
       store.set('settings.owner', { ...ownerConfig(store.get('settings.owner')), enabled: true });
       ownerGuard.reset(); broadcast();
-      ask.notice(`Your face is enrolled (${n} angles) and owner recognition is on. If someone else sits down, I will sound the alarm and lock after ${ownerConfig(store.get('settings.owner')).seconds} seconds. Say "test the access denied screen" to see it.`, 'done');
+      ask.notice(`${en.name || "Your face"} is enrolled (${n} angles) and owner recognition is on. If someone else sits down, I will sound the alarm and lock after ${ownerConfig(store.get('settings.owner')).seconds} seconds. Say "test the access denied screen" to see it.`, 'done');
       return { ok: true, done: true };
     }
     return { ok: true, count: n };
+  });
+  ipcMain.handle('owner:trusted', async (e, action, value) => {
+    if(e.sender!==mainWin?.webContents || !trustedPeople) return {error:'Open Relay Settings to manage trusted people.'};
+    try {
+      if(action==='cancel') { ownerState.enroll=null; broadcast(); return {ok:true}; }
+      if(action==='remove') await trustedPeople.remove(String(value));
+      else if(action==='enroll') {
+        const name=trustedPeople.name(value);
+        if(!ownerState.templates.length) throw Error('Enroll your own face first with “enroll my face”.');
+        await trustedPeople.authorize();
+        if(!safeStorage.isEncryptionAvailable()) throw Error('Encrypted storage is unavailable.');
+        store.set('settings.presence.enabled',true); await setPresence(true);
+        ownerState.enroll={name,samples:[],start:Date.now(),until:Date.now()+120000};
+        ask.notice(`Enrolling ${name}: only that person should face the camera. Slowly turn and tilt your head.`, 'done');
+      } else throw Error('Unknown profile action.');
+      broadcast(); return {ok:true};
+    } catch(err) { return {error:err.message}; }
   });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
@@ -1104,7 +1147,7 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getBackdrop:()=>({opacity:store.get('settings.assistantBlurStrength')??.7,image:assistantBackdrop?.image||''}), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
   overlay.watchDisplays();
   restoreToast = new (require('./restoreToast').RestoreToast)(path.join(__dirname, 'preload.js'));
   trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
@@ -1145,6 +1188,8 @@ app.whenReady().then(() => {
     onProblem: (m) => { voiceProblem = m; broadcast(); }
   });
   speaker.prepare(profileFor('quiet', store.get('settings') || {}));
+  const prepareGreeting=()=>speaker.prepare({...profileFor('reply',store.get('settings')||{}),text:welcome.greetingFor(Date.now(),store.get('settings.welcome.name')||'Sir')});
+  prepareGreeting();
   timers = new Timers({
     store,
     onFire: (t) => {
@@ -1215,6 +1260,7 @@ app.whenReady().then(() => {
     const win = overnightMod.windowBounds(new Date(), ask.overnight.conf());
     const routines = (store.get('history') || []).filter((h) => /^(?:scheduled|missed):/.test(String(h.id)) && h.ts >= win.start && h.ts <= win.end + 2 * 3600e3).map((h) => ({ text: h.text, status: h.status })).reverse();
     const report = overnightMod.buildReport(tasks, routines);
+    const maintenance=store.get('nightlyMaintenance');if(maintenance)report.text+='\n\nNightly maintenance ('+maintenance.status+'):\n'+maintenance.text;
     try { ask.outputExport('Overnight report', report.text); } catch { /* the report is still kept in Relay and can be read by voice */ }
     ask.overnight.markReported(tasks, report);
     if (Notification.isSupported()) new Notification({ title: 'Overnight report', body: report.summary.charAt(0).toUpperCase() + report.summary.slice(1) + '. Say "what happened overnight" to hear it.', silent: true }).show();
@@ -1230,6 +1276,16 @@ app.whenReady().then(() => {
       for (const t of st.interrupted) { ask.overnight.interrupt(t, (store.get('actions') || []).filter((a) => a.requestId === t.runId)); changed = true; }
       if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
       if (st.run) { await runOvernightTask(st.run); changed = true; }
+      const conf=ask.overnight.conf(), now=new Date(), key=String(overnightMod.windowBounds(now,conf).start);
+      if(!changed && !ask.overnight.queued().length && ask.canRunScheduled() && conf.enabled && overnightMod.inWindow(now,conf)) {
+        if(store.get('overnightPlannedKey')!==key){
+          store.set('overnightPlannedKey',key);
+          const planned=String(store.get('settings.overnight.planned')||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,3);
+          for(const task of planned)ask.overnight.add(task);
+          changed=planned.length>0;
+        }
+        if(!changed && nightlyMaintenance) changed=await nightlyMaintenance.run(key);
+      }
       if (!changed && st.report) overnightReport(st.report);
     } catch (e) { console.error('Overnight tick failed:', e); } finally { overnightBusy = false; }
   };
@@ -1273,7 +1329,7 @@ app.whenReady().then(() => {
   ask.lockWatch = lockWatch;
   let lockedAt = 0;
   let lastWelcome = 0;
-  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); });
+  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     lockWatch.set(false);
     // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
@@ -1305,7 +1361,7 @@ app.whenReady().then(() => {
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
   hands = new HandControl({ motion: floatingMotion,
-    externalDrag,
+    externalDrag,maxHands:()=>store.get('settings.hands.maxHands')??4,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
     onThrow: rememberThrow,
@@ -1366,13 +1422,14 @@ app.whenReady().then(() => {
         action: (a) => { if (shown && !win.isDestroyed()) win.webContents.send('hands:action', a); }
       };
     },
-    createCursor: () => {
+    createCursor: (slot=0) => {
+      const rgb=['0,212,255','170,120,255','66,235,170','255,190,70','255,110,160','120,195,255'][slot%6];
       const win = new BrowserWindow({ width: 56, height: 56, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
       win.setIgnoreMouseEvents(true);
       win.setAlwaysOnTop(true, 'screen-saver');
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       win.setHiddenInMissionControl?.(true);
-      win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent('<body class="open" style="margin:0;background:transparent;overflow:hidden"><style>div{position:absolute;inset:10px;border-radius:50%;border:2px solid rgba(0,212,255,.9);box-shadow:0 0 14px rgba(0,212,255,.6);transition:all .12s}.held div{background:rgba(0,212,255,.35);inset:14px}.pinch div{inset:19px;background:rgba(0,212,255,.55)}.click div{inset:2px;opacity:.5}.mic div{inset:4px;box-shadow:0 0 26px rgba(0,212,255,.95)}</style><div></div></body>')}`);
+      win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent('<body class="open" style="margin:0;background:transparent;overflow:hidden"><style>div{position:absolute;inset:10px;border-radius:50%;border:2px solid rgba(0,212,255,.9);box-shadow:0 0 14px rgba(0,212,255,.6);transition:all .12s}.held div{background:rgba(0,212,255,.35);inset:14px}.pinch div{inset:19px;background:rgba(0,212,255,.55)}.click div{inset:2px;opacity:.5}.mic div{inset:4px;box-shadow:0 0 26px rgba(0,212,255,.95)}</style><div></div></body>'.replaceAll('0,212,255',rgb))}`);
       return { moveTo: (pt) => { if (!win.isDestroyed()) { if (!win.isVisible()) win.showInactive(); win.setPosition(Math.round(pt.x - 28), Math.round(pt.y - 28)); } }, hide: () => { if (!win.isDestroyed()) win.hide(); }, close: () => { if (!win.isDestroyed()) win.close(); }, setState: (c) => { if (!win.isDestroyed()) win.webContents.executeJavaScript(`document.body.className=${JSON.stringify(String(c).replace(/[^a-z]/g, ''))}`).catch(() => {}); } };
     },
     air: (type, x, y) => overlay.air(type, x, y),
@@ -1387,6 +1444,8 @@ app.whenReady().then(() => {
     askAccess: async () => { const st = systemPreferences.getMediaAccessStatus?.('camera') ?? 'granted'; if (st === 'granted') return true; if (st === 'not-determined') return !!(await systemPreferences.askForMediaAccess('camera')); return false; },
     createCamera: async () => {
       const win = new BrowserWindow({ width: 320, height: 240, show: false, focusable: false, skipTaskbar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
+      const sender=win.webContents; presenceSender=sender;
+      win.on('closed',()=>{if(presenceSender===sender) presenceSender=null;});
       win.loadFile(path.join(__dirname, '../renderer/presence.html'));
       return { close: () => { if (!win.isDestroyed()) win.close(); } };
     },
@@ -1401,6 +1460,17 @@ app.whenReady().then(() => {
   const proposals = new ProposalWorkspace({
     store, getConfig: () => store.get('settings.selfImprove'),
     run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
+  });
+  nightlyMaintenance=new(require('./nightlyMaintenance').NightlyMaintenance)({store,proposals,settings:()=>({...store.get('settings.selfImprove'),model:store.get('settings.model.ollamaModel'),url:store.get('settings.model.ollamaUrl')}),exportReport:(title,text)=>{try{ask.outputExport(title,text);}catch{}}});
+  ipcMain.handle('proposal:review',async(e,id)=>{
+    if(e.sender!==mainWin?.webContents)return {error:'Open Settings first.'};
+    const p=proposals.find(id);if(!p?.generated)return {error:'No generated proposal to review.'};
+    const diff=await proposals.git(['diff','--no-ext-diff','--', 'src'],p.dir);if(diff.code!==0||!diff.stdout.trim())return {error:'No readable source diff.'};
+    const reviewedState=await proposals.status(p);if(!reviewedState)return {error:'Cannot verify proposal files.'};
+    const answer=await dialog.showMessageBox(mainWin,{type:'warning',message:'Review the generated source change before allowing tests',detail:diff.stdout.slice(0,100000),buttons:['Cancel','Approve testing'],defaultId:0,cancelId:0});
+    if(answer.response!==1)return {cancelled:true};
+    if(reviewedState!==await proposals.status(p))return {error:'Files changed during review. Review again.'};
+    proposals.patch(p.id,{reviewed:true,reviewState:reviewedState});broadcast();return {ok:true};
   });
   ask.selfImproveCommand = async (c) => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
@@ -1428,6 +1498,12 @@ app.whenReady().then(() => {
   const loadOwner = () => { try { ownerState.templates = safeStorage.isEncryptionAvailable() ? openTemplates(store.get('ownerFace'), (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64'))) : []; } catch { ownerState.templates = []; } ownerState.version++; };
   ownerState.save = (templates) => { if (!safeStorage.isEncryptionAvailable()) return false; store.set('ownerFace', sealTemplates(templates, (txt) => safeStorage.encryptString(txt).toString('base64'))); ownerState.templates = templates; ownerState.version++; return true; };
   loadOwner();
+  trustedPeople=new (require('./trustedPeople').TrustedPeople)({store,
+    encrypt:txt=>{if(!safeStorage.isEncryptionAvailable()) throw Error('Encrypted storage unavailable'); return safeStorage.encryptString(txt).toString('base64');},
+    decrypt:b64=>safeStorage.decryptString(Buffer.from(b64,'base64')),
+    authenticate:()=>new Promise(resolve=>execFile(axBinPath(),['authenticate-owner'],{timeout:65000},(err,out)=>resolve(!err && out.trim()==='authenticated'))),
+    changed:()=>{ownerState.version++; broadcast();}
+  });
   ownerGuard = new OwnerGuard({
     lock: () => ask.mac.lockScreen(),
     hasTemplates: () => ownerState.templates.length > 0,
@@ -1443,13 +1519,14 @@ app.whenReady().then(() => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
     const setOwner = (patch) => store.set('settings.owner', { ...cfg(), ...patch });
     const needCamera = async () => { if (store.get('settings.presence.enabled')) return ''; store.set('settings.presence.enabled', true); await setPresence(true); return ' I turned Presence on, because it uses the same camera.'; };
+    if (['enroll','forget','off','liveness-off'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
       const note = await needCamera();
       ownerState.enroll = { samples: [], start: Date.now(), until: Date.now() + 120000 }; broadcast();
       return done(`Look at the camera. Slowly turn your head left and right, and tilt it up and down a little. It takes about ten seconds, and I will tell you when it is done.${note} Your face is kept as numbers, encrypted on this Mac; no picture is saved.`);
     }
-    if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
+    if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); store.set('trustedFaces',[]); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
     if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }
     if (c.type === 'seconds') { const s = ownerConfig({ enabled: true, seconds: c.seconds }).seconds; setOwner({ seconds: s }); return done(`${s === c.seconds ? '' : `That is outside 5 to 120, so I used ${s}. `}The lock countdown is ${s} seconds.`); }
     if (c.type === 'away-on' || c.type === 'away-off') { setOwner({ awayScreen: c.type === 'away-on' }); if (c.type === 'away-off' && ownerGuard.state !== 'alarm') intruder.hide(); return done(c.type === 'away-on' ? `The away screen is on: after ${cfg().awaySeconds} seconds with nobody in view, the screen blurs and I say the owner will be back soon, until you are seen again.` : 'The away screen is off.'); }
@@ -1487,7 +1564,7 @@ app.whenReady().then(() => {
   remote.sync().then(broadcast);
   inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
   ask.inbound = inbound;
-  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: false });
+  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: process.platform==='darwin' && fs.existsSync('/usr/bin/sandbox-exec') });
   ask.plugins = pluginMgr;
   // Live panels
   const arrangeOpenMenus = (onlyIfOverlapping = false) => {

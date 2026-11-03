@@ -60,7 +60,8 @@ function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], 
   return { spoken: spoken.trim(), lines: lines.length ? lines : ['Nothing needs your attention.'], priorities, away };
 }
 
-function briefingCard(w, briefing, name = 'Sir') {
+function briefingCard(w, briefing, name = 'Sir', facts) {
+  if(facts){const card=require('./briefing').briefingCard(facts,briefing);card.title=`Welcome back, ${name}`;card.subtitle='Your updates, most urgent first';card.sections=[...(w.priorities||[]).map(p=>({title:p.label,bullets:[p.text]})),...card.sections];return card;}
   const items = (w.priorities || []).map((p) => ({ title: p.label, subtitle: p.text }));
   if (briefing) items.push({ title: 'Today', subtitle: briefing });
   if (!items.length) return null;
@@ -80,4 +81,14 @@ function showWelcomeReactor(overlay, greeting, { setTimer = setTimeout, duration
   return true;
 }
 
-module.exports = { shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard, showWelcomeReactor };
+// Start audio/UI before any slow source reads, then avoid late delivery after interruption.
+async function deliverInStages({canDeliver,begin,collect,finish}){
+ if(!canDeliver())return false;
+ const greeting=Promise.resolve(begin()).catch(()=>{});
+ let facts;try{facts=await collect();}catch{await greeting;return true;}
+ await greeting;
+ if(canDeliver())await finish(facts);
+ return true;
+}
+
+module.exports = { deliverInStages, shouldGreet, canDeliverWelcome, buildWelcome, awayWords, greetingFor, briefingCard, showWelcomeReactor };

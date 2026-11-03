@@ -11,13 +11,13 @@ const momentum = require('./momentum');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null }) {
+  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4 }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.motion = motion;
     this.sensitivity = sensitivity;
     this.saveMargin = saveMargin;
     this.onThrow = onThrow;
-    this.externalDrag = externalDrag;
+    this.externalDrag = externalDrag;this.maxHands=maxHands;
     this.externalHeld = false;
     this.shortcut = shortcut;
     this.onShortcut = onShortcut;
@@ -59,22 +59,25 @@ class HandControl {
 
   async enable() {
     if (this.enabled) return { ok: true };
+    const enableVersion=this.enableVersion=(this.enableVersion||0)+1;
     this.status = 'starting'; this.message = ''; this.onChange();
     if (!(await this.askAccess())) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
+    if(this.enableVersion!==enableVersion)return{ok:false,cancelled:true};
     this.enabled = true;
+    this.trackLimit=Math.max(2,Math.min(6,Math.round(Number(this.maxHands())||4)));this.tracks=new HandTracks(this.trackLimit);
     this.externalDrag?.start();
-    this.cam = await this.createCamera();
+    const camera=await this.createCamera();if(this.enableVersion!==enableVersion||!this.enabled){camera?.close?.();return{ok:false,cancelled:true};}this.cam=camera;
     this.cam?.setPreview?.(this.preview);
-    this.ring = this.createCursor();
+    this.ring = this.createCursor(0);
     if (!this.secondary) {
       this.peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
       this.peer.claims = this.claims;
       this.peer.glides = this.glides;
       this.peer.enabled = true;
-      this.peer.ring = this.createCursor();
-      this.extraPeers = Array.from({ length: 2 }, () => {
+      this.peer.ring = this.createCursor(1);
+      this.extraPeers = Array.from({ length: this.trackLimit-2 }, (_,index) => {
         const peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
-        peer.claims = this.claims; peer.glides = this.glides; peer.enabled = true; peer.ring = this.createCursor();
+        peer.claims = this.claims; peer.glides = this.glides; peer.enabled = true; peer.ring = this.createCursor(index+2);
         return peer;
       });
     }
@@ -82,6 +85,7 @@ class HandControl {
   }
 
   disable() {
+    this.enableVersion=(this.enableVersion||0)+1;
     this.enabled = false;
     this.status = 'off'; this.message = '';
     clearTimeout(this.calibration?.timer); this.calibration = null; this.paused = false; this.pauseHold = null; this.pauseLatched = false;
@@ -169,7 +173,9 @@ class HandControl {
     this.pointer.margin = safeMargin;
     this.peer.pointer.margin = safeMargin;
     for (const peer of this.extraPeers) peer.pointer.margin = safeMargin;
+    const epochs=[...this.tracks.epochs];
     const [first, second, ...others] = this.tracks.update(f.hands);
+    [this,this.peer,...this.extraPeers].forEach((control,i)=>{if(epochs[i]>0&&epochs[i]!==this.tracks.epochs[i]){control.release();control.pointer=new HandPointer({onEvent:e=>control.handle(e).catch(()=>{})});control.pointer.margin=safeMargin;}});
     // Keep the established two-hand gestures when both hands address the same hologram.
     const a = first && this.holos.holoNear(this.toScreen(this.pointer.map(first)), 0);
     const b = second && this.holos.holoNear(this.toScreen(this.pointer.map(second)), 0);
@@ -308,7 +314,7 @@ class HandControl {
       return;
     }
     if (e.type === 'move') {
-      if (this.externalHeld) { this.externalDrag?.move(this, pt); this.ringState('held'); return; }
+      if (this.externalHeld) { if(this.externalDrag?.move(this, pt)===false){this.externalHeld=false;this.ringState('open');return;} this.ringState('held'); return; }
       if (this.drag) {
         this.drag.target.move(pt.x - this.drag.ax, pt.y - this.drag.ay);
         this.motion?.update(this.drag.target.key, pt);

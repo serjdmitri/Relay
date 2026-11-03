@@ -4,7 +4,7 @@ const { ProposalWorkspace, parseSelfImproveCommand, slug } = require('../src/mai
 
 // A fake git/npm: the working tree is a string the test edits; every call is recorded.
 function make({ repo = '/h/relay', testOut = 'ℹ pass 1157\nℹ fail 0', testCode = 0, worktreeFail = false } = {}) {
-  const calls = [], data = {}, tree = { status: '' };
+  const calls = [], data = {}, tree = { status: '', content: '' };
   const store = { get: (k) => data[k], set: (k, v) => { data[k] = JSON.parse(JSON.stringify(v)); } };
   const run = async (args, { cwd }) => {
     calls.push({ args, cwd });
@@ -13,6 +13,8 @@ function make({ repo = '/h/relay', testOut = 'ℹ pass 1157\nℹ fail 0', testCo
     if (a1 === 'worktree' && a2 === 'add') return worktreeFail ? { code: 128, stdout: '', stderr: 'fatal: invalid reference: main' } : { code: 0, stdout: '', stderr: '' };
     if (a1 === 'worktree' && a2 === 'remove') return { code: 0, stdout: '', stderr: '' };
     if (a1 === 'status') return { code: 0, stdout: tree.status, stderr: '' };
+    if (a1 === 'diff') return {code:0,stdout:tree.content,stderr:''};
+    if (a1 === 'ls-files') return {code:0,stdout:'',stderr:''};
     if (a1 === 'add') return { code: 0, stdout: '', stderr: '' };
     if (a1 === 'commit') { tree.status = ''; return { code: 0, stdout: '', stderr: '' }; }
     if (a1 === 'rev-parse') return { code: 0, stdout: 'abcdef1234567890\n', stderr: '' };
@@ -109,3 +111,5 @@ test('voice commands are understood and ordinary talk is left alone', () => {
   assert.deepEqual(parseSelfImproveCommand('list my proposals'), { type: 'list' });
   for (const t of ['push the proposal', 'merge the proposal', 'install the proposal', 'I have a proposal for you', 'open Notes', '']) assert.equal(parseSelfImproveCommand(t), null, t);
 });
+
+test('same dirty filenames with changed contents invalidate the tested proposal',async()=>{const m=make();await m.w.create('faster startup');m.tree.status=' M a.js\n';m.tree.content='first';await m.w.test('');m.tree.content='changed';assert.match((await m.w.commit('')).error,/changed after/);});
