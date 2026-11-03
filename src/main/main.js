@@ -1167,7 +1167,7 @@ function registerIpc() {
     if (!['idle','done','input'].includes(ask.state)) return {error:'Finish or stop the current request first.'};
     mainWin?.hide();
     if (action === 'show') {
-      if (ask.state === 'input') ask.close();
+      if (ask.state !== 'idle') ask.close();
       ask.reactorIdle = true;
       overlay.hud({state:'reactor-idle',idlePosition:store.get('settings.reactorIdlePosition') === 'corner' ? 'corner' : 'center'});
     } else if (action === 'type') await ask.open({typed:true});
