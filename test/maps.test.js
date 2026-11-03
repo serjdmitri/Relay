@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+// Pure URL/intent helpers are extracted without loading Electron window code.
+const fs=require('fs'),vm=require('vm');const source=fs.readFileSync(require.resolve('../src/main/mapWindow'),'utf8');const functions=source.slice(source.indexOf('function mapAddress'),source.indexOf('class MapWindow'));const context={URL};vm.runInNewContext(functions+';this.api={mapAddress,mapIntent}',context);const {mapAddress,mapIntent}=context.api;
+test('map commands are provider-independent and tolerate natural wording',()=>{assert.equal(mapIntent('please open Gods Eye view'),'godseye');assert.equal(mapIntent('show me Argos Atlas map'),'argos');assert.equal(mapIntent('open notes'),null);});
+test('Gods Eye can only point at an unauthenticated loopback server',()=>{assert.match(mapAddress('godseye'),/127.0.0.1:4173/);for(const url of ['https://evil.example','file:///etc/passwd','http://user:pass@localhost:4173','http://127.0.0.1:4173?secret=abc'])assert.throws(()=>mapAddress('godseye',url));assert.equal(mapAddress('argos'),'https://argosatlas.com/map/');});
