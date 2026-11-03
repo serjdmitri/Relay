@@ -5,7 +5,7 @@ window.__relayGodsEyeCommand=async command=>{
  const ac=new AbortController();window.__relayGodsEyeAbort=ac;const timeout=setTimeout(()=>ac.abort(),25000);
  const run=async(name,args)=>{ac.signal.throwIfAborted();const r=await runner(name,args,{signal:ac.signal});if(r?.ok===false||r?.error)throw Error(r.error||r.say||'The source could not apply that change.');return r;};
  try{
-  if(command.place)await run('fly_to_location',{query:command.place});
+  if(command.place)await run('fly_to_location',{query:command.place,waitForArrival:true});
   if(command.type==='place')return {ok:true};
   if(command.type==='reset'){document.getElementById('reset-globe-view')?.click();return {ok:true};}
   if(command.type==='layer'){
