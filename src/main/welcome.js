@@ -61,7 +61,7 @@ function buildWelcome({ name = 'Sir', lockedAt, now = Date.now(), history = [], 
 }
 
 function briefingCard(w, briefing, name = 'Sir', facts) {
-  if(facts){const card=require('./briefing').briefingCard(facts,briefing);card.title=`Welcome back, ${name}`;card.subtitle='Your updates, most urgent first';card.sections=[...(w.priorities||[]).map(p=>({title:p.label,bullets:[p.text]})),...card.sections];return card;}
+  if(facts){const card=require('./briefing').briefingCard(facts,briefing);card.title=`Welcome back, ${name}`;card.subtitle='Your updates, most urgent first';card.hold=false; /* the daily briefing menu stays until closed; this welcome closes by itself (30 seconds, longer while the mouse is over it, never while pinned) */card.sections=[...(w.priorities||[]).map(p=>({title:p.label,bullets:[p.text]})),...card.sections];return card;}
   const items = (w.priorities || []).map((p) => ({ title: p.label, subtitle: p.text }));
   if (briefing) items.push({ title: 'Today', subtitle: briefing });
   if (!items.length) return null;

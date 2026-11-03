@@ -148,3 +148,11 @@ test('a newly locked or busy Mac receives no late briefing',async()=>{
  const {deliverInStages}=require('../src/main/welcome');let allowed=true,release,finished=false;
  const pending=deliverInStages({canDeliver:()=>allowed,begin:()=>{},collect:()=>new Promise(r=>release=r),finish:()=>{finished=true;}});allowed=false;release({});await pending;assert.equal(finished,false);
 });
+
+test('the welcome-back card closes by itself (it must not inherit the daily briefing menu\'s "stay until closed"), which also releases the reactor held behind it', () => {
+  const facts = { now: new Date('2026-11-02T12:00:00Z'), missing: [] };
+  const w = { priorities: [{ label: 'Next', text: 'Class at 3.' }] };
+  const card = briefingCard(w, 'All good.', 'Sir', facts);
+  assert.equal(card.hold, false); assert.match(card.title, /Welcome back, Sir/);
+  assert.equal(require('../src/main/briefing').briefingCard(facts, '').hold, true, 'the daily briefing itself still stays until you close it');
+});

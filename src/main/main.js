@@ -407,7 +407,12 @@ async function welcomeBack(lockedAt, lastWelcome) {
       if(cfg.show!==false&&Notification.isSupported())new Notification({title:greeting,body:(card?.sections||[]).flatMap(s=>s.bullets).slice(0,3).join('\n')||'Your briefing is ready.',silent:true}).show();
       if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())ask.speakText(details);
     }
-  }).finally(()=>{if(!heldByCard&&welcomeToken&&overlay.hudState?.welcomeToken===welcomeToken)overlay.hud({hide:true});});
+  }).finally(()=>{
+    if(!welcomeToken)return;
+    const hideReactor=()=>{if(overlay.hudState?.welcomeToken===welcomeToken)overlay.hud({hide:true});};
+    if(!heldByCard)hideReactor();
+    else{const t=setTimeout(hideReactor,60000);t.unref?.();} // the reactor goes when the card is dismissed; this is the backstop so it can never stay on screen
+  });
 }
 
 function registerIpc() {
@@ -1564,7 +1569,7 @@ app.whenReady().then(() => {
   remote.sync().then(broadcast);
   inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
   ask.inbound = inbound;
-  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: process.platform==='darwin' && fs.existsSync('/usr/bin/sandbox-exec') });
+  pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: process.platform==='darwin' && require('fs').existsSync('/usr/bin/sandbox-exec') });
   ask.plugins = pluginMgr;
   // Live panels
   const arrangeOpenMenus = (onlyIfOverlapping = false) => {
