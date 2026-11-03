@@ -47,6 +47,7 @@ const { parseSelfImproveCommand } = require('./selfImprove');
 const { parseOwnerCommand } = require('./ownerGuard');
 const shieldMod = require('./injectionShield');
 const skillImportMod = require('./skillImport');
+const extrasMod = require('./connectors/extras');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -1075,22 +1076,34 @@ class AskController {
     return skillsMod.skillText(found);
   }
 
+  // A small, careful web read: 15 seconds, 4 MB, JSON or text. Used for GitHub skill imports and the news feeds.
+  async httpGet(url, asJson) {
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 15000);
+    try {
+      const r = await fetch(url, { signal: ac.signal, headers: { 'User-Agent': 'Relay', Accept: asJson ? 'application/json' : 'text/plain, application/xml, text/xml, */*' } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const txt = await r.text();
+      if (txt.length > 4000000) throw new Error('too large');
+      return asJson ? JSON.parse(txt) : txt;
+    } finally { clearTimeout(timer); }
+  }
+
   // "import skills from github.com/…": SKILL.md text only, scanned, and kept pending until you approve it in Settings > Memory (see skillImport.js).
   async importSkills(c) {
-    const get = async (url, asJson) => {
-      const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 15000);
-      try {
-        const r = await fetch(url, { signal: ac.signal, headers: { 'User-Agent': 'Relay', Accept: asJson ? 'application/vnd.github+json' : 'text/plain' } });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const txt = await r.text();
-        if (txt.length > 4000000) throw new Error('too large');
-        return asJson ? JSON.parse(txt) : txt;
-      } finally { clearTimeout(timer); }
-    };
+    const get = (u, asJson) => this.httpGet(u, asJson);
     const before = this.store.get('skills') || [];
     const r = await skillImportMod.importFrom(c.source, before, { json: (u) => get(u, true), text: (u) => get(u, false), addSkill: skillsMod.addSkill, id: () => crypto.randomUUID() });
     if (r.list !== before) this.store.set('skills', r.list);
     return { status: 'done', reply: r.summary, actions: r.results.some((x) => x.added) ? 1 : 0 };
+  }
+
+  // News (Hacker News, RSS), GitHub notifications (through gh) and Obsidian: read-only, see connectors/extras.js.
+  async extrasCommand(c) {
+    return extrasMod.runCommand(c, {
+      store: this.store, home: os.homedir(), fs: require('fs'),
+      json: (u) => this.httpGet(u, true), text: (u) => this.httpGet(u, false),
+      run: (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { timeout: 15000, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, out, errOut) => (err ? reject(new Error(`${err.code === 'ENOENT' ? 'ENOENT ' : ''}${String(errOut || err.message)}`)) : resolve(String(out))))),
+    });
   }
 
   saveSkill(input) {
@@ -2098,6 +2111,7 @@ class AskController {
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
+          if (extrasMod.parseExtrasCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.extrasCommand(extrasMod.parseExtrasCommand(effective))); }
           if (skillImportMod.parseSkillImportCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.importSkills(skillImportMod.parseSkillImportCommand(effective))); }
           if (shieldMod.parseShieldCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: shieldMod.describeLog(this.store.get('shieldLog')), actions: 0 }); }
           if (this.selfImproveCommand && parseSelfImproveCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.selfImproveCommand(parseSelfImproveCommand(effective))); }
