@@ -13,7 +13,9 @@
     "speech": "bash scripts/build-speech.sh",
     "signing": "bash scripts/setup-signing.sh",
     "charts": "node scripts/make-charts.mjs",
-    "readme-images": "node scripts/readme-images.mjs"
+    "readme-images": "node scripts/readme-images.mjs",
+    "startup-check": "node scripts/startup-check.js dist/mac-arm64/Relay.app",
+    "install-local": "bash scripts/install-local.sh"
   },
   "dependencies": {
     "qrcode-generator": "^2.0.4",

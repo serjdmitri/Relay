@@ -100,6 +100,13 @@ let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
+// What the Doctor shows about startup: when it began, when it finished (the end of the main setup function), and any errors since.
+const bootStartedAt = Date.now();
+let bootDoneAt = 0;
+const bootErrors = [];
+const noteBootError = (kind, err) => { bootErrors.push({ at: Date.now(), kind, message: String((err && err.message) || err).slice(0, 200) }); if (bootErrors.length > 20) bootErrors.shift(); };
+process.on('unhandledRejection', (r) => { noteBootError('rejection', r); console.error('Unhandled promise rejection:', (r && r.stack) || r); });
+process.on('uncaughtExceptionMonitor', (e) => noteBootError('exception', e));
 let mainWin = null;
 let lastVoiceNotice = { key: '', at: 0 };
 const { activateMainWindow, restoreDockPreference } = require('./mainWindowFocus');
@@ -848,6 +855,13 @@ function registerIpc() {
       notes: () => ({ on: flagsMod.isOn(store.get('settings'), 'folderQa'), folders: notesSvc?.status() || [], noEmbed: !!notesSvc?.noEmbed }),
       plugins: () => ({ on: flagsMod.isOn(store.get('settings'), 'plugins'), list: pluginMgr?.list() || [], sandbox: !!pluginMgr?.sandbox }),
       imessage: () => ({ on: flagsMod.isOn(store.get('settings'), 'imessage'), fullDisk: fullDisk(), ...(inbound?.status() || {}) }),
+      startup: () => ({ startedAt: bootStartedAt, completedAt: bootDoneAt, errors: bootErrors.slice(-5) }),
+      keychain: () => { try { return { available: !!safeStorage.isEncryptionAvailable() }; } catch { return { available: null }; } },
+      lastFailure: () => ask?.lastFailure || null,
+      voice: () => ({ engine: store.get('settings.tts.engine'), problem: voiceProblem }),
+      owner: () => { const c = ownerConfig(store.get('settings.owner')); return { enabled: c.enabled, enrolled: (ownerState?.templates?.length || 0) > 0, cameraRunning: presence?.status === 'running', armed: !!ownerGuard?.armed, lastScore: ownerGuard?.lastScore ?? null, threshold: c.threshold, liveness: c.liveness }; },
+      ollamaLive: () => require('./hybridSearch').ollamaStatus({ get: (u) => ask.httpGet(u, true) }),
+      gh: () => new Promise((res) => execFile('gh', ['auth', 'status'], { timeout: 3000, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (e, _o, errOut) => res(e && e.code === 'ENOENT' ? { installed: false } : { installed: true, signedIn: !e }))),
       _signing: st
     };
   };
@@ -1871,6 +1885,7 @@ app.whenReady().then(() => {
   }, 8000);
   if (process.env.RELAY_DEMO) ask.demo(process.env.RELAY_DEMO);
 
+  bootDoneAt = Date.now(); // the setup above ran to its end without throwing
   if (store.get('onboardingDone')) openMain(process.env.RELAY_PAGE || 'home');
   else openOnboarding();
 });

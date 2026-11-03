@@ -28,6 +28,13 @@ codesign --force --sign - "$APP/Contents/Resources/native/relay-ax"
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 
+# Prove the built app really STARTS before a .dmg is made from it (it launches a copy with a throwaway profile; see scripts/startup-check.js).
+# 0.38.0 and 0.38.1 were published with a window that stayed blank, and nothing caught it.
+if [ "${SKIP_STARTUP_CHECK:-0}" != 1 ]; then
+  echo "Checking that the built app starts..."
+  node scripts/startup-check.js "$APP" || { echo "The startup check failed, so no .dmg was made. (SKIP_STARTUP_CHECK=1 skips it.)"; exit 1; }
+fi
+
 STAGE=$(mktemp -d)
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
