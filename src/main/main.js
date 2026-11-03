@@ -530,6 +530,7 @@ function registerIpc() {
   const godsEyeServer=new(require('./godsEyeServer').GodsEyeServer)({configFile:path.join(app.getPath('userData'),'gods-eye-runtime.json')});
   app.once('before-quit',()=>godsEyeServer.stop());
   mapPanel=new(require('./mapWindow').MapWindow)({store,motion:floatingMotion,server:godsEyeServer,onWorldView:on=>overlay.setWorldView(on)});
+  ask.runWorldCommand=async(command,signal)=>{try{return require('./worldCommands').worldReply(command,await mapPanel.command(command,{signal}));}catch(e){return {status:signal?.aborted?'stopped':'failed',reply:signal?.aborted?'Stopped, Sir.':e.message,actions:0};}};
   ask.openWorldMap=kind=>{try{mapPanel.open(kind);return {status:'done',reply:kind==='godseye'?'Your God’s Eye workspace is opening, Sir. The local engine will start automatically.':'Your Argos Atlas map is open, Sir.',actions:1};}catch(e){return {status:'failed',reply:e.message,actions:0};}};
   fitnessPanel = new FitnessWindow({store, motion:floatingMotion, getApi:()=>ask.googleApiIfConnected(), openSettings:()=>openMain('connectors')});
   ask.openFitness = () => {fitnessPanel.open();return {status:'done',reply:'Your Fitbit stats menu is open, Sir. Connect Fitbit / Google Health in Connections if needed.',actions:1};};

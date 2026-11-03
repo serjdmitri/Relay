@@ -2213,6 +2213,8 @@ class AskController {
           if (this.openAssignments && parseAssignmentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAssignments()); }
           if (this.openPriorities && parsePrioritiesCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openPriorities()); }
           if (this.auditRun && parseAuditCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.auditRun() }); }
+          const worldCommand=require('./worldCommands').parseWorldCommand(effective);
+          if(worldCommand && this.runWorldCommand){const ac=this.abort=new AbortController();try{return this.finish(entry,await this.runWorldCommand(worldCommand,ac.signal));}finally{if(this.abort===ac)this.abort=null;}}
           const worldMap=require('./mapWindow').mapIntent(effective);
           if(worldMap && this.openWorldMap)return this.finish(entry,await this.openWorldMap(worldMap));
           if (this.openFitness && require('./connectors/fitness').fitnessIntent(effective)) return this.finish(entry, await this.openFitness());
