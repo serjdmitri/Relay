@@ -1412,7 +1412,11 @@ app.whenReady().then(() => {
     const r = await proposals.discard(c.ref); return r.error ? fail(r) : done('The proposal folder is removed. Its branch is kept in case you want it back.');
   };
   // Owner recognition (opt-in): your face, as numbers encrypted on this Mac. A face that is not yours, while you are not there, starts the access-denied alarm and then the lock.
-  intruder = new IntruderWindow();
+  intruder = new IntruderWindow({
+    touchId: () => { try { return !!systemPreferences.canPromptTouchID?.(); } catch { return false; } },
+    // a fingerprint is you proving it is you: the alarm (or the standby screen) stops, and it stays quiet for five minutes. promptTouchID throws if it is not accepted.
+    fingerprint: async () => { await systemPreferences.promptTouchID('stop the access denied alarm'); ownerGuard.dismiss('fingerprint'); return { ok: true }; }
+  });
   ownerState = { templates: [], version: 1, enroll: null };
   const loadOwner = () => { try { ownerState.templates = safeStorage.isEncryptionAvailable() ? openTemplates(store.get('ownerFace'), (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64'))) : []; } catch { ownerState.templates = []; } ownerState.version++; };
   ownerState.save = (templates) => { if (!safeStorage.isEncryptionAvailable()) return false; store.set('ownerFace', sealTemplates(templates, (txt) => safeStorage.encryptString(txt).toString('base64'))); ownerState.templates = templates; ownerState.version++; return true; };

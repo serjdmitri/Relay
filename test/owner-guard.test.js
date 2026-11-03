@@ -236,3 +236,24 @@ test('looking down: a face that vanishes right after looking down gets three tim
   const k = make(); k.feed([0.9], 5); for (let i = 0; i < 30; i++) { k.clock.t += 1000; k.g.frame({ faces: 1, scores: [null], down: true }); }
   assert.deepEqual(k.log, [], 'looking down at the keyboard never alarms');
 });
+
+test('a fingerprint stops the alarm, and the guard stays quiet for five minutes so a friend in view does not restart it', async () => {
+  const m = make();
+  m.feed([0.1], 3); assert.equal(m.g.state, 'alarm');
+  m.g.dismiss('fingerprint');
+  assert.equal(m.g.state, 'idle'); assert.deepEqual(events(m, 'clear'), [['clear', 'fingerprint']]);
+  m.feed([0.1], 200); await tick();
+  assert.equal(m.g.state, 'idle', 'the stranger is still there, but you said it is fine'); assert.deepEqual(m.locks, []);
+  m.clock.t += 5 * 60000;
+  m.feed([0.1], 3); assert.equal(m.g.state, 'alarm', 'after five minutes it is watching again');
+});
+
+test('a fingerprint also ends the standby screen and keeps it from coming straight back, and does not undo a lock that already happened', () => {
+  const away = [];
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4, awayScreen: true, awaySeconds: 10 }, { onAway: (on) => away.push(on) });
+  m.feed([], 12); assert.deepEqual(away, [true]);
+  m.g.dismiss('fingerprint'); assert.deepEqual(away, [true, false]);
+  m.feed([], 60); assert.deepEqual(away, [true, false], 'quiet for five minutes');
+  const k = make(); k.feed([0.1], 3); k.feed([0.1], 21); assert.equal(k.g.state, 'locked');
+  k.g.dismiss('fingerprint'); assert.equal(k.g.state, 'locked', 'once the Mac is locked, macOS is in charge of getting back in');
+});

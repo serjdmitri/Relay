@@ -46,7 +46,7 @@ class OwnerGuard {
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
@@ -73,11 +73,11 @@ class OwnerGuard {
     const t = this.now();
     // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again.
     if (cfg.enabled && cfg.awayScreen && !this.demo && this.armed) {
-      if (!this.awayActive && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
+      if (!this.awayActive && t >= this.quietUntil && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
       else if (this.awayActive && this.owners >= this.ownerFrames) { this.awayActive = false; this.onAway(false); }
     } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
-      if (cfg.enabled && this.armed && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
+      if (cfg.enabled && this.armed && t >= this.quietUntil && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
       return null;
     }
     if (this.state === 'alarm') {
@@ -93,6 +93,13 @@ class OwnerGuard {
 
   // Looking down at the keyboard can lose the face altogether. If the face vanished right after it was seen looking down, that is most likely you, not an empty chair: wait three times as long.
   awayFactor() { return this.lastDownAt && this.noFaceSince !== null && this.noFaceSince - this.lastDownAt < 6000 ? 3 : 1; }
+
+  // You proved it is you another way (a fingerprint): stop the alarm or the standby screen, and stay quiet for a few minutes so a friend in view does not start it again.
+  dismiss(reason = 'fingerprint', minutes = 5) {
+    this.quietUntil = this.now() + minutes * 60000; this.armed = true;
+    if (this.state === 'alarm') this.clear(reason);
+    if (this.awayActive) { this.awayActive = false; this.onAway(false); }
+  }
 
   end() {
     if (this.demo) { this.clear('ended'); return 'cleared'; }

@@ -126,7 +126,7 @@ setInterval(poll, 250); poll();
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 function frame() {
   requestAnimationFrame(frame);
-  if (!state.active) { if (soundMode) stopSound(); return; }
+  if (!state.active || state.paused) { if (soundMode) stopSound(); return; } // paused: the Touch ID sheet is up
   const mode = state.mode === 'away' ? 'away' : 'alarm';
   if (document.body.className !== mode) { document.body.className = mode; if (soundMode) stopSound(); }
   if (soundMode !== mode) startSound(mode);
@@ -143,7 +143,16 @@ function frame() {
     $('count').textContent = `Away for ${mmss(away)}`;
     $('note').textContent = 'It wakes up when the owner is back in front of the camera.';
   }
+  $('touch').hidden = !state.touchId;
   reactor.draw(mode, urgency);
 }
+
+// Touch ID: the owner stops the screen with a fingerprint. The system asks; if it is not accepted the screen comes back with a short note.
+let noteUntil = 0;
+$('touch').addEventListener('click', async () => {
+  let r = null;
+  try { r = await relay.intruderFingerprint(); } catch { /* the window is closing */ }
+  if (r && !r.ok) { $('touchlabel').textContent = r.error || 'Not recognised'; setTimeout(() => { $('touchlabel').textContent = 'Touch ID to stop'; }, 3500); }
+});
 requestAnimationFrame(frame);
 addEventListener('beforeunload', stopSound);
