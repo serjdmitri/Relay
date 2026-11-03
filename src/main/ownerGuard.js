@@ -52,6 +52,16 @@ function acceptEnrollment(samples, { minDirections = 6, max = 24 } = {}) {
   return { ok: true, templates, poses: [...poses] };
 }
 
+// Which of the faces in view are a trusted person (someone you enrolled by name): the face matches a trusted profile, does not match YOU, and (when the blink check is on)
+// has blinked. A trusted person is neither the owner nor a stranger: they never start the alarm or the viewer countdown, and they cannot stand in for you (arm the guard,
+// lift the standby screen). scores: each face's best match against YOUR face; trustedScores: against the trusted profiles; live: the blink check per face.
+function trustedFlags({ scores = [], trustedScores = [], live = [], threshold = DEFAULTS.threshold } = {}) {
+  return scores.map((owner, i) => {
+    const t = trustedScores[i];
+    return Number.isFinite(t) && t >= threshold && !(Number.isFinite(owner) && owner >= threshold) && live[i] !== false;
+  });
+}
+
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
@@ -62,19 +72,22 @@ class OwnerGuard {
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; this.trustedFrames = 0; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
-  frame({ faces = 0, scores = [], live = [], down = false } = {}) {
+  // trusted: per face, true for a recognised trusted person (see trustedFlags).
+  frame({ faces = 0, scores = [], live = [], down = false, trusted = [] } = {}) {
     const cfg = config(this.getConfig());
     if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; this.watchStart = null; return null; }
     if (this.watchStart === null) this.watchStart = this.now();
     this.lastFrameAt = this.now();
-    const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
+    const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false, trusted: trusted[i] === true })).filter((k) => Number.isFinite(k.s));
+    const trustedHere = known.some((k) => k.trusted);
     // A score between (threshold - margin) and the threshold is "not sure" (a face that is far, turned or badly lit): neither you nor a stranger. Only a clearly low score, or a match with no blink, counts against you.
-    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive));
-    this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
+    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => !k.trusted && (k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive)));
+    this.seen = owner ? 'owner' : stranger ? 'stranger' : trustedHere ? 'trusted' : faces ? 'unclear' : 'nobody';
+    this.trustedFrames = trustedHere && !owner && !stranger ? this.trustedFrames + 1 : 0;
     if (known.length) this.lastScore = Math.max(...known.map((k) => k.s));
     this.owners = owner ? this.owners + 1 : 0;
     this.strangers = stranger && !owner ? this.strangers + 1 : 0;
@@ -119,6 +132,7 @@ class OwnerGuard {
     }
     if (this.state === 'alarm') {
       if (this.owners >= this.ownerFrames && !this.demo) return this.clear('owner');
+      if (this.trustedFrames >= this.ownerFrames && !this.demo) return this.clear('trusted'); // an approved person is at the desk and no stranger is: nothing to alarm about (the Mac is not unlocked by this, only the alarm stops)
       if (t >= this.deadline) return this.end();
       this.onCount(this.secondsLeft());
       return null;
@@ -195,4 +209,4 @@ function openTemplates(rec, decrypt) {
   } catch { return []; }
 }
 
-module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
+module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };

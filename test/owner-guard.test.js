@@ -360,3 +360,33 @@ test('"enroll my face" does not leave the reactor on the screen in front of the 
   assert.match(ask, /noHold: !!res\.noHold/); assert.match(ask, /res\.noHold \? 1500 :/, 'and the reactor goes after a moment, not after ten seconds');
   assert.match(win, /setAlwaysOnTop\(true, 'screen-saver', 1\)/, 'the setup window sits above the reactor (level 0) and below the alarm (level 2)');
 });
+
+test('trusted people: a recognised trusted face is neither you nor a stranger (needs to match them, not you, and to have blinked)', () => {
+  const { trustedFlags } = require('../src/main/ownerGuard');
+  assert.deepEqual(trustedFlags({ scores: [0.1, 0.9, 0.1], trustedScores: [0.8, 0.8, 0.2], live: [true, true, true], threshold: 0.4 }), [true, false, false], 'a face that is you is not "trusted", and one matching nobody is not either');
+  assert.deepEqual(trustedFlags({ scores: [0.1], trustedScores: [0.8], live: [false], threshold: 0.4 }), [false], 'a trusted face that has not blinked (a picture of them) does not count');
+  assert.deepEqual(trustedFlags({ scores: [null], trustedScores: [0.8], threshold: 0.4 }), [true], 'no score against you (a far or turned face) but a clear trusted match still counts');
+  assert.deepEqual(trustedFlags({ scores: [0.1, 0.1], trustedScores: [], live: [] }), [false, false], 'no trusted profiles: nobody is trusted'); assert.deepEqual(trustedFlags(), []);
+});
+
+test('a trusted person at the desk does not start the alarm, cannot stand in for you, and an alarm ends once only trusted people are in view', () => {
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4 }, { strangerFrames: 5 });
+  const feed = (scores, trusted, n = 1) => { for (let i = 0; i < n; i++) { m.clock.t += 1000; m.g.frame({ faces: scores.length, scores, trusted }); } };
+  feed([0.05], [true], 30); assert.equal(m.g.state, 'idle', 'a trusted person alone for 30 seconds: no alarm'); assert.equal(m.g.seen, 'trusted'); assert.equal(m.g.awayActive, false, 'and not the standby screen: someone is there');
+  feed([0.05, 0.05], [true, false], 5); assert.equal(m.g.state, 'alarm', 'a trusted person with a STRANGER beside them: the stranger still starts the alarm');
+  feed([0.05], [true], 1); assert.equal(m.g.state, 'alarm'); feed([0.05], [true], 1);
+  assert.equal(m.g.state, 'idle', 'the stranger leaves and the trusted person stays for two looks: the alarm ends'); assert.deepEqual(events(m, 'clear').at(-1), ['clear', 'trusted']); assert.deepEqual(m.locks, [], 'nothing locked');
+  const demo = make({ enabled: true, seconds: 20, threshold: 0.4 }); demo.g.startDemo(6);
+  for (let i = 0; i < 4; i++) { demo.clock.t += 1000; demo.g.frame({ faces: 1, scores: [0.05], trusted: [true] }); } assert.equal(demo.g.state, 'alarm', 'the test screen ignores who is in view');
+  const unarmed = make({ enabled: true, seconds: 20, threshold: 0.4 }, { unarmed: true });
+  for (let i = 0; i < 10; i++) { unarmed.clock.t += 1000; unarmed.g.frame({ faces: 1, scores: [0.05], trusted: [true] }); } assert.equal(unarmed.g.armed, false, 'a trusted person cannot arm the guard as if they were you');
+});
+
+test('the camera page compares each face with you and, separately, with the trusted profiles, and main keeps trusted people out of the extra-viewer count', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(page, /trustedTemplates = c\.trusted \|\| \[\]/); assert.match(page, /frame\.trustedScores = both\.map/);
+  assert.match(main, /out\.templates = \[\.\.\.ownerState\.templates\]; out\.trusted = trustedPeople\?\.templates\(\) \|\| \[\]/, 'the two lists are sent apart');
+  assert.match(main, /faces: Math\.max\(0, faces - trusted\.filter\(Boolean\)\.length\)/, 'the viewer guard does not count trusted people');
+  assert.match(main, /ownerGuard\?\.frame\(\{ faces, scores, live, trusted, down: f\?\.down === true \}\)/);
+});
