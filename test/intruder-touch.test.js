@@ -43,9 +43,20 @@ test('no sheet when this Mac has no Touch ID, on the calm away screen, after the
   const idle = make(); assert.deepEqual(await idle.w.askFingerprint(), { ok: false }, 'nothing to stop when there is no alarm'); assert.deepEqual(idle.calls, []);
 });
 
-test('an accepted fingerprint reports ok and leaves the alarm to be cleared by the guard', async () => {
+test('an accepted fingerprint reports ok and takes the screen down itself, even when nothing else would (the standby test screen)', async () => {
   const { w, calls } = make({ result: { ok: true } });
-  w.state = { active: true, mode: 'alarm', touchId: true };
+  w.state = { active: true, mode: 'away', touchId: true };
   assert.deepEqual(await w.askFingerprint(), { ok: true });
-  assert.deepEqual(calls, ['hold', 'prompt'], 'no release: the guard hides the alarm itself');
+  assert.deepEqual(calls, ['hold', 'prompt'], 'no release: it is not coming back');
+  assert.equal(w.state.active, false, 'the screen is down');
+  const again = make({ result: { ok: false } }); again.w.state = { active: true, mode: 'alarm' };
+  assert.deepEqual(await again.w.askFingerprint(), { ok: false }); assert.equal(again.w.state.active, true, 'a fingerprint that is not accepted leaves the alarm up'); assert.deepEqual(again.calls, ['hold', 'prompt', 'release']);
+});
+
+test('while the Touch ID sheet is up the alarm screen stays visible and drops to a lower window level, then goes back to the top if it is not accepted', () => {
+  const calls = [];
+  const win = { isDestroyed: () => false, setAlwaysOnTop: (...a) => calls.push(['level', ...a]), hide: () => calls.push(['hide']), showInactive: () => calls.push(['show']) };
+  const w = new IntruderWindow({}); w.wins = [win]; w.state = { active: true, mode: 'alarm' };
+  w.hold(); assert.deepEqual(calls, [['level', true, 'floating']], 'not hidden: only lowered, so the system sheet can be seen above it'); assert.equal(w.state.paused, true);
+  calls.length = 0; w.release(); assert.deepEqual(calls, [['level', true, 'screen-saver', 2], ['show']]); assert.equal(w.state.paused, false);
 });
