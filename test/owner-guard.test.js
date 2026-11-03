@@ -348,3 +348,15 @@ test('the standby screen never traps you: it stays away while you use the keyboa
   // 5. without an idle reading (older callers) nothing changes
   const d = make({ enabled: true, seconds: 20, threshold: 0.4, awaySeconds: 10 }); d.feed([], 12); assert.equal(d.g.awayActive, true);
 });
+
+test('"enroll my face" does not leave the reactor on the screen in front of the setup window', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const { shouldHoldAnswer } = require('../src/main/dismiss');
+  const long = 'x'.repeat(120);
+  assert.equal(shouldHoldAnswer({ reply: long, status: 'done' }), true, 'an ordinary long answer stays until dismissed');
+  assert.equal(shouldHoldAnswer({ reply: long, status: 'done', noHold: true }), false, 'a command that says it must not stay is not held');
+  const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8'), ask = fs.readFileSync(path.join(__dirname, '../src/main/askController.js'), 'utf8'), win = fs.readFileSync(path.join(__dirname, '../src/main/enrollWindow.js'), 'utf8');
+  assert.match(main, /enrollWin\.open\(\);[\s\S]{0,500}noHold: true, noFollowUp: true/, 'the enroll command asks not to be held and not to be followed up');
+  assert.match(ask, /noHold: !!res\.noHold/); assert.match(ask, /res\.noHold \? 1500 :/, 'and the reactor goes after a moment, not after ten seconds');
+  assert.match(win, /setAlwaysOnTop\(true, 'screen-saver', 1\)/, 'the setup window sits above the reactor (level 0) and below the alarm (level 2)');
+});
