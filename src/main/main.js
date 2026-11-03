@@ -1034,7 +1034,7 @@ function registerIpc() {
     if (!fromCameraPage(e) || !ownerState) return { faceId: false };
     const enrolling = !!ownerState.enroll && Date.now() < ownerState.enroll.until;
     const faceId = enrolling || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0);
-    const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness };
+    const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness, pace: faceId && !enrolling ? ownerGuard?.pace?.() || 1000 : 1000 };
     if (faceId && have !== ownerState.version) out.templates = [...ownerState.templates, ...(trustedPeople?.templates() || [])];
     return out;
   });

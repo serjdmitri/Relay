@@ -46,13 +46,14 @@ class OwnerGuard {
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
   frame({ faces = 0, scores = [], live = [], down = false } = {}) {
     const cfg = config(this.getConfig());
-    if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; return null; }
+    if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; this.watchStart = null; return null; }
+    if (this.watchStart === null) this.watchStart = this.now();
     const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
     // A score between (threshold - margin) and the threshold is "not sure" (a face that is far, turned or badly lit): neither you nor a stranger. Only a clearly low score, or a match with no blink, counts against you.
     const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive));
@@ -66,6 +67,17 @@ class OwnerGuard {
     if (down) this.lastDownAt = this.now();
     this.noFaceSince = faces > 0 ? null : (this.noFaceSince ?? this.now());
     return this.step(cfg);
+  }
+
+  // How often the camera page should look: quickly while Relay is waiting to see YOU (the first moments after turning it on, the away screen, the alarm countdown), so you are
+  // recognised in under a second, and once a second otherwise. Quick looking only changes WHEN frames arrive, never how many it takes to alarm: the alarm and the lock after one
+  // still count the same frames in the same state (the stranger count only runs while idle and armed, which is the slow pace).
+  pace(fastMs = 400, slowMs = 1000, warmMs = 30000) {
+    const cfg = config(this.getConfig());
+    if (!cfg.enabled || !this.hasTemplates()) return slowMs;
+    if (this.awayActive || this.state === 'alarm') return fastMs;
+    if (!this.armed && this.watchStart !== null && this.now() - this.watchStart < warmMs) return fastMs;
+    return slowMs;
   }
 
   // Called every second as well, so the countdown ends on time even if the camera stops sending pictures.

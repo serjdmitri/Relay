@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Owner recognition answers faster when it is waiting for you.** The camera page now looks about 2.5 times a second (instead of once a second) only while Relay is waiting to see you: the first 30 seconds after turning recognition on, the away screen, and the access-denied countdown. Coming back from the away screen takes 0.8 seconds (two frames of you) instead of about 2. The rest of the time it is still once a second, and it never changes how many frames it takes to raise the alarm or to lock, so it is not more trigger-happy. The face model now loads as soon as recognition is on, not when the first face appears, so the first recognition after starting is not delayed.
+- **The startup check reports how long the window took to appear** (0.7 s after launch on a clean profile).
+
 ## 0.38.5
 
 - **A startup check now guards every build.** `scripts/make-dmg.sh` launches the built app (a copy, with a throwaway profile, beside your running Relay) and refuses to make the .dmg unless it really starts: no startup errors in its log, the window's page has content, and the bridge to the app is there. If the app never answers it says a Keychain prompt is probably waiting. Run it yourself with `npm run startup-check`. Checked against the real broken 0.38.1: it fails it with "ReferenceError: fs is not defined".

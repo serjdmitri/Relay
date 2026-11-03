@@ -83,13 +83,14 @@ function main() {
     const exe = path.join(target, 'Contents/MacOS/Relay');
     const port = await freePort();
     let out = '', exitedEarly = null, done = false;
+    const tSpawn = Date.now();
     const child = spawn(exe, [`--remote-debugging-port=${port}`, `--user-data-dir=${path.join(tmp, 'profile')}`], { env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout.on('data', (d) => (out += d)); child.stderr.on('data', (d) => (out += d));
     child.on('exit', (code, sig) => { if (!done) exitedEarly = `exit ${code ?? sig}`; });
 
     let pages = null; const t0 = Date.now();
     while (Date.now() - t0 < 30000 && exitedEarly === null) { pages = await getJson(port); if (pages && pages.some((p) => WINDOW.test(p.url))) break; await sleep(700); }
-    const answered = !!pages;
+    const answered = !!pages, windowMs = pages && pages.some((p) => WINDOW.test(p.url)) ? Date.now() - tSpawn : null; // from launching the app to its window page existing
     const blockedBy = !answered && /SecurityAgent/.test(sh('pgrep', ['-l', 'SecurityAgent'])) ? 'Keychain' : null;
     let pageTextLength = 0, apiKeys = 0; const pageErrors = [];
     const main = pages && pages.find((p) => WINDOW.test(p.url));
@@ -112,6 +113,7 @@ function main() {
     if (!flag('keep-open')) { try { child.kill('SIGTERM'); } catch { /* gone */ } await sleep(1500); try { child.kill('SIGKILL'); } catch { /* gone */ } }
     const v = verdict({ answered, blockedBy, hasPage: !!main, pageTextLength, apiKeys, logErrors: classifyLog(out).errors, pageErrors: [...new Set(pageErrors)].slice(0, 6), designatedDiffers, exitedEarly });
     console.log(`Startup check of ${path.basename(app)} (${((Date.now() - t0) / 1000).toFixed(1)}s): ${v.ok ? 'OK' : 'FAILED'}`);
+    if (windowMs !== null) console.log(`  the window page appeared ${(windowMs / 1000).toFixed(1)}s after launch`);
     if (v.ok) console.log(`  the ${/onboarding/.test(main.url) ? 'welcome' : 'main'} window has content (${pageTextLength} characters) and ${apiKeys} bridge functions; no startup errors`);
     for (const p of v.problems) console.log(`  ✗ ${p}`);
     for (const w of v.warnings) console.log(`  ! ${w}`);
