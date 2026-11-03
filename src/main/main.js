@@ -1162,6 +1162,18 @@ function registerIpc() {
     }
   });
 
+  ipcMain.handle('assistant:activate', async (_e, action) => {
+    if (!['show','talk','type'].includes(action)) throw Error('Unknown assistant action.');
+    if (!['idle','done','input'].includes(ask.state)) return {error:'Finish or stop the current request first.'};
+    mainWin?.hide();
+    if (action === 'show') {
+      if (ask.state === 'input') ask.close();
+      ask.reactorIdle = true;
+      overlay.hud({state:'reactor-idle',idlePosition:store.get('settings.reactorIdlePosition') === 'corner' ? 'corner' : 'center'});
+    } else if (action === 'type') await ask.open({typed:true});
+    else await ask.listen('ask',false,{auto:store.get('settings.autoSend.enabled') !== false});
+    return {ok:true};
+  });
   ipcMain.handle('ask:open', async (_e, text) => {
     await ask.open();
     if (text) await ask.submit(text);

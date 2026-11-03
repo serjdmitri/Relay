@@ -363,3 +363,4 @@ details.adv[open] summary::before { transform: rotate(90deg); }
 .wchip { cursor: default; margin-bottom: 6px; }
 .wchip:hover { background: var(--g4a); }
 .row .field { height: 26px; }
+.get-row[role="button"]{cursor:pointer}.get-row[role="button"]:hover{background:var(--hover,rgba(100,200,255,.06))}.get-row[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
