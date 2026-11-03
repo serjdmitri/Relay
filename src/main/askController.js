@@ -45,6 +45,7 @@ const { AgentManager, parseAgentCommand, parseAgentsDashboardCommand } = require
 const { parseViewerGuardCommand } = require('./viewerGuard');
 const { parseSelfImproveCommand } = require('./selfImprove');
 const { parseOwnerCommand } = require('./ownerGuard');
+const shieldMod = require('./injectionShield');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -1313,6 +1314,21 @@ class AskController {
     const tools = [...base, ...this.connectorTools(), ...this.pluginTools()];
     // Text from a plugin is data, not instructions: once one was read in this request, anything that sends, deletes or runs code asks first.
     for (const t of tools) if (RISKY_AFTER_PLUGIN.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.tainted ? `This request read output from a plugin. Allow "${t.name}"?` : null); }
+    // Injection shield: what a tool reads from outside is data. If it holds wording aimed at an AI, the model gets a notice in front of it and risky tools ask first; and nothing private is sent out through a search or web request.
+    for (const t of tools) {
+      if (t.shielded || typeof t.run !== 'function') continue;
+      const untrusted = shieldMod.UNTRUSTED.has(t.name), sink = shieldMod.SINKS.has(t.name);
+      if (!untrusted && !sink) continue;
+      const orig = t.run; t.shielded = true;
+      t.run = async (i, ctx) => {
+        if (sink) { const why = shieldMod.checkSink(t.name, i); if (why) return why; }
+        const r = await orig.call(t, i, ctx);
+        if (!untrusted) return r;
+        const g = shieldMod.guardResult(t.name, r);
+        if (g.level === 'medium' || g.level === 'high') { this.tainted = true; try { shieldMod.logEntry(this.store, t.name, g); } catch { /* the log is a convenience */ } }
+        return g.result;
+      };
+    }
     if (forModel && flagsMod.isOn(this.store.get('settings'), 'toolCategories')) { tools.exposed = toolCategories.exposure(tools, { request }); tools.onLoadMore = (group) => this.store.set('toolMisses', [...(this.store.get('toolMisses') || []), { group, ts: Date.now() }].slice(-100)); }
     return tools;
   }
@@ -2063,6 +2079,7 @@ class AskController {
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
+          if (shieldMod.parseShieldCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: shieldMod.describeLog(this.store.get('shieldLog')), actions: 0 }); }
           if (this.selfImproveCommand && parseSelfImproveCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.selfImproveCommand(parseSelfImproveCommand(effective))); }
           if (this.viewerGuardCommand && parseViewerGuardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.viewerGuardCommand(parseViewerGuardCommand(effective))); }
           if (this.openAgentsDashboard && parseAgentsDashboardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.openAgentsDashboard()); }

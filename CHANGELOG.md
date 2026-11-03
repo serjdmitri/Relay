@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Injection shield (idea from OpenJarvis).** Text Relay reads from outside (web pages, search results, email, notes, Notion, the calendar, the clipboard, Firefox pages) is now scanned for wording aimed at an AI: "ignore your previous instructions", fake system markers, hidden or invisible characters, "send my files to…", "don't tell the user", shell tricks. When found, the model gets a plain notice in front of the text saying it is data and not to follow it, the request is marked as having read untrusted content (so sending, deleting and running code ask first), and a text-free note is kept: say "what did the shield catch". Going the other way, nothing private (API keys, tokens, private keys, passwords, card numbers, ID numbers) can leave through a web search, a page fetch or a link, and a credential stripper blanks them in text that is about to go out.
+
 ## 0.38.0
 
 - **Combined release: Codex's feature batch plus Claude's owner recognition, on Electron 45.2.1** (was 33). From Codex: Fitbit goals and rings, encrypted trusted-person face profiles, a security audit with fixes, planned overnight checks and local improvement drafts, isolated Argos and God's Eye map windows, an iPhone route preview, the Memory field fix, adjustable background blur and images, work modes, scheduled owner check-in calls, wake and clap handling, and six stable hand cursors. Details in docs/release-0.38.0.md.
