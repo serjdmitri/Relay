@@ -9,8 +9,9 @@ const DISMISS = /^(?:ok|okay|k|kay|alright|all right|thanks|thank you|thanks a l
 const parseDismiss = (text) => DISMISS.test(clean(text).replace(/'/g, ' ').replace(/\s+/g, ' ').trim());
 
 // Hold it when it was worked out by the model, or is a real sentence or more; not for replies sent to the phone or run on a schedule.
-function shouldHoldAnswer({ reply = '', status = 'done', model = '', remote = false, unattended = false, busy = false, setting = true } = {}) {
-  if (!setting || remote || unattended || busy || status === 'stopped') return false; // busy: a quiz or checklist is running, where "ok" and "got it" mean something else
+// noHold: the command itself says its answer must not stay (the face setup window opens in front of it and the reactor would block it).
+function shouldHoldAnswer({ reply = '', status = 'done', model = '', remote = false, unattended = false, busy = false, setting = true, noHold = false } = {}) {
+  if (noHold || !setting || remote || unattended || busy || status === 'stopped') return false; // busy: a quiz or checklist is running, where "ok" and "got it" mean something else
   const r = String(reply).trim();
   if (!r) return false;
   return !!model || r.length >= 50;

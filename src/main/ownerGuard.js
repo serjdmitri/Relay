@@ -36,28 +36,58 @@ function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
   return { samples: [...samples, embedding.map((x) => Math.round(x * 1e5) / 1e5)], added: true };
 }
 
+// What the enrollment window sends back: [{ pose, embedding }] for the nine poses. Only a set that really covers your face from around is kept: straight ahead plus at least six of
+// the eight directions, every embedding 128 finite numbers, nothing else. Returns { ok, templates, poses } or { ok: false, why } in words.
+const ENROLL_POSES = ['center', 'left', 'topLeft', 'top', 'topRight', 'right', 'bottomRight', 'bottom', 'bottomLeft'];
+function acceptEnrollment(samples, { minDirections = 6, max = 24 } = {}) {
+  if (!Array.isArray(samples) || !samples.length) return { ok: false, why: 'No face samples arrived.' };
+  const templates = [], poses = new Set();
+  for (const s of samples.slice(0, max)) {
+    if (!s || !ENROLL_POSES.includes(s.pose) || !Array.isArray(s.embedding) || s.embedding.length !== 128 || s.embedding.some((x) => typeof x !== 'number' || !Number.isFinite(x))) continue;
+    templates.push(s.embedding.map((x) => Math.round(x * 1e5) / 1e5)); poses.add(s.pose);
+  }
+  if (!poses.has('center')) return { ok: false, why: 'The straight-ahead pose is missing.' };
+  const directions = [...poses].filter((p) => p !== 'center').length;
+  if (directions < minDirections) return { ok: false, why: `Only ${directions} of the 8 directions were captured; at least ${minDirections} are needed.` };
+  return { ok: true, templates, poses: [...poses] };
+}
+
+// Which of the faces in view are a trusted person (someone you enrolled by name): the face matches a trusted profile, does not match YOU, and (when the blink check is on)
+// has blinked. A trusted person is neither the owner nor a stranger: they never start the alarm or the viewer countdown, and they cannot stand in for you (arm the guard,
+// lift the standby screen). scores: each face's best match against YOUR face; trustedScores: against the trusted profiles; live: the blink check per face.
+function trustedFlags({ scores = [], trustedScores = [], live = [], threshold = DEFAULTS.threshold } = {}) {
+  return scores.map((owner, i) => {
+    const t = trustedScores[i];
+    return Number.isFinite(t) && t >= threshold && !(Number.isFinite(owner) && owner >= threshold) && live[i] !== false;
+  });
+}
+
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
-    Object.assign(this, { armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, getIdleSeconds = () => Infinity, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
+    Object.assign(this, { getIdleSeconds, armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
     this.reset();
   }
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; this.trustedFrames = 0; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
-  frame({ faces = 0, scores = [], live = [], down = false } = {}) {
+  // trusted: per face, true for a recognised trusted person (see trustedFlags).
+  frame({ faces = 0, scores = [], live = [], down = false, trusted = [] } = {}) {
     const cfg = config(this.getConfig());
     if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; this.watchStart = null; return null; }
     if (this.watchStart === null) this.watchStart = this.now();
-    const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
+    this.lastFrameAt = this.now();
+    const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false, trusted: trusted[i] === true })).filter((k) => Number.isFinite(k.s));
+    const trustedHere = known.some((k) => k.trusted);
     // A score between (threshold - margin) and the threshold is "not sure" (a face that is far, turned or badly lit): neither you nor a stranger. Only a clearly low score, or a match with no blink, counts against you.
-    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive));
-    this.seen = owner ? 'owner' : stranger ? 'stranger' : faces ? 'unclear' : 'nobody';
+    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => !k.trusted && (k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive)));
+    this.seen = owner ? 'owner' : stranger ? 'stranger' : trustedHere ? 'trusted' : faces ? 'unclear' : 'nobody';
+    this.trustedFrames = trustedHere && !owner && !stranger ? this.trustedFrames + 1 : 0;
     if (known.length) this.lastScore = Math.max(...known.map((k) => k.s));
     this.owners = owner ? this.owners + 1 : 0;
     this.strangers = stranger && !owner ? this.strangers + 1 : 0;
@@ -83,10 +113,18 @@ class OwnerGuard {
   // Called every second as well, so the countdown ends on time even if the camera stops sending pictures.
   step(cfg = config(this.getConfig())) {
     const t = this.now();
-    // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again.
+    // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again. It must never trap you, so:
+    //  - it does not appear while the keyboard or mouse have been used lately (someone is there, whatever the camera sees),
+    //  - it does not appear, and goes away, when the camera has stopped sending pictures (blind is not the same as nobody there),
+    //  - and once it is up, touching the keyboard or mouse for two seconds in a row clears it (a stranger who sits down is seen by the camera and gets the alarm instead).
+    const idle = Number(this.getIdleSeconds()), blind = this.lastFrameAt !== null && t - this.lastFrameAt > 8000, usingMac = Number.isFinite(idle) && idle < Math.min(cfg.awaySeconds, 30);
+    this.activeSteps = Number.isFinite(idle) && idle < 1.5 ? this.activeSteps + 1 : 0;
     if (cfg.enabled && cfg.awayScreen && !this.demo && this.armed) {
-      if (!this.awayActive && t >= this.quietUntil && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
-      else if (this.awayActive && this.owners >= this.ownerFrames) { this.awayActive = false; this.onAway(false); }
+      if (!this.awayActive && t >= this.quietUntil && this.state === 'idle' && !blind && !usingMac && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
+      else if (this.awayActive && (this.owners >= this.ownerFrames || blind || this.activeSteps >= 2)) {
+        if (this.owners < this.ownerFrames) { this.quietUntil = Math.max(this.quietUntil, t + 120000); this.noFaceSince = null; } // cleared without seeing you: leave it be for two minutes
+        this.awayActive = false; this.onAway(false);
+      }
     } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
       if (cfg.enabled && this.armed && t >= this.quietUntil && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
@@ -94,6 +132,7 @@ class OwnerGuard {
     }
     if (this.state === 'alarm') {
       if (this.owners >= this.ownerFrames && !this.demo) return this.clear('owner');
+      if (this.trustedFrames >= this.ownerFrames && !this.demo) return this.clear('trusted'); // an approved person is at the desk and no stranger is: nothing to alarm about (the Mac is not unlocked by this, only the alarm stops)
       if (t >= this.deadline) return this.end();
       this.onCount(this.secondsLeft());
       return null;
@@ -170,4 +209,4 @@ function openTemplates(rec, decrypt) {
   } catch { return []; }
 }
 
-module.exports = { OwnerGuard, authenticateOwner, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
+module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };

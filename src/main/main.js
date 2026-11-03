@@ -47,7 +47,7 @@ const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
-const { OwnerGuard, authenticateOwner, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
+const { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
 const { IntruderWindow } = require('./intruderWindow');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
@@ -95,7 +95,7 @@ function rememberThrow(undo) {
 const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
-let mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let enrollWin, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -315,6 +315,7 @@ function rebuildTray() {
   tray.setContextMenu(Menu.buildFromTemplate(uiText.localizeMenu([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
     { label: 'Type a Request…', click: () => ask.open() },
+    { label: 'Set Up Owner Recognition…', click: () => { Promise.resolve(ask.ownerCommand?.({ type: 'enroll' })).then((r) => { if (r?.status === 'failed') ask.notice(r.reply, 'failed'); }).catch((e) => ask.notice(e.message, 'failed')); } },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
     { label: holos?.holos.size ? `Clear ${holos.holos.size} Hologram${holos.holos.size === 1 ? '' : 's'}` : 'No Holograms', enabled: !!holos?.holos.size, click: () => holos.closeAll() },
     { label: hands?.status === 'error' ? 'Hand control (camera): problem, click to retry' : 'Hand control (camera)', type: 'checkbox', checked: !!store.get('settings.hands.enabled') && hands?.status !== 'error', click: (item) => setHands(item.checked) },
@@ -492,9 +493,18 @@ function registerIpc() {
       if (!command.background) openMain('calls');
       if (command.type === 'open') return { status: 'done', reply: 'Phone Calls is open, Sir.' };
       if (command.type === 'schedule') { callService.addSchedule(command.spec); return { status: 'done', reply: 'The check-in review is scheduled, Sir. At that time it will await approval of the exact number and purpose; it will not dial automatically.' }; }
+      if (command.type === 'provider') {
+        const st = callService.configure({ provider: command.provider });
+        const missing = [];
+        if (command.provider === 'twilio' && !st.hasTwilio) missing.push('your Twilio account SID, auth token and Twilio phone number');
+        if (command.provider === 'bland' && !st.hasKey) missing.push('your Bland key');
+        const what = command.provider === 'twilio' ? 'Twilio, the free-trial option: a one-way call that reads your message aloud in a British male voice (Brian)' : command.provider === 'bland' ? 'Bland, which holds a conversation' : 'Bland first, with Twilio as the backup';
+        return { status: 'done', reply: `Calls now use ${what}, Sir.${missing.length ? ` It still needs ${missing.join(' and ')}, which only you can add in Calls settings, so no call will go out until then.` : ''}${command.provider === 'twilio' && st.hasTwilio ? ' A Twilio trial account can only call numbers you verified in Twilio, and the first thing you hear is its trial notice.' : ''}${(callService.schedules() || []).some((x) => x.automatic) ? ' Automatic check-ins stay paused until you recreate them, because they were authorized for the old provider.' : ''}` };
+      }
       const result = await callService.requestOwnerCall(command.purpose, { background: command.background });
       if (result.error) return { status: 'failed', reply: result.error };
-      if (!result.review) return { status: 'done', reply: 'Your call has been submitted to Bland, Sir. Watch Calls for its status.' };
+      const via = ({ twilio: 'Twilio', bland: 'Bland' })[callService.config().provider] || 'your calling provider';
+      if (!result.review) return { status: 'done', reply: `Your call has been submitted to ${via}, Sir. Watch Calls for its status.` };
       return { status: 'done', reply: 'Your call is prepared, Sir. Review the number and purpose in Calls and approve the dialing prompt. No call has been placed.' };
     } catch (err) { return { status: 'failed', reply: err.message }; }
   };
@@ -1023,7 +1033,17 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
-  ipcMain.handle('presence:frame', (e, f) => { if(e.sender!==presenceSender) return; presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [], down: f?.down === true }); } });
+  ipcMain.handle('presence:frame', (e, f) => {
+    if (e.sender !== presenceSender) return;
+    presence?.frame(f);
+    if (!presence?.enabled) return;
+    const faces = Number(f?.faces) || 0, arr = (v) => (Array.isArray(v) ? v.slice(0, 5) : []);
+    const scores = arr(f?.scores), live = arr(f?.live);
+    // a recognised trusted person is neither you nor a stranger: they are not counted as an extra viewer, and they do not start the alarm
+    const trusted = trustedFlags({ scores, trustedScores: arr(f?.trustedScores), live, threshold: ownerConfig(store.get('settings.owner')).threshold });
+    viewerGuard?.frame({ ...(f || {}), faces: Math.max(0, faces - trusted.filter(Boolean).length) });
+    ownerGuard?.frame({ faces, scores, live, trusted, down: f?.down === true });
+  });
   ipcMain.handle('presence:status', (e, st) => {
     if(e.sender!==presenceSender) return;
     if (st?.state === 'faceid-error') { ask.notice(String(st.message || 'Owner recognition could not start.').slice(0, 200), 'failed'); return; }
@@ -1036,7 +1056,7 @@ function registerIpc() {
     const enrolling = !!ownerState.enroll && Date.now() < ownerState.enroll.until;
     const faceId = enrolling || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0);
     const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness, pace: faceId && !enrolling ? ownerGuard?.pace?.() || 1000 : 1000 };
-    if (faceId && have !== ownerState.version) out.templates = [...ownerState.templates, ...(trustedPeople?.templates() || [])];
+    if (faceId && have !== ownerState.version) { out.templates = [...ownerState.templates]; out.trusted = trustedPeople?.templates() || []; } // kept apart: a trusted person is not you
     return out;
   });
   ipcMain.handle('presence:enroll', (e, s) => {
@@ -1066,8 +1086,8 @@ function registerIpc() {
         await trustedPeople.authorize();
         if(!safeStorage.isEncryptionAvailable()) throw Error('Encrypted storage is unavailable.');
         store.set('settings.presence.enabled',true); await setPresence(true);
-        ownerState.enroll={name,samples:[],start:Date.now(),until:Date.now()+120000};
-        ask.notice(`Enrolling ${name}: only that person should face the camera. Slowly turn and tilt your head.`, 'done');
+        enrollWin.open({name});
+        ask.notice(`Adding ${name}: only that person should face the camera in the setup window, then turn their head toward each part of the ring.`, 'done');
       } else throw Error('Unknown profile action.');
       broadcast(); return {ok:true};
     } catch(err) { return {error:err.message}; }
@@ -1396,6 +1416,8 @@ app.whenReady().then(() => {
   ask.lockWatch = lockWatch;
   let lockedAt = 0;
   let lastWelcome = 0;
+  // After the Mac wakes (the lid was closed) the camera stream is often dead: start the camera again, so recognition and the standby screen see you and not a frozen picture.
+  powerMonitor.on('resume', () => { if (presence?.enabled) { presence.disable(); setTimeout(() => { if (store.get('settings.presence.enabled') || ownerConfig(store.get('settings.owner')).enabled) presence.enable().then(() => broadcast()).catch(() => {}); }, 2500).unref?.(); } });
   powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     lockWatch.set(false);
@@ -1574,6 +1596,7 @@ app.whenReady().then(() => {
   ownerGuard = new OwnerGuard({
     lock: () => ask.mac.lockScreen(),
     hasTemplates: () => ownerState.templates.length > 0,
+    getIdleSeconds: () => { try { return powerMonitor.getSystemIdleTime(); } catch { return Infinity; } },
     getConfig: () => store.get('settings.owner'),
     onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); },
     onClear: () => intruder.hide(),
@@ -1581,6 +1604,25 @@ app.whenReady().then(() => {
     onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
   });
   setInterval(() => ownerGuard.step(), 1000);
+  // The face setup window (camera in a circle, ring of eight directions): it returns the finished set of numbers, and this decides whether it is a full set and keeps it.
+  enrollWin = new (require('./enrollWindow').EnrollWindow)({
+    motion: floatingMotion,
+    save: async (samples, name) => {
+      if (!safeStorage.isEncryptionAvailable()) return { ok: false, message: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
+      const firstPerPose = (list) => { const seen = new Set(); return list.filter((x) => x && !seen.has(x.pose) && seen.add(x.pose)); }; // trusted people keep one numbers set per pose
+      const r = acceptEnrollment(name ? firstPerPose(samples) : samples);
+      if (!r.ok) return { ok: false, message: r.why };
+      if (name) { try { trustedPeople.save(name, r.templates); } catch (e) { return { ok: false, message: e.message }; } }
+      else if (!ownerState.save(r.templates)) return { ok: false, message: 'Your face could not be saved: this Mac cannot encrypt it right now.' };
+      store.set('settings.owner', { ...ownerConfig(store.get('settings.owner')), enabled: true });
+      ownerGuard.reset();
+      if (!store.get('settings.presence.enabled')) { store.set('settings.presence.enabled', true); await setPresence(true); }
+      broadcast();
+      const seconds = ownerConfig(store.get('settings.owner')).seconds;
+      ask.notice(`${name || 'Your face'} is enrolled (${r.templates.length} angles) and owner recognition is on. If someone else sits down, I will sound the alarm and lock after ${seconds} seconds. Say "test the access denied screen" to see it.`, 'done');
+      return { ok: true, message: `${r.templates.length} angles saved. Owner recognition is on: a stranger at the desk gets the alarm, then the lock after ${seconds} seconds.` };
+    }
+  });
   ask.ownerCommand = async (c) => {
     const cfg = () => ownerConfig(store.get('settings.owner'));
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
@@ -1589,9 +1631,9 @@ app.whenReady().then(() => {
     if (['enroll','forget','off','liveness-off'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
-      const note = await needCamera();
-      ownerState.enroll = { samples: [], start: Date.now(), until: Date.now() + 120000 }; broadcast();
-      return done(`Look at the camera. Slowly turn your head left and right, and tilt it up and down a little. It takes about ten seconds, and I will tell you when it is done.${note} Your face is kept as numbers, encrypted on this Mac; no picture is saved.`);
+      enrollWin.open();
+      // short, and told not to stay: the reactor card would otherwise sit on the screen in front of the setup window until dismissed, and nothing should ask "anything else?" over it
+      return { ...done('The face setup window is open. Follow the glow around the ring.'), noHold: true, noFollowUp: true };
     }
     if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); store.set('trustedFaces',[]); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
     if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }

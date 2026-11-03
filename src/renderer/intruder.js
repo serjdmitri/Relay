@@ -123,13 +123,16 @@ let state = { active: false };
 async function poll() { try { state = (await relay.intruderState()) || { active: false }; } catch { /* the window is closing */ } }
 setInterval(poll, 250); poll();
 
+let wasPaused = false, noteUntil = 0;
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 function frame() {
   requestAnimationFrame(frame);
-  if (!state.active || state.paused) { if (soundMode) stopSound(); return; } // paused: the Touch ID sheet is up
+  if (!state.active) { if (soundMode) stopSound(); return; }
   const mode = state.mode === 'away' ? 'away' : 'alarm';
   if (document.body.className !== mode) { document.body.className = mode; if (soundMode) stopSound(); }
-  if (soundMode !== mode) startSound(mode);
+  // paused: the Touch ID sheet is up. The screen stays and keeps counting down; only the siren is quiet, so the sheet can be heard and used.
+  if (state.paused) { if (soundMode) stopSound(); } else if (soundMode !== mode) startSound(mode);
+  if (!!state.paused !== wasPaused) { wasPaused = !!state.paused; if (wasPaused) $('touchlabel').textContent = 'Touch the sensor…'; else if (Date.now() > noteUntil) $('touchlabel').textContent = 'Touch ID to stop'; }
   let urgency = 0;
   if (mode === 'alarm') {
     const left = Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000));
@@ -148,11 +151,10 @@ function frame() {
 }
 
 // Touch ID: the owner stops the screen with a fingerprint. The system asks; if it is not accepted the screen comes back with a short note.
-let noteUntil = 0;
 $('touch').addEventListener('click', async () => {
   let r = null;
   try { r = await relay.intruderFingerprint(); } catch { /* the window is closing */ }
-  if (r && !r.ok) { $('touchlabel').textContent = r.error || 'Not recognised'; setTimeout(() => { $('touchlabel').textContent = 'Touch ID to stop'; }, 3500); }
+  if (r && !r.ok) { noteUntil = Date.now() + 3500; $('touchlabel').textContent = r.error || 'Not recognised'; setTimeout(() => { $('touchlabel').textContent = 'Touch ID to stop'; }, 3500); }
 });
 requestAnimationFrame(frame);
 addEventListener('beforeunload', stopSound);

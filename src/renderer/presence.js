@@ -13,10 +13,10 @@ let stream = null;
 let timer = 0;
 let stopped = false;
 let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBusy = false, recogOn = false, livenessOn = false, lmTimer = 0;
-let lastLm = { t: 0, faces: [] };
+let lastLm = { t: 0, faces: [] }, watchdog = 0;
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
-let busy = false, embed = null, embedFailed = false, templates = [], version = 0;
+let busy = false, embed = null, embedFailed = false, templates = [], trustedTemplates = [], version = 0;
 const cosine = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x) * Math.sqrt(y) || 1); };
 const bestScore = (e, list) => list.reduce((best, t) => { const s = t.length === e.length ? cosine(e, t) : null; return s !== null && (best === null || s > best) ? s : best; }, null);
 
@@ -50,6 +50,26 @@ async function loadLandmarker() {
   } catch (e) { lmFailed = true; relay.presenceStatus({ state: 'faceid-error', message: 'The face landmark finder could not start, so recognition is less accurate and a photo of you could pass: ' + String(e?.message || e).slice(0, 100) }); } finally { lmLoading = false; }
 }
 
+
+// A camera stream does not always survive the Mac sleeping (closing the lid) or another app taking the camera: it ends, or the picture freezes, and nothing says so. Then Relay is
+// blind: it sees nobody, and the standby screen could stay up. So a stream that ends, or whose picture has not moved for 12 seconds, is started again by reloading this page.
+// Reloads are counted, and after four in two minutes it gives up and says so, so a camera that is really gone cannot loop.
+function watchStream() {
+  const restart = () => {
+    if (stopped) return; stopped = true; clearTimeout(timer); clearInterval(lmTimer);
+    let log = []; try { log = JSON.parse(sessionStorage.getItem('camReloads') || '[]').filter((t) => Date.now() - t < 120000); } catch { /* no storage */ }
+    if (log.length >= 4) { status('error', { message: 'The camera keeps stopping, so Presence and owner recognition cannot watch. Close any app using the camera, or turn Presence off and on.' }); return; }
+    try { sessionStorage.setItem('camReloads', JSON.stringify([...log, Date.now()])); } catch { /* no storage */ }
+    location.reload();
+  };
+  const track = stream?.getVideoTracks?.()[0];
+  track?.addEventListener('ended', restart);
+  let lastTime = video.currentTime, lastMove = Date.now();
+  watchdog = setInterval(() => {
+    if (video.currentTime !== lastTime) { lastTime = video.currentTime; lastMove = Date.now(); } else if (Date.now() - lastMove > 12000) restart();
+  }, 4000);
+}
+
 async function start() {
   try {
     fileset = await FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
@@ -60,6 +80,7 @@ async function start() {
     video.srcObject = stream;
     await video.play();
     status('running');
+    watchStream();
     // Looks once a second, or faster while the main process is waiting to see you (it says so in the config: c.pace), so a return is recognised in under a second.
     let pace = 1000;
     const tick = async () => {
@@ -72,7 +93,7 @@ async function start() {
         const frame = { faces: dets.length };
         // Owner recognition (opt-in): only when asked for. The main process says whether to match faces or to enroll yours.
         const c = await relay.presenceConfig(version);
-        if (c?.templates) { templates = c.templates; version = c.version; }
+        if (c?.templates) { templates = c.templates; trustedTemplates = c.trusted || []; version = c.version; }
         recogOn = !!c?.faceId; livenessOn = recogOn && !!c?.liveness && c.mode !== 'enroll';
         pace = Math.min(1000, Math.max(250, Number(c?.pace) || 1000));
         if (recogOn && !landmarker && !lmFailed && !lmLoading) loadLandmarker();
@@ -91,7 +112,9 @@ async function start() {
             } else {
               // like Glance, a face too small in the picture is a bystander or too far to judge: no score, rather than a low one
               frame.down = faces.some((f) => f.away); // looking down at the keyboard or turned aside: not the same as leaving, and not judged
-              frame.scores = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? bestScore(e, templates) : null; }));
+              // each face is compared with YOUR face and, separately, with the trusted people you enrolled (so a trusted person is recognised as that, not as you)
+              const both = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? { owner: bestScore(e, templates), trusted: trustedTemplates.length ? bestScore(e, trustedTemplates) : null } : null; }));
+              frame.scores = both.map((b) => (b ? b.owner : null)); frame.trustedScores = both.map((b) => (b ? b.trusted : null));
               // Liveness: a face that matches you but has not blinked lately is reported as not alive (a picture). Until the blink finder is ready, or if it cannot load, faces count as alive.
               frame.live = faces.map((f) => (livenessOn && fresh && Number.isFinite(f.x) ? tracker.isLive(f.x, f.y, Date.now()) !== false : true));
             }
@@ -106,5 +129,5 @@ async function start() {
   }
 }
 
-addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
+addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); clearInterval(watchdog); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
 start();
