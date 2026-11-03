@@ -101,6 +101,7 @@ let voiceProblem = ''; // why the chosen voice could not speak the last reply, i
 let claudeState = { installed: false, loggedIn: false, checked: false };
 let speechInfo = { device: null, preparing: null, prepared: false, error: null };
 let mainWin = null;
+let lastVoiceNotice = { key: '', at: 0 };
 const { activateMainWindow, restoreDockPreference } = require('./mainWindowFocus');
 let onboardWin = null;
 let quitting = false;
@@ -1190,7 +1191,14 @@ app.whenReady().then(() => {
       const t = store.get('settings.tts');
       return { engine: t.engine, kokoro: t.kokoro, openai: { ...t.openai, key: decryptKey(t.openai.keyEnc) }, elevenlabs: { ...t.elevenlabs, key: decryptKey(t.elevenlabs.keyEnc) }, gemini: { ...t.gemini, key: decryptKey(t.gemini?.keyEnc) } };
     },
-    onProblem: (m) => { voiceProblem = m; broadcast(); }
+    // a better voice failed: say so in plain words (once per problem per ten minutes), so a silent reply is never a mystery
+    onProblem: (m) => {
+      voiceProblem = m; broadcast();
+      const now = Date.now(), key = String(m).slice(0, 80);
+      if (key === lastVoiceNotice.key && now - lastVoiceNotice.at < 600000) return;
+      lastVoiceNotice = { key, at: now };
+      try { ask?.notice(require('./failureMessage').explainVoiceFailure(m, { engine: store.get('settings.tts.engine') }), 'failed'); } catch { /* the notice is a convenience */ }
+    }
   });
   speaker.prepare(profileFor('quiet', store.get('settings') || {}));
   const prepareGreeting=()=>speaker.prepare({...profileFor('reply',store.get('settings')||{}),text:welcome.greetingFor(Date.now(),store.get('settings.welcome.name')||'Sir')});
