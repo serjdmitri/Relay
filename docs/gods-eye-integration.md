@@ -14,3 +14,9 @@ Runtime setup on this Mac:
 The visual skin and first-view integration are applied only in the isolated local map renderer. No Relay bridge, filesystem API, Node integration, microphone or location permission is exposed there. Source attribution remains visible. The transition preserves upstream map controls rather than pretending feed data belongs to Relay.
 
 Verification: upstream setup doctor passed; actual server startup and live Esri/Cesium imagery rendered in an Electron native window; native checks confirmed the globe reset, isolated map bridge and corner reactor. Startup errors no longer show an empty white rectangle. Unit coverage includes healthy-server reuse, concurrent startup, loopback/strict-port selection, missing runtime and credential-free process environment. Physical voice activation and every external feed are not exhaustively verified.
+
+## Natural commands
+
+“Closest camera”, “next camera”, “show cameras in London”, “show flights over Miami”, “show satellites”, “show earthquakes”, “show ships near London”, “fly to Tokyo” and “zoom out” route directly to the local globe, identically for Claude/Codex. They reuse upstream God’s Eye actions, not its paid voice session. Nearest means nearest to the current map view or the named place, not GPS location. Only available public cameras are considered; missing catalogs/feeds are reported as failures. Local/private mode still blocks online layers. Stop cancels an active command.
+
+Native checks successfully flew to London, enabled live flights and selected the public camera “Old Kent Rd/Preston Cls”. This verifies selection/control, not uninterrupted availability of every public feed.

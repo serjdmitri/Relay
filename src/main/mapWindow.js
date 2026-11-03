@@ -14,7 +14,7 @@ class MapWindow {
    if(r.win.isDestroyed())return;
    await r.view.webContents.loadURL(r.url);
    if(r.win.isDestroyed())return;
-   if(r.kind==='godseye'){await r.view.webContents.insertCSS(fs.readFileSync(path.join(__dirname,'../renderer/gods-eye-theme.css'),'utf8'));await r.view.webContents.executeJavaScript(fs.readFileSync(path.join(__dirname,'../renderer/gods-eye-integrate.js'),'utf8'));}
+   if(r.kind==='godseye'){await r.view.webContents.insertCSS(fs.readFileSync(path.join(__dirname,'../renderer/gods-eye-theme.css'),'utf8'));await r.view.webContents.executeJavaScript(fs.readFileSync(path.join(__dirname,'../renderer/gods-eye-integrate.js'),'utf8'));await r.view.webContents.executeJavaScript(fs.readFileSync(path.join(__dirname,'../renderer/gods-eye-commands.js'),'utf8'));}
    r.view.setVisible(true);status(r.kind==='godseye'?'God’s Eye engine connected · live sources show their own freshness':'External map loaded · source availability applies');
    if(r.kind==='godseye')this.onWorldView(true);
   }catch(e){status(r.kind==='godseye'?String(e.message||'God’s Eye could not start. Reload to retry.'):'Argos could not load. Check your network or open the source in your browser.');}
@@ -34,6 +34,23 @@ class MapWindow {
   const resize=()=>{const [w,h]=win.getContentSize();const top=kind==='godseye'?(r.settings?109:42):109;view.setBounds({x:1,y:top,width:Math.max(1,w-2),height:Math.max(1,h-top-32)});};r.resize=resize;resize();win.on('resize',resize);
   win.loadFile(path.join(__dirname,'../renderer/maps.html'),{query:{kind}});win.once('ready-to-show',()=>{win.show();if(kind==='godseye')this.onWorldView(true);this.load(r).catch(()=>{});});
   win.on('closed',()=>{if(!view.webContents.isDestroyed())view.webContents.close();this.windows.delete(kind);if(kind==='godseye')this.onWorldView(false);});this.motion?.watchWindow(win,{key:'map-'+kind,close:()=>win.close(),undo:()=>this.open(kind)});
+ }
+ async command(command,{signal}={}){
+  if(this.commandBusy)throw Error('Finish or stop the current map command first.');
+  this.commandBusy=true;let r;
+  const cancel=()=>{if(r&&!r.view.webContents.isDestroyed())r.view.webContents.executeJavaScript('window.__relayGodsEyeAbort?.abort()').catch(()=>{});};
+  signal?.addEventListener('abort',cancel,{once:true});
+  try{
+   this.open('godseye');r=this.windows.get('godseye');
+   for(let i=0;i<320;i++){
+    signal?.throwIfAborted();if(r.win.isDestroyed())throw Error('The God’s Eye workspace was closed.');
+    const ready=await r.view.webContents.executeJavaScript('!!(window.__relayWorldReady && window.__relayGodsEyeCommand && window.__godsEyeView?.voiceCommands?.runner)').catch(()=>false);
+    if(ready){const pending=r.view.webContents.executeJavaScript('window.__relayGodsEyeCommand('+JSON.stringify(command)+')');
+     return await Promise.race([pending,new Promise((_,reject)=>{const timer=setTimeout(()=>{cancel();reject(Error('God’s Eye did not finish in time.'));},35000);pending.finally(()=>clearTimeout(timer)).catch(()=>{});})]);}
+    await new Promise(resolve=>setTimeout(resolve,250));
+   }
+   throw Error('God’s Eye has not finished loading. Check its workspace status and try again.');
+  }finally{signal?.removeEventListener('abort',cancel);this.commandBusy=false;}
  }
  close(){for(const r of this.windows.values())r.win.close();}
 }
