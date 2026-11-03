@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.38.9
 
 - **Owner recognition answers faster when it is waiting for you.** The camera page now looks about 2.5 times a second (instead of once a second) only while Relay is waiting to see you: the first 30 seconds after turning recognition on, the away screen, and the access-denied countdown. Coming back from the away screen takes 0.8 seconds (two frames of you) instead of about 2. The rest of the time it is still once a second, and it never changes how many frames it takes to raise the alarm or to lock, so it is not more trigger-happy. The face model now loads as soon as recognition is on, not when the first face appears, so the first recognition after starting is not delayed.
 - **Owner recognition can no longer be left without its camera.** If recognition was on and your face enrolled but Presence (the camera) had ended up off, nothing was being watched and Relay still read "on". Launching now starts the camera whenever recognition is on, tells you when it had to turn Presence back on, and a camera that fails to start for a passing reason is retried (15, 30 and 45 seconds later) instead of being switched off for good. Only a refused Camera permission, or running out of tries, leaves it off, and then it says so.
