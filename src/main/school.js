@@ -1,4 +1,4 @@
-const schoolPath=path=>path.replace(/\/+$/,'');
+const schoolPath=pathname=>pathname.replace(/\/+$/,'');
 
 // Read a user-selected school page only from an already open, signed-in Firefox tab.
 // Page text is untrusted; callers must not treat it as instructions.
