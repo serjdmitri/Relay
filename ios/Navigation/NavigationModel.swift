@@ -12,9 +12,15 @@ final class NavigationModel: ObservableObject {
     @Published private(set) var status = "Choose a destination."
     @Published private(set) var loading = false
     private var requestID = UUID()
+    private var searchRequest: MKLocalSearch?
+    private var directionsRequest: MKDirections?
+    @Published var walking = false
+    @Published var query = ""
+    @Published var routeReady = UUID()
 
     func cancel() {
         requestID = UUID()
+        searchRequest?.cancel(); directionsRequest?.cancel()
         loading = false
         route = nil
         destination = nil
@@ -25,6 +31,7 @@ final class NavigationModel: ObservableObject {
     func search(for query: String, near origin: CLLocationCoordinate2D) async {
         let destinationText = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !destinationText.isEmpty else { status = "Enter a destination."; return }
+        searchRequest?.cancel(); directionsRequest?.cancel()
         let id = UUID()
         requestID = id
         loading = true
@@ -37,7 +44,9 @@ final class NavigationModel: ObservableObject {
             let search = MKLocalSearch.Request()
             search.naturalLanguageQuery = destinationText
             search.region = MKCoordinateRegion(center: origin, latitudinalMeters: 50_000, longitudinalMeters: 50_000)
-            let results = try await MKLocalSearch(request: search).start()
+            let pending = MKLocalSearch(request: search)
+            searchRequest = pending
+            let results = try await pending.start()
             guard requestID == id else { return }
             matches = Array(results.mapItems.prefix(10))
             status = matches.isEmpty ? "No matching place found." : "Choose a destination."
@@ -48,6 +57,7 @@ final class NavigationModel: ObservableObject {
     }
 
     func route(to place: MKMapItem, from origin: CLLocationCoordinate2D) async {
+        searchRequest?.cancel(); directionsRequest?.cancel()
         let id = UUID()
         requestID = id
         loading = true
@@ -59,14 +69,17 @@ final class NavigationModel: ObservableObject {
             let request = MKDirections.Request()
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: origin))
             request.destination = place
-            request.transportType = .automobile
-            let response = try await MKDirections(request: request).calculate()
+            request.transportType = walking ? .walking : .automobile
+            let pending = MKDirections(request: request)
+            directionsRequest = pending
+            let response = try await pending.calculate()
             guard requestID == id else { return }
             guard let found = response.routes.first else { status = "No driving route found."; return }
             destination = place
             route = found
             matches = []
             status = "Route preview ready."
+            routeReady = UUID()
         } catch {
             guard requestID == id else { return }
             status = "Could not find a route. Check your connection and try again."
