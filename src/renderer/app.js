@@ -230,12 +230,14 @@ const PAGES = {
     const gs = h('<div style="margin-top:-8px"></div>');
     const row = (ic, t, d, right, onclick, blue) => {
       const el = h(`<div class="get-row"><div class="ic ${blue ? 'blue' : ''}">${icon(ic)}</div><div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div>${right}</div>`);
-      if (onclick) el.onclick = onclick;
+      if (onclick) { el.onclick=onclick;el.setAttribute('role','button');el.tabIndex=0;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onclick();}}; }
       return el;
     };
-    gs.append(row('wave', 'Ask Relay', 'Say what you want done. It acts, then checks that it worked.', `<span class="kbd">${esc(S.labels.ask)}</span>`, null, true));
+    const activate=async action=>{try{const r=await relay.activateAssistant(action);if(r?.error)alert(r.error);}catch(e){alert(e.message);}};
+    gs.append(row('wave', 'Show Jarvis', 'Open the reactor without starting the microphone.', '<span class="kbd">⌥I</span>', () => activate('show'), true));
+    gs.append(row('wave', 'Ask Relay', 'Say what you want done. It acts, then checks that it worked.', `<span class="kbd">${esc(S.labels.ask)}</span>`, () => activate('talk'), true));
     gs.append(row('mic', 'Dictate', 'Talk, and the words are typed where your cursor is.', `<span class="kbd">${esc(S.labels.dictate)}</span>`));
-    gs.append(row('keyboard', 'Type a request', "For when talking isn't an option.", `<span class="kbd">${esc(S.labels.type)}</span>`));
+    gs.append(row('keyboard', 'Type a request', "For when talking isn't an option.", `<span class="kbd">${esc(S.labels.type)}</span>`, () => activate('type')));
     gs.append(row('command', 'Customize your shortcuts', 'Change the keys for any of these.', '<span class="chev"><svg viewBox="0 0 8 13"><path d="M1.5 1.5l5 5-5 5"/></svg></span>', () => go('shortcuts')));
     c.append(gs);
 
