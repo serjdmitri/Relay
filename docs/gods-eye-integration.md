@@ -20,3 +20,11 @@ Verification: upstream setup doctor passed; actual server startup and live Esri/
 “Closest camera”, “next camera”, “show cameras in London”, “show flights over Miami”, “show satellites”, “show earthquakes”, “show ships near London”, “fly to Tokyo” and “zoom out” route directly to the local globe, identically for Claude/Codex. They reuse upstream God’s Eye actions, not its paid voice session. Nearest means nearest to the current map view or the named place, not GPS location. Only available public cameras are considered; missing catalogs/feeds are reported as failures. Local/private mode still blocks online layers. Stop cancels an active command.
 
 Native checks successfully flew to London, enabled live flights and selected the public camera “Old Kent Rd/Preston Cls”. This verifies selection/control, not uninterrupted availability of every public feed.
+
+### Desktop globe and side controls
+
+God’s Eye now occupies a frameless transparent workspace. At Earth-scale zoom, space outside the globe is transparent and clicks there pass through to the desktop. Zoom toward Earth to blend into the full-screen map; zoom out to return. The Jarvis reactor remains bottom-right. Credits remain visible.
+
+Use the small **gear** at top-right, then **Side controls** to choose **Show on hover** (default) or **Always visible**. Hover or focus the Layers/Context edge tabs to reveal controls. The setting persists across launches. Expanded panels keep upstream controls and scrolling, with rails inset to avoid clipped tabs. The × closes the world workspace.
+
+The remote view has a dedicated sandbox preload that enables transparent WebGL at context creation and forwards only visual layout/settings/close messages. It exposes no Relay APIs, credentials, microphone, location, filesystem or general IPC. Main-process handlers accept only that view's main frame. Private/local model mode still disables online maps.
