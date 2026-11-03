@@ -534,8 +534,10 @@ function registerIpc() {
     const r=await storagePanel.trashSelected();
     return {status:r.cancelled?'stopped':r.error||r.failed?.length&&!r.count?'failed':'done',reply:r.cancelled?'Cancelled. No files were moved.':r.error||`I moved ${r.count} selected files to Trash, Sir.${r.failed?.length?` ${r.failed.length} could not be moved; check the storage menu.`:''}`,actions:r.count||0};
   };
-  mapPanel=new(require('./mapWindow').MapWindow)({store,motion:floatingMotion});
-  ask.openWorldMap=kind=>{try{mapPanel.open(kind);return {status:'done',reply:(kind==='argos'?'Argos Atlas':'God’s Eye')+' map menu is open, Sir. Check its source status for availability.',actions:1};}catch(e){return {status:'failed',reply:e.message,actions:0};}};
+  const godsEyeServer=new(require('./godsEyeServer').GodsEyeServer)({configFile:path.join(app.getPath('userData'),'gods-eye-runtime.json')});
+  app.once('before-quit',()=>godsEyeServer.stop());
+  mapPanel=new(require('./mapWindow').MapWindow)({store,motion:floatingMotion,server:godsEyeServer,onWorldView:on=>overlay.setWorldView(on)});
+  ask.openWorldMap=kind=>{try{mapPanel.open(kind);return {status:'done',reply:kind==='godseye'?'Your God’s Eye workspace is opening, Sir. The local engine will start automatically.':'Your Argos Atlas map is open, Sir.',actions:1};}catch(e){return {status:'failed',reply:e.message,actions:0};}};
   fitnessPanel = new FitnessWindow({store, motion:floatingMotion, getApi:()=>ask.googleApiIfConnected(), openSettings:()=>openMain('connectors')});
   ask.openFitness = () => {fitnessPanel.open();return {status:'done',reply:'Your Fitbit stats menu is open, Sir. Connect Fitbit / Google Health in Connections if needed.',actions:1};};
   networkPanel = new NetworkWindow({ store, motion: floatingMotion });

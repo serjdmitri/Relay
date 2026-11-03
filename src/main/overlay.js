@@ -236,7 +236,9 @@ class Overlay {
 
   // ----- the reactor: the Jarvis HUD in the middle of the screen while Relay listens, small in the top left while it works -----
   // msg uses the same fields as the pill ({ state, mode, partial, level, label, text, reply, status, ... }) or { hide: true }.
+  setWorldView(on) {this.worldView=!!on;this.hud(on?{state:'reactor-idle',idlePosition:'corner'}:{hide:true});if(on)this.hudEntry?.win.moveTop();}
   hud(msg) {
+    if(this.worldView && msg.hide)msg={state:'reactor-idle',idlePosition:'corner'};
     if (msg.hide) {
       clearInterval(this.borderTimer);
       this.borderTimer = null;
@@ -263,8 +265,8 @@ class Overlay {
       this.borderTimer = setInterval(() => this.refreshBorder(), 1000);
       this.borderTimer.unref?.();
     }
-    this.setHudBlur(this.hudEntry, this.getBlur());
-    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, name: this.getName(), visual: this.getVisual() === 'orb' ? 'orb' : 'reactor', border: this.getBorder() !== false } });
+    this.setHudBlur(this.hudEntry, this.worldView?false:this.getBlur());
+    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, worldView:!!this.worldView, name: this.getName(), visual: this.getVisual() === 'orb' ? 'orb' : 'reactor', border: this.getBorder() !== false } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
   }
 
@@ -309,7 +311,7 @@ class Overlay {
   }
 
   refreshHudBlur() {
-    if (this.hudEntry) this.setHudBlur(this.hudEntry, this.getBlur());
+    if (this.hudEntry) this.setHudBlur(this.hudEntry, this.worldView?false:this.getBlur());
   }
 
   // Typing a request and Allow / Cancel need the keyboard and the mouse, so the window takes them only while those are shown.

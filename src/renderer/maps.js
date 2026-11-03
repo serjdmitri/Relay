@@ -1,6 +1,10 @@
 const kind=new URLSearchParams(location.search).get('kind');
+document.body.classList.toggle('world',kind==='godseye');
+document.querySelector('#settings').hidden=kind!=='godseye';
+document.querySelector('#settings').onclick=()=>action('settings');
+window.relay.onMapSettings(on=>document.body.classList.toggle('settings',on));
 document.querySelector('#title').textContent='JARVIS / '+(kind==='argos'?'ARGOS ATLAS':'GOD’S EYE');
 for(const id of ['server','save'])document.getElementById(id).hidden=kind==='argos';
 const action=async(name,value)=>{const result=await window.relay.mapsAction(name,value);if(result?.error)document.querySelector('#status').textContent=result.error;};
 document.querySelector('#x').onclick=()=>action('close');document.querySelector('#reload').onclick=()=>action('reload');document.querySelector('#browser').onclick=()=>action('browser');document.querySelector('#save').onclick=()=>action('url',document.querySelector('#server').value);
-window.relay.onMapStatus(s=>{document.querySelector('#status').textContent=s.status;document.querySelector('#server').value=s.url;});
+window.relay.onMapStatus(s=>{document.body.classList.toggle('ready',s.status.includes('engine connected'));document.querySelector('#status').textContent=s.status;document.querySelector('#server').value=s.url;});
