@@ -1,6 +1,6 @@
 # Relay 0.38.10
 
-- Three hands-free modes in Speech settings: wake phrase, two claps followed by the phrase within five seconds, and two claps alone. Claps alone begin fresh command listening. Stopped speech helpers recover instead of remaining falsely armed; microphone retries use bounded backoff.
+- Three hands-free modes in General settings: wake phrase, two claps followed by the phrase within five seconds, and two claps alone. Claps alone begin fresh command listening. Stopped speech helpers recover instead of remaining falsely armed; microphone retries use bounded backoff.
 - Clap detection uses native acoustic peaks and validates both short impulses. Actual claps and wake recognition still require physical testing on the selected microphone.
 - School connection accepts canonical trailing slashes, marks limited assignment views incomplete, and does not mistake a clock time for a due date. Signed-in Blackbaud was readable; its week view showed only five of fourteen active assignments.
 - Phone reactor remains centered independently of smaller music controls; verified at two portrait sizes and landscape.
