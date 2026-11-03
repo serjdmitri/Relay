@@ -1575,6 +1575,7 @@ app.whenReady().then(() => {
   ownerGuard = new OwnerGuard({
     lock: () => ask.mac.lockScreen(),
     hasTemplates: () => ownerState.templates.length > 0,
+    getIdleSeconds: () => { try { return powerMonitor.getSystemIdleTime(); } catch { return Infinity; } },
     getConfig: () => store.get('settings.owner'),
     onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); },
     onClear: () => intruder.hide(),

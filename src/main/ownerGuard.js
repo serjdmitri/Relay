@@ -55,14 +55,14 @@ function acceptEnrollment(samples, { minDirections = 6, max = 24 } = {}) {
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
-    Object.assign(this, { armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, getIdleSeconds = () => Infinity, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
+    Object.assign(this, { getIdleSeconds, armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
     this.reset();
   }
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
@@ -70,6 +70,7 @@ class OwnerGuard {
     const cfg = config(this.getConfig());
     if (!cfg.enabled || !this.hasTemplates()) { if (this.state !== 'idle' && !this.demo) this.clear('ended'); if (this.awayActive) { this.awayActive = false; this.onAway(false); } this.noFaceSince = null; this.watchStart = null; return null; }
     if (this.watchStart === null) this.watchStart = this.now();
+    this.lastFrameAt = this.now();
     const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false })).filter((k) => Number.isFinite(k.s));
     // A score between (threshold - margin) and the threshold is "not sure" (a face that is far, turned or badly lit): neither you nor a stranger. Only a clearly low score, or a match with no blink, counts against you.
     const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive));
@@ -99,10 +100,18 @@ class OwnerGuard {
   // Called every second as well, so the countdown ends on time even if the camera stops sending pictures.
   step(cfg = config(this.getConfig())) {
     const t = this.now();
-    // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again.
+    // The away screen: nobody in view for a while (and you are not in the middle of an alarm) puts the Mac on standby until you are seen again. It must never trap you, so:
+    //  - it does not appear while the keyboard or mouse have been used lately (someone is there, whatever the camera sees),
+    //  - it does not appear, and goes away, when the camera has stopped sending pictures (blind is not the same as nobody there),
+    //  - and once it is up, touching the keyboard or mouse for two seconds in a row clears it (a stranger who sits down is seen by the camera and gets the alarm instead).
+    const idle = Number(this.getIdleSeconds()), blind = this.lastFrameAt !== null && t - this.lastFrameAt > 8000, usingMac = Number.isFinite(idle) && idle < Math.min(cfg.awaySeconds, 30);
+    this.activeSteps = Number.isFinite(idle) && idle < 1.5 ? this.activeSteps + 1 : 0;
     if (cfg.enabled && cfg.awayScreen && !this.demo && this.armed) {
-      if (!this.awayActive && t >= this.quietUntil && this.state === 'idle' && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
-      else if (this.awayActive && this.owners >= this.ownerFrames) { this.awayActive = false; this.onAway(false); }
+      if (!this.awayActive && t >= this.quietUntil && this.state === 'idle' && !blind && !usingMac && this.noFaceSince !== null && t - this.noFaceSince >= cfg.awaySeconds * 1000 * this.awayFactor()) { this.awayActive = true; this.onAway(true); }
+      else if (this.awayActive && (this.owners >= this.ownerFrames || blind || this.activeSteps >= 2)) {
+        if (this.owners < this.ownerFrames) { this.quietUntil = Math.max(this.quietUntil, t + 120000); this.noFaceSince = null; } // cleared without seeing you: leave it be for two minutes
+        this.awayActive = false; this.onAway(false);
+      }
     } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
       if (cfg.enabled && this.armed && t >= this.quietUntil && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
