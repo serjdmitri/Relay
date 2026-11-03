@@ -324,3 +324,27 @@ test('an enrollment is kept only when it covers your face from around: straight 
   const r = acceptEnrollment(dirty); assert.equal(r.ok, true); assert.equal(r.templates.length, 15, 'the three bad ones are dropped, the rest kept');
   assert.equal(acceptEnrollment(Array.from({ length: 60 }, () => ({ pose: 'center', embedding: emb(1) }))).ok, false, 'a flood of one pose is not a full set');
 });
+
+test('the standby screen never traps you: it stays away while you use the keyboard or mouse, clears when you touch them, and gives up when the camera goes blind', () => {
+  let idle = Infinity;
+  const away = (extra = {}) => make({ enabled: true, seconds: 20, threshold: 0.4, awaySeconds: 10 }, { getIdleSeconds: () => idle, ...extra });
+  const shown = (m) => m.log.filter((e) => e[0] === 'away');
+  // 1. someone is using the Mac (input a few seconds ago): nobody in the picture does not put the screen up
+  idle = 5; const a = away(); const events = []; a.g.onAway = (on) => events.push(on);
+  a.feed([], 60); assert.equal(a.g.awayActive, false, 'typing, but the camera sees nobody (looking down, camera blocked): no standby screen');
+  idle = 100; a.feed([], 2); assert.equal(a.g.awayActive, true, 'no input for a while and nobody in view: now it is shown');
+  // 2. touching the keyboard or mouse clears it, after two seconds in a row, and it stays down for two minutes
+  idle = 0.5; a.clock.t += 1000; a.g.step(); assert.equal(a.g.awayActive, true, 'one second of input is not enough (a bump of the desk)');
+  a.clock.t += 1000; a.g.step(); assert.equal(a.g.awayActive, false); assert.deepEqual(events, [true, false]);
+  idle = 100; a.feed([], 100); assert.equal(a.g.awayActive, false, 'quiet for two minutes after being cleared by input, even with nobody in view');
+  a.feed([], 40); assert.equal(a.g.awayActive, true, 'and it can come back after that');
+  // 3. the camera stops sending pictures: that is blindness, not an empty chair
+  const b = away(); idle = 100; b.feed([], 12); assert.equal(b.g.awayActive, true);
+  b.clock.t += 9000; b.g.step(); assert.equal(b.g.awayActive, false, 'no pictures for 9 seconds: the standby screen is taken down');
+  b.clock.t += 60000; b.g.step(); assert.equal(b.g.awayActive, false, 'and it does not come back while the camera is blind');
+  // 4. seeing you still clears it, as before, and does not start the two-minute quiet
+  const c = away(); idle = 100; c.feed([], 12); assert.equal(c.g.awayActive, true);
+  c.feed([0.9], 2); assert.equal(c.g.awayActive, false); assert.equal(c.g.quietUntil, 0);
+  // 5. without an idle reading (older callers) nothing changes
+  const d = make({ enabled: true, seconds: 20, threshold: 0.4, awaySeconds: 10 }); d.feed([], 12); assert.equal(d.g.awayActive, true);
+});
