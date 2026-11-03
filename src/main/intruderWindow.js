@@ -13,7 +13,7 @@ class IntruderWindow {
       if (this.busy || !this.state.active || !this.wins.some((w) => !w.isDestroyed() && w.webContents === e.sender)) return { ok: false };
       this.busy = true; this.hold();
       try { const r = await this.fingerprint(); if (!r?.ok) this.release(); return { ok: !!r?.ok }; }
-      catch (err) { this.release(); return { ok: false, error: /cancel/i.test(String(err?.message)) ? 'Cancelled.' : 'Fingerprint not recognised.' }; }
+      catch (err) { this.release(); return { ok: false, error: String(err?.message || 'Not recognised.').slice(0, 90) }; }
       finally { this.busy = false; }
     });
     ipcMain.handle('intruder:state', (e) => (this.wins.some((w) => !w.isDestroyed() && w.webContents === e.sender) ? this.state : { active: false }));
@@ -40,7 +40,7 @@ class IntruderWindow {
     this.wins = screen.getAllDisplays().map((d) => {
       const { x, y, width, height } = d.bounds;
       const win = new BrowserWindow({
-        x, y, width, height, enableLargerThanScreen: true, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false, movable: false, show: false, skipTaskbar: true, focusable: false, type: 'panel',
+        x, y, width, height, enableLargerThanScreen: true, acceptFirstMouse: true, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false, movable: false, show: false, skipTaskbar: true, focusable: false, type: 'panel',
         vibrancy: 'hud', visualEffectState: 'active',
         webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, autoplayPolicy: 'no-user-gesture-required' }
       });

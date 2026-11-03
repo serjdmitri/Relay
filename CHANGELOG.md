@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Touch ID button fix.** Clicking the fingerprint button now has Relay ask macOS to confirm it is you: the Touch ID sheet first, and if the system cannot show that sheet at all, macOS's own prompt (Touch ID or your password), so there is always a way to stop the screen. A wrong or cancelled fingerprint never falls back to the password. The button no longer hides the real reason when something fails (it shows it, and "owner recognition status" mentions a Touch ID problem), and the first click on the alarm screen is no longer swallowed by macOS's window activation.
+
 ## 0.37.3
 
 - **Touch ID stops the "not your computer" screen.** A fingerprint button sits in the bottom right of the access-denied and away screens (only on Macs with Touch ID). Click it, touch the sensor, and if it is you the siren stops, the screen goes away, and the guard stays quiet for five minutes, so a friend sitting next to you does not set it off again. While the system's Touch ID sheet is up, the alarm steps aside so the sheet is not hidden. A rejected fingerprint brings the screen back with a short note. It cannot undo a lock that already happened: once the Mac is locked, macOS (and Glance) are in charge of getting back in.

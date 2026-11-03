@@ -47,7 +47,7 @@ const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
-const { OwnerGuard, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
+const { OwnerGuard, authenticateOwner, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
 const { IntruderWindow } = require('./intruderWindow');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
@@ -1415,7 +1415,14 @@ app.whenReady().then(() => {
   intruder = new IntruderWindow({
     touchId: () => { try { return !!systemPreferences.canPromptTouchID?.(); } catch { return false; } },
     // a fingerprint is you proving it is you: the alarm (or the standby screen) stops, and it stays quiet for five minutes. promptTouchID throws if it is not accepted.
-    fingerprint: async () => { await systemPreferences.promptTouchID('stop the access denied alarm'); ownerGuard.dismiss('fingerprint'); return { ok: true }; }
+    fingerprint: async () => {
+      await authenticateOwner({
+        touchId: () => systemPreferences.promptTouchID('stop the access denied alarm'),
+        admin: () => new Promise((resolve, reject) => require('child_process').execFile('osascript', ['-e', 'do shell script "true" with administrator privileges with prompt "Relay: confirm it is you, to stop the access denied alarm"'], (err) => (err ? reject(err) : resolve()))),
+        onProblem: (m) => { ownerState.touchIdProblem = m; }
+      });
+      ownerGuard.dismiss('fingerprint'); return { ok: true };
+    }
   });
   ownerState = { templates: [], version: 1, enroll: null };
   const loadOwner = () => { try { ownerState.templates = safeStorage.isEncryptionAvailable() ? openTemplates(store.get('ownerFace'), (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64'))) : []; } catch { ownerState.templates = []; } ownerState.version++; };
@@ -1455,7 +1462,7 @@ app.whenReady().then(() => {
       return done(`Owner recognition is on, and arms itself once it has recognised you. If a face that is not yours is in view while you are not, I will sound the alarm and lock the screen after ${cfg().seconds} seconds.${note} A still photo of you will not pass (it must blink), but a video of you could, and it may flag you in poor light for a moment; coming back into view stops it.`);
     }
     const t = ownerState.templates.length;
-    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. ${ownerGuard.armed ? 'It has recognised you this session, so it is armed.' : 'It has not recognised you yet this session, so it is not armed and will not sound the alarm or lock'}${ownerGuard.lookingAway ? ' You are looking away from the camera right now, so I am not judging your face.' : ''}${ownerGuard.lastScore !== null ? ` (best match so far ${ownerGuard.lastScore.toFixed(2)}; it needs ${cfg().threshold.toFixed(2)})` : ''}. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
+    return done(`Owner recognition is ${cfg().enabled ? 'on' : 'off'}. ${t ? `Your face is enrolled (${t} angles).` : 'Your face is not enrolled.'} The lock countdown is ${cfg().seconds} seconds. ${ownerGuard.armed ? 'It has recognised you this session, so it is armed.' : 'It has not recognised you yet this session, so it is not armed and will not sound the alarm or lock'}${ownerState.touchIdProblem ? ` The Touch ID sheet had a problem (${ownerState.touchIdProblem}), so I used the macOS password prompt instead.` : ''}${ownerGuard.lookingAway ? ' You are looking away from the camera right now, so I am not judging your face.' : ''}${ownerGuard.lastScore !== null ? ` (best match so far ${ownerGuard.lastScore.toFixed(2)}; it needs ${cfg().threshold.toFixed(2)})` : ''}. The liveness check is ${cfg().liveness ? 'on' : 'off'}. The away screen is ${cfg().awayScreen ? `on (after ${cfg().awaySeconds} seconds with nobody in view)` : 'off'}. It only locks; it never unlocks the Mac.`);
   };
   ask.viewerGuardCommand = async (c) => {
     const limits = ' It counts faces in the camera\'s view, so it cannot tell who anyone is, a photo counts as a face, and anyone out of the camera\'s view is not seen. It only locks the screen.';
