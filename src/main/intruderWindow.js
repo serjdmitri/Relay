@@ -21,7 +21,8 @@ class IntruderWindow {
   async askFingerprint() {
     if (this.busy || !this.state.active) return { ok: false };
     this.busy = true; this.hold();
-    try { const r = await this.fingerprint(); if (!r?.ok) this.release(); return { ok: !!r?.ok }; }
+    // an accepted fingerprint always takes the screen down, whatever started it (the guard also clears its own state, which hides it too; doing it here as well covers the screens it does not own, such as the standby test)
+    try { const r = await this.fingerprint(); if (r?.ok) this.hide(); else this.release(); return { ok: !!r?.ok }; }
     catch (err) { this.release(); return { ok: false, error: String(err?.message || 'Not recognised.').slice(0, 90) }; }
     finally { this.busy = false; }
   }
@@ -44,9 +45,10 @@ class IntruderWindow {
     this.open();
   }
 
-  // While the system's Touch ID sheet is up, the alarm windows step aside (and the siren stops), so the sheet is not hidden behind them; they come back if it fails.
-  hold() { this.state = { ...this.state, paused: true }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.hide(); } catch { /* gone */ } } }
-  release() { if (!this.state.active) return; this.state = { ...this.state, paused: false }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.showInactive(); } catch { /* gone */ } } }
+  // While the system's Touch ID sheet is up the alarm screen STAYS, but drops to a lower window level (and its siren stops), so the sheet is not hidden behind it; when the sheet is
+  // done and it was not accepted, the screen goes back to the top.
+  hold() { this.state = { ...this.state, paused: true }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.setAlwaysOnTop(true, 'floating'); } catch { /* gone */ } } }
+  release() { if (!this.state.active) return; this.state = { ...this.state, paused: false }; for (const w of this.wins) { try { if (!w.isDestroyed()) { w.setAlwaysOnTop(true, 'screen-saver', 2); w.showInactive(); } } catch { /* gone */ } } }
 
   open() {
     if (this.wins.some((w) => !w.isDestroyed())) return;
