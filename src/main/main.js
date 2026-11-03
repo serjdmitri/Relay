@@ -47,7 +47,7 @@ const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
-const { OwnerGuard, authenticateOwner, acceptEnrollment, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
+const { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
 const { IntruderWindow } = require('./intruderWindow');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
@@ -493,9 +493,18 @@ function registerIpc() {
       if (!command.background) openMain('calls');
       if (command.type === 'open') return { status: 'done', reply: 'Phone Calls is open, Sir.' };
       if (command.type === 'schedule') { callService.addSchedule(command.spec); return { status: 'done', reply: 'The check-in review is scheduled, Sir. At that time it will await approval of the exact number and purpose; it will not dial automatically.' }; }
+      if (command.type === 'provider') {
+        const st = callService.configure({ provider: command.provider });
+        const missing = [];
+        if (command.provider === 'twilio' && !st.hasTwilio) missing.push('your Twilio account SID, auth token and Twilio phone number');
+        if (command.provider === 'bland' && !st.hasKey) missing.push('your Bland key');
+        const what = command.provider === 'twilio' ? 'Twilio, the free-trial option: a one-way call that reads your message aloud in a British male voice (Brian)' : command.provider === 'bland' ? 'Bland, which holds a conversation' : 'Bland first, with Twilio as the backup';
+        return { status: 'done', reply: `Calls now use ${what}, Sir.${missing.length ? ` It still needs ${missing.join(' and ')}, which only you can add in Calls settings, so no call will go out until then.` : ''}${command.provider === 'twilio' && st.hasTwilio ? ' A Twilio trial account can only call numbers you verified in Twilio, and the first thing you hear is its trial notice.' : ''}${(callService.schedules() || []).some((x) => x.automatic) ? ' Automatic check-ins stay paused until you recreate them, because they were authorized for the old provider.' : ''}` };
+      }
       const result = await callService.requestOwnerCall(command.purpose, { background: command.background });
       if (result.error) return { status: 'failed', reply: result.error };
-      if (!result.review) return { status: 'done', reply: 'Your call has been submitted to Bland, Sir. Watch Calls for its status.' };
+      const via = ({ twilio: 'Twilio', bland: 'Bland' })[callService.config().provider] || 'your calling provider';
+      if (!result.review) return { status: 'done', reply: `Your call has been submitted to ${via}, Sir. Watch Calls for its status.` };
       return { status: 'done', reply: 'Your call is prepared, Sir. Review the number and purpose in Calls and approve the dialing prompt. No call has been placed.' };
     } catch (err) { return { status: 'failed', reply: err.message }; }
   };
@@ -1024,7 +1033,17 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
-  ipcMain.handle('presence:frame', (e, f) => { if(e.sender!==presenceSender) return; presence?.frame(f); if (presence?.enabled) { viewerGuard?.frame(f || {}); ownerGuard?.frame({ faces: Number(f?.faces) || 0, scores: Array.isArray(f?.scores) ? f.scores.slice(0, 5) : [], live: Array.isArray(f?.live) ? f.live.slice(0, 5) : [], down: f?.down === true }); } });
+  ipcMain.handle('presence:frame', (e, f) => {
+    if (e.sender !== presenceSender) return;
+    presence?.frame(f);
+    if (!presence?.enabled) return;
+    const faces = Number(f?.faces) || 0, arr = (v) => (Array.isArray(v) ? v.slice(0, 5) : []);
+    const scores = arr(f?.scores), live = arr(f?.live);
+    // a recognised trusted person is neither you nor a stranger: they are not counted as an extra viewer, and they do not start the alarm
+    const trusted = trustedFlags({ scores, trustedScores: arr(f?.trustedScores), live, threshold: ownerConfig(store.get('settings.owner')).threshold });
+    viewerGuard?.frame({ ...(f || {}), faces: Math.max(0, faces - trusted.filter(Boolean).length) });
+    ownerGuard?.frame({ faces, scores, live, trusted, down: f?.down === true });
+  });
   ipcMain.handle('presence:status', (e, st) => {
     if(e.sender!==presenceSender) return;
     if (st?.state === 'faceid-error') { ask.notice(String(st.message || 'Owner recognition could not start.').slice(0, 200), 'failed'); return; }
@@ -1037,7 +1056,7 @@ function registerIpc() {
     const enrolling = !!ownerState.enroll && Date.now() < ownerState.enroll.until;
     const faceId = enrolling || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0);
     const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness, pace: faceId && !enrolling ? ownerGuard?.pace?.() || 1000 : 1000 };
-    if (faceId && have !== ownerState.version) out.templates = [...ownerState.templates, ...(trustedPeople?.templates() || [])];
+    if (faceId && have !== ownerState.version) { out.templates = [...ownerState.templates]; out.trusted = trustedPeople?.templates() || []; } // kept apart: a trusted person is not you
     return out;
   });
   ipcMain.handle('presence:enroll', (e, s) => {

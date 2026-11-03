@@ -48,3 +48,37 @@ test('a changed destination invalidates scheduled authorization instead of diali
 test('late automatic schedules never make catch-up calls',async()=>{const r=setup(),s=r.calls.addSchedule({purpose:'Check in',repeat:'daily',hour:13,minute:0,automatic:true});r.setNow(s.next+3600000);await r.calls.tick();assert.equal(r.posts(),0);assert.match(s.error,/missed/);});
 test('editing a scheduled purpose invalidates automatic consent',async()=>{const r=setup(),s=r.calls.addSchedule({purpose:'Check robotics',repeat:'daily',hour:13,minute:0,automatic:true});s.text='Different purpose';r.setNow(s.next);await r.calls.tick();assert.equal(r.posts(),0);assert.match(s.error,/settings changed/);});
 test('provider change during automatic approval is rechecked before any dial',async()=>{const r=setup(),s=r.calls.addSchedule({purpose:'Check in',repeat:'daily',hour:13,minute:0,automatic:true});const approve=r.calls.approve.bind(r.calls);r.calls.approve=(id)=>approve(id,async()=>{r.calls.configure({provider:'bland'});return true;});r.setNow(s.next);await r.calls.tick();assert.equal(r.posts(),0);assert.match(s.error,/authorization changed/);});
+
+test('"use Twilio for calls" and its phrasings switch only the provider; ordinary call and open commands are unchanged', () => {
+  const cases = { 'use twilio for calls': 'twilio', 'switch calls to twilio': 'twilio', 'switch to the free calling model': 'twilio', 'use the free calling model for my calls': 'twilio', 'switch to free calling': 'twilio', 'set the call provider to twilio': 'twilio', 'switch the calling provider to bland': 'bland', 'use bland': 'bland', 'change calls to automatic': 'auto' };
+  for (const [text, provider] of Object.entries(cases)) assert.deepEqual(parseCallCommand(text), { type: 'provider', provider }, text);
+  assert.equal(parseCallCommand('call me about homework').type, 'prepare'); assert.equal(parseCallCommand('open phone calls').type, 'open');
+  assert.equal(parseCallCommand('use the free tier of something else'), null); assert.equal(parseCallCommand('switch to the free calling model things'), null, 'extra words are not guessed at');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(src, /command\.type === 'provider'[\s\S]{0,200}callService\.configure\(\{ provider: command\.provider \}\)/, 'the command only sets the provider');
+  assert.match(src, /which only you can add in Calls settings/, 'it says the credentials are the person\'s to add');
+});
+
+test('a scheduled, authorized call through Twilio reads the message in the British male voice (Brian), once, to the owner number from the Twilio number', async () => {
+  const { Twilio } = require('../src/main/calls/twilio');
+  let now = new Date(2026, 10, 2, 12).getTime(); const posts = [];
+  const store = { data: { settings: { calls: { ...DEFAULTS, enabled: true, ownerNumber: '+15555550123', quiet: false, provider: 'twilio', twilioFrom: '+15555550100' } }, callRequests: [], callSchedules: [] }, get(k) { return k.split('.').reduce((o, p) => o?.[p], this.data); }, set(k, v) { this.data.settings.calls = v; }, flush() {} };
+  const SID = 'AC' + 'a'.repeat(32), CALL = 'CA' + 'b'.repeat(32);
+  const fetchFn = async (url, o) => { if (o.method === 'POST') { posts.push(Object.fromEntries(new URLSearchParams(o.body))); return { ok: true, status: 200, json: async () => ({ sid: CALL }) }; } return { ok: true, status: 200, json: async () => ({ status: 'completed', duration: '20' }) }; };
+  const twilio = new Twilio({ fetchFn, getCreds: () => ({ sid: SID, token: 'token', from: store.data.settings.calls.twilioFrom, voice: store.data.settings.calls.twilioVoice }) });
+  const calls = new Calls({ store, api: { dial: async () => { throw Error('Bland must not be used'); } }, twilio, hasKey: () => false, hasTwilio: () => true, now: () => now });
+  const s = calls.addSchedule({ purpose: 'Robotics check-in', repeat: 'daily', hour: 13, minute: 0, automatic: true });
+  now = s.next; await calls.tick(); await calls.tick();
+  assert.equal(posts.length, 1, 'once per occurrence');
+  assert.equal(posts[0].To, '+15555550123'); assert.equal(posts[0].From, '+15555550100');
+  assert.match(posts[0].Twiml, /<Say voice="Polly\.Brian">Hello, this is Jarvis/); assert.match(posts[0].Twiml, /Robotics check-in/);
+  assert.equal(store.data.callRequests.at(-1).provider, 'twilio');
+  assert.equal(DEFAULTS.twilioVoice, 'Polly.Brian');
+});
+
+test('switching the provider invalidates an automatic schedule made for the old one: it asks to be recreated and dials nothing', async () => {
+  const r = setup(), s = r.calls.addSchedule({ purpose: 'Check in', repeat: 'daily', hour: 13, minute: 0, automatic: true });
+  r.calls.configure({ provider: 'twilio' });
+  r.setNow(s.next); await r.calls.tick();
+  assert.equal(r.posts(), 0); assert.match(r.store.data.callSchedules[0].error, /Recreate this schedule/);
+});

@@ -16,7 +16,7 @@ let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBu
 let lastLm = { t: 0, faces: [] }, watchdog = 0;
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
-let busy = false, embed = null, embedFailed = false, templates = [], version = 0;
+let busy = false, embed = null, embedFailed = false, templates = [], trustedTemplates = [], version = 0;
 const cosine = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x) * Math.sqrt(y) || 1); };
 const bestScore = (e, list) => list.reduce((best, t) => { const s = t.length === e.length ? cosine(e, t) : null; return s !== null && (best === null || s > best) ? s : best; }, null);
 
@@ -93,7 +93,7 @@ async function start() {
         const frame = { faces: dets.length };
         // Owner recognition (opt-in): only when asked for. The main process says whether to match faces or to enroll yours.
         const c = await relay.presenceConfig(version);
-        if (c?.templates) { templates = c.templates; version = c.version; }
+        if (c?.templates) { templates = c.templates; trustedTemplates = c.trusted || []; version = c.version; }
         recogOn = !!c?.faceId; livenessOn = recogOn && !!c?.liveness && c.mode !== 'enroll';
         pace = Math.min(1000, Math.max(250, Number(c?.pace) || 1000));
         if (recogOn && !landmarker && !lmFailed && !lmLoading) loadLandmarker();
@@ -112,7 +112,9 @@ async function start() {
             } else {
               // like Glance, a face too small in the picture is a bystander or too far to judge: no score, rather than a low one
               frame.down = faces.some((f) => f.away); // looking down at the keyboard or turned aside: not the same as leaving, and not judged
-              frame.scores = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? bestScore(e, templates) : null; }));
+              // each face is compared with YOUR face and, separately, with the trusted people you enrolled (so a trusted person is recognised as that, not as you)
+              const both = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? { owner: bestScore(e, templates), trusted: trustedTemplates.length ? bestScore(e, trustedTemplates) : null } : null; }));
+              frame.scores = both.map((b) => (b ? b.owner : null)); frame.trustedScores = both.map((b) => (b ? b.trusted : null));
               // Liveness: a face that matches you but has not blinked lately is reported as not alive (a picture). Until the blink finder is ready, or if it cannot load, faces count as alive.
               frame.live = faces.map((f) => (livenessOn && fresh && Number.isFinite(f.x) ? tracker.isLive(f.x, f.y, Date.now()) !== false : true));
             }

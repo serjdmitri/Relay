@@ -110,6 +110,10 @@ class Calls {
 function parseCallCommand(raw){
   const text=String(raw||'').trim().replace(/^(?:(?:hey|ok|okay) )?(?:jarvis|relay)[, ]+/i,'').replace(/[.!?]+$/,'');
   if(/^(?:show|open)(?: me)? (?:my |the )?(?:phone )?calls?(?: menu| settings| history)?$/i.test(text))return{type:'open'};
+  // "use Twilio for calls", "switch calls to the free calling model", "switch the calling provider to Bland": only which provider is used; it never takes or changes a key or token.
+  const P='(twilio|bland|auto|automatic|free(?: calling)?(?: model)?)',name=v=>/^free/i.test(v)||/^twilio$/i.test(v)?'twilio':/^bland$/i.test(v)?'bland':'auto';
+  const pv=new RegExp('^(?:please )?(?:(?:switch|change|set|move)(?: my| the)?(?: (?:phone|calling))? ?(?:calls?|calling)?(?: (?:model|provider|service))? (?:over )?(?:to|back to|on) (?:the )?'+P+'(?: (?:for|to make) (?:my |the )?(?:phone )?calls?)?|(?:switch|change) to (?:the )?'+P+'(?: (?:for )?(?:my |the )?(?:phone )?calls?)?|use (?:the )?'+P+'(?: (?:for|to make) (?:my |the )?(?:phone )?calls?)?)$','i').exec(text);
+  if(pv)return{type:'provider',provider:name(pv[1]||pv[2]||pv[3])};
   const scheduled=parseScheduleCommand(/^schedule\b/i.test(text)?text:'schedule '+text);
   const callText=scheduled?.type==='schedule-add'?scheduled.text:text;
   const m=/^(?:please )?(?:call|phone|ring) me(?: (?:about|to|and|for))?(?: (.+))?$/i.exec(callText);if(!m)return null;
