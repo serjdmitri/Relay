@@ -26,15 +26,15 @@ export function frameFrom(result, t) {
   return { t, hands };
 }
 
-async function load() {
+async function load(maxHands=4) {
   const fileset = await FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
-  const make = (delegate) => GestureRecognizer.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/gesture_recognizer.task', delegate }, runningMode: 'VIDEO', numHands: 4, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
+  const make = (delegate) => GestureRecognizer.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/gesture_recognizer.task', delegate }, runningMode: 'VIDEO', numHands: maxHands, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
   try { return await make('GPU'); } catch { return make('CPU'); }
 }
 
 async function start() {
   try {
-    recognizer = await load();
+    const state=await relay.getState();recognizer = await load(Math.max(2,Math.min(6,Math.round(Number(state.settings?.hands?.maxHands)||4))));
     status('model');
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 30 }, audio: false });
     video.srcObject = stream;

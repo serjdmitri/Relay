@@ -103,7 +103,7 @@ test('the weather comes from the free forecast service, using the city and its r
     return { json: async () => ({ current: { temperature_2m: 79.6, weather_code: 2 }, daily: { temperature_2m_max: [86.2], temperature_2m_min: [74.4], precipitation_probability_max: [45], weather_code: [61] } }) };
   };
   const w = await fetchWeather('Hollywood, Florida', { fetchFn });
-  assert.deepEqual(w, { city: 'Hollywood', tempNow: 80, high: 86, low: 74, rain: 45, word: 'rainy', units: 'f' });
+  assert.deepEqual(w, { city: 'Hollywood', tempNow: 80, high: 86, low: 74, rain: 45, word: 'rainy', code: 61, units: 'f' });
   assert.match(urls[1], /latitude=26\.01&longitude=-80\.15/, 'Florida, not California');
   assert.match(urls[1], /temperature_unit=fahrenheit/);
   await fetchWeather('Paris', { fetchFn, units: 'c' });
@@ -282,7 +282,7 @@ test('tomorrow calendar filters today, includes all-day events, and reports disc
 });
 
 test('briefing menu retains checked time, source links and unavailable/partial warnings',()=>{
- const {briefingCard}=require('../src/main/briefing');const card=briefingCard({now:new Date('2026-11-02T12:00:00Z'),missing:['mail'],school:{sourceUrl:'https://school.myschoolapp.com/lms-assignment/assignment-center/student',truncated:true}},'A sourced briefing.');assert.equal(card.summary,'A sourced briefing.');assert.equal(card.hold,true);assert.match(card.items[0].subtitle,/mail/);assert.match(card.items[1].title,/limited/);assert.match(card.links[0].url,/myschoolapp/);
+ const {briefingCard}=require('../src/main/briefing');const card=briefingCard({now:new Date('2026-11-02T12:00:00Z'),missing:['mail'],school:{sourceUrl:'https://school.myschoolapp.com/lms-assignment/assignment-center/student',truncated:true}},'A sourced briefing.');assert.equal(card.summary,'');assert.equal(card.briefing,true);assert.equal(card.hold,true);assert.match(JSON.stringify(card.sections),/email/);assert.match(JSON.stringify(card.sections),/Limited results/);assert.equal(card.dateTile.day,'2');assert.match(card.links[0].url,/myschoolapp/);
  assert.deepEqual(briefingCard({school:{sourceUrl:'https://evil.test/?token=secret'}},'Unavailable.').links,[]);
 });
 
@@ -291,4 +291,16 @@ test('disabled briefing sources make no source calls and are not reported empty 
  c.store={get:k=>k==='settings.briefing'?{sources,city:'London',schoolUrl:'https://school.myschoolapp.com/lms-assignment/assignment-center/student'}:[]};c.mac={calendarEvents:async()=>{calls++;},remindersDue:async()=>{calls++;}};c.googleApiIfConnected=()=>({calEvents:async()=>{calls++;},gmailSearch:async()=>{calls++;}});c.bridge={};
  const f=await c.briefingFacts(),tomorrow=await c.tomorrowCalendar(f.now);assert.equal(calls,0);assert.deepEqual(f.missing,[]);assert.equal(f.school,undefined);assert.equal(f.disabled.length,6);assert.equal(tomorrow.disabled.length,2);
  const text=buildBriefing(f);assert.match(text,/turned off/);assert.doesNotMatch(text,/clear today|No reminders|Nothing is due|could not check|not configured/);
+});
+
+test('briefing display uses numeric weather and sourced bullets independently of natural speech',()=>{const f={now:new Date(2026,10,2,9),weather:{city:'Hollywood',tempNow:78,high:82,low:76,rain:44,code:3,word:'overcast',units:'f'},due:[{title:'Study physics',overdue:false}],missing:['mail']};const {briefingCard}=require('../src/main/briefing');const c=briefingCard(f,buildBriefing(f));assert.equal(c.dateTile.weekday,'Mon');assert.equal(c.briefingWeather.tempNow,78);assert.equal(c.briefingWeather.code,3);assert.equal(c.summary,'');assert(c.sections.some(s=>s.bullets.includes('Study physics')));assert.match(buildBriefing(f),/It is 78 degrees and overcast/);assert.doesNotMatch(JSON.stringify(c.sections),/It is 78/);});
+
+test('explicit brief menu requests use the built-in briefing command, with common spoken variants',()=>{
+ for(const phrase of ['show the brief menu.','Show me my briefing','open the briefing menu','bring up my daily brief panel','Jarvis, show the brief menu','can you show me the brief menu please','give me a breif','show the breifing card','brief'])assert.deepEqual(parseBriefingCommand(phrase),{type:'briefing'},phrase);
+ for(const phrase of ['write a brief about robots','email my briefing to Mom','close the brief menu','explain what a briefing is'])assert.equal(parseBriefingCommand(phrase),null,phrase);
+});
+test('a direct briefing request shows the structured menu even when a source is missing',async()=>{
+ const c=Object.create(AskController.prototype);let card,models=0;const facts={now:new Date(2026,10,2,18),missing:['mail'],due:[]};
+ c.briefingText=async options=>{options.onFacts(facts);return 'Good evening. Email is unavailable.';};c.recordBriefingSources=()=>{};c.store={get:()=>true};c.cardPanel={show:async value=>{card=value;}};c.requestLanguage=()=> 'en';c.runRequest=()=>{models++;};c.finish=(_entry,result)=>result;
+ const r=await c.runBriefingCommand('show the brief menu.',{id:'fixture'});assert.equal(r.status,'done');assert.equal(card.briefing,true);assert.equal(card.dateTile.day,'2');assert.match(JSON.stringify(card.sections),/Unavailable/);assert.equal(models,0);
 });

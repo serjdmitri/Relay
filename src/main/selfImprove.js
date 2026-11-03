@@ -4,6 +4,8 @@
 // in the proposal folder; you review the commit and decide. Off until a source checkout is set in settings.selfImprove.repo.
 
 const path = require('path');
+const fs = require('fs');
+const {createHash}=require('crypto');
 
 const MAX_PROPOSALS = 10;
 const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
@@ -24,7 +26,14 @@ class ProposalWorkspace {
   }
   patch(id, p) { this.save(this.list().map((x) => (x.id === id ? { ...x, ...p } : x))); }
   git(args, cwd, timeout = 60000) { return this.run(['git', ...args], { cwd, timeout }); }
-  async status(p) { const r = await this.git(['status', '--porcelain'], p.dir); return r.code === 0 ? r.stdout : null; }
+  async status(p) {
+    const r=await this.git(['status','--porcelain'],p.dir); if(r.code!==0)return null; if(!r.stdout.trim())return '';
+    const diff=await this.git(['diff','HEAD','--binary','--no-ext-diff'],p.dir), files=await this.git(['ls-files','--others','--exclude-standard','-z'],p.dir);
+    if(diff.code!==0||files.code!==0)return null;
+    const hash=createHash('sha256').update(diff.stdout); let size=0;
+    try { for(const name of files.stdout.split('\0').filter(Boolean).sort()) { const file=path.resolve(p.dir,name),relative=path.relative(p.dir,file); if(relative.startsWith('..')||path.isAbsolute(relative))return null; const st=fs.lstatSync(file); if(!st.isFile()||st.size>20*1024*1024||(size+=st.size)>100*1024*1024)return null; hash.update(name).update(fs.readFileSync(file)); } } catch {return null;}
+    return r.stdout+'\nsha256:'+hash.digest('hex');
+  }
 
   async create(title) {
     const { repo, base } = this.conf();
@@ -44,12 +53,14 @@ class ProposalWorkspace {
   async test(ref) {
     const p = this.find(ref); if (!p) return { error: 'No such proposal.' };
     const before = await this.status(p);
+    if(p.generated && (!p.reviewed || p.reviewState!==before)) return {error:'Review the generated diff in Settings before testing. It has not been executed.'};
     if (before === null) return { error: 'The proposal folder is not readable. It may have been moved or removed.' };
     const r = await this.run(['npm', 'test'], { cwd: p.dir, timeout: 600000 });
     const out = `${r.stdout}\n${r.stderr}`;
     const failed = Number((/ℹ fail (\d+)/.exec(out) || [])[1]), passed = Number((/ℹ pass (\d+)/.exec(out) || [])[1]);
-    const ok = r.code === 0 && failed === 0 && passed > 0;
+    let ok = r.code === 0 && failed === 0 && passed > 0;
     const state = await this.status(p);
+    ok = ok && state !== null && before === state;
     this.patch(p.id, { lastTest: { ok, at: this.now(), state, passed: Number.isFinite(passed) ? passed : null, failed: Number.isFinite(failed) ? failed : null } });
     return { ok, passed: Number.isFinite(passed) ? passed : null, failed: Number.isFinite(failed) ? failed : null, proposal: p };
   }

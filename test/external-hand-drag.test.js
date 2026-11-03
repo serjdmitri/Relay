@@ -14,7 +14,7 @@ test('one hand can drag at a time and releasing sends mouse up', () => {
   const { child, drag, lines } = rig(); drag.start(); child.stdout.write('ready\n');
   const a = {}, b = {}; assert.equal(drag.begin(a, {x: 10, y: 20}), true);
   assert.equal(drag.begin(b, {x: 30, y: 40}), false);
-  drag.move(a, {x: 60, y: 70}); drag.end(a);
+  drag.move(a, {x: 60, y: 70});assert.equal(lines().length,1,'moves wait for native hit-test acknowledgement');child.stdout.write('down\n');drag.end(a);
   assert.deepEqual(lines(), [{op:'down',x:10,y:20},{op:'move',x:60,y:70},{op:'up',x:60,y:70}]);
   drag.close();
 });
@@ -31,7 +31,7 @@ test('a fist over a non-draggable area does not show an error', () => {
   const hand = {}; x.drag.begin(hand, { x: 10, y: 20 });
   x.child.stdout.write('not-draggable\n'); x.drag.end(hand);
   assert.deepEqual(x.notes, []);
-  assert.deepEqual(x.lines().map(line => line.op), ['down', 'up']);
+  assert.deepEqual(x.lines().map(line => line.op), ['down']);
   x.drag.close();
 });
 

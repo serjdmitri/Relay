@@ -105,19 +105,21 @@ class Speaker {
     return JSON.stringify([engine, rate, kokoroVoice || tts.kokoro?.voice || '']);
   }
 
-  // Warm only an already-installed local voice. Cache this fixed phrase in memory,
+  // Warm only an already-installed local voice. Cache short fixed acknowledgements/greetings in memory,
   // never conversations, and never make a paid/cloud request in the background.
-  prepare({ rate = 'normal', kokoroVoice } = {}) {
+  prepare({ rate = 'normal', kokoroVoice, text = 'On it, Sir.' } = {}) {
     this.voiceList().catch(() => {});
     const tts = this.getTts() || {}, engine = this.engineFor(tts);
     if (!['omnivoice', 'kokoro'].includes(engine)) return Promise.resolve();
-    const key = this.acknowledgementKey(engine, tts, rate, kokoroVoice);
-    if (this.ackAudio?.key === key) return Promise.resolve();
-    if (this.preparing) return this.preparing;
+    text=speakable(text);if(!text||text.length>160)return Promise.resolve();
+    const key = JSON.stringify([this.acknowledgementKey(engine, tts, rate, kokoroVoice),text]);
+    this.preparedAudio ||= new Map();
+    if (this.preparedAudio.has(key)) return Promise.resolve();
+    if (this.preparing) return this.preparing.then(()=>this.prepare({rate,kokoroVoice,text}));
     this.preparing = (async () => {
-      const file = await (engine === 'omnivoice' ? this.omni.synthesize('On it, Sir.', { rate })
-        : this.kokoro.synthesize('On it, Sir.', { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate }));
-      try { this.ackAudio = { key, bytes: fs.readFileSync(file) }; } finally { this.discard(file); }
+      const file = await (engine === 'omnivoice' ? this.omni.synthesize(text, { rate })
+        : this.kokoro.synthesize(text, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate }));
+      try { this.preparedAudio.set(key,fs.readFileSync(file));if(this.preparedAudio.size>8)this.preparedAudio.delete(this.preparedAudio.keys().next().value); } finally { this.discard(file); }
     })().catch(() => {}).finally(() => { this.preparing = null; });
     return this.preparing;
   }
@@ -146,7 +148,7 @@ class Speaker {
     this.currentText = say;
     const tts = this.getTts() || { engine: 'system' };
     const selected = this.engineFor(tts, lang);
-    const cachedAudio = quick && say === 'On it, Sir.' && this.ackAudio?.key === this.acknowledgementKey(selected, tts, rate, kokoroVoice) ? this.ackAudio.bytes : null;
+    const cachedAudio = quick ? this.preparedAudio?.get(JSON.stringify([this.acknowledgementKey(selected, tts, rate, kokoroVoice),say])) : null;
     // Acknowledgements must not start a slow synthesis that completion would cancel.
     const engine = quick && !cachedAudio ? 'system' : selected;
     if (engine === 'system') {

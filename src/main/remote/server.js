@@ -23,6 +23,7 @@ class RemoteServer {
     this.host = host;
     this.port = port;
     this.clients = new Set();
+    this.rates = new Map();
     this.waiters = new Map(); // requests that asked to wait for the answer (iPhone Shortcuts): id -> resolve
     this.server = null;
     this.ping = null;
@@ -93,6 +94,13 @@ class RemoteServer {
 
   async handle(req, res) {
     if (!isPrivateAddress(req.socket.remoteAddress)) { res.writeHead(403); return res.end(); } // not from your network
+    res.setHeader('x-content-type-options','nosniff');
+    res.setHeader('x-frame-options','DENY');
+    res.setHeader('referrer-policy','no-referrer');
+    const now=Date.now(), ip=req.socket.remoteAddress;
+    for(const [key,v] of this.rates) if(now-v.at>60000)this.rates.delete(key);
+    const rate=this.rates.get(ip)||{at:now,count:0}; rate.count++; this.rates.set(ip,rate);
+    if(rate.count>240 || this.rates.size>512) return this.json(res,429,{error:'Too many requests. Try again in a minute.'});
     const url = new URL(req.url, 'http://x');
     const p = url.pathname;
 
@@ -194,6 +202,7 @@ class RemoteServer {
     if (p === '/api/confirm' && req.method === 'POST') { const b = await this.body(req).catch(() => null); return this.json(res, 200, { ok: !!this.control.confirm?.(b?.yes === true) }); }
     if (p === '/api/stop' && req.method === 'POST') { this.control.stop(); return this.json(res, 200, { ok: true }); }
     if (p === '/api/events' && req.method === 'GET') {
+      if(this.clients.size>=32 || [...this.clients].filter(c=>c.device.id===device.id).length>=4)return this.json(res,429,{error:'Too many live connections.'});
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write(`data: ${JSON.stringify({ type: 'status', ...this.control.snapshot() })}\n\n`);
       const c = { res, device };

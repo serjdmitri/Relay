@@ -32,9 +32,9 @@ test('two distinct impulses open a short wake window, not one sustained sound', 
   assert.equal(gate.level(0.8, 1000), false);
   assert.equal(gate.level(0.8, 1200), false, 'continuous sound is one impulse');
   gate.level(0.1, 1250);
-  assert.equal(gate.level(0.8, 1400), true);
+  assert.equal(gate.level(0.8, 1400), false,'a long sound is not a clap');gate.reset();gate.level(.8,1400);gate.level(.03,1450);assert.equal(gate.level(.8,1650),true);
   assert.equal(gate.ready(6000), true);
-  assert.equal(gate.ready(6401), false);
+  assert.equal(gate.ready(6651), false);
   gate.reset();
   gate.level(0.8, 7000); gate.level(0.1, 7050);
   assert.equal(gate.level(0.8, 7100), false, 'too close together');
@@ -130,7 +130,7 @@ test('quieter separated clap impulses work without treating sustained sound as t
 test('wake handoff retains inline words and is cancelled when listening is disabled', async () => {
   const r=rig({handoffMs:300}); await r.w.refresh();
   r.speech.emit('partial','hey jarvis');r.speech.emit('partial','hey jarvis open notes');
-  assert.equal(r.woke.length,0);r.timers.find(t=>t.ms===300).f();
+  assert.equal(r.woke.length,0);r.timers.filter(t=>t.ms===300).at(-1).f();
   assert.deepEqual(r.woke,['hey jarvis open notes']);
   const stopped=rig({handoffMs:300});await stopped.w.refresh();stopped.speech.emit('partial','hey jarvis');stopped.cfg.enabled=false;stopped.w.disarm();stopped.timers.find(t=>t.ms===300).f();assert.equal(stopped.woke.length,0);
 });
@@ -140,3 +140,5 @@ test('inline wake commands exclude the wake phrase and preceding room transcript
   assert.equal(commandAfterWake('Jarvis wake up show my battery','hey jarvis'),'show my battery');
   assert.equal(commandAfterWake('hey jarvis','hey jarvis'),'');
 });
+
+test('revised wake partials extend handoff instead of executing an incomplete command',async()=>{const r=rig({handoffMs:450});await r.w.refresh();r.speech.emit('partial','hey jarvis');const old=r.timers.at(-1);r.speech.emit('partial','hey jarvis open my notes');old.f();assert.equal(r.woke.length,0);r.timers.at(-1).f();assert.deepEqual(r.woke,['hey jarvis open my notes']);});

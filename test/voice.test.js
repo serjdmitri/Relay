@@ -183,3 +183,9 @@ test('an online voice that fails is skipped for the next replies instead of fail
   assert.deepEqual(spoke, ['First answer.', 'Second answer.'], 'both are still spoken, by the system voice');
   assert.equal(calls, 1, 'the dead engine was asked once, then left to rest');
 });
+
+test('a warmed greeting starts playback without a synthesis request; a cold greeting uses fast Mac speech',async()=>{
+ const fs=require('fs'),path=require('path'),os=require('os');let made=0;const calls=[];
+ const sp=new Spk({spawnFn:fakeSpawn(calls),exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'omnivoice'}),omni:{installed:()=>true,synthesize:async()=>{made++;const f=path.join(os.tmpdir(),`relay-greet-test-${process.pid}.wav`);fs.writeFileSync(f,'fixture');return f;}}});
+ await sp.prepare({text:'Good evening, Sir.'});await sp.speak('Good evening, Sir.',{quick:true});assert.equal(made,1);assert.equal(calls[0].cmd,'afplay');await sp.speak('Good morning, Sir.',{quick:true});assert.equal(made,1);assert.equal(calls[1].cmd,'say');
+});

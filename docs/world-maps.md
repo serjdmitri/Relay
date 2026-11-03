@@ -1,0 +1,9 @@
+# World map menus
+
+Say “open Argos Atlas” or “show God’s Eye view”. Both providers use the same native intent route for Claude and Codex. The menus have Jarvis chrome and can be moved/resized. Their web content runs in a separate sandboxed, in-memory session with no Relay preload, Node, file bridge, microphone, location permission, downloads or popup access. Online map windows close when private/local mode is selected.
+
+Argos opens its public hosted map at https://argosatlas.com/map/. It remains a third-party website, with its own data freshness, availability and terms: https://argosatlas.com/terminos/. No scraping, access-control bypass or redistribution of camera feeds was added. No guarantee is made that every feed or future feature is free.
+
+God’s Eye opens a local server (default http://127.0.0.1:4173), adjustable in that window. If unavailable, the menu reports it. Setup uses the upstream instructions at https://github.com/bilawalsidhu/gods-eye-view#quick-start: install its current supported Node runtime, clone the repository, run npm ci, npm run doctor and npm run dev. This integration does not silently install or execute that separate third-party server. Its MIT source license does not cover all bundled data/assets; provider licenses and quotas still apply. Optional photorealistic imagery or voice may need provider keys. Keep that server loopback-only.
+
+This is an embedded viewer, not a new Relay live-data API or a claim that map positions are surveillance-grade. Top-level navigation is restricted to the selected source origin. The viewer may contact that source's normal third-party data providers. Provider-native voice and location permissions are deliberately unavailable inside the isolated view; use the source browser option if you choose to grant those permissions separately.

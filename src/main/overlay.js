@@ -18,13 +18,13 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false, getRecentRect = () => null, borderBin = null }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false, getBackdrop = () => ({}), getRecentRect = () => null, borderBin = null }) {
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
     this.getName = getName; // the name shown in the reactor's core
     this.getVisual = getVisual;
     this.getBorder = getBorder;
-    this.getBlur = getBlur;
+    this.getBlur = getBlur; this.getBackdrop=getBackdrop;
     this.getRecentRect = getRecentRect;
     this.borderBin = borderBin;
     this.getLook = getLook; // 'jarvis' (a cyan HUD) or 'classic'
@@ -245,7 +245,7 @@ class Overlay {
       this.hudInteractive(false);
       this.hudEntry = null;
       if (e && !e.win.isDestroyed()) {
-        this.setHudBlur(e, false);
+        this.setHudBlur(e, false, false);
         this.send(e, { type: 'hud', hide: true });
         clearTimeout(e.hudTimer);
         e.hudTimer = setTimeout(() => { if (this.hudEntry !== e) { e.hud = false; this.refresh(e); } }, 500); // let it fade out first
@@ -285,8 +285,10 @@ class Overlay {
     });
   }
 
-  setHudBlur(entry, on) {
-    if (!entry || entry.win.isDestroyed() || entry.blur === !!on) return;
+  setHudBlur(entry, on, active=true) {
+    if (!entry || entry.win.isDestroyed()) return;
+    const design=this.getBackdrop()||{},opacity=Math.max(0,Math.min(1,Number(design.opacity??.7)));design.image=design.image||'';on=active&&(!!on||!!design.image);
+    if(entry.blur===on&&entry.blurAmount===opacity&&entry.design===design.image&&entry.nativeBlur===this.getBlur())return;
     try {
       if (on && (!entry.blurWin || entry.blurWin.isDestroyed())) {
         entry.blurWin = new BrowserWindow({ ...entry.win.getBounds(), show: false, frame: false, transparent: true, backgroundColor: '#00000000', focusable: false, skipTaskbar: true, resizable: false, type: 'panel', vibrancy: 'hud', visualEffectState: 'active', webPreferences: { sandbox: true, contextIsolation: true } });
@@ -295,9 +297,14 @@ class Overlay {
         entry.blurWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
         entry.blurWin.setHiddenInMissionControl?.(true);
       }
-      if (on) entry.blurWin.showInactive();
+      if(on){
+        entry.blurWin.setVibrancy?.(this.getBlur()?'hud':null);
+        entry.blurWin.setOpacity?.(Number.isFinite(opacity)?opacity:.7);
+        if(entry.design!==design.image){entry.design=design.image;const img=typeof design.image==='string'&&/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(design.image)?design.image:'';entry.blurWin.loadURL?.('data:text/html;charset=utf-8,'+encodeURIComponent(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>html,body{margin:0;height:100%;background:transparent}img{width:100%;height:100%;object-fit:cover}</style>${img?'<img alt="" src="'+img+'">':''}`));}
+        entry.blurWin.showInactive();
+      }
       else entry.blurWin?.hide();
-      entry.blur = !!on;
+      entry.blur = !!on;entry.blurAmount=opacity;entry.nativeBlur=this.getBlur();
     } catch { /* unsupported on this platform */ }
   }
 
