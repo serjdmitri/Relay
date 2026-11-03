@@ -1,0 +1,12 @@
+/* Relay's skin for the locally installed God’s Eye UI; no controls or attributions removed. */
+:root{--bg-dark:#031b2d!important;--glass-bg:rgba(4,35,55,.76)!important;--glass-border:rgba(65,211,246,.42)!important;--menu-bg:#082b40!important;--panel-radius:0px!important;--btn-radius:0px!important;--left-stack-x:24px!important;--right-rail-x:24px!important;--text-primary:#d9f5ff!important;--text-secondary:#a2cbdc!important}
+html,body{background:#031b2d!important}
+.cesium-widget canvas{mask-image:radial-gradient(ellipse at center,#000 40%,rgba(0,0,0,.95) 57%,transparent 96%);-webkit-mask-image:radial-gradient(ellipse at center,#000 40%,rgba(0,0,0,.95) 57%,transparent 96%)}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:3;background:linear-gradient(90deg,rgba(3,27,45,.75),transparent 20%,transparent 80%,rgba(3,27,45,.75)),linear-gradient(0deg,rgba(3,27,45,.8),transparent 20%,transparent 85%,rgba(3,27,45,.5));box-shadow:inset 0 0 100px #00cfff15}
+#left-panel-stack,#right-context-rail{filter:drop-shadow(0 8px 20px #0006)}
+.panel-collapsible,.glass-panel,.panel-surface{border-radius:0!important;border-color:#42bfe366!important;background:rgba(3,31,50,.8)!important}
+@media(prefers-reduced-motion:no-preference){#cesiumContainer{animation:relay-world-arrive .85s ease-out both}@keyframes relay-world-arrive{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}}
+/* Side rails retain upstream expand/collapse behavior; their surfaces use Relay's angular chrome. */
+.floating-panel-rail,.first-run-panel{border-radius:0!important}
+@media(min-width:900px){#corner-actions{right:270px!important}}
+@media(max-width:899px){#corner-actions{bottom:240px!important}}

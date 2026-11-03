@@ -75,6 +75,9 @@
   #hudborder .detail { stroke: rgba(115,239,255,.95); stroke-width: 2.4; stroke-dasharray: 72 20 8 14 170 28; }
   #hudR { position: absolute; left: 50%; top: calc(50% - 40px); width: 810px; height: 810px; margin: -405px 0 0 -405px; transform-origin: 50% 50%; transform: scale(var(--k));
     transition: transform .8s cubic-bezier(.22, .9, .3, 1); transform-style: preserve-3d; will-change: transform; }
+  #hud.world-view #hudR {animation:none!important;transform:translate(calc(50vw - 135px),calc(50vh - 105px)) scale(.24) perspective(1000px) rotateX(25deg) rotateZ(-12deg)!important;}
+  #hud.world-view #hudT{left:auto;right:20px;bottom:20px;top:auto;transform:none;width:230px;max-width:230px;margin:0;font-size:11px;}
+  #hud.world-view #hudtasks{display:none}
   #hud.corner #hudR { transform: translate(var(--tx), var(--ty)) scale(var(--ck)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
   #hud.idle-center #hudR { transform: scale(var(--k)) perspective(1000px) rotateX(48deg) rotateZ(-18deg); }
   #hud.on.center #hudR { animation: reactor-assemble .8s cubic-bezier(.22,.9,.3,1) both; }
