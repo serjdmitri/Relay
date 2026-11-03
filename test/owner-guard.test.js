@@ -309,3 +309,18 @@ test('the camera page reads the pace the main process sends and loads the face m
   assert.doesNotMatch(page, /setInterval\(async/, 'the frame loop reschedules itself, so frames never overlap');
   assert.match(main, /pace: faceId && !enrolling \? ownerGuard\?\.pace\?\.\(\) \|\| 1000 : 1000/);
 });
+
+test('an enrollment is kept only when it covers your face from around: straight ahead and enough directions, with clean numbers', () => {
+  const { acceptEnrollment } = require('../src/main/ownerGuard');
+  const emb = (k) => Array.from({ length: 128 }, (_, i) => Math.sin(i * 0.3 + k));
+  const set = (ids) => ids.flatMap((pose, k) => [{ pose, embedding: emb(k) }, { pose, embedding: emb(k + 0.01) }]);
+  const all = ['center', 'left', 'topLeft', 'top', 'topRight', 'right', 'bottomRight', 'bottom', 'bottomLeft'];
+  const full = acceptEnrollment(set(all)); assert.equal(full.ok, true); assert.equal(full.templates.length, 18); assert.equal(full.poses.length, 9);
+  assert.equal(acceptEnrollment(set(all.slice(0, 7))).ok, true, 'center and six directions is enough');
+  assert.match(acceptEnrollment(set(all.slice(0, 6))).why, /Only 5 of the 8 directions/);
+  assert.match(acceptEnrollment(set(all.slice(1))).why, /straight-ahead pose is missing/);
+  assert.equal(acceptEnrollment([]).ok, false); assert.equal(acceptEnrollment(null).ok, false);
+  const dirty = set(all); dirty[0].embedding = [1, 2, 3]; dirty[3].embedding = emb(1).map((x, i) => (i === 5 ? NaN : x)); dirty[4].pose = 'sideways';
+  const r = acceptEnrollment(dirty); assert.equal(r.ok, true); assert.equal(r.templates.length, 15, 'the three bad ones are dropped, the rest kept');
+  assert.equal(acceptEnrollment(Array.from({ length: 60 }, () => ({ pose: 'center', embedding: emb(1) }))).ok, false, 'a flood of one pose is not a full set');
+});
