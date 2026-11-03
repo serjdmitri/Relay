@@ -102,12 +102,20 @@ class WakeWord {
       this.disarm();
       this.retry=this.setTimer(()=>this.refresh(),500);
     };
-    for(const event of ['final','error','exit'])speech.on(event,ended);
+    for(const event of ['error-event','error','exit'])speech.on(event,ended);
+    speech.on('final',msg=>{
+      if(!this.armed)return;
+      // A final transcript ends recognition: deliver a valid pending wake now,
+      // rather than cancelling its handoff timer and losing the command.
+      if(typeof msg?.text==='string'&&msg.text.trim()){this.pendingText=null;this.partial(msg.text);}
+      if(this.armed&&this.pendingText&&this.wanted){const text=this.pendingText;this.lastWake=Date.now();this.disarm();this.onWake(text);}
+      else ended();
+    });
   }
 
   get wanted() {
     const c = this.getConfig();
-    return !!c.enabled && !!c.phrase && !!this.canListen() && wakeAllowedIn(c.apps, c.apps && c.apps.length ? this.getFront() : null);
+    return !!c.enabled && (activationMode(c)==='claps'||!!c.phrase) && !!this.canListen() && wakeAllowedIn(c.apps, c.apps && c.apps.length ? this.getFront() : null);
   }
 
   // Start or stop listening to match what should be happening right now. Safe to call as often as you like.
