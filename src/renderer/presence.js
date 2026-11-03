@@ -13,7 +13,7 @@ let stream = null;
 let timer = 0;
 let stopped = false;
 let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBusy = false, recogOn = false, livenessOn = false, lmTimer = 0;
-let lastLm = { t: 0, faces: [] };
+let lastLm = { t: 0, faces: [] }, watchdog = 0;
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
 let busy = false, embed = null, embedFailed = false, templates = [], version = 0;
@@ -50,6 +50,26 @@ async function loadLandmarker() {
   } catch (e) { lmFailed = true; relay.presenceStatus({ state: 'faceid-error', message: 'The face landmark finder could not start, so recognition is less accurate and a photo of you could pass: ' + String(e?.message || e).slice(0, 100) }); } finally { lmLoading = false; }
 }
 
+
+// A camera stream does not always survive the Mac sleeping (closing the lid) or another app taking the camera: it ends, or the picture freezes, and nothing says so. Then Relay is
+// blind: it sees nobody, and the standby screen could stay up. So a stream that ends, or whose picture has not moved for 12 seconds, is started again by reloading this page.
+// Reloads are counted, and after four in two minutes it gives up and says so, so a camera that is really gone cannot loop.
+function watchStream() {
+  const restart = () => {
+    if (stopped) return; stopped = true; clearTimeout(timer); clearInterval(lmTimer);
+    let log = []; try { log = JSON.parse(sessionStorage.getItem('camReloads') || '[]').filter((t) => Date.now() - t < 120000); } catch { /* no storage */ }
+    if (log.length >= 4) { status('error', { message: 'The camera keeps stopping, so Presence and owner recognition cannot watch. Close any app using the camera, or turn Presence off and on.' }); return; }
+    try { sessionStorage.setItem('camReloads', JSON.stringify([...log, Date.now()])); } catch { /* no storage */ }
+    location.reload();
+  };
+  const track = stream?.getVideoTracks?.()[0];
+  track?.addEventListener('ended', restart);
+  let lastTime = video.currentTime, lastMove = Date.now();
+  watchdog = setInterval(() => {
+    if (video.currentTime !== lastTime) { lastTime = video.currentTime; lastMove = Date.now(); } else if (Date.now() - lastMove > 12000) restart();
+  }, 4000);
+}
+
 async function start() {
   try {
     fileset = await FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
@@ -60,6 +80,7 @@ async function start() {
     video.srcObject = stream;
     await video.play();
     status('running');
+    watchStream();
     // Looks once a second, or faster while the main process is waiting to see you (it says so in the config: c.pace), so a return is recognised in under a second.
     let pace = 1000;
     const tick = async () => {
@@ -106,5 +127,5 @@ async function start() {
   }
 }
 
-addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
+addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); clearInterval(watchdog); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
 start();
