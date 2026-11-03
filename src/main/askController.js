@@ -46,6 +46,7 @@ const { parseViewerGuardCommand } = require('./viewerGuard');
 const { parseSelfImproveCommand } = require('./selfImprove');
 const { parseOwnerCommand } = require('./ownerGuard');
 const shieldMod = require('./injectionShield');
+const skillImportMod = require('./skillImport');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
@@ -1074,6 +1075,24 @@ class AskController {
     return skillsMod.skillText(found);
   }
 
+  // "import skills from github.com/…": SKILL.md text only, scanned, and kept pending until you approve it in Settings > Memory (see skillImport.js).
+  async importSkills(c) {
+    const get = async (url, asJson) => {
+      const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 15000);
+      try {
+        const r = await fetch(url, { signal: ac.signal, headers: { 'User-Agent': 'Relay', Accept: asJson ? 'application/vnd.github+json' : 'text/plain' } });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const txt = await r.text();
+        if (txt.length > 4000000) throw new Error('too large');
+        return asJson ? JSON.parse(txt) : txt;
+      } finally { clearTimeout(timer); }
+    };
+    const before = this.store.get('skills') || [];
+    const r = await skillImportMod.importFrom(c.source, before, { json: (u) => get(u, true), text: (u) => get(u, false), addSkill: skillsMod.addSkill, id: () => crypto.randomUUID() });
+    if (r.list !== before) this.store.set('skills', r.list);
+    return { status: 'done', reply: r.summary, actions: r.results.some((x) => x.added) ? 1 : 0 };
+  }
+
   saveSkill(input) {
     const r = skillsMod.addSkill(this.store.get('skills') || [], input, { id: crypto.randomUUID() });
     if (!r.added) return r.why;
@@ -2079,6 +2098,7 @@ class AskController {
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
+          if (skillImportMod.parseSkillImportCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.importSkills(skillImportMod.parseSkillImportCommand(effective))); }
           if (shieldMod.parseShieldCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: shieldMod.describeLog(this.store.get('shieldLog')), actions: 0 }); }
           if (this.selfImproveCommand && parseSelfImproveCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.selfImproveCommand(parseSelfImproveCommand(effective))); }
           if (this.viewerGuardCommand && parseViewerGuardCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.viewerGuardCommand(parseViewerGuardCommand(effective))); }
