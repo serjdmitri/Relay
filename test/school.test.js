@@ -63,3 +63,6 @@ test('school environment routing is safely canonicalized without accepting login
  assert.equal(schoolUrl(url+'?svcid=edu&envId=p-fixture&access_token=secret'),null);
  assert.equal(schoolUrl(url+'?envId=arbitrary-secret'),null);
 });
+test('school tabs with a canonical trailing slash remain readable',async()=>{const bridge={isConnected:()=>true,call:async name=>name==='tabs.list'?[{id:1,url:url+'/'}]:{url:url+'/',text:'Assignment Center\nEssay due Friday'}};assert.equal((await readSchoolPage(bridge,url)).ok,true);});
+test('a clock time without a calendar date is not presented as an assignment due date',async()=>{assert.deepEqual(await extractSchoolAssignments('Essay 11:55 PM',async()=>JSON.stringify([{title:'Essay',due:'11:55 PM'}])),[{title:'Essay',due:''}]);});
+test('a school page advertising more active work than it shows is marked limited',async()=>{const {checkSchoolAssignments}=require('../src/main/school');const b={isConnected:()=>true,call:async name=>name==='tabs.list'?[{id:1,url}]:{url,text:'14 Active assignments\nEssay\nFriday'}};const r=await checkSchoolAssignments(b,url,async()=>JSON.stringify([{title:'Essay',due:'Friday'}]));assert.equal(r.truncated,true);assert.equal(r.assignments.length,1);});
