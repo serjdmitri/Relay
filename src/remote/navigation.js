@@ -1,11 +1,11 @@
 // Jarvis Navigation, the page: search a place (typed or said), preview the route, then navigate: the map follows you, the next turn is shown at the top, and Jarvis speaks the turns as you
 // approach them. The deciding (where you are on the route, when to speak, when you have left it) is in navmath.js; what you can say is in navvoice.js; this file is the screen, the
 // microphone, the speaker and the GPS. Search and routing go through the Mac's Relay (it asks Photon and Valhalla); nothing here goes to an AI model.
-import * as maplibregl from '/maplibre/maplibre-gl.mjs';
-import { buildRoute, snap, bearing, NavSession, showDistance, speakDistance } from '/navmath.js';
-import { parseCommand, REPLIES } from '/navvoice.js';
+import * as maplibregl from './maplibre/maplibre-gl.mjs';
+import { buildRoute, snap, bearing, NavSession, showDistance, speakDistance } from './navmath.js';
+import { parseCommand, REPLIES } from './navvoice.js';
 
-maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+maplibregl.setWorkerUrl(new URL('./maplibre/maplibre-gl-worker.mjs', import.meta.url).href);
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.hash.slice(1));
 let token = ''; try { token = localStorage.getItem('relay-remote-token') || ''; } catch { /* no storage */ }
@@ -17,8 +17,11 @@ let map;
 const status = (t) => { $('status').textContent = t || ''; };
 const caption = (t) => { $('caption').textContent = t ? `“${t}”` : ''; };
 
-// ---- the server (the Mac's Relay) ----
+// ---- the server: the Mac's Relay, or (standalone page, no Mac) the free map services asked directly ----
+const STANDALONE = document.documentElement.dataset.standalone === '1';
+let directCall = null;
 async function api(action, body, signal) {
+  if (STANDALONE) { directCall ||= (await import('./navdirect.js')).directApi(); return directCall(action, body || {}, signal); }
   const r = await fetch('/api/navigation/' + action, { method: body ? 'POST' : 'GET', headers: { authorization: 'Bearer ' + token, ...(body ? { 'content-type': 'application/json', 'x-relay-remote': '1' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}), signal });
   const data = await r.json();
   if (!r.ok) throw Error(r.status === 401 ? 'Open Relay Home and pair this phone first.' : data.error || 'Navigation could not finish.');
@@ -358,7 +361,7 @@ async function heyStart() {
   if (!Recognition) { status('This browser cannot listen. Open Relay in Safari.'); return; }
   try {
     if (!hey) {
-      const { WakeLoop } = await import('/wakeword.js');
+      const { WakeLoop } = await import('./wakeword.js');
       hey = new WakeLoop({
         makeRecognizer: () => { const r = new Recognition(); r.lang = navigator.language || 'en-US'; r.continuous = true; r.interimResults = true; return r; },
         onWake: () => { try { speechSynthesis.cancel(); } catch { /* none */ } status('Listening…'); },
@@ -392,7 +395,12 @@ $('voice').onclick = () => handle(S.muted ? 'unmute' : 'mute');
 $('recenter').onclick = recenter;
 $('zin').onclick = () => map.zoomTo(map.getZoom() + 1, { duration: 250 }); $('zout').onclick = () => map.zoomTo(map.getZoom() - 1, { duration: 250 });
 
+function standaloneSetup() {
+  $('back').hidden = true;
+  $('privacy').textContent = 'This page works without your Mac. Place searches go to Photon, routes to Valhalla (they get the places and points you ask for, and this phone\'s internet address), and map tiles come from OpenFreeMap. Nothing goes to an AI model and nothing is saved except your home and work spots, on this phone. Your location is used only while you navigate. Guidance works while this page is open with the screen on: leaving it, or locking the phone, pauses it, and Apple Maps can guide in the background.';
+}
 async function boot() {
+  if (STANDALONE) standaloneSetup();
   for (const el of document.querySelectorAll('button,input')) el.disabled = true;
   syncModes();
   try {
