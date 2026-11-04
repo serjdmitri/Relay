@@ -301,3 +301,28 @@ test('shuffle and repeat: parsed, and they flip the right setting in Spotify and
   const none = { listApps: async () => ['Safari'], osa: async () => '' };
   assert.equal((await runQuick({ type: 'media', op: 'shuffle', on: null }, none, {})).reply, 'No music app is open.');
 });
+
+test('shuffle and repeat buttons turn off again even when the app keeps reporting the old state (Spotify answers "false" after shuffle was turned on)', async () => {
+  const { runQuick, forgetToggles } = require('../src/main/quick');
+  forgetToggles();
+  // an app whose getter never changes (it always says off), but accepts what is set
+  const log = []; const stuck = { listApps: async () => ['Spotify'], osa: async (s) => { log.push(s); if (/player state/.test(s)) return 'playing'; if (/\(shuffling as text\)|\(repeating as text\)/.test(s)) return 'false'; return ''; } };
+  const press = async (op) => (await runQuick({ type: 'media', op, on: null, mode: null }, stuck, {})).reply;
+  assert.equal(await press('shuffle'), 'Shuffle on.');
+  assert.equal(await press('shuffle'), 'Shuffle off.', 'second press turns it off');
+  assert.equal(await press('shuffle'), 'Shuffle on.');
+  assert.equal(await press('repeat'), 'Repeat on.');
+  assert.equal(await press('repeat'), 'Repeat off.');
+  assert.ok(log.filter((s) => /set shuffling to false/.test(s)).length === 1 && log.filter((s) => /set shuffling to true/.test(s)).length === 2);
+  // an app that reports honestly keeps being read, so a change made in the app itself is respected
+  forgetToggles();
+  let on = false; const honest = { listApps: async () => ['Spotify'], osa: async (s) => { if (/player state/.test(s)) return 'playing'; if (/\(shuffling as text\)/.test(s)) return String(on); const m = /set shuffling to (true|false)/.exec(s); if (m) on = m[1] === 'true'; return ''; } };
+  const hp = async () => (await runQuick({ type: 'media', op: 'shuffle', on: null }, honest, {})).reply;
+  assert.equal(await hp(), 'Shuffle on.'); on = false; /* turned off in the app */ assert.equal(await hp(), 'Shuffle on.'); assert.equal(await hp(), 'Shuffle off.');
+  // Apple Music repeat: a press toggles off <-> all (repeat one is asked for by name)
+  forgetToggles();
+  let rep = 'off'; const music = { listApps: async () => ['Music'], osa: async (s) => { if (/player state/.test(s)) return 'playing'; if (/\(song repeat as text\)/.test(s)) return rep; const m = /set song repeat to (\w+)/.exec(s); if (m) rep = m[1]; return ''; } };
+  const mp = async (mode = null) => (await runQuick({ type: 'media', op: 'repeat', mode }, music, {})).reply;
+  assert.equal(await mp(), 'Repeat all.'); assert.equal(await mp(), 'Repeat off.'); assert.equal(await mp('one'), 'Repeat one.'); assert.equal(await mp(), 'Repeat off.');
+  forgetToggles();
+});
