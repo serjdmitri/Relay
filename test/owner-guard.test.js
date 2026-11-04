@@ -403,7 +403,43 @@ test('intruder pictures: the guard says when you have just been seen, the photos
   const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8'), page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8');
   assert.match(main, /onAlarm: \(\{ seconds, demo \}\) => \{ intruder\.show\(\{ seconds, demo \}\); ask\.sound\('Basso'\); if \(!demo\) startVisit\(seconds\); \}/, 'the test screen never takes pictures');
   assert.match(main, /intruderLog: _intruderLog/, 'the log is never sent to the screen with the rest of the state');
-  assert.match(main, /\['enroll','forget','off','liveness-off','intruders-clear'\]\.includes\(c\.type\)/, 'deleting the pictures asks the Mac owner to confirm first');
+  assert.match(main, /\['enroll','forget','off','liveness-off','intruders-clear','looser'\]\.includes\(c\.type\)/, 'deleting the pictures asks the Mac owner to confirm first');
   assert.match(main, /if \(screenLocked \|\| ownerGuard\.state !== 'idle'\) return;/, 'it waits until the screen is unlocked and the alarm is over before telling you');
   assert.match(page, /window\.__relaySnapshot = \(\) =>/); assert.match(page, /lastFaces = both\.filter\(Boolean\)/);
+});
+
+test('"why didn\'t it alert?": each reason a face did not set off the alarm is recorded and explained in words', () => {
+  const cfg = { enabled: true, seconds: 20, threshold: 0.4 }; // margin 0.12: below 0.28 is a stranger, 0.28 to 0.4 is "not sure"
+  const run = (extra, scores, n = 8) => { const m = make(cfg, { strangerFrames: 5, ...extra }); m.feed(scores, n); return m; };
+  const a = run({ unarmed: true }, [0.05]); assert.equal(a.g.state, 'idle'); assert.match(a.g.explain(), /Relay had not recognised you yet since it last started, so it was not guarding.*restart while you are away/);
+  const b = make(cfg, { strangerFrames: 5 }); b.g.dismiss('fingerprint'); b.feed([0.05], 8); assert.equal(b.g.state, 'idle'); assert.match(b.g.explain(), /stopped an alarm with your fingerprint a few minutes earlier/);
+  const c = run({}, [0.33]); assert.equal(c.g.state, 'idle'); assert.match(c.g.explain(), /scored 0\.33 to 0\.33 against yours\. The alarm needs a score below 0\.28.*"not sure" zone, which never alarms/);
+  const d = run({}, [0.5]); assert.equal(d.g.state, 'idle'); assert.match(d.g.explain(), /matched yours at only 0\.50 to 0\.50.*above the 0\.40 limit.*look-alike, such as a brother or sister.*stricter/);
+  const e = run({}, [0.05]); assert.equal(e.g.state, 'alarm'); assert.match(e.g.explain(), /who was not you set off the alarm/);
+  const f = make(cfg, { strangerFrames: 5 }); for (let i = 0; i < 6; i++) { f.clock.t += 1000; f.g.frame({ faces: 1, scores: [null] }); } assert.match(f.g.explain(), /too small, too far or turned away for me to judge/);
+  const g = make(cfg, { strangerFrames: 5 }); g.feed([0.05], 3); assert.match(g.g.explain(), /only seen for a moment: the alarm needs five clear looks/, 'a few looks are not enough');
+  const none = make(cfg); none.feed([0.9], 5); assert.match(none.g.explain(), /have not noted anyone but you/);
+  const nobodyArmed = make(cfg, { unarmed: true }); assert.match(nobodyArmed.g.explain(), /not recognised you yet since Relay started, so I am not guarding until I do/);
+});
+
+test('episodes are separated by calm looks, saved through a callback, restored on start, and newest-first with a cap', () => {
+  const saved = []; const m = make({ enabled: true, seconds: 20, threshold: 0.4 }, { onEpisode: (ep, all) => saved.push([ep, all.length]) });
+  m.feed([0.33], 4); m.feed([0.9], 3); assert.equal(saved.length, 1, 'three looks of you end the episode'); assert.equal(saved[0][0].counts.unsure, 4);
+  m.feed([0.05], 2); m.feed([], 3); assert.equal(saved.length, 2, 'nobody in view for three looks ends it too');
+  m.clock.t += 60000; m.feed([0.33], 2); m.clock.t += 20000; m.feed([0.33], 1); assert.equal(saved.length, 3, 'a gap of more than 15 seconds starts a new one');
+  const restored = new OwnerGuard({ lock: async () => {}, getConfig: () => ({ enabled: true, threshold: 0.4 }), episodes: saved.map((s) => s[0]), now: () => 5e6 });
+  assert.equal(restored.episodes.length, 3); assert.match(restored.explain({ enabled: true, threshold: 0.4 }, { count: 1 }), /^At .*:/, 'what was seen before a restart can still be explained');
+  const many = new OwnerGuard({ lock: async () => {}, getConfig: () => ({}), episodes: Array.from({ length: 80 }, (_, i) => ({ at: i, seconds: 1, faces: 1, counts: { unsure: 1 }, gates: {}, best: 0.3, worst: 0.3, alarmed: false })) });
+  assert.equal(many.episodes.length, 30, 'only the latest 30 are kept');
+});
+
+test('main: a fingerprint stop discards the pictures, the guard starts armed if you were seen in the last day, and "stricter/looser" move the limit within bounds (looser asks for confirmation)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(src, /if \(outcome === 'fingerprint'\) intruderLog\.remove\(id\); else intruderLog\.finish\(id, outcome\)/, 'that was you, so the pictures are not kept');
+  assert.match(src, /Date\.now\(\) - \(Number\(store\.get\('ownerArmedAt'\)\) \|\| 0\) < 24 \* 3600 \* 1000 && ownerState\.templates\.length > 0\) ownerGuard\.armed = true/);
+  assert.match(src, /onOwnerSeen: \(\) => \{ store\.set\('ownerArmedAt', Date\.now\(\)\); tellAboutVisits\(\); \}/);
+  assert.match(src, /ownerGuard\.dismiss\('fingerprint'\); store\.set\('ownerArmedAt', Date\.now\(\)\)/);
+  assert.match(src, /Math\.min\(0\.6, Math\.max\(0\.3, now \+ \(c\.type === 'stricter' \? 0\.05 : -0\.05\)\)\)/);
+  assert.match(src, /'intruders-clear','looser'\]\.includes\(c\.type\)/);
+  assert.match(src, /episodes: store\.get\('ownerEpisodes'\) \|\| \[\]/);
 });

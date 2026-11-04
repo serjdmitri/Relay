@@ -62,17 +62,36 @@ function trustedFlags({ scores = [], trustedScores = [], live = [], threshold = 
   });
 }
 
+// One noted stretch of time, in words: what was seen and the reason it did or did not set off the alarm.
+function explainEpisode(ep, cfg, locale = 'en-US') {
+  const time = new Date(ep.at).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }), who = ep.faces > 1 ? 'people' : 'someone', n = (k) => ep.counts[k] || 0;
+  const total = Object.values(ep.counts).reduce((a, b) => a + b, 0) || 1, f = (x) => (x === null || x === undefined ? 'n/a' : Number(x).toFixed(2));
+  const head = `At ${time}, for about ${Math.max(1, ep.seconds)} second${ep.seconds === 1 ? '' : 's'}:`;
+  if (ep.alarmed) return `${head} ${who} who was not you set off the alarm.`;
+  const gated = (k) => (ep.gates && ep.gates[k]) || 0;
+  let why;
+  if (gated('unarmed') >= total / 2) why = 'Relay had not recognised you yet since it last started, so it was not guarding. It only starts guarding once it has seen you, so a restart while you are away leaves it off until you sit down.';
+  else if (gated('quiet') >= total / 2) why = 'you had stopped an alarm with your fingerprint a few minutes earlier, so it stayed quiet for 5 minutes.';
+  else if (n('weak-match') >= total / 2) why = `the face matched yours at only ${f(ep.worst)} to ${f(ep.best)} (your own face usually scores above 0.7), but that is above the ${cfg.threshold.toFixed(2)} limit, so I counted it as you. A look-alike, such as a brother or sister, can do this. Saying "make owner recognition stricter" raises the limit.`;
+  else if (n('unsure') >= total / 2) why = `the face scored ${f(ep.worst)} to ${f(ep.best)} against yours. The alarm needs a score below ${(cfg.threshold - cfg.margin).toFixed(2)} (and ${cfg.threshold.toFixed(2)} or more counts as you), so this was in the "not sure" zone, which never alarms.`;
+  else if (n('not-judged') >= total / 2) why = 'the face was too small, too far or turned away for me to judge, so I could not tell it from you.';
+  else if (n('stranger')) why = 'it was only seen for a moment: the alarm needs five clear looks in a row.';
+  else why = 'I could not tell it from you.';
+  return `${head} ${who} was in view but no alarm started because ${why}`;
+}
+
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, onOwnerSeen = () => {}, getConfig = () => ({}), hasTemplates = () => true, getIdleSeconds = () => Infinity, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
-    Object.assign(this, { onOwnerSeen, getIdleSeconds, armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, onOwnerSeen = () => {}, onEpisode = () => {}, episodes = [], getConfig = () => ({}), hasTemplates = () => true, getIdleSeconds = () => Infinity, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
+    Object.assign(this, { onOwnerSeen, onEpisode, getIdleSeconds, armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+    this.episodes = Array.isArray(episodes) ? episodes.slice(-30) : [];
     this.reset();
   }
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
-    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; this.trustedFrames = 0; }
+    this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; this.trustedFrames = 0; this.cur = null; this.calmLooks = 0; }
 
   // faces: how many; scores: best match per face (null = could not tell). Returns 'alarm', 'cleared', 'locked' or null (when nothing changed).
   // live: per face, false when it matches you but has not blinked lately (a picture). That is treated as a stranger, never as you.
@@ -96,10 +115,44 @@ class OwnerGuard {
     if (faces > 0) this.lookingAway = !!down;
     if (down) this.lastDownAt = this.now();
     this.noFaceSince = faces > 0 ? null : (this.noFaceSince ?? this.now());
+    this.note(faces, owner, stranger, trustedHere, known, cfg);
     const out = this.step(cfg);
     // you have just been seen (the first look in a streak of looks): the place to tell you what happened while you were away
     if (owner && this.owners === this.ownerFrames) { try { this.onOwnerSeen(); } catch { /* a failing report must not stop the guard */ } }
     return out;
+  }
+
+  // A short record of every stretch of time a face that is not clearly you was in view, and why it did or did not raise the alarm, so "why didn't it alert?" has an answer.
+  // verdict per look: owner (a strong match), weak-match (counted as you, but only just), stranger, unsure (the grey zone), not-judged (too small or turned away), trusted, nobody.
+  note(faces, owner, stranger, trustedHere, known, cfg) {
+    const t = this.now(), best = known.length ? Math.max(...known.map((k) => k.s)) : null;
+    if (this.cur && t - this.cur.last > 15000) this.endEpisode(); // a long gap since the last such look: that was a different stretch of time
+    const verdict = !faces ? 'nobody' : owner ? (best !== null && best < cfg.threshold + 0.2 ? 'weak-match' : 'owner') : stranger ? 'stranger' : trustedHere ? 'trusted' : !known.length ? 'not-judged' : 'unsure';
+    const gate = !this.armed ? 'unarmed' : t < this.quietUntil ? 'quiet' : null;
+    if (['stranger', 'unsure', 'not-judged', 'weak-match'].includes(verdict)) {
+      this.calmLooks = 0;
+      if (!this.cur) this.cur = { at: t, last: t, counts: {}, gates: {}, min: null, max: null, faces: 0, alarmed: false };
+      const c = this.cur; c.last = t; c.counts[verdict] = (c.counts[verdict] || 0) + 1; if (gate) c.gates[gate] = (c.gates[gate] || 0) + 1; c.faces = Math.max(c.faces, faces);
+      if (best !== null) { c.min = c.min === null ? best : Math.min(c.min, best); c.max = c.max === null ? best : Math.max(c.max, best); }
+    } else if (this.cur && (verdict === 'owner' || verdict === 'nobody' || verdict === 'trusted')) {
+      if (++this.calmLooks >= 3) this.endEpisode();
+    }
+  }
+
+  endEpisode() {
+    const c = this.cur; this.cur = null; this.calmLooks = 0;
+    if (!c) return;
+    const ep = { at: c.at, seconds: Math.round((c.last - c.at) / 1000), faces: c.faces, counts: c.counts, gates: c.gates, best: c.max, worst: c.min, alarmed: c.alarmed };
+    this.episodes = [...this.episodes, ep].slice(-30);
+    try { this.onEpisode(ep, this.episodes); } catch { /* saving the note must not stop the guard */ }
+  }
+
+  // What was seen lately and why it did or did not alert, in words.
+  explain(cfgRaw = this.getConfig(), { count = 3, locale = 'en-US' } = {}) {
+    if (this.cur) this.endEpisode();
+    const cfg = config(cfgRaw), list = this.episodes.slice(-count).reverse();
+    if (!list.length) return `I have not noted anyone but you since Relay started watching. A face that matches you strongly, a trusted person, or nobody at all is not recorded.${this.armed ? '' : ' I also have not recognised you yet since Relay started, so I am not guarding until I do.'}`;
+    return list.map((e) => explainEpisode(e, cfg, locale)).join(' ');
   }
 
   // How often the camera page should look: quickly while Relay is waiting to see YOU (the first moments after turning it on, the away screen, the alarm countdown), so you are
@@ -130,7 +183,7 @@ class OwnerGuard {
       }
     } else if (this.awayActive) { this.awayActive = false; this.onAway(false); }
     if (this.state === 'idle') {
-      if (cfg.enabled && this.armed && t >= this.quietUntil && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
+      if (cfg.enabled && this.armed && t >= this.quietUntil && this.strangers >= this.strangerFrames) { this.state = 'alarm'; this.deadline = t + cfg.seconds * 1000; this.demo = false; this.awayActive = false; if (this.cur) this.cur.alarmed = true; this.onAlarm({ seconds: cfg.seconds, demo: false }); return 'alarm'; }
       return null;
     }
     if (this.state === 'alarm') {
@@ -186,6 +239,9 @@ function parseOwnerCommand(text) {
   if (/^(?:turn on|enable|start|switch on) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-on' };
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-off' };
   if (/^(?:delete|clear|erase|remove) (?:all )?(?:the |my )?(?:intruder|stranger) (?:photos?|pictures?|log|visits|shots)$/.test(n)) return { type: 'intruders-clear' };
+  if (/^why (?:didn'?t|did not|wasn'?t|was not|isn'?t|is not|won'?t)\b.*\b(?:alert\w*|alarm\w*|go off|trigger\w*|catch\w*|notice\w*|detect\w*|stop\w*|work\w*|lock\w*)(?: (?:me|him|her|them|us|anyone|anybody|someone|my \w+|the \w+))?$|^(?:what did (?:the )?camera see|explain (?:the )?(?:last )?(?:alert|alarm|guard|owner recognition))(?: while i was (?:away|gone|out))?$/.test(n)) return { type: 'explain' };
+  if (/^make (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:stricter|more strict|tighter|stronger)$/.test(n)) return { type: 'stricter' };
+  if (/^make (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:looser|more relaxed|more lenient|weaker|less strict)$/.test(n)) return { type: 'looser' };
   if (/^(?:owner|face) (?:recogn\w*|guard|check) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
   if (/^(?:test|show|preview|try) (?:the )?(?:access denied|intruder|not your computer)(?: screen| alarm| warning)?$/.test(n)) return { type: 'demo' };
   return null;
@@ -216,4 +272,4 @@ function openTemplates(rec, decrypt) {
   } catch { return []; }
 }
 
-module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
+module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, explainEpisode, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };

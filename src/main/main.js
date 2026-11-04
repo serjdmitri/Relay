@@ -1581,7 +1581,7 @@ app.whenReady().then(() => {
         admin: () => new Promise((resolve, reject) => require('child_process').execFile('osascript', ['-e', 'do shell script "true" with administrator privileges with prompt "Relay: confirm it is you, to stop the access denied alarm"'], (err) => (err ? reject(err) : resolve()))),
         onProblem: (m) => { ownerState.touchIdProblem = m; }
       });
-      ownerGuard.dismiss('fingerprint'); return { ok: true };
+      ownerGuard.dismiss('fingerprint'); store.set('ownerArmedAt', Date.now()); return { ok: true };
     }
   });
   ownerState = { templates: [], version: 1, enroll: null };
@@ -1613,7 +1613,8 @@ app.whenReady().then(() => {
       intruderLog.addShot(id, { jpeg: snap.jpeg, embeddings: strangers }, { threshold });
     }, delay).unref?.();
   };
-  const endVisit = (outcome) => { if (!currentVisit) return; const id = currentVisit; currentVisit = null; intruderLog.finish(id, outcome); broadcast(); };
+  // Stopped with your fingerprint: that was you, not an intruder, so the pictures are not kept (and never shown).
+  const endVisit = (outcome) => { if (!currentVisit) return; const id = currentVisit; currentVisit = null; if (outcome === 'fingerprint') intruderLog.remove(id); else intruderLog.finish(id, outcome); broadcast(); };
   tellAboutVisits = () => {
     if (screenLocked || ownerGuard.state !== 'idle') return;
     const pending = intruderLog.pending(); if (!pending.length) return;
@@ -1630,9 +1631,14 @@ app.whenReady().then(() => {
     onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); if (!demo) startVisit(seconds); },
     onClear: (reason) => { intruder.hide(); endVisit(({ owner: 'owner-returned', fingerprint: 'fingerprint', trusted: 'trusted' })[reason] || 'ended'); },
     onLocked: () => { intruder.hide(); endVisit('locked'); },
-    onOwnerSeen: () => tellAboutVisits(),
+    episodes: store.get('ownerEpisodes') || [],
+    onEpisode: (_ep, all) => { store.set('ownerEpisodes', all); },
+    onOwnerSeen: () => { store.set('ownerArmedAt', Date.now()); tellAboutVisits(); },
     onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
   });
+  // Guarding must not depend on you having been seen since the app last started: a restart (an update, a crash, a wake) while you are away would otherwise leave the Mac unguarded
+  // until you sat down again. If you were recognised in the last 24 hours, the guard starts armed.
+  if (Date.now() - (Number(store.get('ownerArmedAt')) || 0) < 24 * 3600 * 1000 && ownerState.templates.length > 0) ownerGuard.armed = true;
   setInterval(() => ownerGuard.step(), 1000);
   // The face setup window (camera in a circle, ring of eight directions): it returns the finished set of numbers, and this decides whether it is a full set and keeps it.
   enrollWin = new (require('./enrollWindow').EnrollWindow)({
@@ -1658,12 +1664,19 @@ app.whenReady().then(() => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
     const setOwner = (patch) => store.set('settings.owner', { ...cfg(), ...patch });
     const needCamera = async () => { if (store.get('settings.presence.enabled')) return ''; store.set('settings.presence.enabled', true); await setPresence(true); return ' I turned Presence on, because it uses the same camera.'; };
-    if (['enroll','forget','off','liveness-off','intruders-clear'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
+    if (['enroll','forget','off','liveness-off','intruders-clear','looser'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
       enrollWin.open();
       // short, and told not to stay: the reactor card would otherwise sit on the screen in front of the setup window until dismissed, and nothing should ask "anything else?" over it
       return { ...done('The face setup window is open. Follow the glow around the ring.'), noHold: true, noFollowUp: true };
+    }
+    if (c.type === 'explain') return done(ownerGuard.explain(store.get('settings.owner')));
+    if (c.type === 'stricter' || c.type === 'looser') {
+      const now = cfg().threshold, next = Math.round(Math.min(0.6, Math.max(0.3, now + (c.type === 'stricter' ? 0.05 : -0.05))) * 100) / 100;
+      if (next === now) return done(`The match limit is already at its ${c.type === 'stricter' ? 'strictest (0.60)' : 'loosest (0.30)'}.`);
+      setOwner({ threshold: next }); broadcast();
+      return done(`The match limit is now ${next.toFixed(2)} (it was ${now.toFixed(2)}). A face must score at least that against yours to count as you, and the alarm starts for faces below ${(next - cfg().margin).toFixed(2)}. ${c.type === 'stricter' ? 'Look-alikes are less likely to pass as you; if it starts doubting you, say "make owner recognition looser".' : 'It will doubt you less, and look-alikes are more likely to pass as you.'} Your own face usually scores above 0.7.`);
     }
     if (c.type === 'intruders') {
       intrudersWin.open(); const list = intruderLog.list();
