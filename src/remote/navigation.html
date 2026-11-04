@@ -13,7 +13,7 @@
       <div id="b-text"><div id="b-dist">—</div><div id="b-street">Waiting for your position…</div></div>
     </div>
     <div id="hud">
-      <button id="hey" type="button" aria-label="Hey Jarvis listening" aria-pressed="false" title="Hey Jarvis">👂</button>
+      <button id="hey" type="button" aria-label="Hey Jarvis listening" aria-pressed="false" title="Hey Jarvis">Hey</button>
       <button id="zin" type="button" aria-label="Zoom in">+</button>
       <button id="zout" type="button" aria-label="Zoom out">−</button>
       <button id="recenter" type="button" aria-label="Follow my position" hidden>◎</button>
@@ -48,10 +48,10 @@
         <div><b id="s-dist">—</b><span>to go</span></div>
       </div>
       <p id="caption" aria-live="polite"></p>
-      <div class="row ctl"><button id="nmic" type="button" aria-label="Talk to Jarvis">🎙 Talk</button><button id="voice" type="button" aria-pressed="true">🔊 Voice on</button><button id="overview" type="button">Overview</button><button id="end" type="button" class="danger">End</button></div>
+      <div class="ctl"><button id="nmic" type="button" aria-label="Talk to Jarvis"><span class="ic">🎙</span><span>Talk</span></button><button id="voice" type="button" aria-pressed="true" aria-label="Voice guidance"><span class="ic">🔊</span><span>Voice</span></button><button id="overview" type="button" aria-label="Show the whole route"><span class="ic">🗺</span><span>Map</span></button><button id="end" type="button" class="danger" aria-label="End navigation"><span class="ic">⏹</span><span>End</span></button></div>
     </div>
 
-    <div id="v-done" hidden><h2>You have arrived, Sir.</h2><div class="row"><button id="done" type="button" class="primary">Done</button></div></div>
+    <div id="v-done" hidden><h2>You have arrived, Sir.</h2><p id="next-line"></p><div class="row"><button id="next" type="button" class="primary" hidden>Continue</button><button id="done" type="button">Done</button></div></div>
 
     <details class="fine"><summary>Online map privacy and limits</summary>
       <p id="privacy">Online preview: place searches go to Photon; routing sends the chosen start and destination to Valhalla. Map tiles come from OpenFreeMap. No AI model receives these requests. Your location is used only while you navigate, and only on this page. Guidance works while this page is open with the screen on: leaving it, or locking the phone, pauses it, and Apple Maps can guide in the background.</p>

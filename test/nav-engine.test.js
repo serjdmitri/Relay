@@ -142,11 +142,11 @@ test('"what\'s next" and "repeat" use the latest position and the last thing sai
 // ---- what you can say ----
 test('voice commands: a destination with its travel mode, and each control', async () => {
   const { parseCommand: p } = await import('../src/remote/navvoice.js');
-  assert.deepEqual(p('Take me to NSU University School'), { type: 'go', place: 'NSU University School', mode: 'driving' });
-  assert.deepEqual(p('Jarvis, walk me to Starbucks.'), { type: 'go', place: 'Starbucks', mode: 'walking' });
-  assert.deepEqual(p('drive to Miami Airport'), { type: 'go', place: 'Miami Airport', mode: 'driving' });
-  assert.deepEqual(p('directions to 3255 Hollywood Blvd'), { type: 'go', place: '3255 Hollywood Blvd', mode: 'driving' });
-  assert.deepEqual(p('how do I get to the beach'), { type: 'go', place: 'the beach', mode: 'driving' });
+  assert.deepEqual(p('Take me to NSU University School'), { type: 'go', place: 'NSU University School', mode: 'driving', then: [] });
+  assert.deepEqual(p('Jarvis, walk me to Starbucks.'), { type: 'go', place: 'Starbucks', mode: 'walking', then: [] });
+  assert.deepEqual(p('drive to Miami Airport'), { type: 'go', place: 'Miami Airport', mode: 'driving', then: [] });
+  assert.deepEqual(p('directions to 3255 Hollywood Blvd'), { type: 'go', place: '3255 Hollywood Blvd', mode: 'driving', then: [] });
+  assert.deepEqual(p('how do I get to the beach'), { type: 'go', place: 'the beach', mode: 'driving', then: [] });
   assert.deepEqual(p('walking'), { type: 'mode', mode: 'walking' }); assert.deepEqual(p('switch to driving'), { type: 'mode', mode: 'driving' });
   const cases = { start: ['start', "let's go", 'begin navigation', 'start the route', 'lead the way'], stop: ['stop', 'end navigation', 'cancel', 'exit'], mute: ['mute', 'be quiet', 'voice off'], unmute: ['unmute', 'voice on'], repeat: ['repeat that', 'say that again', 'what did you say'], next: ["what's next", 'next turn', 'where do I turn'], eta: ['how far', 'how long', 'when will I arrive', 'eta'], 'zoom-in': ['zoom in'], 'zoom-out': ['zoom out'], overview: ['overview', 'show the whole route'], recenter: ['recenter', 'where am I', 'follow me'], apple: ['open apple maps', 'use apple maps'] };
   for (const [type, phrases] of Object.entries(cases)) for (const phrase of phrases) assert.equal(p(phrase)?.type, type, phrase);
@@ -157,4 +157,23 @@ test('ordinary speech is not taken for a map command, and an empty or odd input 
   for (const t of ['what time is it', 'play some music', 'I went to the store', 'to the left', 'turn the lights off', '', '   ', null, undefined, 'take me']) assert.equal(p(t), null, String(t));
   assert.equal(p('take me to ' + 'x'.repeat(300)), null, 'a place name is bounded');
   assert.equal(REPLIES.mode('walking'), 'Walking directions.'); assert.match(REPLIES.none, /take me to/);
+});
+
+test('stops: "X and then Y", "Y with a stop at X", add a stop, continue, and saved home/work are all understood', async () => {
+  const { parseCommand } = await import('../src/remote/navvoice.js');
+  assert.deepEqual(parseCommand('take me to Starbucks and then home'), { type: 'go', place: 'Starbucks', mode: 'driving', then: ['home'] });
+  assert.deepEqual(parseCommand('walk to the beach then the office then home'), { type: 'go', place: 'the beach', mode: 'walking', then: ['work', 'home'] });
+  assert.deepEqual(parseCommand('take me home with a stop at Starbucks'), { type: 'go', place: 'Starbucks', mode: 'driving', then: ['home'] });
+  assert.deepEqual(parseCommand('take me home'), { type: 'go', place: 'home', mode: 'driving', then: [] });
+  assert.deepEqual(parseCommand('take me to the Home Depot'), { type: 'go', place: 'the Home Depot', mode: 'driving', then: [] });
+  assert.deepEqual(parseCommand('add a stop at Starbucks'), { type: 'addstop', place: 'Starbucks' });
+  assert.deepEqual(parseCommand('stop at the bank first'), { type: 'addstop', place: 'the bank' });
+  assert.deepEqual(parseCommand('continue'), { type: 'continue' });
+  assert.deepEqual(parseCommand('next stop'), { type: 'continue' });
+  assert.deepEqual(parseCommand('this is home'), { type: 'sethome', name: 'home' });
+  assert.deepEqual(parseCommand('save my location as work'), { type: 'sethome', name: 'work' });
+  // the existing words keep their meaning
+  assert.deepEqual(parseCommand('stop'), { type: 'stop' });
+  assert.deepEqual(parseCommand('end navigation'), { type: 'stop' });
+  assert.deepEqual(parseCommand('start'), { type: 'start' });
 });

@@ -260,7 +260,8 @@
   async function ask(text) {
     const t = String(text || '').trim();
     if (!t) return;
-    const navigation=/^(?:(?:hey )?jarvis[, ]+)?(?:take me to|navigate to|directions to|route to|walk(?: me)? to|drive(?: me)? to)\s+(.{1,200})$/i.exec(t);
+    const homeAsk=/^(?:(?:hey )?jarvis[, ]+)?(?:take|bring|drive|walk) me (home|to work)$/i.exec(t); // "take me home" has no "to"
+    const navigation=homeAsk?[t,/home/i.test(homeAsk[1])?'home':'work']:/^(?:(?:hey )?jarvis[, ]+)?(?:take me to|navigate to|directions to|route to|walk(?: me)? to|drive(?: me)? to)\s+(.{1,200})$/i.exec(t);
     if(navigation){
       if ('speechSynthesis' in window) speechSynthesis.cancel();
       location.href='/navigation.html#'+new URLSearchParams({destination:navigation[1],mode:/\bwalk(?: me)? to\b/i.test(t)?'walking':'driving'}).toString();return;

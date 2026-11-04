@@ -2,7 +2,7 @@
 // approach them. The deciding (where you are on the route, when to speak, when you have left it) is in navmath.js; what you can say is in navvoice.js; this file is the screen, the
 // microphone, the speaker and the GPS. Search and routing go through the Mac's Relay (it asks Photon and Valhalla); nothing here goes to an AI model.
 import * as maplibregl from '/maplibre/maplibre-gl.mjs';
-import { buildRoute, snap, NavSession, showDistance, speakDistance } from '/navmath.js';
+import { buildRoute, snap, bearing, NavSession, showDistance, speakDistance } from '/navmath.js';
 import { parseCommand, REPLIES } from '/navvoice.js';
 
 maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
@@ -11,7 +11,7 @@ const params = new URLSearchParams(location.hash.slice(1));
 let token = ''; try { token = localStorage.getItem('relay-remote-token') || ''; } catch { /* no storage */ }
 const units = (() => { try { return new Intl.Locale(navigator.language).region === 'US' ? 'imperial' : 'metric'; } catch { return 'metric'; } })();
 
-const S = { view: 'plan', mode: params.get('mode') === 'walking' ? 'walking' : 'driving', from: null, to: null, route: null, obj: null, steps: [], session: null, watch: null, follow: true, muted: false, wake: null, voice: null, lastReroute: 0, rerouting: false, ready: false, request: null, revision: 0, markers: [], puck: null, hiddenDuringNav: false, listening: null };
+const S = { queue: [], view: 'plan', mode: params.get('mode') === 'walking' ? 'walking' : 'driving', from: null, to: null, route: null, obj: null, steps: [], session: null, watch: null, follow: true, muted: false, wake: null, voice: null, lastReroute: 0, rerouting: false, ready: false, request: null, revision: 0, markers: [], puck: null, hiddenDuringNav: false, listening: null };
 let map;
 
 const status = (t) => { $('status').textContent = t || ''; };
@@ -174,20 +174,62 @@ async function previewRoute() {
     if (id !== S.revision) return;
     applyRoute(r); pins();
     $('summary').textContent = `${mins(r.seconds)} · ${showDistance(r.km * 1000, units)}`;
-    $('eta-line').textContent = `To ${S.to.label.split(',')[0]} · arrive about ${clock(Date.now() + r.seconds * 1000)} · ${S.mode === 'walking' ? 'walking' : 'driving'}`;
+    $('eta-line').textContent = `To ${S.to.label.split(',')[0]}${S.queue.length ? ` · then ${S.queue.map(short).join(', then ')}` : ''} · arrive about ${clock(Date.now() + r.seconds * 1000)} · ${S.mode === 'walking' ? 'walking' : 'driving'}`;
     show('preview'); fitRoute(); status('Route ready. Tap Start, or say “start”.');
     return r;
   } catch (e) { if (id === S.revision && e.name !== 'AbortError') status(e.message); }
 }
-// "Take me to X": find it, pick the best match, route from where you are, and wait for "start".
-async function go(place, mode = S.mode) {
-  S.mode = mode; syncModes(); $('destination').value = place;
+// Saved places ("this is home"): kept on this phone only.
+const PLACES_KEY = 'relay-nav-places';
+const savedPlaces = () => { try { return JSON.parse(localStorage.getItem(PLACES_KEY) || '{}') || {}; } catch { return {}; } };
+function savePlace(name, place) { try { const all = savedPlaces(); all[name] = place; localStorage.setItem(PLACES_KEY, JSON.stringify(all)); return true; } catch { return false; } }
+const short = (p) => (p ? String(p.label || '').split(',')[0] || 'the next stop' : '');
+const isSavedName = (t) => /^(?:home|work)$/i.test(String(t || ''));
+// A place by its words, without showing the list: a saved place first, otherwise the best match near you.
+async function lookup(text) {
+  const saved = savedPlaces()[String(text).toLowerCase()];
+  if (saved) return saved;
+  if (isSavedName(text)) return null;
+  try { const r = await api('search', { query: text, ...(S.from ? { near: S.from.coordinates } : {}) }); return (r.places || [])[0] || null; } catch { return null; }
+}
+// "Take me to X" (or "X and then Y"): find it, pick the best match, route from where you are, and wait for "start".
+async function go(place, mode = S.mode, then = []) {
+  S.mode = mode; syncModes(); $('destination').value = place; S.queue = [];
   try { if (!S.from) await useMyLocation(); } catch (e) { status(e.message + ' Open "Starting from" and search a place.'); $('startbox').open = true; show('plan'); return; }
-  const places = await search('destination', place);
-  if (!places.length) { speak(`I could not find ${place}, Sir.`, true); return; }
-  S.to = places[0]; $('destination').value = places[0].label; $('places').replaceChildren(); pins();
+  let first = null;
+  if (isSavedName(place) || savedPlaces()[String(place).toLowerCase()]) { first = await lookup(place); if (!first) { reply(REPLIES.nohome(String(place).toLowerCase())); return; } }
+  else { const places = await search('destination', place); if (!places.length) { speak(`I could not find ${place}, Sir.`, true); return; } first = places[0]; }
+  for (const t of then) { const p = await lookup(t); if (!p) { reply(isSavedName(t) ? REPLIES.nohome(String(t).toLowerCase()) : `I could not find ${t}, Sir.`); return; } S.queue.push(p); }
+  S.to = first; $('destination').value = first.label; $('places').replaceChildren(); pins();
   const r = await previewRoute();
-  if (r) speak(`Route to ${places[0].label.split(',')[0]}. ${mins(r.seconds)}, ${speakDistance(r.km * 1000, units)}. Say start when you are ready, Sir.`, true);
+  if (r) speak(`Route to ${short(first)}${S.queue.length ? `, then ${S.queue.map(short).join(', then ')}` : ''}. ${mins(r.seconds)}, ${speakDistance(r.km * 1000, units)}. Say start when you are ready, Sir.`, true);
+}
+// A stop on the way: it becomes the next destination and the old one waits behind it.
+async function addStop(text) {
+  const p = await lookup(text);
+  if (!p) return reply(isSavedName(text) ? REPLIES.nohome(String(text).toLowerCase()) : `I could not find ${text}, Sir.`);
+  if (!S.to) return reply('Tell me where to first, Sir.');
+  const before = { to: S.to, queue: S.queue.slice() };
+  S.queue.unshift(S.to); S.to = p;
+  const told = () => reply(`Added ${short(p)} as a stop, Sir. Then ${short(S.queue[0])}.`);
+  try {
+    if (S.view === 'nav') {
+      const pos = await position({ maximumAge: 0 });
+      const r = await api('route', { from: [pos.coords.longitude, pos.coords.latitude], to: p.coordinates, mode: S.mode });
+      applyRoute(r); S.session.setRoute(S.obj, S.steps, r.seconds); S.session.destination = p.label; S.lastReroute = Date.now(); pins(); told();
+    } else { pins(); await previewRoute(); told(); }
+  } catch (e) { S.to = before.to; S.queue = before.queue; status(e.message); }
+}
+// After arriving at a stop: route from here to the next one and go.
+async function continueTrip() {
+  const next = S.queue.shift();
+  if (!next) return reply(REPLIES.nostop);
+  S.to = next; $('banner').classList.remove('arrive'); status('Finding the way…');
+  try {
+    const p = await position({ maximumAge: 0 });
+    applyRoute(await api('route', { from: [p.coords.longitude, p.coords.latitude], to: next.coordinates, mode: S.mode })); pins();
+  } catch (e) { S.queue.unshift(next); status(e.message); return; }
+  await startNav();
 }
 
 // ---- navigating ----
@@ -236,6 +278,7 @@ async function startNav() {
   const here = [first.coords.longitude, first.coords.latitude];
   if (snap(S.obj, here).dist > 150) { try { applyRoute(await api('route', { from: here, to: S.to.coordinates, mode: S.mode })); } catch (e) { status(e.message); return; } } // you are not where the route starts: route from here
   S.follow = true; S.lastReroute = Date.now();
+  { const sn = snap(S.obj, here); const ahead = S.obj.coords[Math.min(S.obj.coords.length - 1, (sn.seg || 0) + 1)]; map.stop(); map.jumpTo({ center: here, zoom: S.mode === 'walking' ? 17.5 : 16.5, pitch: S.mode === 'driving' ? 55 : 45, bearing: ahead ? bearing(here, ahead) : 0 }); } // start already looking at you, not at the whole route
   S.session = new NavSession({ route: S.obj, steps: S.steps, mode: S.mode, units, destination: S.to.label, seconds: S.route.seconds, speak });
   show('nav'); status(''); caption('');
   S.session.start(); onFix(first);
@@ -243,12 +286,17 @@ async function startNav() {
 }
 function endWatch() { if (S.watch !== null) { try { navigator.geolocation.clearWatch(S.watch); } catch { /* gone */ } S.watch = null; } releaseWake(); S.session = null; S.puck?.remove(); S.puck = null; }
 function stopNav(message) {
-  endWatch(); try { speechSynthesis.cancel(); } catch { /* none */ }
+  S.queue = []; endWatch(); try { speechSynthesis.cancel(); } catch { /* none */ }
   S.follow = false; show('preview'); map.easeTo({ pitch: 0, bearing: 0, duration: 600 }); setTimeout(fitRoute, 650);
   if (message) reply(message);
 }
-function arrived() { endWatch(); show('done'); $('banner').classList.add('arrive'); $('b-icon').textContent = ARROWS.flag; $('b-dist').textContent = 'Arrived'; $('b-street').textContent = S.to ? S.to.label.split(',')[0] : ''; }
-function reset() { cancelRequests(); endWatch(); clearRoute(); S.to = null; S.markers.forEach((m) => m.remove()); S.markers = []; $('destination').value = ''; $('places').replaceChildren(); $('banner').classList.remove('arrive'); show('plan'); status('Where to?'); map.easeTo({ pitch: 0, bearing: 0, duration: 500 }); }
+function arrived() {
+  endWatch(); show('done'); $('banner').classList.add('arrive'); $('b-icon').textContent = ARROWS.flag; $('b-dist').textContent = 'Arrived'; $('b-street').textContent = S.to ? S.to.label.split(',')[0] : '';
+  const next = S.queue[0];
+  $('next').hidden = !next; $('next-line').textContent = next ? `Next stop: ${short(next)}` : '';
+  if (next) { $('next').textContent = `Continue to ${short(next)}`; speak(`Say continue when you are ready for ${short(next)}, Sir.`); }
+}
+function reset() { S.queue = []; cancelRequests(); endWatch(); clearRoute(); S.to = null; S.markers.forEach((m) => m.remove()); S.markers = []; $('destination').value = ''; $('places').replaceChildren(); $('banner').classList.remove('arrive'); show('plan'); status('Where to?'); map.easeTo({ pitch: 0, bearing: 0, duration: 500 }); }
 
 // ---- talking to Jarvis ----
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -263,16 +311,23 @@ function listen(button) {
   r.onend = () => { S.listening = null; button.classList.remove('live'); };
   try { r.start(); } catch { S.listening = null; button.classList.remove('live'); }
 }
+function voiceShow() { $('voice').firstElementChild.textContent = S.muted ? '🔇' : '🔊'; $('voice').lastElementChild.textContent = S.muted ? 'Muted' : 'Voice'; $('voice').setAttribute('aria-pressed', String(!S.muted)); }
+async function setPlaceHere(name) {
+  try { const p = await position({ maximumAge: 0 }); const c = p.coords; if (!(c.accuracy <= 500)) return reply('I cannot tell where you are well enough yet, Sir. Try again in a moment.'); savePlace(name, { label: name[0].toUpperCase() + name.slice(1), coordinates: [c.longitude, c.latitude] }); reply(REPLIES.sethome(name)); } catch (e) { status(e.message); }
+}
 function handle(text) {
   const cmd = parseCommand(text);
   if (!cmd) { if (S.view === 'plan' && String(text).trim().length > 1) return go(String(text).trim(), S.mode); return reply(REPLIES.none); }
   switch (cmd.type) {
-    case 'go': return go(cmd.place, cmd.mode);
+    case 'go': return go(cmd.place, cmd.mode, cmd.then || []);
+    case 'addstop': return addStop(cmd.place);
+    case 'continue': return S.view === 'done' && S.queue.length ? continueTrip() : reply(REPLIES.nostop);
+    case 'sethome': return setPlaceHere(cmd.name);
     case 'mode': S.mode = cmd.mode; syncModes(); reply(REPLIES.mode(cmd.mode)); if (S.to && S.view !== 'nav') previewRoute(); return;
-    case 'start': return S.view === 'preview' ? startNav() : reply(S.view === 'nav' ? 'Already navigating, Sir.' : 'Tell me where to first, Sir.');
+    case 'start': return S.view === 'done' && S.queue.length ? continueTrip() : S.view === 'preview' ? startNav() : reply(S.view === 'nav' ? 'Already navigating, Sir.' : 'Tell me where to first, Sir.');
     case 'stop': return S.view === 'nav' ? stopNav(REPLIES.stop) : S.view === 'preview' ? reset() : undefined;
-    case 'mute': S.muted = true; $('voice').textContent = '🔇 Voice off'; $('voice').setAttribute('aria-pressed', 'false'); try { speechSynthesis.cancel(); } catch { /* none */ } return status(REPLIES.mute);
-    case 'unmute': S.muted = false; $('voice').textContent = '🔊 Voice on'; $('voice').setAttribute('aria-pressed', 'true'); return reply(REPLIES.unmute);
+    case 'mute': S.muted = true; voiceShow(); try { speechSynthesis.cancel(); } catch { /* none */ } return status(REPLIES.mute);
+    case 'unmute': S.muted = false; voiceShow(); return reply(REPLIES.unmute);
     case 'repeat': return S.session ? S.session.repeat() : reply('There is nothing to repeat, Sir.');
     case 'next': return S.session ? speak(S.session.describeNext(), true) : reply('We are not navigating, Sir.');
     case 'eta': { const i = S.session && S.session.latest; return i ? speak(`${mins(i.seconds)} to go, ${speakDistance(i.remaining, units)}. You will arrive about ${clock(Date.now() + i.seconds * 1000)}, Sir.`, true) : reply('We are not navigating, Sir.'); }
@@ -323,7 +378,7 @@ $('origin').oninput = () => { cancelRequests(); S.from = null; $('startsum').tex
 for (const b of document.querySelectorAll('#modes .seg')) b.onclick = () => { S.mode = b.dataset.mode; syncModes(); if (S.to && S.from && S.view === 'preview') previewRoute(); };
 $('locate').onclick = async () => { try { await useMyLocation(); status('Starting from your location.'); if (S.to) previewRoute(); } catch (e) { status(e.message); } };
 $('start').onclick = startNav; $('fit').onclick = fitRoute; $('route').onclick = previewRoute;
-$('cancel').onclick = reset; $('done').onclick = reset; $('end').onclick = () => stopNav('Navigation ended, Sir.'); $('overview').onclick = fitRoute;
+$('next').onclick = continueTrip; $('cancel').onclick = reset; $('done').onclick = reset; $('end').onclick = () => stopNav('Navigation ended, Sir.'); $('overview').onclick = fitRoute;
 $('mic').onclick = () => listen($('mic')); $('nmic').onclick = () => listen($('nmic'));
 $('voice').onclick = () => handle(S.muted ? 'unmute' : 'mute');
 $('recenter').onclick = () => { S.follow = true; $('recenter').hidden = true; };
@@ -344,7 +399,7 @@ async function boot() {
       for (const el of document.querySelectorAll('button,input')) el.disabled = false;
       $('fit').disabled = true; show('plan'); status('Where to?');
       const dest = (params.get('destination') || '').slice(0, 200);
-      if (dest) go(dest, S.mode);
+      if (dest) { const c = parseCommand('take me to ' + dest); if (c && c.type === 'go') go(c.place, S.mode, c.then || []); else go(dest, S.mode); }
     });
   } catch (e) { status(e.message); }
 }

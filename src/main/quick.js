@@ -241,30 +241,37 @@ async function nowPlaying(mac, app) {
 const pct = (v) => Math.round(v * 100);
 
 // Shuffle and repeat, for Spotify and Music. Returns the words for the new state ("Shuffle on.", "Repeat all."). want: true/false (shuffle) or off/one/all (repeat); null toggles.
-async function shuffleRepeat(mac, app, op, want) {
-  if (app === 'Spotify') {
-    if (op === 'shuffle') {
-      const now = String(await mac.osa('tell application "Spotify" to return (shuffling as text)')).trim() === 'true';
-      const next = want === null ? !now : !!want;
-      await mac.osa(`tell application "Spotify" to set shuffling to ${next}`);
-      return { reply: next ? 'Shuffle on.' : 'Shuffle off.', undo: () => mac.osa(`tell application "Spotify" to set shuffling to ${now}`) };
-    }
-    const now = String(await mac.osa('tell application "Spotify" to return (repeating as text)')).trim() === 'true';
-    const next = want === null ? !now : want !== 'off';
-    await mac.osa(`tell application "Spotify" to set repeating to ${next}`);
-    return { reply: next ? 'Repeat on.' : 'Repeat off.', undo: () => mac.osa(`tell application "Spotify" to set repeating to ${now}`) };
-  }
-  if (op === 'shuffle') {
-    const now = String(await mac.osa('tell application "Music" to return (shuffle enabled as text)')).trim() === 'true';
-    const next = want === null ? !now : !!want;
-    await mac.osa(`tell application "Music" to set shuffle enabled to ${next}`);
-    return { reply: next ? 'Shuffle on.' : 'Shuffle off.', undo: () => mac.osa(`tell application "Music" to set shuffle enabled to ${now}`) };
-  }
-  const now = String(await mac.osa('tell application "Music" to return (song repeat as text)')).trim().toLowerCase();
-  const order = ['off', 'all', 'one']; // each press: off, then repeat all, then repeat one
-  const next = want || order[(Math.max(0, order.indexOf(now)) + 1) % 3];
-  await mac.osa(`tell application "Music" to set song repeat to ${next}`);
-  return { reply: next === 'off' ? 'Repeat off.' : next === 'one' ? 'Repeat one.' : 'Repeat all.', undo: () => mac.osa(`tell application "Music" to set song repeat to ${now}`) };
+//
+// Reading the current state back from the app is not always reliable (Spotify can keep answering "false" after shuffle was turned on). A toggle that trusts such a read turns it ON every time and
+// never OFF, which is what the phone's shuffle and repeat buttons did. So after each change the setting is read back; when the app does not show what was just set, its answer is not trusted and
+// the next toggle starts from what Relay last set instead.
+const toggleMemo = new Map(); // "Spotify:shuffle" -> { value, untrusted, at }
+const MEMO_MS = 6 * 3600 * 1000;
+function forgetToggles() { toggleMemo.clear(); }
+async function shuffleRepeat(mac, app, op, want, nowMs = Date.now()) {
+  const key = `${app}:${op}`;
+  const memo = toggleMemo.get(key);
+  const memoUsable = memo && memo.untrusted && nowMs - memo.at < MEMO_MS;
+  const spec = app === 'Spotify'
+    ? (op === 'shuffle' ? { prop: 'shuffling', bool: true } : { prop: 'repeating', bool: true })
+    : (op === 'shuffle' ? { prop: 'shuffle enabled', bool: true } : { prop: 'song repeat', bool: false });
+  const read = async () => String(await mac.osa(`tell application "${app}" to return (${spec.prop} as text)`)).trim().toLowerCase();
+  const set = (v) => mac.osa(`tell application "${app}" to set ${spec.prop} to ${v}`);
+  const asState = (text) => (spec.bool ? (text === 'true' ? 'on' : 'off') : (['all', 'one'].includes(text) ? text : 'off')); // on/off, or off/all/one
+  const readNow = asState(await read());
+  const before = memoUsable ? memo.value : readNow;
+  // the target: what was asked, or the opposite of now (repeat in Music: off <-> all; "repeat one" is asked for by name)
+  let target;
+  if (op === 'shuffle') target = want === null ? (before === 'on' ? 'off' : 'on') : (want ? 'on' : 'off');
+  else if (spec.bool) target = want === null ? (before === 'on' ? 'off' : 'on') : (want === 'off' ? 'off' : 'on');
+  else target = want || (before === 'off' ? 'all' : 'off');
+  const value = (state) => (spec.bool ? String(state === 'on') : state);
+  await set(value(target));
+  let shown = null;
+  try { shown = asState(await read()); } catch { /* cannot read back */ }
+  toggleMemo.set(key, { value: target, untrusted: shown !== target, at: nowMs });
+  const reply = op === 'shuffle' ? (target === 'on' ? 'Shuffle on.' : 'Shuffle off.') : (target === 'off' ? 'Repeat off.' : target === 'one' ? 'Repeat one.' : spec.bool ? 'Repeat on.' : 'Repeat all.');
+  return { reply, undo: async () => { await set(value(before)); toggleMemo.set(key, { value: before, untrusted: true, at: Date.now() }); } };
 }
 
 // Returns { tool, input, reply, undo? } when it handled the command, or null to let the model take it.
@@ -550,4 +557,4 @@ async function runQuick(cmd, mac, ctx = {}) {
   }
 }
 
-module.exports = { parseQuick, runQuick, matchRunning, ALIASES, FOLDERS, SITES, lite };
+module.exports = { parseQuick, runQuick, matchRunning, ALIASES, FOLDERS, SITES, lite, forgetToggles };
