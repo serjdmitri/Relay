@@ -242,6 +242,8 @@ function parseOwnerCommand(text) {
   if (/^why (?:didn'?t|did not|wasn'?t|was not|isn'?t|is not|won'?t)\b.*\b(?:alert\w*|alarm\w*|go off|trigger\w*|catch\w*|notice\w*|detect\w*|stop\w*|work\w*|lock\w*)(?: (?:me|him|her|them|us|anyone|anybody|someone|my \w+|the \w+))?$|^(?:what did (?:the )?camera see|explain (?:the )?(?:last )?(?:alert|alarm|guard|owner recognition))(?: while i was (?:away|gone|out))?$/.test(n)) return { type: 'explain' };
   if (/^make (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:stricter|more strict|tighter|stronger)$/.test(n)) return { type: 'stricter' };
   if (/^make (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:looser|more relaxed|more lenient|weaker|less strict)$/.test(n)) return { type: 'looser' };
+  if (/^(?:who do you know|who have you learned|which (?:faces|people) do you know|list (?:the )?(?:people|faces) you(?:'ve| have)? (?:know|learned)|show (?:the )?(?:people|faces) you(?:'ve| have)? learned)$/.test(n)) return { type: 'people' };
+  { const f = /^forget (?:the (?:face|person)(?: of| called| named)? )([a-z][a-z' -]{1,30})$|^forget ([a-z][a-z' -]{1,30})'s face$/.exec(n); const who = f && (f[1] || f[2]); if (who && !/^(?:my|the owner|your)\b/.test(who)) return { type: 'forget-person', name: who.replace(/\b\w/g, (c) => c.toUpperCase()) }; }
   if (/^(?:owner|face) (?:recogn\w*|guard|check) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
   if (/^(?:test|show|preview|try) (?:the )?(?:access denied|intruder|not your computer)(?: screen| alarm| warning)?$/.test(n)) return { type: 'demo' };
   return null;

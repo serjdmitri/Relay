@@ -2201,6 +2201,8 @@ class AskController {
           if (this.securityWatchSet) { const w = parseWatchCommand(effective); if (w !== null) return this.finish(entry, { status: 'done', reply: this.securityWatchSet(w) }); }
           if (this.overnightCommand) { const oc = parseOvernightCommand(effective); if (oc) return this.finish(entry, { status: 'done', reply: this.overnightCommand(oc), actions: oc.type === 'add' ? 1 : 0 }); }
           if (this.clutterCommand) { const cc = parseClutterCommand(effective, this.clutterNames?.() || []); if (cc) return this.finish(entry, { status: 'done', reply: await this.clutterCommand(cc), actions: 0 }); }
+          // "yes" / "no" / "that's Sam" about a visitor Relay just told you about: only heard for five minutes after it asked, so a bare "yes" is never taken for anything else
+          if (this.pendingNaming && this.onNamingAnswer && Date.now() - this.pendingNaming.at < 5 * 60000) { const na = require('./intruderLog').parseNamingAnswer(effective); if (na) { this.lastRequestText = effective; return this.finish(entry, await this.onNamingAnswer(na)); } }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
           if (hybridMod.parseSearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.searchMemory(hybridMod.parseSearchCommand(effective))); }
           if (researchMod.parseResearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, this.researchCommand(researchMod.parseResearchCommand(effective))); }

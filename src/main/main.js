@@ -1620,8 +1620,26 @@ app.whenReady().then(() => {
     const pending = intruderLog.pending(); if (!pending.length) return;
     const newest = pending[pending.length - 1], more = pending.length > 1 ? ` There ${pending.length === 2 ? 'was 1 earlier visit' : `were ${pending.length - 1} earlier visits`} too.` : '';
     intruderLog.markReviewed(pending.map((p) => p.id)); broadcast();
-    ask.notice(`While you were away: ${intruderLog.describe(newest)}${more} I have opened the pictures.`, 'done');
+    // Does the visitor look like someone you have named? Then ask a plain yes or no: each answer teaches Relay the face, until it can name them on its own. Otherwise say who it was
+    // as far as it can know, and that one word ("that's Sam") names them.
+    const q = newest.question, ask_ = q ? ` Is that ${q.name}? Say yes or no.` : newest.label ? '' : ' If you know who it is, say "that\'s" and their name, and I will remember the face.';
+    const text = `While you were away: ${intruderLog.describe(newest)}${more} I have opened the pictures.${ask_}`;
+    ask.pendingNaming = { visitId: newest.id, at: Date.now(), question: !!q };
+    ask.notice(text, 'done');
+    if (q || !newest.label) { try { if (store.get('settings.speakReplies')) ask.speakText(`${intruderLog.describe(newest)}${ask_}`); } catch { /* speaking is optional */ } }
     intrudersWin.open();
+  };
+  // "yes" / "no" / "no, that's Sam" / "that's Sam": the answer about the visitor just reported (see the hook in askController).
+  ask.onNamingAnswer = async ({ yes, name }) => {
+    const pn = ask.pendingNaming; if (!pn) return { status: 'done', reply: 'There is nothing waiting for an answer, Sir.' };
+    const { LEARN_STREAK } = require('./intruderLog');
+    const left = (r) => (r.learned ? '' : ` ${Math.max(0, LEARN_STREAK - r.streak)} more yes${LEARN_STREAK - r.streak === 1 ? '' : 'es'} in a row and I will name ${r.name} on my own.`);
+    let reply;
+    if (name && yes !== true) { if (intruderLog.list().find((x) => x.id === pn.visitId)?.question) intruderLog.answer(pn.visitId, false); intruderLog.setLabel(pn.visitId, name); ask.pendingNaming = null; const p = intruderLog.people().find((x) => x.name.toLowerCase() === name.toLowerCase()); reply = `Got it, that is ${name}. I have saved their face${p && p.confirmed >= 2 ? `, and I will start asking whether new visitors are ${name}` : `. Name them once more and I will start asking whether new visitors are ${name}`}.`; }
+    else if (yes === true) { const r = intruderLog.answer(pn.visitId, true); ask.pendingNaming = null; reply = r ? (r.learned ? `Yes, that is ${r.name}. I know the face well enough now to name ${r.name} without asking.` : `Thank you, Sir. That is ${r.name}.${left({ ...r, name: r.name })}`) : 'There was no question to answer, Sir.'; }
+    else { const r = intruderLog.answer(pn.visitId, false); ask.pendingNaming = r ? { ...pn, question: false, at: Date.now() } : null; reply = r ? `Understood, that is not ${r.name}. I will not offer that face as ${r.name} again. If you know who it is, say "that's" and their name.` : 'There was no question to answer, Sir.'; }
+    broadcast(); intrudersWin.open();
+    return { status: 'done', reply, actions: 1 };
   };
   ownerGuard = new OwnerGuard({
     lock: () => ask.mac.lockScreen(),
@@ -1664,7 +1682,7 @@ app.whenReady().then(() => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
     const setOwner = (patch) => store.set('settings.owner', { ...cfg(), ...patch });
     const needCamera = async () => { if (store.get('settings.presence.enabled')) return ''; store.set('settings.presence.enabled', true); await setPresence(true); return ' I turned Presence on, because it uses the same camera.'; };
-    if (['enroll','forget','off','liveness-off','intruders-clear','looser'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
+    if (['enroll','forget','off','liveness-off','intruders-clear','looser','forget-person'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
       enrollWin.open();
@@ -1678,6 +1696,11 @@ app.whenReady().then(() => {
       setOwner({ threshold: next }); broadcast();
       return done(`The match limit is now ${next.toFixed(2)} (it was ${now.toFixed(2)}). A face must score at least that against yours to count as you, and the alarm starts for faces below ${(next - cfg().margin).toFixed(2)}. ${c.type === 'stricter' ? 'Look-alikes are less likely to pass as you; if it starts doubting you, say "make owner recognition looser".' : 'It will doubt you less, and look-alikes are more likely to pass as you.'} Your own face usually scores above 0.7.`);
     }
+    if (c.type === 'people') {
+      const list = intruderLog.people();
+      return done(list.length ? `I have learned ${list.length} face${list.length === 1 ? '' : 's'}: ${list.map((p) => `${p.name} (${p.learned ? 'I recognise them on my own' : `${p.confirmed} naming${p.confirmed === 1 ? '' : 's'}, ${p.confirmed >= 2 ? 'I ask whether visitors are them' : 'not enough yet to ask'}`})`).join(', ')}.` : 'I have not learned anyone yet, Sir. When someone visits and you say "that\'s" and their name, I will remember the face.');
+    }
+    if (c.type === 'forget-person') return done(intruderLog.forgetPerson(c.name) ? `I have forgotten ${c.name}'s face and removed the name from their visits.` : `I do not know anyone called ${c.name}.`);
     if (c.type === 'intruders') {
       intrudersWin.open(); const list = intruderLog.list();
       return done(list.length ? `Here are the pictures, Sir. ${list.length} visit${list.length === 1 ? '' : 's'} so far. The latest: ${intruderLog.describe(list[0])}` : 'Nobody has sat at your Mac while the alarm was watching, Sir. When someone does, their pictures will be here.');

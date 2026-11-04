@@ -25,3 +25,12 @@ main { flex: 1; overflow-y: auto; padding: 4px 22px 22px; }
 input { font: 13px -apple-system, system-ui, sans-serif; color: var(--ink); background: #02080f99; border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; width: 190px; }
 button.act { font: 600 12px -apple-system, system-ui, sans-serif; color: var(--ink); background: #52ddff1c; border: 1px solid var(--line); border-radius: 9px; padding: 6px 13px; cursor: pointer; }
 button.act:hover { background: #52ddff33; } button.act.del { color: var(--bad); margin-left: auto; }
+
+#people { margin: 0 0 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#people .label { font-size: 11px; letter-spacing: .12em; color: var(--accent); margin-right: 4px; }
+.person { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 3px 4px 3px 11px; border: 1px solid var(--line); border-radius: 999px; background: #52ddff10; }
+.person.learned { border-color: #7ee0a688; }
+.person button { font: 600 11px -apple-system, system-ui, sans-serif; color: var(--bad); background: none; border: 0; cursor: pointer; padding: 2px 8px; }
+.ask { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #ffd28a66; border-radius: 10px; background: #ffd28a10; }
+.ask b { font-weight: 600; }
+.ask .act.yes { color: var(--ok); }

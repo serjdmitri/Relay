@@ -175,6 +175,8 @@ contextBridge.exposeInMainWorld('relay', {
   intrudersPhotos: (id) => invoke('intruders:photos', id),
   intrudersLabel: (id, name) => invoke('intruders:label', id, name),
   intrudersRemove: (id) => invoke('intruders:remove', id),
+  intrudersAnswer: (id, yes) => invoke('intruders:answer', id, yes),
+  intrudersForget: (id) => invoke('intruders:forget', id),
   intrudersClose: () => invoke('intruders:close'),
   onIntrudersRefresh: (cb) => on('intruders:refresh', cb),
   intruderState: () => invoke('intruder:state'),
