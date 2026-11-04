@@ -45,6 +45,7 @@ const welcome = require('./welcome');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
+const { CaptureLatch } = require('./captureLatch');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
 const { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
@@ -95,6 +96,7 @@ function rememberThrow(undo) {
 const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
+const captureLatch = new CaptureLatch({ onChange: (on) => { if (typeof ask !== 'undefined' && ask) ask.suspended = on; } }); // recording a shortcut pauses shortcuts and "Hey Jarvis", never for long
 let enrollWin, intrudersWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
@@ -152,7 +154,9 @@ function openMain(page) {
     wc.on('unresponsive', () => { clearTimeout(healTimer); healTimer = setTimeout(() => healMain('the page stopped responding'), 6000); });
     wc.on('responsive', () => clearTimeout(healTimer));
     wc.once('did-finish-load', () => setTimeout(() => checkMainPainted('after loading'), 2500));
-    mainWin.on('hide', () => restoreDockPreference({ app, showInDock: store.get('settings.showInDock') }));
+    mainWin.on('hide', () => { captureLatch.clear(); restoreDockPreference({ app, showInDock: store.get('settings.showInDock') }); });
+    mainWin.on('blur', () => captureLatch.clear());
+    wc.on('did-start-loading', () => captureLatch.clear());
     mainWin.on('close', (e) => {
       if (!quitting) {
         e.preventDefault();
@@ -1160,7 +1164,7 @@ function registerIpc() {
     broadcast();
   });
   // While the user is recording a new shortcut, existing ones must not fire.
-  ipcMain.handle('shortcut:capturing', (_e, on) => { ask.suspended = !!on; });
+  ipcMain.handle('shortcut:capturing', (_e, on) => { captureLatch.set(!!on); });
   ipcMain.handle('shortcut:reset', () => {
     store.set('settings.shortcuts', JSON.parse(JSON.stringify(DEFAULT_SHORTCUTS)));
     broadcast();
