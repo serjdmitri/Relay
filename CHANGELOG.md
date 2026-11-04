@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.38.9
+## 0.38.13
 
 - **"Enroll my face" no longer leaves the reactor in front of the setup window.** Its reply is now short and tells Relay not to hold it on screen (and not to ask "anything else?"), so the reactor goes after a moment, and the setup window sits above the reactor and the answer card. Only this command changed; every other answer stays until dismissed as before.
 - **Trusted people are now recognised as themselves.** Before, a trusted person's face was mixed into the list that means "you", so Relay took them for you, and the second-viewer guard counted them as a stranger and started its lock countdown. Now the camera page compares each face with you and, separately, with your trusted profiles. A trusted person (who has also blinked, so a photo of them does not count) is neither you nor a stranger: they never start the access-denied alarm, they are not counted as an extra viewer, they cannot arm the guard or lift the standby screen as if they were you, and an alarm that a stranger started ends once only trusted people are left in view. A stranger beside a trusted person still starts the alarm and the countdown. Tested with a real camera (your face as "trusted": trusted score 0.87, owner score -0.09, flagged trusted in 31 of 31 looks; as "owner": owner 0.85, trusted -0.11, flagged trusted 0 of 23).
