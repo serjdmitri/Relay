@@ -4,13 +4,13 @@
 // (faceid.js). Only the finished set of numbers goes to Relay; the picture is only drawn here.
 import { FaceLandmarker, FilesetResolver } from './vendor/mediapipe/vision_bundle.mjs';
 import { createEmbedder } from './faceid.js';
-import { PoseCapture, POSES, HINTS, headAngles } from './enrollpose.js';
+import { PoseCapture, POSES, HINTS, headAngles, assessEnrollment, scanVerdict } from './enrollpose.js';
 
 const $ = (id) => document.getElementById(id);
 const video = $('v'), ringEl = $('ring');
 const NS = 'http://www.w3.org/2000/svg';
 const capture = new PoseCapture();
-let samples = [], landmarker = null, embed = null, stream = null, phase = 'loading', stopped = false, busy = false, timer = 0, embedFails = 0, overrideUntil = 0, override = '', smooth = null;
+let samples = [], threshold = 0.363, liveScores = [], checkStarted = 0, report = null, landmarker = null, embed = null, stream = null, phase = 'loading', stopped = false, busy = false, timer = 0, embedFails = 0, overrideUntil = 0, override = '', smooth = null;
 
 // ---- the ring: eight arcs around the picture, 30 degrees wide, centred on the compass directions (0 = up, clockwise) ----
 const R = 100;
@@ -30,7 +30,10 @@ function say(line1, line2, warn = false) { $('line1').textContent = line1; $('li
 
 function draw(now) {
   const p = capture.pose, done = capture.done;
-  for (const [id, el] of sectors) el.setAttribute('class', `sector${capture.capturedPoses.has(id) ? ' done' : ''}${!done && id === p.id ? ' target' : ''}`);
+  for (const [id, el] of sectors) {
+    const weakNow = report && report.weak.includes(id);
+    el.setAttribute('class', `sector${capture.capturedPoses.has(id) && !weakNow ? ' done' : ''}${weakNow ? ' weak' : ''}${!done && id === p.id ? ' target' : ''}`);
+  }
   // a zero-length arc with a round end would still draw a dot, so an empty one is not drawn at all
   for (const [id, el] of fills) { const shown = !done && id === p.id && capture.progress > 0.02; el.style.display = shown ? '' : 'none'; if (shown) el.setAttribute('stroke-dasharray', `${(capture.progress * 100).toFixed(1)} 100`); }
   ringEl.classList.toggle('center', !done && p.id === 'center');
@@ -48,10 +51,11 @@ function draw(now) {
 
 // ---- one look at the camera ----
 async function look() {
-  if (stopped || phase !== 'running' || busy || video.readyState < 2) return;
+  if (stopped || (phase !== 'running' && phase !== 'checking') || busy || video.readyState < 2) return;
   busy = true;
   const now = Date.now();
   try {
+    if (phase === 'checking') { await checkLook(now); return; }
     const r = landmarker.detectForVideo(video, performance.now());
     const faces = r.faceLandmarks || [];
     let angles = null, problem = '';
@@ -84,21 +88,59 @@ async function finish() {
   let r;
   try { r = await relay.enrollFinish(samples); } catch (e) { r = { ok: false, message: String(e?.message || 'The face could not be saved.') }; }
   if (r?.ok) {
-    phase = 'done'; document.body.classList.add('done'); $('cue').classList.remove('on');
-    say('All done', r.message || 'Owner recognition is on.');
-    $('cancel').textContent = 'Close'; stopCamera();
-    setTimeout(() => relay.enrollClose(), 6000);
+    if (Number.isFinite(r.threshold)) threshold = r.threshold;
+    // saved. Now see how well it really works: a few fresh looks at the camera, not part of the scan
+    phase = 'checking'; liveScores = []; checkStarted = Date.now(); smooth = null; $('cue').classList.remove('on');
+    say('Saved. Checking how well it works…', 'Look straight at the camera for a moment.');
   } else {
     phase = 'failed'; say('That did not work', r?.message || 'The face could not be saved. Try again.', true); $('again').hidden = false;
   }
 }
 
-function restart() { capture.reset(); samples = []; smooth = null; embedFails = 0; document.body.classList.remove('done'); $('again').hidden = true; phase = 'running'; draw(Date.now()); }
+const best = (e, list) => list.reduce((m, t) => { let d = 0, x = 0, y = 0; for (let i = 0; i < e.length; i++) { d += e[i] * t[i]; x += e[i] * e[i]; y += t[i] * t[i]; } return Math.max(m, d / (Math.sqrt(x) * Math.sqrt(y) || 1)); }, -1);
+// the live check: up to six looks with you facing the camera, each compared with the saved scan
+async function checkLook(now) {
+  const r = landmarker.detectForVideo(video, performance.now()), faces = r.faceLandmarks || [];
+  if (faces.length === 1) {
+    const raw = headAngles(faces[0], video.videoWidth || 640, video.videoHeight || 480), b = capture.baseline || { yaw: 0, pitch: 0 };
+    if (raw && Math.abs(raw.yaw - b.yaw) < 12 && Math.abs(raw.pitch - b.pitch) < 10 && liveScores.length < 6 && now - (checkLook.last || 0) > 350) {
+      const e = await embed(video, { lm: faces[0] });
+      if (e) { liveScores.push(best(e, samples.map((s) => s.embedding))); checkLook.last = Date.now(); }
+    }
+  }
+  if (liveScores.length >= 6 || now - checkStarted > 9000) showReport();
+}
+
+function showReport() {
+  const live = liveScores.length >= 3 ? { passed: liveScores.filter((x) => x >= threshold).length, total: liveScores.length, mean: liveScores.reduce((a, b) => a + b, 0) / liveScores.length } : null;
+  report = assessEnrollment(samples, { threshold, live }); phase = 'report';
+  const v = scanVerdict(report), tone = (n) => (n >= 90 ? 'good' : n >= 75 ? 'mid' : 'bad');
+  $('sAcc').textContent = `${report.accuracy}%`; $('sAcc').parentElement.className = `stat ${tone(report.accuracy)}`;
+  $('sRel').textContent = `${report.reliability}%`; $('sRel').parentElement.className = `stat ${tone(report.reliability + 15)}`;
+  $('sLive').textContent = report.live ? `${report.live.passed}/${report.live.total}` : 'skipped'; $('sLive').parentElement.className = `stat ${report.live ? tone(report.live.accuracy) : ''}`;
+  $('chips').replaceChildren(...POSES.filter((p) => p.compass !== null || report.per.some((q) => q.pose === p.id)).map((p) => { const q = report.per.find((x) => x.pose === p.id), c = document.createElement('span'); c.className = `chip ${q && q.weak ? 'weak' : 'good'}`; c.textContent = p.id === 'center' ? 'straight' : p.id.replace(/([A-Z])/g, ' $1').toLowerCase(); return c; }));
+  $('report').hidden = false; document.body.classList.add('report'); if (report.status === 'good') document.body.classList.add('done');
+  say(v.title, v.line, report.status !== 'good');
+  $('redoweak').hidden = !(report.status !== 'good' && report.weak.length && report.weak.length < 9);
+  $('again').hidden = report.status === 'good'; $('again').textContent = report.status === 'poor' ? 'Redo the whole scan' : 'Redo everything';
+  $('cancel').textContent = report.status === 'good' ? 'Done' : 'Keep it as it is';
+  draw(Date.now());
+  if (report.status === 'good') setTimeout(() => { if (phase === 'report') relay.enrollClose(); }, 12000);
+}
+
+function leaveReport() { report = null; $('report').hidden = true; document.body.classList.remove('report', 'done'); $('redoweak').hidden = true; $('again').hidden = true; $('cancel').textContent = 'Cancel'; }
+function redoWeak() {
+  if (!report || !report.weak.length) return;
+  const ids = [...report.weak]; samples = samples.filter((s) => !ids.includes(s.pose)); leaveReport();
+  capture.redo(ids); smooth = null; embedFails = 0; phase = 'running'; draw(Date.now());
+}
+
+function restart() { leaveReport(); capture.reset(); samples = []; smooth = null; embedFails = 0; phase = 'running'; draw(Date.now()); }
 function stopCamera() { try { stream?.getTracks().forEach((t) => t.stop()); } catch { /* gone */ } stream = null; }
 function close() { stopped = true; clearInterval(timer); stopCamera(); try { landmarker?.close?.(); } catch { /* gone */ } relay.enrollClose(); }
 
 $('x').onclick = $('cancel').onclick = close;
-$('again').onclick = restart;
+$('again').onclick = restart; $('redoweak').onclick = redoWeak;
 addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); if (e.key === 'd' || e.key === 'D') $('debug').hidden = !$('debug').hidden; });
 addEventListener('beforeunload', () => { stopped = true; clearInterval(timer); stopCamera(); try { landmarker?.close?.(); } catch { /* gone */ } });
 

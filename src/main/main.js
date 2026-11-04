@@ -1607,12 +1607,12 @@ app.whenReady().then(() => {
   // The face setup window (camera in a circle, ring of eight directions): it returns the finished set of numbers, and this decides whether it is a full set and keeps it.
   enrollWin = new (require('./enrollWindow').EnrollWindow)({
     motion: floatingMotion,
-    save: async (samples, name) => {
+    save: async (samples, name, { replace = false } = {}) => {
       if (!safeStorage.isEncryptionAvailable()) return { ok: false, message: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
       const firstPerPose = (list) => { const seen = new Set(); return list.filter((x) => x && !seen.has(x.pose) && seen.add(x.pose)); }; // trusted people keep one numbers set per pose
       const r = acceptEnrollment(name ? firstPerPose(samples) : samples);
       if (!r.ok) return { ok: false, message: r.why };
-      if (name) { try { trustedPeople.save(name, r.templates); } catch (e) { return { ok: false, message: e.message }; } }
+      if (name) { try { replace ? trustedPeople.upsert(name, r.templates) : trustedPeople.save(name, r.templates); } catch (e) { return { ok: false, message: e.message }; } }
       else if (!ownerState.save(r.templates)) return { ok: false, message: 'Your face could not be saved: this Mac cannot encrypt it right now.' };
       store.set('settings.owner', { ...ownerConfig(store.get('settings.owner')), enabled: true });
       ownerGuard.reset();
@@ -1620,7 +1620,7 @@ app.whenReady().then(() => {
       broadcast();
       const seconds = ownerConfig(store.get('settings.owner')).seconds;
       ask.notice(`${name || 'Your face'} is enrolled (${r.templates.length} angles) and owner recognition is on. If someone else sits down, I will sound the alarm and lock after ${seconds} seconds. Say "test the access denied screen" to see it.`, 'done');
-      return { ok: true, message: `${r.templates.length} angles saved. Owner recognition is on: a stranger at the desk gets the alarm, then the lock after ${seconds} seconds.` };
+      return { ok: true, threshold: ownerConfig(store.get('settings.owner')).threshold, message: `${r.templates.length} angles saved. Owner recognition is on: a stranger at the desk gets the alarm, then the lock after ${seconds} seconds.` };
     }
   });
   ask.ownerCommand = async (c) => {

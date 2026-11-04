@@ -52,3 +52,17 @@ button:hover { background: #52ddff33; }
 button[hidden] { display: none; }
 body.done #privacy, body.done #dots, body.done #count { opacity: .55; }
 @media (prefers-reduced-motion: reduce) { #cue.on, #ring.center .sector { animation: none; } }
+
+/* the scan report */
+#report { width: 100%; max-width: 400px; margin: 0 0 10px; }
+#stats { display: flex; gap: 10px; justify-content: center; margin-bottom: 10px; }
+.stat { flex: 1; text-align: center; padding: 8px 6px; border: 1px solid var(--line); border-radius: 12px; background: #52ddff10; }
+.stat b { display: block; font-size: 22px; font-weight: 650; }
+.stat span { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.stat.good b { color: var(--ok); } .stat.mid b { color: var(--warn); } .stat.bad b { color: #ff8f8f; }
+#chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.chip { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid currentColor; }
+.chip.good { color: var(--ok); } .chip.weak { color: var(--warn); }
+#fine { margin: 0; font-size: 11px; color: #7fa7b8; text-align: center; line-height: 1.4; }
+.sector.weak { stroke: var(--warn); filter: drop-shadow(0 0 5px #ffd28a77); }
+body.report #dots, body.report #count { display: none; }
