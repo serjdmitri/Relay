@@ -18,6 +18,7 @@
     "install-local": "bash scripts/install-local.sh"
   },
   "dependencies": {
+    "maplibre-gl": "6.16.0",
     "qrcode-generator": "^2.0.4",
     "uiohook-napi": "^1.5.4",
     "ws": "^8.18.0"

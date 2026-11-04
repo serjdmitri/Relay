@@ -262,8 +262,8 @@
     if (!t) return;
     const navigation=/^(?:(?:hey )?jarvis[, ]+)?(?:take me to|navigate to|directions to|route to|walk(?: me)? to|drive(?: me)? to)\s+(.{1,200})$/i.exec(t);
     if(navigation){
-      if ('speechSynthesis' in window) speechSynthesis.cancel(); showAsked(t); showReply('Choose Apple Maps for navigation now, or Jarvis Navigation for an in-app route preview if installed. Apple Maps needs no separate Jarvis app setup.');
-      const walking=/\bwalk(?: me)? to\b/i.test(t),destination=encodeURIComponent(navigation[1]);for(const [label,url]of [['Open Apple Maps','https://maps.apple.com/?daddr='+destination+'&dirflg='+(walking?'w':'d')],['Preview in Jarvis Navigation','relay-navigation://navigate?destination='+destination+'&transport='+(walking?'walking':'driving')]]){const link=document.createElement('a');link.textContent=label;link.href=url;link.style.color='#60dcff';$('reply').append(document.createElement('br'),link);}setMode('idle');return;
+      if ('speechSynthesis' in window) speechSynthesis.cancel();
+      location.href='/navigation.html#'+new URLSearchParams({destination:navigation[1],mode:/\bwalk(?: me)? to\b/i.test(t)?'walking':'driving'}).toString();return;
     }
     unlockSpeech();
     try {

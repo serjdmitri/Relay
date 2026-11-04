@@ -39,7 +39,7 @@ class RemoteService {
     if (this.server && (!s.enabled || this.server.host !== host || this.server.port !== s.port)) { this.stop(); }
     if (!s.enabled || this.server) return;
     const control = { ask: (t, d, id) => this.ask.remoteAsk(t, d, id), stop: () => this.ask.cancelAll(), snapshot: () => this.ask.remoteSnapshot(), recent: (n) => this.ask.remoteRecent(n), holos: () => this.ask.remoteHolos(), holoModel: (id) => this.ask.remoteHoloModel(id), holoCad: (id) => this.ask.remoteHoloCad(id), setHoloCad: (id, cad) => this.ask.remoteSetHoloCad(id, cad), holoAsk: (id, text, d) => this.ask.remoteHoloAsk(id, text, d), send: (what, d, id) => this.ask.remoteSend(what, d, id), volume: (o) => this.ask.remoteVolume(o), confirm: (yes) => this.ask.remoteConfirm(yes), memory: () => this.ask.memoryV2List(), memoryAct: (a, id) => this.ask.memoryV2Act(a, id) };
-    const server = new RemoteServer({ control, pairing: this.pairing, devices: this.devices, root: this.root, host, port: s.port });
+    const server = new RemoteServer({ navigation: new (require('./navigation').NavigationService)({getConfig:()=>this.store.get('settings.remote.navigation'),isPrivate:()=>this.store.get('settings.model.provider')==='ollama'}), control, pairing: this.pairing, devices: this.devices, root: this.root, host, port: s.port });
     server.onPaired = () => this.broadcast();
     try {
       await server.start();

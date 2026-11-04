@@ -2,19 +2,22 @@
 // needs a paired phone's token. Nothing here thinks: it passes your words to the same request path as the Mac's own shortcuts.
 
 const crypto = require('crypto');
+const {NavigationService}=require('./navigation');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { isPrivateAddress } = require('./auth');
 
-const TYPES = { '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const TYPES = { '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
-const PAGES = { '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
+const MAP_FILES=['maplibre-gl.mjs','maplibre-gl-shared.mjs','maplibre-gl-worker.mjs','maplibre-gl.css','LICENSE.txt'];
+const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
   // control: { ask(text) -> id, stop(), snapshot(), recent(n) }; pairing: Pairing; devices: Devices; root: folder of the phone page.
-  constructor({ control, pairing, devices, root, vendor = path.join(root, '../renderer/vendor/three'), host = '0.0.0.0', port = 47900 }) {
+  constructor({ control, pairing, devices, root, vendor = path.join(root, '../renderer/vendor/three'), host = '0.0.0.0', port = 47900, navigation = new NavigationService() }) {
+    this.navigation = navigation;
     this.vendor = vendor; // where the viewer's libraries (three.js) are
     this.control = control;
     this.pairing = pairing;
@@ -110,6 +113,12 @@ class RemoteServer {
       res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
       return res.end(fs.readFileSync(file));
     }
+    if(req.method==='GET'&&p.startsWith('/maplibre/')){
+      const name=p.slice('/maplibre/'.length);if(!MAP_FILES.includes(name)){res.writeHead(404);return res.end();}
+      const file=path.join(__dirname,'../../../node_modules/maplibre-gl',name==='LICENSE.txt'?name:'dist/'+name);
+      if(!fs.existsSync(file)){res.writeHead(404);return res.end();}
+      res.writeHead(200,{'content-type':TYPES[path.extname(file)]||'text/plain','cache-control':'max-age=86400'});return res.end(fs.readFileSync(file));
+    }
     if (req.method === 'GET' && VENDOR[p]) { // the 3D viewer's libraries (three.js), nothing else from that folder
       const file = path.join(this.vendor, VENDOR[p]);
       if (!fs.existsSync(file)) { res.writeHead(404); return res.end(); }
@@ -133,6 +142,16 @@ class RemoteServer {
     const device = this.auth(req);
     if (!device) return this.json(res, 401, { error: 'Not paired.' });
 
+    if(p.startsWith('/api/navigation/')){
+      try{
+        if(p==='/api/navigation/config'&&req.method==='GET')return this.json(res,200,this.navigation.config());
+        if(req.method!=='POST')return this.json(res,405,{error:'Use POST.'});
+        const body=await this.body(req).catch(()=>null);if(!body)return this.json(res,400,{error:'Invalid navigation request.'});
+        if(p==='/api/navigation/search')return this.json(res,200,{places:await this.navigation.search(body.query,body.near)});
+        if(p==='/api/navigation/route')return this.json(res,200,await this.navigation.route(body.from,body.to,body.mode));
+      }catch(e){return this.json(res,400,{error:e.message});}
+      return this.json(res,404,{error:'Unknown navigation action.'});
+    }
     if (p === '/api/state' && req.method === 'GET') return this.json(res, 200, { ...this.control.snapshot(), recent: this.control.recent(8), device: device.name });
     if (p === '/api/ask' && req.method === 'POST') {
       const b = await this.body(req).catch(() => null);
