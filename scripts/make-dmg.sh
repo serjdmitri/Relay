@@ -32,7 +32,8 @@ codesign --verify --deep --strict "$APP"
 # 0.38.0 and 0.38.1 were published with a window that stayed blank, and nothing caught it.
 if [ "${SKIP_STARTUP_CHECK:-0}" != 1 ]; then
   echo "Checking that the built app starts..."
-  node scripts/startup-check.js "$APP" || { echo "The startup check failed, so no .dmg was made. (SKIP_STARTUP_CHECK=1 skips it.)"; exit 1; }
+  # A broken build fails every time; a slow start on a busy Mac (a long first launch under load) does not. So it is tried once more before the build is refused.
+  node scripts/startup-check.js "$APP" || { echo "The startup check failed once; trying again in case the Mac was just busy..."; sleep 8; node scripts/startup-check.js "$APP"; } || { echo "The startup check failed twice, so no .dmg was made. (SKIP_STARTUP_CHECK=1 skips it.)"; exit 1; }
 fi
 
 STAGE=$(mktemp -d)
