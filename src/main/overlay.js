@@ -67,6 +67,19 @@ class Overlay {
     }
   }
 
+  // A window that sat hidden through a screen lock or sleep can come back blank or glitchy (the reactor missing at unlock, then drawn wrongly when summoned). Replace the idle ones with
+  // fresh windows, and load them ahead of use so the reactor appears at once. A window that is showing something is left alone.
+  renewIdle() {
+    for (const [id, e] of [...this.wins]) {
+      if (this.hudEntry === e || e.hud || e.card || e.halo || e.buddy || e.shapes || e.markShow) continue;
+      clearTimeout(e.hudTimer);
+      if (e.blurWin && !e.blurWin.isDestroyed()) e.blurWin.destroy();
+      if (!e.win.isDestroyed()) e.win.destroy();
+      if (this.wins.get(id) === e) this.wins.delete(id);
+    }
+    try { for (const d of screen.getAllDisplays()) this.entry(d); } catch { /* the windows are made when first needed */ }
+  }
+
   entry(display) {
     let e = this.wins.get(display.id);
     if (e && !e.win.isDestroyed()) return e;
