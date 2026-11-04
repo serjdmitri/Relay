@@ -130,8 +130,9 @@ function frame() {
   if (!state.active) { if (soundMode) stopSound(); return; }
   const mode = state.mode === 'away' ? 'away' : 'alarm';
   if (document.body.className !== mode) { document.body.className = mode; if (soundMode) stopSound(); }
-  // paused: the Touch ID sheet is up. The screen stays and keeps counting down; only the siren is quiet, so the sheet can be heard and used.
-  if (state.paused) { if (soundMode) stopSound(); } else if (soundMode !== mode) startSound(mode);
+  // paused: the Touch ID sheet is up. The screen stays, keeps counting down, and the siren KEEPS SOUNDING: pressing the button must not be a way to silence the alarm. It stops when the
+  // fingerprint is accepted (the screen is taken down) and not before.
+  if (soundMode !== mode) startSound(mode);
   if (!!state.paused !== wasPaused) { wasPaused = !!state.paused; if (wasPaused) $('touchlabel').textContent = 'Touch the sensor…'; else if (Date.now() > noteUntil) $('touchlabel').textContent = 'Touch ID to stop'; }
   let urgency = 0;
   if (mode === 'alarm') {

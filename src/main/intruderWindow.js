@@ -45,7 +45,7 @@ class IntruderWindow {
     this.open();
   }
 
-  // While the system's Touch ID sheet is up the alarm screen STAYS, but drops to a lower window level (and its siren stops), so the sheet is not hidden behind it; when the sheet is
+  // While the system's Touch ID sheet is up the alarm screen STAYS (with its siren), but drops to a lower window level, so the sheet is not hidden behind it; when the sheet is
   // done and it was not accepted, the screen goes back to the top.
   hold() { this.state = { ...this.state, paused: true }; for (const w of this.wins) { try { if (!w.isDestroyed()) w.setAlwaysOnTop(true, 'floating'); } catch { /* gone */ } } }
   release() { if (!this.state.active) return; this.state = { ...this.state, paused: false }; for (const w of this.wins) { try { if (!w.isDestroyed()) { w.setAlwaysOnTop(true, 'screen-saver', 2); w.showInactive(); } } catch { /* gone */ } } }
