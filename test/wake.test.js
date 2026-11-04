@@ -32,9 +32,9 @@ test('two distinct impulses open a short wake window, not one sustained sound', 
   assert.equal(gate.level(0.8, 1000), false);
   assert.equal(gate.level(0.8, 1200), false, 'continuous sound is one impulse');
   gate.level(0.1, 1250);
-  assert.equal(gate.level(0.8, 1400), false,'a long sound is not a clap');gate.reset();gate.level(.8,1400);gate.level(.03,1450);assert.equal(gate.level(.8,1650),true);
+  assert.equal(gate.level(0.8, 1400), false,'a long sound is not a clap');gate.reset();gate.level(.8,1400);gate.level(.03,1450);assert.equal(gate.level(.8,1650),false);assert.equal(gate.level(.03,1700),true);
   assert.equal(gate.ready(6000), true);
-  assert.equal(gate.ready(6651), false);
+  assert.equal(gate.ready(6701), false);
   gate.reset();
   gate.level(0.8, 7000); gate.level(0.1, 7050);
   assert.equal(gate.level(0.8, 7100), false, 'too close together');
@@ -49,7 +49,7 @@ test('clap mode requires the wake phrase after both claps', async () => {
     await r.w.refresh();
     r.speech.emit('partial', 'hey jarvis');
     assert.equal(r.woke.length, 0);
-    r.speech.emit('level', 0.9); now += 80; r.speech.emit('level', 0.1); now += 120; r.speech.emit('level', 0.9);
+    r.speech.emit('level', 0.9); now += 80; r.speech.emit('level', 0.1); now += 120; r.speech.emit('level', 0.9); now += 60; r.speech.emit('level',0.03);
     r.speech.emit('partial', 'hey jarvis');
     assert.equal(r.woke.length, 0, 'an old wake phrase cannot activate after the claps');
     r.speech.emit('partial', 'hey jarvis jarvis wake up');
@@ -100,7 +100,7 @@ test('hearing the phrase stops listening and wakes Relay once', async () => {
   assert.equal(r.woke.length, 1, 'not armed any more, so nothing more happens');
 });
 
-test('a session is renewed now and then, and a failing microphone is retried a few times then left', async () => {
+test('a session is renewed now and then, and a failing microphone keeps retrying with bounded backoff', async () => {
   const r = rig();
   await r.w.refresh();
   assert.equal(r.timers.at(-1).ms, 90000);
@@ -116,14 +116,14 @@ test('a session is renewed now and then, and a failing microphone is retried a f
   bad.w.log = { error() {} };
   for (let i = 0; i < 7; i++) await bad.w.arm();
   assert.equal(bad.w.errors, 7);
-  assert.equal(bad.timers.filter((t) => t.ms >= 2000).length, 4, 'retries stop after a few tries');
+  assert.equal(bad.timers.filter((t) => t.ms >= 2000).length, 7);assert.ok(bad.timers.every(t=>t.ms<=30000));
 });
 
 test('quieter separated clap impulses work without treating sustained sound as two claps', () => {
   const gate = new ClapGate();
   for(let t=0;t<500;t+=50) gate.level(.03,t);
   assert.equal(gate.level(.28,600),false); gate.level(.04,660);
-  assert.equal(gate.level(.3,850),true);
+  assert.equal(gate.level(.3,850),false);assert.equal(gate.level(.03,900),true);
   gate.reset();for(let t=0;t<1000;t+=50) assert.equal(gate.level(.8,t),false);
   assert.equal(gate.level(NaN,1200),false);
 });
@@ -142,3 +142,14 @@ test('inline wake commands exclude the wake phrase and preceding room transcript
 });
 
 test('revised wake partials extend handoff instead of executing an incomplete command',async()=>{const r=rig({handoffMs:450});await r.w.refresh();r.speech.emit('partial','hey jarvis');const old=r.timers.at(-1);r.speech.emit('partial','hey jarvis open my notes');old.f();assert.equal(r.woke.length,0);r.timers.at(-1).f();assert.deepEqual(r.woke,['hey jarvis open my notes']);});
+
+test('wake re-arms after the speech helper ends or exits instead of staying falsely armed',async()=>{for(const event of ['final','error-event','exit']){const r=rig();await r.w.refresh();r.speech.emit(event,{});assert.equal(r.w.armed,false);await r.timers.at(-1).f();assert.equal(r.w.armed,true);assert.equal(r.log.filter(x=>x==='listen').length,2);}});
+test('two brief acoustic transients arm claps but a sustained second sound does not',()=>{const g=new ClapGate();g.level(.8,1000);g.level(.02,1040);g.level(.8,1300);assert.equal(g.ready(1300),false);g.level(.8,1500);assert.equal(g.level(.02,1600),false);assert.equal(g.ready(1600),false);});
+test('activation modes keep claps-only separate from phrase-only',async()=>{
+ const real=Date.now;let now=20000;Date.now=()=>now;
+ try{for(const mode of ['voice','claps','claps-voice']){const r=rig();r.cfg.mode=mode;await r.w.refresh();if(mode==='claps'){r.speech.emit('partial','hey jarvis');assert.equal(r.woke.length,0);}for(const [rms,peak,step] of [[.01,.4,0],[.005,.01,50],[.01,.4,220],[.005,.01,50]]){now+=step;r.speech.emit('acoustic',{rms,peak});}assert.equal(r.woke.length,mode==='claps'?1:0);if(mode!=='claps'){r.speech.emit('partial','hey jarvis');assert.equal(r.woke.length,1);}}}finally{Date.now=real;}
+});
+
+test('a final wake transcript hands off the latest command exactly once',async()=>{const r=rig({handoffMs:450});await r.w.refresh();r.speech.emit('partial','hey jarvis');r.speech.emit('final',{text:'hey jarvis open notes'});assert.deepEqual(r.woke,['hey jarvis open notes']);for(const t of r.timers.filter(t=>t.ms===450))t.f();assert.equal(r.woke.length,1);});
+test('a final revision without the wake phrase does not execute a pending guess',async()=>{const r=rig({handoffMs:450});await r.w.refresh();r.speech.emit('partial','hey jarvis');r.speech.emit('final',{text:'a service'});assert.deepEqual(r.woke,[]);});
+test('claps-only does not require a configured wake phrase or execute final speech',async()=>{const r=rig({handoffMs:450});r.cfg.mode='claps';r.cfg.phrase='';await r.w.refresh();assert.equal(r.w.armed,true);r.speech.emit('final',{text:'hey jarvis open notes'});assert.deepEqual(r.woke,[]);});

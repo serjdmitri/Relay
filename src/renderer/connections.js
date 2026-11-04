@@ -13,7 +13,7 @@ function renderGoogleConnections(c,g){
   const row=h(`<label class="row" style="padding:8px 0"><input type="checkbox" ${googleServices.includes(id)?'checked':''}><span class="grow"><span class="t">${name}</span><span class="d">${access}</span></span></label>`);
   row.querySelector('input').onchange=e=>{googleServices=e.target.checked?[...googleServices,id]:googleServices.filter(s=>s!==id);};q('[data-services]').append(row);
  }
- const busy=on=>{googleConnecting=on;for(const el of [box,document]){const b=el.querySelector('[data-connect]'),cancel=el.querySelector('[data-cancel]');if(b)b.disabled=on||!g.clientId||!g.hasSecret;if(cancel){cancel.hidden=!on;cancel.style.display=on?'':'none';}}};busy(googleConnecting);
+ const busy=on=>{googleConnecting=on;for(const el of [box,document]){const b=el.querySelector('[data-connect]'),cancel=el.querySelector('[data-cancel]');if(b){b.disabled=on||!g.clientId||!g.hasSecret;b.title=!g.clientId||!g.hasSecret?'Complete the one-time app credentials setup below first.':'';}if(cancel){cancel.hidden=!on;cancel.style.display=on?'':'none';}}};busy(googleConnecting);
  const connect=async email=>{
   if(!googleServices.length){status('Choose at least one service.');return;}
   busy(true);status('Continue in your browser. Jarvis will show the result here when sign-in finishes.');
@@ -30,7 +30,7 @@ function renderGoogleConnections(c,g){
   row.querySelector('[data-remove]').onclick=async()=>{if(!confirm(`Disconnect ${account.email} from Relay?`))return;const r=await relay.removeGoogle(account.email);googleChecks.delete(account.email);if(r?.warning)status(r.warning);};
   q('[data-accounts]').append(row);
  }
- status(connectionMessages.google);c.append(box);
+ status(connectionMessages.google||(!(g.clientId&&g.hasSecret)?'Google is not connected. Complete the one-time app credentials setup below, then use Connect with Google to sign in.':!(g.accounts||[]).length?'App setup is ready. Choose services and click Connect with Google to sign in.':''));c.append(box);
 }
 
 let notionConnecting=false;

@@ -5,6 +5,8 @@ const { wakeAllowedIn } = require('./conversation');
 
 const GREETINGS = new Set(['hey', 'hi', 'ok', 'okay', 'hay', 'a', 'hello']);
 
+const activationMode=c=>['voice','claps-voice','claps'].includes(c.mode)?c.mode:c.requireClaps?'claps-voice':'voice';
+
 const clean = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 function distance(a, b) {
@@ -26,13 +28,17 @@ class ClapGate {
     const sample = Number(value);
     if (!Number.isFinite(sample)) return false;
     const threshold = Math.max(Math.max(.05,Math.min(.7,Number(minimum)||.18)), Math.min(.9, this.floor * 4 + .07));
-    if (sample < threshold * .8) { if(this.high){this.first=now-this.highSince<=180?this.highSince:null;}this.high = false; this.highSince=null; this.floor = this.floor * .94 + Math.max(0, sample) * .06; return false; }
-    if (sample < threshold) return false;
-    if (this.high) return false;
-    this.high = true;this.highSince=now;
-    if (this.first !== null && now - this.first >= 120 && now - this.first <= 900) {
-      this.first = null; this.until = now + 5000; return true;
+    if (sample < threshold * .8) {
+      let pair=false;
+      if(this.high){
+        const at=this.highSince,duration=now-at;
+        if(duration<=180){if(this.first!==null&&at-this.first>=120&&at-this.first<=900){this.until=now+5000;this.first=null;pair=true;}else this.first=at;}
+        else this.first=null;
+      }
+      this.high=false;this.highSince=null;this.floor=this.floor*.94+Math.max(0,sample)*.06;return pair;
     }
+    if(sample<threshold||this.high)return false;
+    this.high=true;this.highSince=now;
     return false;
   }
   ready(now) { return this.until > 0 && now <= this.until; }
@@ -88,15 +94,28 @@ class WakeWord {
     this.clapPrefix = '';
     this.onPartial = (text) => this.partial(text);
     speech.on('partial', this.onPartial);
-    speech.on('level', (level) => {
-      if (!this.armed || !this.getConfig().requireClaps) return;
-      if (this.claps.level(level, Date.now(),this.getConfig().clapThreshold)) this.clapPrefix = clean(this.lastPartial);
+    const clap=(level)=>{const c=this.getConfig();if(!this.armed||activationMode(c)==='voice'||!this.claps.level(level,Date.now(),c.clapThreshold))return;this.clapPrefix=clean(this.lastPartial);if(activationMode(c)==='claps'&&this.wanted&&Date.now()-this.lastWake>=1500){this.lastWake=Date.now();this.disarm();this.onWake('');}};
+    speech.on('acoustic',sample=>{this.acousticAt=Date.now();const peak=Number(sample?.peak),rms=Number(sample?.rms);if(Number.isFinite(peak)&&Number.isFinite(rms))clap(peak>rms*2.5?Math.min(1,peak*3):0);});
+    speech.on('level',level=>{if(!this.acousticAt||Date.now()-this.acousticAt>1000)clap(level);});
+    const ended=()=>{
+      if(!this.armed)return;
+      this.disarm();
+      this.retry=this.setTimer(()=>this.refresh(),500);
+    };
+    for(const event of ['error-event','error','exit'])speech.on(event,ended);
+    speech.on('final',msg=>{
+      if(!this.armed)return;
+      // A final transcript ends recognition: deliver a valid pending wake now,
+      // rather than cancelling its handoff timer and losing the command.
+      if(typeof msg?.text==='string'&&msg.text.trim()){this.pendingText=null;this.partial(msg.text);}
+      if(this.armed&&this.pendingText&&this.wanted){const text=this.pendingText;this.lastWake=Date.now();this.disarm();this.onWake(text);}
+      else ended();
     });
   }
 
   get wanted() {
     const c = this.getConfig();
-    return !!c.enabled && !!c.phrase && !!this.canListen() && wakeAllowedIn(c.apps, c.apps && c.apps.length ? this.getFront() : null);
+    return !!c.enabled && (activationMode(c)==='claps'||!!c.phrase) && !!this.canListen() && wakeAllowedIn(c.apps, c.apps && c.apps.length ? this.getFront() : null);
   }
 
   // Start or stop listening to match what should be happening right now. Safe to call as often as you like.
@@ -120,9 +139,9 @@ class WakeWord {
       this.log.error?.('wake word:', e.message);
       this.errors++;
       this.onArmed(false);
-      if (this.errors < 5) { // the microphone may just be busy: try again in a moment
+      if (this.wanted) { // recover after a transient device or recognizer failure, with bounded backoff
         this.clearTimer(this.retry);
-        this.retry = this.setTimer(() => this.refresh(), 2000 * this.errors);
+        this.retry = this.setTimer(() => this.refresh(), Math.min(30000,2000 * this.errors));
       }
     } finally {
       this.arming = false;
@@ -151,8 +170,9 @@ class WakeWord {
     if (!this.armed) return;
     const c = this.getConfig();
     this.lastPartial = text;
+    if(activationMode(c)==='claps')return;
     let candidate = text;
-    if (c.requireClaps) {
+    if (activationMode(c)==='claps-voice') {
       if (!this.claps.ready(Date.now())) return;
       const current = clean(text);
       if (this.clapPrefix && current.startsWith(`${this.clapPrefix} `)) candidate = current.slice(this.clapPrefix.length).trim();
@@ -182,4 +202,4 @@ function commandAfterWake(text, phrase) {
   }
   return '';
 }
-module.exports = { WakeWord, ClapGate, heardWake, clean, commandAfterWake };
+module.exports = { activationMode, WakeWord, ClapGate, heardWake, clean, commandAfterWake };
