@@ -2,7 +2,7 @@
 // Builds the standalone Jarvis Navigation page: the same page the Mac serves to the phone, packaged as plain files that any web host can serve (for example GitHub Pages), so it works
 // without the Mac and without a VPN. The phone page then asks the free map services directly (see src/remote/navdirect.js).
 //
-//   node scripts/build-standalone.js            writes ./standalone
+//   node scripts/build-standalone.js            writes ./docs/nav (GitHub Pages serves the docs folder, so this is where it goes live: serjdmitri.github.io/Relay/nav/)
 //   node scripts/build-standalone.js --out DIR  writes DIR
 //
 // Nothing is uploaded or published by this script.
@@ -21,7 +21,7 @@ function page(html) {
   return html;
 }
 
-function build(outDir = path.join(ROOT, 'standalone')) {
+function build(outDir = path.join(ROOT, 'docs', 'nav')) {
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'maplibre'), { recursive: true });
   const src = (f) => path.join(ROOT, 'src', 'remote', f);

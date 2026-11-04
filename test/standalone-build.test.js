@@ -22,9 +22,9 @@ test('the standalone page is built from the phone page, with relative paths, no 
   fs.rmSync(out, { recursive: true, force: true });
 });
 
-test('the committed standalone folder is the current build (run npm run build:standalone after changing the phone page)', () => {
-  const committed = path.join(ROOT, 'standalone');
-  assert.ok(fs.existsSync(committed), 'standalone/ is missing: run npm run build:standalone');
+test('the published docs/nav folder is the current build (run npm run build:standalone after changing the phone page)', () => {
+  const committed = path.join(ROOT, 'docs', 'nav');
+  assert.ok(fs.existsSync(committed), 'docs/nav is missing: run npm run build:standalone');
   const out = build(fs.mkdtempSync(path.join(os.tmpdir(), 'relay-standalone-')));
   assert.deepEqual(walk(committed), walk(out));
   for (const f of walk(out)) assert.ok(fs.readFileSync(path.join(committed, f)).equals(fs.readFileSync(path.join(out, f))), f + ' is out of date');
