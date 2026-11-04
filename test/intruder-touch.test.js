@@ -60,3 +60,10 @@ test('while the Touch ID sheet is up the alarm screen stays visible and drops to
   w.hold(); assert.deepEqual(calls, [['level', true, 'floating']], 'not hidden: only lowered, so the system sheet can be seen above it'); assert.equal(w.state.paused, true);
   calls.length = 0; w.release(); assert.deepEqual(calls, [['level', true, 'screen-saver', 2], ['show']]); assert.equal(w.state.paused, false);
 });
+
+test('the siren keeps sounding while the Touch ID sheet is up, so pressing the button is not a way to silence the alarm', () => {
+  const page = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/renderer/intruder.js'), 'utf8');
+  assert.match(page, /if \(soundMode !== mode\) startSound\(mode\);/, 'the sound follows the mode only');
+  assert.doesNotMatch(page, /state\.paused\) \{ if \(soundMode\) stopSound\(\)/, 'and is not stopped because the sheet is up');
+  assert.match(page, /if \(!state\.active\) \{ if \(soundMode\) stopSound\(\); return; \}/, 'it does stop when the screen is taken down');
+});
