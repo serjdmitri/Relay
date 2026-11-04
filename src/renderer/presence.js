@@ -14,6 +14,7 @@ let timer = 0;
 let stopped = false;
 let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBusy = false, recogOn = false, livenessOn = false, lmTimer = 0;
 let lastLm = { t: 0, faces: [] }, watchdog = 0, lastFaces = [];
+let facePresent = true, lmLast = 0; // the landmark finder runs about 8 times a second while someone is in view, and only twice a second when nobody is (it was the biggest CPU cost of the camera)
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
 let busy = false, embed = null, embedFailed = false, templates = [], trustedTemplates = [], version = 0;
@@ -34,7 +35,8 @@ async function loadLandmarker() {
     // blinks are quick, so this looks several times a second (only while owner recognition is on)
     lmTimer = setInterval(() => {
       if (stopped || !recogOn || lmBusy || video.readyState < 2) return;
-      lmBusy = true;
+      if (!facePresent && Date.now() - lmLast < 500) return;
+      lmBusy = true; lmLast = Date.now();
       try {
         const r = landmarker.detectForVideo(video, performance.now());
         const faces = (r.faceLandmarks || []).map((lm, i) => {
@@ -43,7 +45,7 @@ async function loadLandmarker() {
           const away = lookingAway({ gazeDownL: g('eyeLookDownLeft'), gazeDownR: g('eyeLookDownRight'), matrix: r.facialTransformationMatrixes?.[i]?.data });
           return { lm, width, away, x: lm[1].x, y: lm[1].y, blinkL: g('eyeBlinkLeft'), blinkR: g('eyeBlinkRight') };
         });
-        lastLm = { t: Date.now(), faces };
+        lastLm = { t: Date.now(), faces }; if (faces.length) facePresent = true;
         if (livenessOn) tracker.update(faces, Date.now());
       } catch { /* a bad picture: skip it */ } finally { lmBusy = false; }
     }, 120);
@@ -101,7 +103,7 @@ async function start() {
       busy = true;
       try {
         const dets = detector.detectForVideo(video, performance.now()).detections;
-        const frame = { faces: dets.length };
+        const frame = { faces: dets.length }; facePresent = dets.length > 0;
         // Owner recognition (opt-in): only when asked for. The main process says whether to match faces or to enroll yours.
         const c = await relay.presenceConfig(version);
         if (c?.templates) { templates = c.templates; trustedTemplates = c.trusted || []; version = c.version; }
