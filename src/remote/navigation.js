@@ -32,8 +32,14 @@ function show(view) {
   document.getElementById('app').classList.toggle('nav', view === 'nav'); // while driving the controls drop to the bottom and the map takes the rest
   if (typeof map !== 'undefined' && map) { map.resize(); setTimeout(() => map.resize(), 350); }
   for (const v of ['plan', 'preview', 'nav', 'done']) $('v-' + v).hidden = v !== view;
-  $('banner').hidden = view !== 'nav' && view !== 'done'; $('recenter').hidden = view !== 'nav' || S.follow;
+  $('banner').hidden = view !== 'nav' && view !== 'done'; $('recenter').hidden = view !== 'nav'; followShow();
   $('apple').href = 'https://maps.apple.com/?' + new URLSearchParams({ daddr: S.to?.label || $('destination').value, dirflg: S.mode === 'walking' ? 'w' : 'd' });
+}
+// The centre button (◎) is always there while navigating: lit while the map follows you, plain after you move the map; tapping it puts you back in the middle.
+function followShow() { $('recenter').setAttribute('aria-pressed', String(!!S.follow)); }
+function recenter() {
+  S.follow = true; followShow();
+  if (S.view === 'nav' && S.lastInfo && map) { const f = S.lastFix || {}; map.stop(); map.easeTo({ center: S.lastInfo.point, bearing: Number.isFinite(S.lastInfo.heading) ? S.lastInfo.heading : map.getBearing(), pitch: S.mode === 'driving' ? 55 : 45, zoom: S.mode === 'walking' ? 17.5 : Number.isFinite(f.speed) && f.speed > 20 ? 15.4 : Number.isFinite(f.speed) && f.speed > 10 ? 16.2 : 17, duration: 600, essential: true }); }
 }
 const syncModes = () => { for (const b of document.querySelectorAll('#modes .seg')) b.classList.toggle('on', b.dataset.mode === S.mode); };
 const ARROWS = { left: '↰', right: '↱', straight: '↑', uturn: '↶', round: '⟳', flag: '⚑', slr: '↗', sll: '↖' };
@@ -82,7 +88,7 @@ function pins() {
 }
 function fitRoute() {
   if (!S.route) return;
-  S.follow = false; $('recenter').hidden = S.view !== 'nav';
+  S.follow = false; followShow();
   map.fitBounds(S.route.coordinates.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(S.route.coordinates[0], S.route.coordinates[0])), { padding: { top: 70, bottom: 50, left: 36, right: 36 }, maxZoom: 16, pitch: 0, bearing: 0 });
 }
 
@@ -257,7 +263,7 @@ function onFix(p) {
   if (S.view !== 'nav' || !S.session) return;
   const c = p.coords, fix = { lon: c.longitude, lat: c.latitude, accuracy: c.accuracy, heading: c.heading, speed: c.speed, t: p.timestamp };
   if (!(c.accuracy <= 150)) { status('Weak GPS signal…'); return; }
-  const info = S.session.onFix(fix);
+  const info = S.session.onFix(fix); S.lastInfo = info; S.lastFix = fix;
   updateNav(info); follow(info, fix);
   if (info.arrived) return arrived();
   if (info.offRoute) reroute(fix); else if (!S.rerouting) status('');
@@ -336,7 +342,7 @@ function handle(text) {
     case 'zoom-in': return void map.zoomTo(map.getZoom() + 1, { duration: 300 });
     case 'zoom-out': return void map.zoomTo(map.getZoom() - 1, { duration: 300 });
     case 'overview': return fitRoute();
-    case 'recenter': S.follow = true; $('recenter').hidden = true; return;
+    case 'recenter': return recenter();
     case 'apple': reply(REPLIES.apple); return void (location.href = $('apple').href);
     default: return reply(REPLIES.none);
   }
@@ -383,7 +389,7 @@ $('start').onclick = startNav; $('fit').onclick = fitRoute; $('route').onclick =
 $('next').onclick = continueTrip; $('cancel').onclick = reset; $('done').onclick = reset; $('end').onclick = () => stopNav('Navigation ended, Sir.'); $('overview').onclick = fitRoute;
 $('mic').onclick = () => listen($('mic')); $('nmic').onclick = () => listen($('nmic'));
 $('voice').onclick = () => handle(S.muted ? 'unmute' : 'mute');
-$('recenter').onclick = () => { S.follow = true; $('recenter').hidden = true; };
+$('recenter').onclick = recenter;
 $('zin').onclick = () => map.zoomTo(map.getZoom() + 1, { duration: 250 }); $('zout').onclick = () => map.zoomTo(map.getZoom() - 1, { duration: 250 });
 
 async function boot() {
@@ -395,7 +401,7 @@ async function boot() {
     map = new maplibregl.Map({ container: 'map', style: cfg.style, center: [0, 20], zoom: 1, attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false });
     let loaded = false;
     map.on('error', () => { if (!loaded) status('Map tiles could not load. Check your connection, or use Apple Maps below.'); });
-    map.on('dragstart', () => { if (S.view === 'nav') { S.follow = false; $('recenter').hidden = false; } });
+    map.on('dragstart', () => { if (S.view === 'nav') { S.follow = false; followShow(); } });
     map.on('load', () => {
       loaded = S.ready = true; tint();
       for (const el of document.querySelectorAll('button,input')) el.disabled = false;
