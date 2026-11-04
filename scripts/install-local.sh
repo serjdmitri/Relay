@@ -42,6 +42,6 @@ echo "Installed Relay $NEW."
 if [ -n "$OLD_DR" ] && [ "$OLD_DR" != "$NEW_DR" ]; then
   echo "NOTE: this build is signed differently from the one it replaced. macOS will ask once for Keychain access: click Always Allow (look for the prompt; Relay waits for it)."
 else
-  echo "Signed the same way as before, so macOS should not ask about the Keychain."
+  echo "Signed with your local certificate. macOS may still ask ONCE for Keychain access (\"Relay wants to access key Relay Safe Storage\"): enter your Mac login password and click Always Allow. Until you answer, Relay's window stays blank, and Deny would stop it reading its saved keys and face data."
 fi
 open -a "$DEST"
