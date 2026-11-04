@@ -66,6 +66,14 @@ summary{cursor:pointer;color:#8ad8ee;padding:8px 0;min-height:36px}
 .fine{margin-top:10px;border-top:1px solid rgba(85,221,255,.15)}
 .fine p{font-size:12px}
 
+/* navigating: the map fills the screen above a compact control strip */
+#app.nav #stage{flex:1 1 auto;min-height:0}
+#app.nav #sheet{flex:0 0 auto;overflow:visible;padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+#app.nav #stats{margin:0 0 4px}#app.nav #stats div{padding:5px 4px}#app.nav #stats b{font-size:19px}
+#app.nav #caption{min-height:0;margin:2px 2px 4px;font-size:13px}
+#app.nav .ctl{margin:4px 0 0}#app.nav .ctl button{min-height:54px}
+#app.nav .fine,#app.nav #status:empty{display:none}
+
 /* map pieces */
 .pin{width:18px;height:18px;border-radius:50%;background:#6de7ff;border:2px solid #04202e;box-shadow:0 0 14px rgba(109,231,255,.8)}
 .pin.destination{background:var(--warn);box-shadow:0 0 16px rgba(255,179,79,.85)}

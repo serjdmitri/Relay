@@ -29,6 +29,8 @@ function cancelRequests() { S.revision++; S.request?.abort(); S.request = null; 
 // ---- screens ----
 function show(view) {
   S.view = view;
+  document.getElementById('app').classList.toggle('nav', view === 'nav'); // while driving the controls drop to the bottom and the map takes the rest
+  if (typeof map !== 'undefined' && map) { map.resize(); setTimeout(() => map.resize(), 350); }
   for (const v of ['plan', 'preview', 'nav', 'done']) $('v-' + v).hidden = v !== view;
   $('banner').hidden = view !== 'nav' && view !== 'done'; $('recenter').hidden = view !== 'nav' || S.follow;
   $('apple').href = 'https://maps.apple.com/?' + new URLSearchParams({ daddr: S.to?.label || $('destination').value, dirflg: S.mode === 'walking' ? 'w' : 'd' });
