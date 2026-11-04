@@ -195,3 +195,14 @@ test('fixed local greetings survive a restart without synthesis or a cloud reque
  const opts={phraseCacheDir:dir,spawnFn:fakeSpawn(calls),exec:(_c,_a,_o,cb)=>cb(null,''),getTts:()=>({engine:'omnivoice'}),omni:{installed:()=>true,synthesize:async()=>{made++;const f=path.join(dir,'generated.wav');fs.writeFileSync(f,'fixed greeting');return f;}}};
  try{await new Spk(opts).prepare({text:'Good morning, Sir.'});await new Spk(opts).speak('Good morning, Sir.',{quick:true});assert.equal(made,1);assert.equal(calls[0].cmd,'afplay');assert.equal(fs.statSync(path.join(dir,fs.readdirSync(dir)[0])).mode&0o777,0o600);await new Spk(opts).speak('Good morning, Sir.',{quick:true,rate:'faster'});assert.equal(calls[1].cmd,'say');}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('the "jarvis" voice stays a man\'s: Daniel first, then other known British men, then other known men, and never "whatever British voice is first"', () => {
+  const { pickJarvis } = require('../src/main/voiceProfile');
+  const v = (name, lang, kind = 'Standard') => ({ name, lang, kind });
+  assert.equal(pickJarvis([v('Kate', 'en_GB'), v('Daniel (English (UK))', 'en_GB'), v('Samantha', 'en_US')]), 'Daniel (English (UK))');
+  assert.equal(pickJarvis([v('Daniel', 'en_GB'), v('Daniel (Premium)', 'en_GB', 'Premium')]), 'Daniel (Premium)', 'a better version of him is preferred');
+  assert.equal(pickJarvis([v('Kate', 'en_GB'), v('Oliver', 'en_GB')]), 'Oliver');
+  assert.equal(pickJarvis([v('Kate', 'en_GB'), v('Serena', 'en_GB'), v('Alex', 'en_US'), v('Samantha', 'en_US')]), 'Alex', 'only women in Britain: a known man from elsewhere, not Kate');
+  assert.equal(pickJarvis([v('Kate', 'en_GB'), v('Samantha', 'en_US')]), null, 'no known man at all: no pick here (the caller then chooses, and the OmniVoice voice is told to be a man anyway)');
+  assert.equal(pickJarvis([v('Fred', 'en_US', 'Novelty'), v('Kate', 'en_GB')]), null, 'novelty voices are never picked');
+});
