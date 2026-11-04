@@ -95,7 +95,7 @@ function rememberThrow(undo) {
 const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
-let enrollWin, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let enrollWin, intrudersWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -191,7 +191,7 @@ function quickState() {
 }
 
 function publicState() {
-  const { sessionNotes: _sessionNotes, ownerFace: _ownerFace, trustedFaces: _trustedFaces, ...publicData } = store.data;
+  const { sessionNotes: _sessionNotes, ownerFace: _ownerFace, trustedFaces: _trustedFaces, intruderLog: _intruderLog, ...publicData } = store.data;
   const d = JSON.parse(JSON.stringify(publicData)); // session notes use protected Memory IPC, not broadcasts
   if (d.settings.calls) { delete d.settings.calls.keyEnc; delete d.settings.calls.twilioTokenEnc; }
   if (d.settings.quick) delete d.settings.quick.keyEnc;
@@ -1418,8 +1418,9 @@ app.whenReady().then(() => {
   let lastWelcome = 0;
   // After the Mac wakes (the lid was closed) the camera stream is often dead: start the camera again, so recognition and the standby screen see you and not a frozen picture.
   powerMonitor.on('resume', () => { if (presence?.enabled) { presence.disable(); setTimeout(() => { if (store.get('settings.presence.enabled') || ownerConfig(store.get('settings.owner')).enabled) presence.enable().then(() => broadcast()).catch(() => {}); }, 2500).unref?.(); } });
-  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); lockWatch.set(true); prepareGreeting(); });
+  powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); screenLocked = true; lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
+    screenLocked = false; setTimeout(() => tellAboutVisits(), 1500).unref?.(); // you have just unlocked it: now is when to say who was at the Mac
     lockWatch.set(false);
     // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
     const { missed } = tickSchedules(false);
@@ -1593,14 +1594,43 @@ app.whenReady().then(() => {
     authenticate:()=>new Promise(resolve=>execFile(axBinPath(),['authenticate-owner'],{timeout:65000},(err,out)=>resolve(!err && out.trim()==='authenticated'))),
     changed:()=>{ownerState.version++; broadcast();}
   });
+  // Pictures of strangers: when the access-denied alarm starts for a real stranger (not the test screen), up to three pictures of the camera view are taken, a few seconds apart, and
+  // kept encrypted on this Mac with the stranger's face numbers (so a second visit by the same face is recognised). Coming back, you are told who was there.
+  const intruderLog = new (require('./intruderLog').IntruderLog)({ store, dir: path.join(app.getPath('userData'), 'intruders'), encrypt: (txt) => safeStorage.encryptString(txt), decrypt: (buf) => safeStorage.decryptString(buf) });
+  intrudersWin = new (require('./intrudersWindow').IntrudersWindow)({ log: intruderLog, motion: floatingMotion, authorize: () => trustedPeople.authorize(), onChange: () => broadcast() });
+  let currentVisit = null;
+  const takeShot = async () => { const wc = presenceSender; if (!wc || wc.isDestroyed()) return null; try { return await wc.executeJavaScript('window.__relaySnapshot && window.__relaySnapshot()'); } catch { return null; } };
+  const startVisit = (seconds) => {
+    if (ownerConfig(store.get('settings.owner')).photos === false) return;
+    try { if (!safeStorage.isEncryptionAvailable()) return; } catch { return; }
+    const id = intruderLog.begin(seconds); currentVisit = id;
+    for (const delay of [300, 4500, 10000]) setTimeout(async () => {
+      if (currentVisit !== id || ownerGuard.state !== 'alarm') return;
+      const snap = await takeShot(); if (!snap || currentVisit !== id) return;
+      const threshold = ownerConfig(store.get('settings.owner')).threshold;
+      // the face numbers kept are the strangers': not yours, and not a trusted person's
+      const strangers = (snap.faces || []).filter((f) => Array.isArray(f.embedding) && !(Number.isFinite(f.score) && f.score >= threshold) && !(Number.isFinite(f.trustedScore) && f.trustedScore >= threshold)).map((f) => f.embedding);
+      intruderLog.addShot(id, { jpeg: snap.jpeg, embeddings: strangers }, { threshold });
+    }, delay).unref?.();
+  };
+  const endVisit = (outcome) => { if (!currentVisit) return; const id = currentVisit; currentVisit = null; intruderLog.finish(id, outcome); broadcast(); };
+  tellAboutVisits = () => {
+    if (screenLocked || ownerGuard.state !== 'idle') return;
+    const pending = intruderLog.pending(); if (!pending.length) return;
+    const newest = pending[pending.length - 1], more = pending.length > 1 ? ` There ${pending.length === 2 ? 'was 1 earlier visit' : `were ${pending.length - 1} earlier visits`} too.` : '';
+    intruderLog.markReviewed(pending.map((p) => p.id)); broadcast();
+    ask.notice(`While you were away: ${intruderLog.describe(newest)}${more} I have opened the pictures.`, 'done');
+    intrudersWin.open();
+  };
   ownerGuard = new OwnerGuard({
     lock: () => ask.mac.lockScreen(),
     hasTemplates: () => ownerState.templates.length > 0,
     getIdleSeconds: () => { try { return powerMonitor.getSystemIdleTime(); } catch { return Infinity; } },
     getConfig: () => store.get('settings.owner'),
-    onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); },
-    onClear: () => intruder.hide(),
-    onLocked: () => intruder.hide(),
+    onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); if (!demo) startVisit(seconds); },
+    onClear: (reason) => { intruder.hide(); endVisit(({ owner: 'owner-returned', fingerprint: 'fingerprint', trusted: 'trusted' })[reason] || 'ended'); },
+    onLocked: () => { intruder.hide(); endVisit('locked'); },
+    onOwnerSeen: () => tellAboutVisits(),
     onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
   });
   setInterval(() => ownerGuard.step(), 1000);
@@ -1628,13 +1658,19 @@ app.whenReady().then(() => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
     const setOwner = (patch) => store.set('settings.owner', { ...cfg(), ...patch });
     const needCamera = async () => { if (store.get('settings.presence.enabled')) return ''; store.set('settings.presence.enabled', true); await setPresence(true); return ' I turned Presence on, because it uses the same camera.'; };
-    if (['enroll','forget','off','liveness-off'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
+    if (['enroll','forget','off','liveness-off','intruders-clear'].includes(c.type)) { try { await trustedPeople.authorize(); } catch(e) { return {status:'failed',reply:e.message}; } }
     if (c.type === 'enroll') {
       if (!safeStorage.isEncryptionAvailable()) return { status: 'failed', reply: 'This Mac cannot encrypt your face data right now, so I will not store it.' };
       enrollWin.open();
       // short, and told not to stay: the reactor card would otherwise sit on the screen in front of the setup window until dismissed, and nothing should ask "anything else?" over it
       return { ...done('The face setup window is open. Follow the glow around the ring.'), noHold: true, noFollowUp: true };
     }
+    if (c.type === 'intruders') {
+      intrudersWin.open(); const list = intruderLog.list();
+      return done(list.length ? `Here are the pictures, Sir. ${list.length} visit${list.length === 1 ? '' : 's'} so far. The latest: ${intruderLog.describe(list[0])}` : 'Nobody has sat at your Mac while the alarm was watching, Sir. When someone does, their pictures will be here.');
+    }
+    if (c.type === 'photos-on' || c.type === 'photos-off') { setOwner({ photos: c.type === 'photos-on' }); broadcast(); return done(c.type === 'photos-on' ? 'Intruder photos are on: when the alarm starts for a stranger I will take up to three pictures and keep them encrypted on this Mac.' : 'Intruder photos are off. The alarm still sounds and locks, but no pictures are taken. The ones already saved are kept.'); }
+    if (c.type === 'intruders-clear') { intruderLog.clear(); intrudersWin.close(); broadcast(); return done('All the intruder pictures are deleted.'); }
     if (c.type === 'forget') { ownerState.enroll = null; store.set('ownerFace', null); store.set('trustedFaces',[]); loadOwner(); setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Your face data is deleted and owner recognition is off.'); }
     if (c.type === 'off') { setOwner({ enabled: false }); ownerGuard.reset(); intruder.hide(); broadcast(); return done('Owner recognition is off.'); }
     if (c.type === 'seconds') { const s = ownerConfig({ enabled: true, seconds: c.seconds }).seconds; setOwner({ seconds: s }); return done(`${s === c.seconds ? '' : `That is outside 5 to 120, so I used ${s}. `}The lock countdown is ${s} seconds.`); }

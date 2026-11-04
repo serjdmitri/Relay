@@ -14,7 +14,7 @@ function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) 
 const events = (m, kind) => m.log.filter((e) => e[0] === kind);
 
 test('the time is adjustable within safe limits, and it is off unless turned on', () => {
-  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12 });
+  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12, photos: true });
   assert.equal(config({ seconds: 1 }).seconds, 5); assert.equal(config({ seconds: 9999 }).seconds, 120); assert.equal(config({ seconds: 45 }).seconds, 45);
   assert.equal(config({ threshold: 5 }).threshold, 0.7); assert.equal(config({ enabled: 'true' }).enabled, false);
   const m = make({ enabled: false }); m.feed([0.01], 60);
@@ -389,4 +389,21 @@ test('the camera page compares each face with you and, separately, with the trus
   assert.match(main, /out\.templates = \[\.\.\.ownerState\.templates\]; out\.trusted = trustedPeople\?\.templates\(\) \|\| \[\]/, 'the two lists are sent apart');
   assert.match(main, /faces: Math\.max\(0, faces - trusted\.filter\(Boolean\)\.length\)/, 'the viewer guard does not count trusted people');
   assert.match(main, /ownerGuard\?\.frame\(\{ faces, scores, live, trusted, down: f\?\.down === true \}\)/);
+});
+
+test('intruder pictures: the guard says when you have just been seen, the photos setting and commands exist, and main takes pictures only for a real stranger alarm', () => {
+  const seen = []; const m = make({ enabled: true, seconds: 20, threshold: 0.4 }, { onOwnerSeen: () => seen.push(m.clock.t) });
+  m.feed([0.9], 1); assert.equal(seen.length, 0, 'one look is not enough'); m.feed([0.9], 1); assert.equal(seen.length, 1, 'the second look in a row: seen'); m.feed([0.9], 5); assert.equal(seen.length, 1, 'not again while you stay');
+  m.feed([], 3); m.feed([0.9], 2); assert.equal(seen.length, 2, 'and again when you come back after being away');
+  const throws = make({ enabled: true, seconds: 20, threshold: 0.4 }, { onOwnerSeen: () => { throw Error('boom'); } }); assert.doesNotThrow(() => throws.feed([0.9], 3), 'a failing report must not stop the guard');
+  const after = make({ enabled: true, seconds: 20, threshold: 0.4 }, { strangerFrames: 3, onOwnerSeen: () => { after.sawState = after.g.state; } }); after.feed([0.05], 3); assert.equal(after.g.state, 'alarm'); after.feed([0.9], 2); assert.equal(after.sawState, 'idle', 'by the time you are reported seen, the alarm has been cleared');
+  assert.equal(config({ enabled: true }).photos, true); assert.equal(config({ photos: false }).photos, false); assert.equal(config({ photos: 'no' }).photos, true, 'only an explicit false turns it off');
+  for (const [text, type] of [['show the intruder pictures', 'intruders'], ['show intruders', 'intruders'], ['who was at my computer', 'intruders'], ['who sat at my computer while i was away', 'intruders'], ['turn off intruder photos', 'photos-off'], ['turn on the stranger pictures', 'photos-on'], ['delete the intruder photos', 'intruders-clear']]) assert.equal(parseOwnerCommand(text)?.type, type, text);
+  assert.equal(parseOwnerCommand('who was at the door'), null);
+  const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8'), page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8');
+  assert.match(main, /onAlarm: \(\{ seconds, demo \}\) => \{ intruder\.show\(\{ seconds, demo \}\); ask\.sound\('Basso'\); if \(!demo\) startVisit\(seconds\); \}/, 'the test screen never takes pictures');
+  assert.match(main, /intruderLog: _intruderLog/, 'the log is never sent to the screen with the rest of the state');
+  assert.match(main, /\['enroll','forget','off','liveness-off','intruders-clear'\]\.includes\(c\.type\)/, 'deleting the pictures asks the Mac owner to confirm first');
+  assert.match(main, /if \(screenLocked \|\| ownerGuard\.state !== 'idle'\) return;/, 'it waits until the screen is unlocked and the alarm is over before telling you');
+  assert.match(page, /window\.__relaySnapshot = \(\) =>/); assert.match(page, /lastFaces = both\.filter\(Boolean\)/);
 });

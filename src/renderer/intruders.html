@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>Who was at your Mac</title>
+<link rel="stylesheet" href="intruders.css">
+</head>
+<body>
+<!-- Pictures of people who sat at this Mac while the alarm ran, kept encrypted on this Mac. Nothing here leaves it. -->
+<header id="bar">
+  <span id="title">WHO WAS AT YOUR MAC</span>
+  <button id="x" type="button" aria-label="Close">×</button>
+</header>
+<main>
+  <p id="intro">Pictures taken when the access-denied alarm started for someone who is not you. They are kept encrypted on this Mac, the newest 30 for up to 60 days. I cannot know a name, but you can give one: later visits by the same face will carry it.</p>
+  <div id="list"></div>
+  <p id="empty" hidden>Nobody has sat at your Mac while the alarm was watching. When someone does, their pictures will be here.</p>
+  <p id="note" hidden></p>
+</main>
+<script src="intruders.js"></script>
+</body>
+</html>

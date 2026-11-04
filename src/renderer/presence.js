@@ -13,7 +13,7 @@ let stream = null;
 let timer = 0;
 let stopped = false;
 let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBusy = false, recogOn = false, livenessOn = false, lmTimer = 0;
-let lastLm = { t: 0, faces: [] }, watchdog = 0;
+let lastLm = { t: 0, faces: [] }, watchdog = 0, lastFaces = [];
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
 let busy = false, embed = null, embedFailed = false, templates = [], trustedTemplates = [], version = 0;
@@ -70,6 +70,17 @@ function watchStream() {
   }, 4000);
 }
 
+// One picture of the camera view, on request from the app (it is only ever asked for when the access-denied alarm starts for a stranger), with the face numbers of the faces in it.
+// The picture is handed straight to the app, which keeps it encrypted; this page keeps nothing.
+window.__relaySnapshot = () => {
+  try {
+    const w = video.videoWidth || 0, h = video.videoHeight || 0;
+    if (!w || !h || video.readyState < 2) return null;
+    const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(video, 0, 0, w, h);
+    return { jpeg: c.toDataURL('image/jpeg', 0.8), faces: lastFaces, at: Date.now() };
+  } catch { return null; }
+};
+
 async function start() {
   try {
     fileset = await FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
@@ -113,8 +124,9 @@ async function start() {
               // like Glance, a face too small in the picture is a bystander or too far to judge: no score, rather than a low one
               frame.down = faces.some((f) => f.away); // looking down at the keyboard or turned aside: not the same as leaving, and not judged
               // each face is compared with YOUR face and, separately, with the trusted people you enrolled (so a trusted person is recognised as that, not as you)
-              const both = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? { owner: bestScore(e, templates), trusted: trustedTemplates.length ? bestScore(e, trustedTemplates) : null } : null; }));
+              const both = await Promise.all(faces.map(async (f) => { if (!(f.width >= MIN_FACE) || f.away) return null; const e = await embed(video, f); return e ? { owner: bestScore(e, templates), trusted: trustedTemplates.length ? bestScore(e, trustedTemplates) : null, e } : null; }));
               frame.scores = both.map((b) => (b ? b.owner : null)); frame.trustedScores = both.map((b) => (b ? b.trusted : null));
+              lastFaces = both.filter(Boolean).map((b) => ({ score: b.owner, trustedScore: b.trusted, embedding: Array.from(b.e, (x) => Math.round(x * 1e5) / 1e5) })); // for the intruder pictures (below)
               // Liveness: a face that matches you but has not blinked lately is reported as not alive (a picture). Until the blink finder is ready, or if it cannot load, faces count as alive.
               frame.live = faces.map((f) => (livenessOn && fresh && Number.isFinite(f.x) ? tracker.isLive(f.x, f.y, Date.now()) !== false : true));
             }
