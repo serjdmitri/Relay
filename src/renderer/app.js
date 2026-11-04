@@ -428,6 +428,12 @@ const PAGES = {
     $('#rlan', sw).onclick = () => relay.setRemote({ lan: !R.lan });
     c.append(sw);
 
+    const navConfig=S.settings.remote?.navigation||{};
+    const nav=h('<details class="card" style="padding:14px;margin-bottom:14px"><summary>Phone map providers</summary><p class="d">Online preview uses OpenStreetMap data via OpenFreeMap, Photon search and Valhalla routing. Free public services are for light use and may be unavailable. No model receives routes. You can switch to your own compatible providers here without updating Relay. HTTPS only, or HTTP on localhost. Do not put API keys in these URLs.</p><label class="d">Map style URL<input class="field" data-nav="style" placeholder="https://tiles.openfreemap.org/styles/dark"></label><label class="d">Photon search URL<input class="field" data-nav="search" placeholder="https://photon.komoot.io/api/"></label><label class="d">Valhalla route URL<input class="field" data-nav="route" placeholder="https://valhalla1.openstreetmap.de/route"></label><button class="btn" data-nav-save>Save map providers</button><p class="d" data-nav-status role="status"></p></details>');
+    for(const field of nav.querySelectorAll('[data-nav]'))field.value=navConfig[field.dataset.nav]||'';
+    nav.querySelector('[data-nav-save]').onclick=async()=>{const config={};try{for(const field of nav.querySelectorAll('[data-nav]')){const value=field.value.trim();if(value){const u=new URL(value);if(u.username||u.password||u.search||u.hash||!(u.protocol==='https:'||u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname)))throw Error('Use HTTPS URLs without credentials or query strings.');}config[field.dataset.nav]=value;}await relay.set('settings.remote.navigation',config);nav.querySelector('[data-nav-status]').textContent='Saved. Reopen the phone preview to load the new providers.';}catch(e){nav.querySelector('[data-nav-status]').textContent=e.message;}};
+    c.append(nav);
+
     {
       c.append(h('<div class="section-title" style="margin-top:0">Tell my phone when a long job finishes</div>'));
       const N = S.settings.notify || {};

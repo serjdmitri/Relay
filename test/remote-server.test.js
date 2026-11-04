@@ -264,3 +264,5 @@ test('/api/confirm lets a paired phone answer the Mac\'s question; nobody else',
   assert.deepEqual(got, [true, false], 'only a real true is a yes');
   s.stop();
 });
+
+test('map pages are available but navigation APIs require a paired token and request header',async()=>{const {s,base,post,pairing}=await make();try{s.navigation={config:()=>({style:'https://tiles.example/style'}),search:async q=>[{label:q,coordinates:[0,0]}]};assert.equal((await fetch(base+'/api/navigation/config')).status,401);pairing.start();const {token}=await(await post('/api/pair',{code:'424242'},null)).json();assert.equal((await fetch(base+'/api/navigation/config',{headers:{authorization:'Bearer '+token}})).status,200);assert.equal((await fetch(base+'/api/navigation/search',{method:'POST',headers:{authorization:'Bearer '+token},body:'{}'})).status,400);assert.equal((await post('/api/navigation/search',{query:'London'},token)).status,200);}finally{s.stop();}});
