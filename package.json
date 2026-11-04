@@ -15,7 +15,8 @@
     "charts": "node scripts/make-charts.mjs",
     "readme-images": "node scripts/readme-images.mjs",
     "startup-check": "node scripts/startup-check.js dist/mac-arm64/Relay.app",
-    "install-local": "bash scripts/install-local.sh"
+    "install-local": "bash scripts/install-local.sh",
+    "build:standalone": "node scripts/build-standalone.js"
   },
   "dependencies": {
     "maplibre-gl": "6.16.0",
