@@ -126,3 +126,61 @@ test('the ring only counts the turn being asked for: wobble on the other axis is
   assert.equal(pc.progress, 1, 'turned 17 degrees left with a little nod: the left turn is complete');
   pc.update({ angles: { yaw: 7, pitch: -6 } }, 9100); assert.ok(Math.abs(pc.progress - 0.5) < 1e-9);
 });
+
+// ---- the scan report and redoing only the weak angles ----
+function rng(seed = 7) { let s = seed; return () => { s = (s * 1664525 + 1013904223) % 4294967296; return s / 4294967296 - 0.5; }; }
+function scan({ weak = [], noise = 0.5, seed = 7 } = {}) {
+  const r = rng(seed), base = Array.from({ length: 128 }, () => r()), ids = ['center', 'left', 'topLeft', 'top', 'topRight', 'right', 'bottomRight', 'bottom', 'bottomLeft'];
+  return ids.flatMap((pose) => [0, 1].map(() => ({ pose, embedding: weak.includes(pose) ? Array.from({ length: 128 }, () => r()) : base.map((b) => b + noise * r()) })));
+}
+
+test('a clean scan is rated reliable, with high accuracy and reliability and no weak angle', async () => {
+  const { assessEnrollment, scanVerdict } = await load();
+  const a = assessEnrollment(scan());
+  assert.equal(a.status, 'good'); assert.equal(a.accuracy, 100); assert.ok(a.reliability >= 70, `reliability ${a.reliability}`); assert.deepEqual(a.weak, []); assert.equal(a.per.length, 9);
+  assert.equal(scanVerdict(a).title, 'Reliable scan');
+});
+
+test('weak angles are found by name, the scan is rated "decent" with a few and "not reliable" with many, and the words say which to redo', async () => {
+  const { assessEnrollment, scanVerdict } = await load();
+  const some = assessEnrollment(scan({ weak: ['topLeft', 'bottom'] }));
+  assert.deepEqual([...some.weak].sort(), ['bottom', 'topLeft']); assert.equal(some.status, 'ok'); assert.ok(some.accuracy < 100 && some.accuracy >= 75);
+  assert.match(scanVerdict(some).line, /top left, bottom/); assert.equal(scanVerdict(some).title, 'Decent, but it can be better');
+  const many = assessEnrollment(scan({ weak: ['left', 'topLeft', 'top', 'topRight', 'right'] }));
+  assert.equal(many.status, 'poor'); assert.ok(many.accuracy < 75); assert.equal(scanVerdict(many).title, 'This scan is not reliable');
+  const noisy = assessEnrollment(scan({ noise: 6 })); assert.notEqual(noisy.status, 'good', 'embeddings that barely agree are not called reliable');
+  assert.equal(assessEnrollment([]).status, 'poor'); assert.equal(scanVerdict(assessEnrollment([])).title, 'No result');
+});
+
+test('a live check straight after saving can lower the verdict but never raise it', async () => {
+  const { assessEnrollment } = await load();
+  assert.equal(assessEnrollment(scan(), { live: { passed: 6, total: 6, mean: 0.8 } }).status, 'good');
+  assert.equal(assessEnrollment(scan(), { live: { passed: 4, total: 6, mean: 0.8 } }).status, 'ok', 'recognised in only 4 of 6 fresh looks: not "good"');
+  assert.equal(assessEnrollment(scan(), { live: { passed: 6, total: 6, mean: 0.40 } }).status, 'ok', 'recognised, but only just');
+  assert.equal(assessEnrollment(scan(), { live: { passed: 1, total: 6, mean: 0.2 } }).status, 'poor');
+  assert.equal(assessEnrollment(scan({ weak: ['top'] }), { live: { passed: 6, total: 6, mean: 0.9 } }).status, 'ok', 'a perfect live check does not rescue a weak angle');
+  assert.deepEqual(assessEnrollment(scan(), { live: { passed: 5, total: 6, mean: 0.7 } }).live, { accuracy: 83, mean: 0.7, passed: 5, total: 6 });
+});
+
+test('redoing only some poses captures just those, keeps where your head sat straight ahead, and finishes when they are done', async () => {
+  const { PoseCapture, POSES } = await load();
+  const pc = new PoseCapture({ initialDelayMs: 0 });
+  run(pc, (p) => turned(p), 120); assert.equal(pc.done, true); const base = { ...pc.baseline };
+  assert.equal(pc.redo(['topLeft', 'bottom'], 200000), true);
+  assert.equal(pc.done, false); assert.equal(pc.total, 4); assert.equal(pc.count, 0); assert.equal(pc.pose.id, 'topLeft'); assert.equal(pc.capturedPoses.has('topLeft'), false); assert.equal(pc.capturedPoses.has('left'), true);
+  const { taken } = run(pc, (p) => turned(p), 60, { t0: 200000 });
+  assert.deepEqual(taken, ['topLeft', 'topLeft', 'bottom', 'bottom']); assert.equal(pc.done, true); assert.deepEqual(pc.baseline, base, 'straight ahead was not redone, so it is kept');
+  assert.equal(pc.capturedPoses.has('topLeft') && pc.capturedPoses.has('bottom'), true);
+  assert.equal(pc.redo([]), false); assert.equal(pc.redo(['nonsense']), false);
+  const again = new PoseCapture({ initialDelayMs: 0 }); run(again, (p) => turned(p), 120);
+  again.redo(['center', 'right'], 300000); assert.equal(again.baseline, null, 'redoing straight ahead resets the baseline'); assert.equal(again.pose.id, 'center');
+  assert.equal(POSES.length, 9, 'the nine poses themselves are untouched');
+});
+
+test('a scan that clears the threshold but only just is not called reliable, and a real scan of the owner is', async () => {
+  const { assessEnrollment, scanVerdict, SCAN_BARS } = await load();
+  const mid = assessEnrollment(scan({ noise: 0.7 }));
+  assert.equal(mid.accuracy, 100, 'every angle is still recognised'); assert.deepEqual(mid.weak, [], 'and no single angle is the problem'); assert.ok(mid.reliability < SCAN_BARS.reliable, `reliability ${mid.reliability}`);
+  assert.equal(mid.status, 'ok'); assert.match(scanVerdict(mid).line, /not by much|better light|weakest/);
+  assert.equal(SCAN_BARS.reliable, 80);
+});

@@ -9,6 +9,13 @@ class TrustedPeople {
   async authorize() { if(this.busy) throw Error('Finish the current authentication first.'); this.busy=true; try { if(!await this.authenticate()) throw Error('Mac owner authentication was cancelled or unavailable.'); } finally { this.busy=false; } }
   name(value) { const name=String(value||'').trim(); if(!name || name.length>40 || /[\x00-\x1f]/.test(name)) throw Error('Enter a name of 1–40 characters.'); if(this.records().some(r=>r.name.toLowerCase()===name.toLowerCase())) throw Error('That person is already enrolled.'); if(this.records().length>=8) throw Error('Remove a profile before adding another (maximum eight).'); return name; }
   save(name, templates) { name=this.name(name); if(!Array.isArray(templates)||templates.length<4||templates.length>12||templates.some(t=>!Array.isArray(t)||t.length!==128||!t.every(Number.isFinite))) throw Error('Face enrollment is incomplete.'); const profile={id:randomUUID(),name,face:sealTemplates(templates,this.encrypt,this.now())}; this.store.set('trustedFaces',[...this.records(),profile]); this.changed(); return profile.id; }
+  // Saving the same person again from the same setup window (some angles were redone): replaces the profile made a moment ago instead of refusing the name as taken.
+  upsert(name, templates) {
+    const key = String(name || '').trim().toLowerCase(), existing = this.records().find(r => r.name.toLowerCase() === key);
+    if (!existing) return this.save(name, templates);
+    if (!Array.isArray(templates)||templates.length<4||templates.length>12||templates.some(t=>!Array.isArray(t)||t.length!==128||!t.every(Number.isFinite))) throw Error('Face enrollment is incomplete.');
+    this.store.set('trustedFaces', this.records().map(r => r.id === existing.id ? { ...r, face: sealTemplates(templates, this.encrypt, this.now()) } : r)); this.changed(); return existing.id;
+  }
   async remove(id) { await this.authorize(); if(!this.records().some(r=>r.id===id)) throw Error('Profile not found.'); this.store.set('trustedFaces',this.records().filter(r=>r.id!==id)); this.changed(); }
 }
 module.exports={TrustedPeople};

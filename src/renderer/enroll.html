@@ -21,11 +21,21 @@
   </div>
   <h1 id="line1">Getting ready…</h1>
   <p id="line2">Starting the camera and the face model on this Mac.</p>
+  <div id="report" hidden>
+    <div id="stats">
+      <div class="stat"><b id="sAcc">0%</b><span>accuracy</span></div>
+      <div class="stat"><b id="sRel">0%</b><span>reliability</span></div>
+      <div class="stat"><b id="sLive">n/a</b><span>live check</span></div>
+    </div>
+    <div id="chips"></div>
+    <p id="fine">Accuracy: how many of your scanned angles are recognised from the others. Reliability: how far above the bare minimum they score. Live check: fresh looks at the camera just now.</p>
+  </div>
   <div id="dots" aria-hidden="true"></div>
   <p id="count">0 of 18 captured</p>
   <p id="debug" hidden></p>
   <p id="privacy">Your face is turned into numbers and kept encrypted on this Mac. No picture is saved or sent anywhere.</p>
   <div id="buttons">
+    <button id="redoweak" type="button" hidden>Redo the weak angles</button>
     <button id="again" type="button" hidden>Start over</button>
     <button id="cancel" type="button">Cancel</button>
   </div>

@@ -51,11 +51,11 @@ export class PoseCapture {
   reset() {
     this.index = 0; this.captured = 0; this.baseline = null; this.baseSum = { yaw: 0, pitch: 0, n: 0 };
     this.startedAt = null; this.poseStartedAt = null; this.holdStart = null; this.streak = 0;
-    this.done = false; this.capturedPoses = new Set(); this.progress = 0; this.hint = 'ready'; this.angles = null;
+    this.done = false; this.capturedPoses = new Set(); this.progress = 0; this.hint = 'ready'; this.angles = null; this.sequence = POSES.slice();
   }
 
-  get pose() { return POSES[Math.min(this.index, POSES.length - 1)]; }
-  get total() { return POSES.length * this.samplesPerPose; }
+  get pose() { return this.sequence[Math.min(this.index, this.sequence.length - 1)]; }
+  get total() { return this.sequence.length * this.samplesPerPose; }
   get count() { return this.index * this.samplesPerPose + this.captured; }
 
   // How much the bands are relaxed for the current pose: 1, then 1.25 after stallMs, 1.5 after twice that, and so on up to 2.
@@ -100,6 +100,17 @@ export class PoseCapture {
     return { capture: true, pose };
   }
 
+  // Capture only some of the poses again (the weak ones), keeping everything else, including where your head sat straight ahead (unless straight ahead itself is redone).
+  redo(ids, now = Date.now()) {
+    const want = new Set(ids), seq = POSES.filter((p) => want.has(p.id));
+    if (!seq.length) return false;
+    this.sequence = seq; this.index = 0; this.captured = 0; this.done = false; this.holdStart = null; this.streak = 0; this.progress = 0; this.hint = 'ready';
+    for (const id of want) this.capturedPoses.delete(id);
+    if (want.has('center')) { this.baseline = null; this.baseSum = { yaw: 0, pitch: 0, n: 0 }; }
+    this.startedAt = now; this.poseStartedAt = now;
+    return true;
+  }
+
   // The caller took the sample (it can fail: the face may not align at that angle). This moves on.
   recorded(angles, now = Date.now()) {
     if (this.done) return;
@@ -109,9 +120,55 @@ export class PoseCapture {
       if (this.pose.id === 'center') this.baseline = this.baseSum.n ? { yaw: this.baseSum.yaw / this.baseSum.n, pitch: this.baseSum.pitch / this.baseSum.n } : { yaw: 0, pitch: 0 };
       else this.capturedPoses.add(this.pose.id);
       this.index++; this.captured = 0; this.poseStartedAt = now; this.progress = 0;
-      if (this.index >= POSES.length) { this.done = true; this.hint = 'done'; }
+      if (this.index >= this.sequence.length) { this.done = true; this.hint = 'done'; }
     }
   }
+}
+
+// ---- how good was the scan? ----
+// The numbers come from the scan itself. Each pose is tested against everything captured at the OTHER poses, which is what recognising you at that angle later would have to
+// rely on: its best match must clear the threshold. "Accuracy" is the share of samples that did. "Reliability" is how far above the threshold the matches sit on average
+// (0% at the threshold, 100% at 0.9), so a scan that only just passes is not called reliable. A live check (fresh looks at the camera straight after saving, not part of the
+// scan) can lower the verdict but never raise it. It is an estimate from your own faces in one sitting: another room or light can score lower.
+const dot = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x) * Math.sqrt(y) || 1); };
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+// Set from a real scan of the owner (every angle's best match to the others was 0.79 to 0.88; across different angles the pair scores ran 0.59 to 0.89, median 0.77): an angle is
+// "weak" below a 0.62 average, and reliability reads 0% at the match threshold and 100% at 0.9, so a scan that only just clears the threshold is not shown as 100%.
+export const SCAN_BARS = { good: 90, ok: 75, reliable: 80, weakMean: 0.62, strong: 0.9 };
+
+export function assessEnrollment(samples, { threshold = 0.363, live = null, bars = SCAN_BARS } = {}) {
+  const list = (Array.isArray(samples) ? samples : []).filter((s) => s && s.pose && Array.isArray(s.embedding) && s.embedding.length === 128);
+  const poses = [...new Set(list.map((s) => s.pose))], per = [];
+  let pass = 0, total = 0, sum = 0;
+  for (const pose of poses) {
+    const own = list.filter((s) => s.pose === pose), others = list.filter((s) => s.pose !== pose);
+    if (!others.length) continue;
+    const scores = own.map((s) => Math.max(...others.map((o) => dot(s.embedding, o.embedding))));
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length, passed = scores.filter((x) => x >= threshold).length;
+    per.push({ pose, mean, min: Math.min(...scores), passed, count: scores.length, weak: passed < scores.length || mean < bars.weakMean });
+    pass += passed; total += scores.length; sum += scores.reduce((a, b) => a + b, 0);
+  }
+  const accuracy = total ? Math.round((100 * pass) / total) : 0, avgScore = total ? sum / total : 0;
+  const reliability = Math.round(100 * clamp01((avgScore - threshold) / (bars.strong - threshold)));
+  const weak = per.filter((p) => p.weak).map((p) => p.pose);
+  let status = total && accuracy >= bars.good && reliability >= bars.reliable && !weak.length ? 'good' : accuracy >= bars.ok ? 'ok' : 'poor';
+  let liveNote = null;
+  if (live && live.total > 0) {
+    const liveAcc = Math.round((100 * live.passed) / live.total);
+    liveNote = { accuracy: liveAcc, mean: live.mean, passed: live.passed, total: live.total };
+    if (status === 'good' && (liveAcc < bars.good || live.mean < threshold + 0.1)) status = 'ok';
+    if (liveAcc < 50) status = 'poor';
+  }
+  return { accuracy, reliability, avgScore, per, weak, status, live: liveNote };
+}
+
+// What to tell the person about a finished scan.
+export function scanVerdict(a) {
+  if (!a || !a.per.length) return { title: 'No result', line: 'I could not measure the scan. Try setting it up again.' };
+  const names = a.weak.map((id) => (POSES.find((p) => p.id === id) || { id }).id.replace(/([A-Z])/g, ' $1').toLowerCase());
+  if (a.status === 'good') return { title: 'Reliable scan', line: 'Your face should be recognised from every angle I checked.' };
+  if (a.status === 'ok') return { title: 'Decent, but it can be better', line: names.length ? `These angles were the weakest: ${names.join(', ')}. Redo them for a more reliable scan.` : 'It passes, but not by much. Redoing the scan in better light should help.' };
+  return { title: 'This scan is not reliable', line: names.length ? `Too many angles were weak (${names.join(', ')}). Please redo the scan, facing the light and without glasses glare if you can.` : 'Please redo the scan, facing the light.' };
 }
 
 // What the person is told, for each hint.
