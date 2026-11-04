@@ -113,7 +113,7 @@ const reply = (text) => { status(text); speak(text, true); };
 
 // ---- keeping the screen on ----
 async function requestWake() { try { if (navigator.wakeLock && !S.wake) { S.wake = await navigator.wakeLock.request('screen'); S.wake.addEventListener?.('release', () => { S.wake = null; }); } } catch { S.wake = null; } }
-function releaseWake() { try { S.wake?.release(); } catch { /* gone */ } S.wake = null; }
+function releaseWake() { if (hey?.enabled) return; try { S.wake?.release(); } catch { /* gone */ } S.wake = null; }
 document.addEventListener('visibilitychange', () => {
   if (S.view !== 'nav') return;
   if (document.visibilityState === 'hidden') S.hiddenDuringNav = true;
@@ -284,6 +284,36 @@ function handle(text) {
     default: return reply(REPLIES.none);
   }
 }
+
+// ---- "Hey Jarvis": hands-free while the page is open and the screen is on ----
+const HEY = 'relay-remote-hey';
+let hey = null;
+const heySaved = () => { try { return localStorage.getItem(HEY) === '1'; } catch { return false; } };
+const heySave = (on) => { try { localStorage.setItem(HEY, on ? '1' : '0'); } catch { /* not saved */ } };
+function heyShow(on) { $('hey').setAttribute('aria-pressed', String(!!on)); $('hey').title = on ? 'Hey Jarvis is listening' : 'Hey Jarvis is off'; }
+async function heyStart() {
+  if (!Recognition) { status('This browser cannot listen. Open Relay in Safari.'); return; }
+  try {
+    if (!hey) {
+      const { WakeLoop } = await import('/wakeword.js');
+      hey = new WakeLoop({
+        makeRecognizer: () => { const r = new Recognition(); r.lang = navigator.language || 'en-US'; r.continuous = true; r.interimResults = true; return r; },
+        onWake: () => { try { speechSynthesis.cancel(); } catch { /* none */ } status('Listening…'); },
+        onCommand: (t) => { status(`“${t}”`); handle(t); },
+        onGiveUp: () => status(''),
+        onState: (st) => {
+          if (st === 'listening') heyShow(true);
+          else if (st === 'off') heyShow(false);
+          else if (st === 'blocked' || st === 'error') { heyShow(false); heySave(false); status(st === 'blocked' ? 'Allow the microphone for this site in Safari settings to use “Hey Jarvis”.' : '“Hey Jarvis” stopped: the speech service keeps failing.'); }
+        }
+      });
+      setInterval(() => hey.setPaused(!!S.listening || (!S.muted && !!speechSynthesis?.speaking) || document.visibilityState !== 'visible'), 400);
+    }
+    hey.start(); requestWake();
+  } catch { heyShow(false); status('Could not start “Hey Jarvis”.'); }
+}
+$('hey').onclick = () => { unlockSpeech(); if (hey?.enabled) { hey.stop(); heySave(false); } else { heySave(true); heyStart(); } };
+if (heySaved()) { const first = () => { removeEventListener('pointerdown', first, true); if (heySaved() && !hey?.enabled) heyStart(); }; addEventListener('pointerdown', first, true); }
 
 // ---- wiring ----
 $('destination-form').onsubmit = (e) => { e.preventDefault(); unlockSpeech(); S.to = null; clearRoute(); search('destination'); };

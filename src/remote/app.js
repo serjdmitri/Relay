@@ -354,6 +354,48 @@
   for (const ev of ['pointerup', 'pointercancel']) reactor.addEventListener(ev, endTalk);
   setInterval(() => { if (mode === 'listening') level = 0.3 + Math.random() * 0.5; }, 120);
 
+  // ---------- "Hey Jarvis" ----------
+  // The phone listens for the wake phrase while this page is open and the screen is on (a web page cannot listen in the background or when the phone is locked). Off until you turn it on.
+  const HEY = 'relay-remote-hey';
+  let heyLoop = null, heyLock = null;
+  let baseHint = $('hint').textContent;
+  async function heyKeepAwake(on) {
+    try {
+      if (!on) { await heyLock?.release?.(); heyLock = null; return; }
+      if (navigator.wakeLock && !heyLock) { heyLock = await navigator.wakeLock.request('screen'); heyLock.addEventListener?.('release', () => { heyLock = null; }); }
+    } catch { heyLock = null; }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && heyLoop?.enabled) heyKeepAwake(true); });
+  async function heyStart() {
+    if (!canTalk) { $('hey').checked = false; line('This browser cannot listen. Open Relay in Safari.', true); return; }
+    try {
+      if (!heyLoop) {
+        const { WakeLoop } = await import('/wakeword.js');
+        heyLoop = new WakeLoop({
+          makeRecognizer: () => { const r = new SR(); r.lang = navigator.language || 'en-US'; r.continuous = true; r.interimResults = true; return r; },
+          onWake: () => { setMode('listening'); line('Listening…', true); level = 0.6; },
+          onCommand: (t) => { setMode('idle'); line(t, true); ask(t); },
+          onGiveUp: () => { setMode('idle'); line(''); },
+          onState: (st, why) => {
+            if (st === 'listening') $('hint').textContent = 'Say “Hey Jarvis” · or hold to talk';
+            else if (st === 'off') $('hint').textContent = baseHint;
+            else if (st === 'blocked') { $('hey').checked = false; save(HEY, '0'); $('hint').textContent = baseHint; line(window.isSecureContext ? 'Allow the microphone and Siri & Dictation for Safari to use “Hey Jarvis”.' : 'The microphone is blocked on this address. Use the secure Tailscale link for “Hey Jarvis”.', true); heyKeepAwake(false); }
+            else if (st === 'error') { $('hey').checked = false; save(HEY, '0'); $('hint').textContent = baseHint; line(why === 'language-not-supported' ? 'This phone has no speech recognition for its language.' : '“Hey Jarvis” stopped: the speech service keeps failing. Check the internet, then turn it on again.', true); heyKeepAwake(false); }
+          }
+        });
+        setInterval(() => heyLoop.setPaused(holding || !!speechSynthesis?.speaking || document.visibilityState !== 'visible'), 400); // it must not hear itself, or you holding the reactor
+      }
+      heyLoop.start(); heyKeepAwake(true);
+    } catch { $('hey').checked = false; line('Could not start “Hey Jarvis”.', true); }
+  }
+  function heyStop() { heyLoop?.stop(); heyKeepAwake(false); }
+  $('hey').checked = saved(HEY) === '1';
+  $('hey').onchange = () => { save(HEY, $('hey').checked ? '1' : '0'); if ($('hey').checked) { unlockSpeech(); heyStart(); } else heyStop(); };
+  if ($('hey').checked) { // Safari wants a tap before the microphone starts: begin on the first one after the page opens
+    const first = () => { removeEventListener('pointerdown', first, true); if ($('hey').checked && !heyLoop?.enabled) heyStart(); };
+    addEventListener('pointerdown', first, true);
+  }
+
   // ---------- menu ----------
   // What Relay learned about you (Smarter memory on the Mac): approve, or delete from here. Editing stays on the Mac.
   const memBox = $('mem');
@@ -390,6 +432,8 @@
   $('unpair').onclick = () => { if (confirm('Unpair this phone?')) unpair(); };
   $('support').textContent = canTalk ? (window.isSecureContext ? 'Hold the reactor to talk.' : 'Hold the reactor to talk. If it says the microphone is blocked, this address is not secure enough: use the Tailscale https link, or type.') : 'This browser has no speech recognition. Open Relay in Safari to hold and talk, or type and use the keyboard microphone.';
   $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap the keyboard button';
+  baseHint = $('hint').textContent;
+  if ($('hey').checked && !heyLoop?.enabled) $('hint').textContent = 'Tap once to start “Hey Jarvis”';
 
   // ---------- start ----------
   async function start() {
