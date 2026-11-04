@@ -443,3 +443,21 @@ test('main: a fingerprint stop discards the pictures, the guard starts armed if 
   assert.match(src, /'intruders-clear','looser','forget-person'\]\.includes\(c\.type\)/);
   assert.match(src, /episodes: store\.get\('ownerEpisodes'\) \|\| \[\]/);
 });
+
+test('a stranger whose face keeps turning away or going unclear still starts the alarm (the count pauses on unclear looks, not resets)', () => {
+  const m = make({ enabled: true, seconds: 20, threshold: 0.4 }); const f = (scores, faces = scores.length) => { m.clock.t += 1000; return m.g.frame({ faces, scores }); };
+  f([0.01]); f([], 1); f([0.33]); f([0.01]); f([], 1); f([0.01]);
+  assert.equal(events(m, 'alarm').length, 1, 'three stranger looks with unclear ones between them reach the alarm');
+});
+
+test('unclear looks do not hide you: your face, an empty chair, or a long stretch of unclear looks still resets the stranger count', () => {
+  let m = make({ enabled: true, seconds: 20, threshold: 0.4 }); let f = (scores, faces = scores.length) => { m.clock.t += 1000; return m.g.frame({ faces, scores }); };
+  f([0.01]); f([0.01]); f([0.9]); f([0.01]); f([0.01]);
+  assert.equal(events(m, 'alarm').length, 0, 'you in between resets it');
+  m = make({ enabled: true, seconds: 20, threshold: 0.4 }); f = (scores, faces = scores.length) => { m.clock.t += 1000; return m.g.frame({ faces, scores }); };
+  f([0.01]); f([0.01]); f([], 0); f([0.01]);
+  assert.equal(events(m, 'alarm').length, 0, 'nobody in view resets it');
+  m = make({ enabled: true, seconds: 20, threshold: 0.4 }); f = (scores, faces = scores.length) => { m.clock.t += 1000; return m.g.frame({ faces, scores }); };
+  f([0.01]); f([0.01]); for (let i = 0; i < 13; i++) f([], 1); f([0.01]);
+  assert.equal(events(m, 'alarm').length, 0, 'a long stretch of unclear looks is not a stranger sitting there');
+});
