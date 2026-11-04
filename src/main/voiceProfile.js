@@ -45,7 +45,11 @@ function pickJarvis(voices) {
   const daniel = gb.filter((v) => /^Daniel/.test(v.name)).sort((a, b) => (b.kind === 'Premium') - (a.kind === 'Premium') || (b.kind === 'Enhanced') - (a.kind === 'Enhanced'));
   if (daniel.length) return daniel[0].name;
   const others = gb.filter((v) => /^(Oliver|Arthur|Gordon|Rishi)/.test(v.name));
-  return (others[0] || gb[0])?.name || null;
+  if (others[0]) return others[0].name;
+  // No British male voice at all: another KNOWN male voice before any voice that might be a woman's (the voice must stay a man's, never "whatever is first")
+  const rank = { Premium: 2, Enhanced: 1 };
+  const male = voices.filter((v) => /^en_/.test(v.lang) && v.kind !== 'Novelty' && /^(Alex|Aaron|Evan|Nathan|Tom|Lee|Fred|Ralph|Reed)\b/.test(v.name)).sort((a, b) => (rank[b.kind] || 0) - (rank[a.kind] || 0));
+  return male[0]?.name || null;
 }
 
 module.exports = { jobFor, profileFor, pickJarvis, DEFAULTS, JARVIS, JARVIS_KOKORO, LONG_REPLY };
