@@ -51,3 +51,6 @@ test('unlabelled hands stay with the nearest cursor', () => {
 });
 test('six hands from several people retain slots when detector order changes',()=>{const t=new HandTracks(6),hands=Array.from({length:6},(_,i)=>({x:.05+i*.17,y:.5,score:1,handed:'Left'}));const first=t.update(hands);assert.equal(first.filter(Boolean).length,6);assert.deepEqual(t.update([...hands].reverse()),first);});
 test('a new hand cannot immediately take a missing hand’s slot',()=>{const t=new HandTracks(2);t.update([{x:.1,y:.1,score:1},{x:.9,y:.9,score:1}]);const epoch=t.epochs[0];assert.equal(t.update([{x:.5,y:.5,score:1}])[0],null);for(let n=0;n<6;n++)t.update([]);t.update([{x:.5,y:.5,score:1}]);assert(t.epochs[0]>epoch);});
+
+test('same-handed cursors follow their recent movement through a crossing',()=>{const t=new HandTracks(2);t.update([hand('Left',.3),hand('Left',.7)]);t.update([hand('Left',.45),hand('Left',.55)]);const movingRight=hand('Left',.6),movingLeft=hand('Left',.4);assert.deepEqual(t.update([movingLeft,movingRight]),[movingRight,movingLeft]);});
+test('reassigned slots discard the old hand velocity',()=>{const t=new HandTracks(1);t.update([hand('Left',.2)]);t.update([hand('Left',.4)]);for(let i=0;i<6;i++)t.update([]);t.update([hand('Left',.8)]);assert.deepEqual(t.velocity[0],{x:0,y:0});});
