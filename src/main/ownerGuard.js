@@ -6,11 +6,11 @@
 // Honest limits: recognition can be wrong (poor light, glasses, a different angle: you may be flagged for a few seconds, which is why two frames of
 // you cancel it), a VIDEO of you blinking can fool it (a still photo cannot: the liveness check wants a blink), and covering the camera makes it blind rather than suspicious.
 
-const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12 }; // 0.363 is the published cosine threshold for the SFace model
+const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12, photos: true }; // 0.363 is the published cosine threshold for the SFace model
 const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 function config(raw) {
   const c = raw && typeof raw === 'object' ? raw : {};
-  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false, margin: clamp(c.margin, 0, 0.3, DEFAULTS.margin) };
+  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false, margin: clamp(c.margin, 0, 0.3, DEFAULTS.margin), photos: c.photos !== false };
 }
 
 // ---- matching ----
@@ -65,8 +65,8 @@ function trustedFlags({ scores = [], trustedScores = [], live = [], threshold = 
 // ---- the guard ----
 class OwnerGuard {
   // lock(): Promise. onAlarm({ seconds, demo }), onCount(secondsLeft), onClear(reason: 'owner' | 'ended'), onLocked(): the window and sound. getConfig(): settings.owner.
-  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, getConfig = () => ({}), hasTemplates = () => true, getIdleSeconds = () => Infinity, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
-    Object.assign(this, { getIdleSeconds, armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
+  constructor({ lock, onAlarm = () => {}, onCount = () => {}, onClear = () => {}, onLocked = () => {}, onAway = () => {}, onOwnerSeen = () => {}, getConfig = () => ({}), hasTemplates = () => true, getIdleSeconds = () => Infinity, now = Date.now, strangerFrames = 5, ownerFrames = 2, calmFrames = 10, armFrames = 3 }) {
+    Object.assign(this, { onOwnerSeen, getIdleSeconds, armFrames, lock, onAlarm, onCount, onClear, onLocked, onAway, getConfig, hasTemplates, now, strangerFrames, ownerFrames, calmFrames });
     this.reset();
   }
   reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
@@ -96,7 +96,10 @@ class OwnerGuard {
     if (faces > 0) this.lookingAway = !!down;
     if (down) this.lastDownAt = this.now();
     this.noFaceSince = faces > 0 ? null : (this.noFaceSince ?? this.now());
-    return this.step(cfg);
+    const out = this.step(cfg);
+    // you have just been seen (the first look in a streak of looks): the place to tell you what happened while you were away
+    if (owner && this.owners === this.ownerFrames) { try { this.onOwnerSeen(); } catch { /* a failing report must not stop the guard */ } }
+    return out;
   }
 
   // How often the camera page should look: quickly while Relay is waiting to see YOU (the first moments after turning it on, the away screen, the alarm countdown), so you are
@@ -179,6 +182,10 @@ function parseOwnerCommand(text) {
   if (/^(?:turn on|enable|start|switch on) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-on' };
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-off' };
   if (/^(?:test|show|preview|try) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-demo' };
+  if (/^(?:show|open|see|view|list)(?: me)?(?: the| my)? (?:intruders?|strangers?|security)(?: pictures?| photos?| log| visits| shots)?$|^who (?:was|sat|tried|came|has been|used|touched) (?:at|to use|using|on) my (?:computer|mac|laptop)(?: while i was (?:away|gone|out))?$|^who was (?:at|on) my (?:computer|mac|laptop)$/.test(n)) return { type: 'intruders' };
+  if (/^(?:turn on|enable|start|switch on) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-on' };
+  if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-off' };
+  if (/^(?:delete|clear|erase|remove) (?:all )?(?:the |my )?(?:intruder|stranger) (?:photos?|pictures?|log|visits|shots)$/.test(n)) return { type: 'intruders-clear' };
   if (/^(?:owner|face) (?:recogn\w*|guard|check) (?:status|settings?)$|^is (?:the )?(?:owner|face) (?:recogn\w*|guard|check) (?:on|working|enabled)$/.test(n)) return { type: 'status' };
   if (/^(?:test|show|preview|try) (?:the )?(?:access denied|intruder|not your computer)(?: screen| alarm| warning)?$/.test(n)) return { type: 'demo' };
   return null;
