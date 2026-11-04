@@ -42,3 +42,14 @@ test('a different signature is a warning, not a failure, and tells you what will
   const v = verdict({ answered: true, hasPage: true, pageTextLength: 10, apiKeys: 190, designatedDiffers: true });
   assert.equal(v.ok, true); assert.match(v.warnings[0], /signed differently.*Keychain access once.*Always Allow/);
 });
+
+test('a locked Mac is recognised, so a build is never judged (or called broken) while the Keychain is out of reach', () => {
+  const { screenLocked } = require('../scripts/startup-check');
+  assert.equal(screenLocked('<dict>\n\t\t\t<key>CGSSessionScreenIsLocked</key>\n\t\t\t<true/>\n</dict>'), true);
+  assert.equal(screenLocked('<key>CGSSessionScreenIsLocked</key><true />'), true);
+  assert.equal(screenLocked('<key>CGSSessionScreenIsLocked</key><false/>'), false);
+  assert.equal(screenLocked('<key>kCGSSessionOnConsoleKey</key><true/>'), false, 'a different key does not count');
+  assert.equal(screenLocked(''), false); assert.equal(screenLocked(undefined), false, 'no reading means not locked (the check then runs as before)');
+  const sh = require('node:fs').readFileSync(require('node:path').join(__dirname, '../scripts/make-dmg.sh'), 'utf8');
+  assert.match(sh, /--wait-unlock=900/); assert.match(sh, /"\$rc" -eq 3/, 'a locked Mac stops the build with its own message, not a "broken build" one');
+});
