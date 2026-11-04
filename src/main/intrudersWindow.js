@@ -10,7 +10,9 @@ class IntrudersWindow {
     this.win = null;
     const own = (e) => this.win && !this.win.isDestroyed() && e.sender === this.win.webContents;
     const guard = (fn) => async (e, ...a) => { if (!own(e)) return { error: 'Open the intruder pictures first.' }; try { return await fn(...a); } catch (err) { return { error: String(err?.message || 'That did not work.').slice(0, 160) }; } };
-    ipcMain.handle('intruders:list', guard(() => ({ visits: this.log.list().slice(0, 30), now: Date.now() })));
+    ipcMain.handle('intruders:list', guard(() => ({ visits: this.log.list().slice(0, 30), people: this.log.people(), now: Date.now() })));
+    ipcMain.handle('intruders:answer', guard((id, yes) => { const r = this.log.answer(String(id), yes === true); this.onChange(); return { ok: !!r, result: r }; }));
+    ipcMain.handle('intruders:forget', guard(async (id) => { await this.authorize(); const ok = this.log.forgetPerson(String(id)); this.onChange(); return { ok }; }));
     ipcMain.handle('intruders:photos', guard((id) => ({ photos: this.log.photos(String(id)) })));
     ipcMain.handle('intruders:label', guard((id, name) => { const ok = this.log.setLabel(String(id), name); this.onChange(); return { ok }; }));
     ipcMain.handle('intruders:remove', guard(async (id) => { await this.authorize(); const ok = this.log.remove(String(id)); this.onChange(); return { ok }; }));

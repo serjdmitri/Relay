@@ -403,7 +403,7 @@ test('intruder pictures: the guard says when you have just been seen, the photos
   const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8'), page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8');
   assert.match(main, /onAlarm: \(\{ seconds, demo \}\) => \{ intruder\.show\(\{ seconds, demo \}\); ask\.sound\('Basso'\); if \(!demo\) startVisit\(seconds\); \}/, 'the test screen never takes pictures');
   assert.match(main, /intruderLog: _intruderLog/, 'the log is never sent to the screen with the rest of the state');
-  assert.match(main, /\['enroll','forget','off','liveness-off','intruders-clear','looser'\]\.includes\(c\.type\)/, 'deleting the pictures asks the Mac owner to confirm first');
+  assert.match(main, /\['enroll','forget','off','liveness-off','intruders-clear','looser','forget-person'\]\.includes\(c\.type\)/, 'deleting the pictures asks the Mac owner to confirm first');
   assert.match(main, /if \(screenLocked \|\| ownerGuard\.state !== 'idle'\) return;/, 'it waits until the screen is unlocked and the alarm is over before telling you');
   assert.match(page, /window\.__relaySnapshot = \(\) =>/); assert.match(page, /lastFaces = both\.filter\(Boolean\)/);
 });
@@ -440,6 +440,6 @@ test('main: a fingerprint stop discards the pictures, the guard starts armed if 
   assert.match(src, /onOwnerSeen: \(\) => \{ store\.set\('ownerArmedAt', Date\.now\(\)\); tellAboutVisits\(\); \}/);
   assert.match(src, /ownerGuard\.dismiss\('fingerprint'\); store\.set\('ownerArmedAt', Date\.now\(\)\)/);
   assert.match(src, /Math\.min\(0\.6, Math\.max\(0\.3, now \+ \(c\.type === 'stricter' \? 0\.05 : -0\.05\)\)\)/);
-  assert.match(src, /'intruders-clear','looser'\]\.includes\(c\.type\)/);
+  assert.match(src, /'intruders-clear','looser','forget-person'\]\.includes\(c\.type\)/);
   assert.match(src, /episodes: store\.get\('ownerEpisodes'\) \|\| \[\]/);
 });

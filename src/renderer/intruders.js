@@ -29,6 +29,13 @@ function card(v, now, index, byId) {
   c.append(head);
   const earlier = v.sameAs && byId.get(v.sameAs);
   c.append(el('p', 'what', `${v.photos} picture${v.photos === 1 ? '' : 's'}. ${v.outcome === 'locked' ? `I locked the screen after ${v.seconds} seconds.` : ''}${earlier ? ` The same face as the visit on ${new Date(earlier.at).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}.` : ''}`.trim()));
+  if (v.question) {
+    const q = el('div', 'ask'); q.append(el('b', '', `Is this ${v.question.name}?`));
+    const yes = el('button', 'act yes', 'Yes'), no = el('button', 'act', 'No');
+    yes.onclick = async () => { const r = await relay.intrudersAnswer(v.id, true); note(r.error || (r.result ? (r.result.learned ? `Saved. I now know ${r.result.name} well enough to name them on my own.` : `Thank you. That is ${r.result.name}.`) : '')); load(); };
+    no.onclick = async () => { const r = await relay.intrudersAnswer(v.id, false); note(r.error || 'Understood. Type their name below if you know who it is.'); load(); };
+    q.append(yes, no); c.append(q);
+  }
   const shots = el('div', 'shots'); c.append(shots);
   if (index < 4) showPhotos(shots, v.id); else { const b = el('button', 'act', 'Show the pictures'); b.onclick = () => showPhotos(shots, v.id); shots.append(b); }
   const row = el('div', 'row'), name = el('input'); name.placeholder = 'Who is this?'; name.maxLength = 40; name.value = v.label || '';
@@ -42,6 +49,11 @@ async function load() {
   const r = await relay.intrudersList();
   if (r.error) { note(r.error); return; }
   const byId = new Map(r.visits.map((v) => [v.id, v]));
+  const people = $('people'); people.hidden = !(r.people && r.people.length);
+  people.replaceChildren(...(people.hidden ? [] : [el('span', 'label', 'PEOPLE I KNOW'), ...r.people.map((p) => {
+    const chip = el('span', `person${p.learned ? ' learned' : ''}`, `${p.name} · ${p.learned ? 'recognised on my own' : p.confirmed >= 2 ? 'asking to confirm' : 'learning'}`);
+    const b = el('button', '', 'Forget'); b.onclick = async () => { note('Confirm with Touch ID to forget this face…'); const x = await relay.intrudersForget(p.id); note(x.error || ''); if (!x.error) load(); };
+    chip.append(b); return chip; })]));
   $('list').replaceChildren(...r.visits.map((v, i) => card(v, r.now, i, byId)));
   $('empty').hidden = r.visits.length > 0;
 }
