@@ -91,7 +91,9 @@ function main() {
     let pages = null; const t0 = Date.now();
     while (Date.now() - t0 < 30000 && exitedEarly === null) { pages = await getJson(port); if (pages && pages.some((p) => WINDOW.test(p.url))) break; await sleep(700); }
     const answered = !!pages, windowMs = pages && pages.some((p) => WINDOW.test(p.url)) ? Date.now() - tSpawn : null; // from launching the app to its window page existing
-    const blockedBy = !answered && /SecurityAgent/.test(sh('pgrep', ['-l', 'SecurityAgent'])) ? 'Keychain' : null;
+    // macOS leaves SecurityAgent running for a while after any prompt, so its presence alone proves nothing: say a prompt is open only if it was started during this run
+    const agentAge = Number((sh('ps', ['-o', 'etime=', '-p', (sh('pgrep', ['SecurityAgent']).split('\n')[0] || '0').trim() || '0']).trim().split(':').reverse().reduce((t, v, i) => t + Number(v) * [1, 60, 3600][i], 0)));
+    const blockedBy = !answered && Number.isFinite(agentAge) && agentAge > 0 && agentAge < (Date.now() - t0) / 1000 + 5 ? 'Keychain' : null;
     let pageTextLength = 0, apiKeys = 0; const pageErrors = [];
     const main = pages && pages.find((p) => WINDOW.test(p.url));
     if (main) {
