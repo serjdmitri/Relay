@@ -44,6 +44,7 @@ class Overlay {
     this.markPoll = null;
     this.hudEntry = null; // the window showing the reactor (the display the pointer was on when it appeared)
     this.hudState = {};
+    app.once?.('before-quit', () => { this.quitting = true; });
   }
 
   // Windows follow displays being plugged in, unplugged or rearranged.
@@ -83,10 +84,32 @@ class Overlay {
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
     e = { win, display, shapes: false, card: false, halo: false, buddy: false, hud: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
     // A page that has not finished loading would drop what we send it, so hold commands until it has.
-    win.webContents.once('did-finish-load', () => {
+    win.webContents.on('did-start-loading', () => { e.ready = false; });
+    win.webContents.on('render-process-gone', (_event, details) => {
+      e.ready = false;
+      if (win.isDestroyed() || this.quitting || details.reason === 'clean-exit') return;
+      const now = Date.now();
+      e.recoveries = (e.recoveries || []).filter(t => now - t < 60000);
+      if (e.recoveries.length >= 2) return; // avoid a renderer crash loop
+      e.recoveries.push(now);
+      e.ready = false;
+      win.webContents.reload();
+    });
+    win.webContents.on('did-finish-load', () => {
       e.ready = true;
       for (const cmd of e.queue) if (!win.isDestroyed()) win.webContents.send('overlay:cmd', cmd);
       e.queue = [];
+      if (e.look) win.webContents.send('overlay:cmd', { type: 'look', look: e.look });
+      if (e.hud && e.lastHud) win.webContents.send('overlay:cmd', e.lastHud);
+    });
+    win.on('closed', () => {
+      clearTimeout(e.hudTimer);
+      e.ready = false; e.queue = [];
+      if (this.hudEntry === e) {
+        clearInterval(this.borderTimer); this.borderTimer = null;
+        this.hudEntry = null;
+      }
+      if (this.wins.get(display.id) === e) this.wins.delete(display.id);
     });
     this.wins.set(display.id, e);
     return e;
@@ -94,6 +117,7 @@ class Overlay {
 
   send(e, cmd) {
     if (!e || e.win.isDestroyed()) return;
+    if (cmd.type === 'hud') e.lastHud = cmd;
     if (e.ready) e.win.webContents.send('overlay:cmd', cmd);
     else if (e.queue.length < 60) e.queue.push(cmd);
   }
@@ -256,6 +280,7 @@ class Overlay {
     }
     if ((msg.state && msg.state !== this.hudState.state) || msg.reset) this.hudState = { state: msg.state, mode: msg.mode };
     Object.assign(this.hudState, msg);
+    if (this.hudEntry?.win.isDestroyed()) { clearInterval(this.borderTimer); this.borderTimer = null; this.hudEntry = null; }
     if (!this.hudEntry) {
       this.hudEntry = this.entry(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
       this.hudEntry.hud = true;
@@ -272,9 +297,9 @@ class Overlay {
 
   refreshBorder() {
     const entry = this.hudEntry;
-    if (!entry || this.borderBusy) return;
+    if (!entry || entry.win.isDestroyed() || this.borderBusy) return;
     const publish = (geometry = {}) => {
-      if (this.hudEntry !== entry) return;
+      if (this.hudEntry !== entry || entry.win.isDestroyed()) return;
       const origin = this.origin(entry);
       const local = r => r && ({ x: r.x - origin.x, y: r.y - origin.y, width: r.width, height: r.height });
       this.send(entry, { type: 'hud-border', notches: (geometry.notches || []).map(local), tuckr: (geometry.tuckr || []).map(local), recent: local(this.getRecentRect()) });
