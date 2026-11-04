@@ -109,7 +109,11 @@ class OwnerGuard {
     this.trustedFrames = trustedHere && !owner && !stranger ? this.trustedFrames + 1 : 0;
     if (known.length) this.lastScore = Math.max(...known.map((k) => k.s));
     this.owners = owner ? this.owners + 1 : 0;
-    this.strangers = stranger && !owner ? this.strangers + 1 : 0;
+    // A face in view that cannot be judged (too small, turned away, in the grey zone) is neither you nor a stranger, and it must not wipe out the strangers already counted: a friend who leans and turns
+    // while using the Mac gives stranger, unclear, stranger, unclear... and never five in a row, so no alarm ever started. Unclear looks now pause the count; you, or nobody in view, still reset it,
+    // and so does a long stretch of nothing but unclear looks.
+    this.unclear = faces > 0 && !owner && !stranger && !trustedHere ? (this.unclear || 0) + 1 : 0;
+    this.strangers = owner ? 0 : stranger ? this.strangers + 1 : (this.unclear > 0 && this.unclear <= 12 ? this.strangers : 0);
     this.calm = stranger ? 0 : this.calm + 1;
     if (owner && this.owners >= this.armFrames) this.armed = true;
     if (faces > 0) this.lookingAway = !!down;
