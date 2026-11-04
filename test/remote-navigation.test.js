@@ -9,3 +9,19 @@ test('Valhalla route mode and GeoJSON are checked before returning directions',a
 test('invalid routes and failed providers are errors, not invented empty results',async()=>{for(const data of [{},{trip:{summary:{time:2,length:1},legs:[{shape:{type:'LineString',coordinates:[a,[999,0]]}}]}}]){const n=new NavigationService({fetchImpl:async()=>response(data)});await assert.rejects(n.route(a,b,'driving'),/usable route|geometry/);}const n=new NavigationService({fetchImpl:async()=>new Response('',{status:503})});await assert.rejects(n.search('London'),/unavailable/);});
 
 test('Valhalla encoded polyline6 is decoded and malformed shapes are bounded',()=>{const points=decodeShape('mlwfaBduxFa@zD[tB]zBDnI}@?w@@mABi@@y@BoBh@iGlBcAXqCiEaEuF');assert.deepEqual(points[0],[-.127843,51.507415]);assert(points.length>2);for(const invalid of ['~','zzzzzzzzzzzz',null])assert.throws(()=>decodeShape(invalid),/geometry/);});
+
+test('route steps carry where each turn begins and what to say, cut to size, and a turn with no usable position is marked so', async () => {
+  const a=[-.1278,51.5074],b=[-.1281,51.508],c=[-.1285,51.5085];
+  const mk=maneuvers=>new NavigationService({fetchImpl:async()=>response({trip:{summary:{time:60,length:.3},legs:[{shape:{type:'LineString',coordinates:[a,b,c]},maneuvers}]}})});
+  const r=await mk([
+    {instruction:'Drive north.',length:.1,time:20,begin_shape_index:0,type:2,street_names:['A Road','B Road','C','D'],verbal_pre_transition_instruction:'Drive north on A Road.'},
+    {instruction:'Turn left onto Beta.',length:.2,time:40,begin_shape_index:1,type:15,verbal_pre_transition_instruction:'Turn left onto Beta.',verbal_transition_alert_instruction:'Turn left.'},
+    {instruction:'Odd step.',length:.0,time:0,begin_shape_index:99,type:'x',street_names:'nope'},
+    {instruction:'x'.repeat(900),verbal_pre_transition_instruction:'\u0007bell\n tab'}
+  ]).route(a,c,'driving');
+  assert.deepEqual(r.steps.map(s=>s.index),[0,1,-1,-1],'an index outside the route is -1');
+  assert.deepEqual([r.steps[1].type,r.steps[1].pre,r.steps[1].alert,r.steps[1].seconds,r.steps[1].km],[15,'Turn left onto Beta.','Turn left.',40,.2]);
+  assert.deepEqual(r.steps[0].streets,['A Road','B Road','C'],'at most three street names');
+  assert.deepEqual([r.steps[2].type,r.steps[2].streets,r.steps[2].pre],[0,[],'']);
+  assert.equal(r.steps[3].text.length,500); assert.equal(r.steps[3].pre,'bell tab','control characters are removed');
+});

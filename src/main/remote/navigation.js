@@ -10,6 +10,10 @@ function decodeShape(shape){
  while(i<shape.length){lat+=delta();lon+=delta();points.push([lon/1e6,lat/1e6]);if(points.length>50000)throw Error('Map route geometry is too large.');}
  return points;
 }
+// One turn of the directions, for the screen and for turn-by-turn: where on the route it begins (index into coordinates, or -1 if the provider gave nothing usable), what kind of turn it is,
+// the text to show, and what to say: the "pre" line ahead of the turn and the short "alert" at the turn. Everything is cut to a sane size.
+const str=(v,n)=>String(v||'').replace(/[\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,n);
+const step=count=>s=>({text:str(s.instruction,500),km:Number.isFinite(s.length)&&s.length>=0?s.length:0,seconds:Number.isFinite(s.time)&&s.time>=0?s.time:0,index:Number.isInteger(s.begin_shape_index)&&s.begin_shape_index>=0&&s.begin_shape_index<count?s.begin_shape_index:-1,type:Number.isInteger(s.type)?s.type:0,streets:(Array.isArray(s.street_names)?s.street_names:[]).slice(0,3).map(v=>str(v,80)).filter(Boolean),pre:str(s.verbal_pre_transition_instruction,300),alert:str(s.verbal_transition_alert_instruction||s.verbal_succinct_transition_instruction,200)});
 class NavigationService{
  constructor({fetchImpl=fetch,getConfig=()=>({}),isPrivate=()=>false,now=Date.now}={}){Object.assign(this,{fetch:fetchImpl,getConfig,isPrivate,now});this.cache=new Map();this.last=-Infinity;this.busy=false;}
  config(){if(this.isPrivate())throw Error('Online maps are disabled in local/private mode.');const cfg=this.getConfig()||{};return Object.fromEntries(Object.entries(DEFAULTS).map(([k,v])=>[k,endpoint(cfg[k]||v)]));}
@@ -29,7 +33,7 @@ class NavigationService{
   const data=await this.request(cfg.route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({locations:[from,to].map(([lon,lat])=>({lon,lat})),costing:mode==='walking'?'pedestrian':'auto',units:'kilometers',language:'en-US',shape_format:'polyline6'})});
   const trip=data.trip,leg=trip?.legs?.[0],coordinates=decodeShape(leg?.shape),summary=trip?.summary;
   if(!summary||!Number.isFinite(summary.time)||summary.time<0||!Number.isFinite(summary.length)||summary.length<0||!Array.isArray(coordinates)||coordinates.length<2||coordinates.length>50000||!coordinates.every(point))throw Error('No usable route was returned. Try another place or travel mode.');
-  return{coordinates,seconds:summary.time,km:summary.length,steps:(Array.isArray(leg.maneuvers)?leg.maneuvers:[]).slice(0,200).map(s=>({text:String(s.instruction||'').slice(0,500),km:Number.isFinite(s.length)?s.length:0}))};
+  return{coordinates,seconds:summary.time,km:summary.length,steps:(Array.isArray(leg.maneuvers)?leg.maneuvers:[]).slice(0,200).map(step(coordinates.length))};
  }
 }
 module.exports={NavigationService,DEFAULTS,point,endpoint,decodeShape};
