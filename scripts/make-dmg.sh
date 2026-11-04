@@ -32,8 +32,14 @@ codesign --verify --deep --strict "$APP"
 # 0.38.0 and 0.38.1 were published with a window that stayed blank, and nothing caught it.
 if [ "${SKIP_STARTUP_CHECK:-0}" != 1 ]; then
   echo "Checking that the built app starts..."
-  # A broken build fails every time; a slow start on a busy Mac (a long first launch under load) does not. So it is tried once more before the build is refused.
-  node scripts/startup-check.js "$APP" || { echo "The startup check failed once; trying again in case the Mac was just busy..."; sleep 8; node scripts/startup-check.js "$APP"; } || { echo "The startup check failed twice, so no .dmg was made. (SKIP_STARTUP_CHECK=1 skips it.)"; exit 1; }
+  # A locked Mac cannot be judged (the Keychain is out of reach, so the app would hang): the check waits up to 15 minutes for it to be unlocked, then stops with its own exit code.
+  # A broken build fails every time; a slow start on a busy Mac does not, so a plain failure is tried once more before the build is refused.
+  rc=0; node scripts/startup-check.js "$APP" --wait-unlock=900 || rc=$?
+  if [ "$rc" -eq 3 ]; then echo "The startup check could not run because the Mac stayed locked, so no .dmg was made. Unlock the Mac and build again."; exit 1; fi
+  if [ "$rc" -ne 0 ]; then
+    echo "The startup check failed once; trying again in case the Mac was just busy..."; sleep 8
+    node scripts/startup-check.js "$APP" --wait-unlock=900 || { echo "The startup check failed twice, so no .dmg was made. (SKIP_STARTUP_CHECK=1 skips it.)"; exit 1; }
+  fi
 fi
 
 STAGE=$(mktemp -d)

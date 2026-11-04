@@ -35,7 +35,11 @@ function verdict({ answered, blockedBy = null, hasPage = true, pageTextLength = 
   return { ok: problems.length === 0, problems, warnings };
 }
 
-module.exports = { classifyLog, verdict, BENIGN, BAD };
+// Is the Mac's screen locked? Relay's startup reads the Keychain, which cannot be read while the screen is locked, so a check run then would hang and look like a broken build.
+// ioregXml: the output of `ioreg -n Root -d1 -a`.
+function screenLocked(ioregXml) { return /<key>CGSSessionScreenIsLocked<\/key>\s*<true\s*\/>/.test(String(ioregXml || '')); }
+
+module.exports = { classifyLog, verdict, screenLocked, BENIGN, BAD };
 
 if (require.main === module) main();
 
@@ -70,6 +74,15 @@ function main() {
   const measure = async (c) => { const r = await c.send('Runtime.evaluate', { expression: 'JSON.stringify({t: document.body ? document.body.innerText.trim().length : 0, k: window.relay ? Object.keys(window.relay).length : 0})', returnByValue: true }); return r && r.result && r.result.value ? JSON.parse(r.result.value) : { t: 0, k: 0 }; };
 
   (async () => {
+    // never judge a build on a locked Mac: wait for it to be unlocked (--wait-unlock=SECONDS), else say so and stop (exit 3) rather than call the build broken
+    const isLocked = () => screenLocked(sh('ioreg', ['-n', 'Root', '-d1', '-a']));
+    const waitSec = Number((argv.find((a) => a.startsWith('--wait-unlock=')) || '').split('=')[1]) || 0;
+    if (isLocked()) {
+      console.log(`The Mac is locked, so Relay cannot read the Keychain and the check would hang. ${waitSec ? `Waiting up to ${Math.round(waitSec / 60)} minutes for it to be unlocked…` : 'Unlock it and run the check again.'}`);
+      const began = Date.now(); while (isLocked() && Date.now() - began < waitSec * 1000) await sleep(5000);
+      if (isLocked()) { console.log('Still locked: the build was not judged. Unlock the Mac and run the check again.'); process.exit(3); }
+      await sleep(4000); // let the desktop settle after the unlock
+    }
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-startup-'));
     let target = app, designatedDiffers = false;
     if (!flag('no-sign') && hasIdentity()) {
