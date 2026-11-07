@@ -1,0 +1,12 @@
+:root { --ink: #e6f7ff; --muted: #9ec7d7; --accent: #52ddff; --line: #42bcdf44; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; color: var(--ink); font: 14px -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden; }
+body { background: rgba(5, 16, 28, .62); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; }
+#bar { -webkit-app-region: drag; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 6px 18px; }
+#title { font-size: 11px; letter-spacing: .18em; color: var(--accent); }
+#x { -webkit-app-region: no-drag; background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 6px; }
+#x:hover { color: var(--ink); }
+main { flex: 1; min-height: 0; position: relative; margin: 0 14px 14px; border-radius: 12px; overflow: hidden; background: #02080f; border: 1px solid var(--line); }
+video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; } /* mirrored, like a mirror */
+#msg { position: absolute; inset: auto 0 0 0; margin: 0; padding: 8px 12px; font-size: 12px; color: var(--muted); background: rgba(2, 8, 15, .7); }
+#msg:empty { display: none; }
