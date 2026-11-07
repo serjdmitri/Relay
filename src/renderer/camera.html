@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob: data:; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'">
 <title>Camera</title>
 <link rel="stylesheet" href="camera.css">
 </head>
 <body>
-<!-- The live camera picture, drawn here on this Mac. Nothing is saved or sent; Jarvis can take one picture of it when you ask what it sees. -->
-<header id="bar"><span id="title">CAMERA</span><button id="x" type="button" aria-label="Close">×</button></header>
-<main><video id="v" autoplay muted playsinline></video><p id="msg" role="status">Starting the camera…</p></main>
-<script src="camera.js"></script>
+<!-- The live camera picture, drawn here on this Mac with its edges faded into the screen. Boxes and names come from a small object finder that also runs here. Nothing is saved or sent. -->
+<div id="view"><video id="v" autoplay muted playsinline></video><canvas id="boxes"></canvas></div>
+<button id="x" type="button" aria-label="Close the camera">×</button>
+<p id="msg" role="status">Starting the camera…</p>
+<script type="module" src="camera.js"></script>
 </body>
 </html>

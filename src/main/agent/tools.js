@@ -646,7 +646,7 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
                 ? { type: 'arrow', x: f.cx + 120, y: f.cy + 90, x2: f.cx, y2: f.cy, label: String(s.label || '').slice(0, 60) }
                 : s.type === 'text'
                   ? { type: 'text', x: f.x, y: f.y + f.h + 6, text: String(s.text || s.label || s.name).slice(0, 60) }
-                  : { type: 'box', x: f.x, y: f.y, w: f.w, h: f.h, label: String(s.label || '').slice(0, 60) });
+                  : { type: 'box', x: f.x, y: f.y, w: f.w, h: f.h, label: String(s.label || s.name || '').slice(0, 60) }); // a named element is labelled with its name
           } else loose.push(s);
         }
         const shapes = [...anchored, ...(loose.length ? normalizeShapes(loose, { scale: getScale(), origin: getOrigin() }) : [])];
