@@ -41,3 +41,14 @@ test('a vision model is reported as able to look through the camera, and with no
   assert.match((await run({ type: 'local-on' }, { store, get: up(['qwen2.5vl:7b']) })).reply, /it can look through the camera/);
   await run({ type: 'local-off' }, { store, get: down }); assert.equal(store.get('settings.model').provider, 'claude');
 });
+
+test('the old 14B default is swapped for the 7B model on a Mac that cannot spare 9 GB, and a model you actually have is left alone', async () => {
+  const data = { 'settings.model': { provider: 'claude', ollamaModel: 'qwen2.5:14b' } };
+  const store = { get: (k) => data[k], set: (k, v) => { if (k === 'settings.model.ollamaModel') data['settings.model'] = { ...data['settings.model'], ollamaModel: v }; else if (k === 'settings.model.cloudProvider') data['settings.model'] = { ...data['settings.model'], cloudProvider: v }; } };
+  let r = await run({ type: 'local-on' }, { store, get: up(['qwen2.5:7b']), apply: (v) => { data['settings.model'] = { ...data['settings.model'], provider: v }; } });
+  assert.equal(data['settings.model'].ollamaModel, 'qwen2.5:7b'); assert.match(r.reply, /thinking on this Mac with qwen2\.5:7b/);
+  const keep = { 'settings.model': { provider: 'claude', ollamaModel: 'qwen2.5:14b' } };
+  const store2 = { get: (k) => keep[k], set: (k, v) => { if (k === 'settings.model.ollamaModel') keep['settings.model'].ollamaModel = v; } };
+  await run({ type: 'local-on' }, { store: store2, get: up(['qwen2.5:14b', 'qwen2.5:7b']), apply() {} });
+  assert.equal(keep['settings.model'].ollamaModel, 'qwen2.5:14b', 'it is installed, so it is your choice');
+});

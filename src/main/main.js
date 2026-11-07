@@ -1613,14 +1613,17 @@ app.whenReady().then(() => {
   // "What do you see": one picture from the camera, for the model. From the camera Relay already has open for owner recognition, else from the camera window (opened on the spot, visibly, when
   // you ask: Relay never looks through the camera without showing you). Returns { mediaType, data } or null. Nothing is saved.
   ask.cameraShot = async () => {
-    let snap = await takeShot();
-    if (!snap?.jpeg) {
-      cameraWin.open();
-      for (let i = 0; i < 20 && !snap?.jpeg; i++) { await new Promise((r) => setTimeout(r, 400)); snap = await cameraWin.snapshot(); }
-    }
+    // "What do you see" opens the camera view too, so you see what is being looked at (and the boxes it draws), then takes the picture from it.
+    cameraWin.open();
+    let snap = null;
+    for (let i = 0; i < 25 && !snap?.jpeg; i++) { await new Promise((r) => setTimeout(r, 400)); snap = await cameraWin.snapshot(); }
+    if (snap?.jpeg) await new Promise((r) => setTimeout(r, 900)); // a moment for the finder to name things, then look again
+    if (snap?.jpeg) snap = (await cameraWin.snapshot()) || snap;
+    if (!snap?.jpeg) snap = await takeShot(); // the camera Relay already has open, if this window's camera would not start
     const m = /^data:(image\/jpeg);base64,(.+)$/.exec(snap?.jpeg || '');
-    return m ? { mediaType: m[1], data: m[2] } : null;
-  };  const startVisit = (seconds) => {
+    return m ? { mediaType: m[1], data: m[2], names: Array.isArray(snap.names) ? snap.names : [] } : null;
+  };
+ const startVisit = (seconds) => {
     if (ownerConfig(store.get('settings.owner')).photos === false) return;
     try { if (!safeStorage.isEncryptionAvailable()) return; } catch { return; }
     const id = intruderLog.begin(seconds); currentVisit = id;

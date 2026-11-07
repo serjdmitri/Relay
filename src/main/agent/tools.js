@@ -676,16 +676,17 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
     }
   );
 
-  if (visionCapable && cameraShot) {
+  if (cameraShot) {
     tools.push({
       name: 'camera_look',
-      description: "Take one picture with the Mac's camera so you can see what is in front of it (the person, an object they are holding up, the room). Use it when the user asks what you see, to look at something, to read or identify something they hold up, or 'look at me'. Returns an image. The picture is not saved.",
+      description: "Take one picture with the Mac's camera so you can see what is in front of it (the person, an object they are holding up, the room). Use it when the user asks what you see, to look at something, to read or identify something they hold up, or 'look at me'. Opens the camera view on screen, then returns the picture (if you can see pictures) and the names of what the camera's object finder recognised in it. The picture is not saved.",
       input_schema: obj({}),
       describe: () => 'Looking through the camera',
       run: async () => {
         const shot = await cameraShot();
         if (!shot) return 'The camera is not available. Another app may be using it, or Relay may not have camera access.';
-        return { image: { mediaType: shot.mediaType, data: shot.data }, text: 'A picture from the Mac camera (mirrored the way a webcam shows it is not applied: left and right are as the camera sees them).' };
+        const said = shot.names?.length ? `The camera view is open on screen. Its object finder recognised: ${[...new Set(shot.names)].join(', ')}.` : 'The camera view is open on screen. Its object finder named nothing.';
+        return visionCapable ? { image: { mediaType: shot.mediaType, data: shot.data }, text: `A picture from the Mac camera (left and right as the camera sees them). ${said}` } : `${said} (This model cannot see pictures, so that list is all there is.)`;
       }
     });
   }

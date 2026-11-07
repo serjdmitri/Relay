@@ -207,7 +207,7 @@ test('no tool lets the model approve its own action: no confirm-style input fiel
   }
 });
 
-test('camera_look gives the model one camera picture, only to models that can see, and only when a camera is wired in', async () => {
+test('camera_look gives the model one camera picture and the names the object finder saw (words only for a model that cannot see), and only when a camera is wired in', async () => {
   const exposure = require('../src/main/agent/toolCategories').exposure;
   const shot = { mediaType: 'image/jpeg', data: 'AAAA' };
   const tools = buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => shot });
@@ -217,6 +217,7 @@ test('camera_look gives the model one camera picture, only to models that can se
   assert.deepEqual(r.image, shot); assert.match(r.text, /camera/i);
   assert.match(await buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => null }).find((t) => t.name === 'camera_look').run({}), /not available/);
   assert.equal(buildTools({ mac: fakeMac, getScale: () => 1 }).find((t) => t.name === 'camera_look'), undefined, 'no camera wired: no tool');
-  assert.equal(buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => shot, visionCapable: false }).find((t) => t.name === 'camera_look'), undefined, 'a model that cannot see pictures is not offered it');
+  const blind = await buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => ({ ...shot, names: ['person', 'cup', 'person'] }), visionCapable: false }).find((t) => t.name === 'camera_look').run({});
+  assert.equal(typeof blind, 'string', 'a model that cannot see pictures gets words, not an image'); assert.match(blind, /person, cup/);
   assert.match(buildSystemPrompt({ visionCapable: true }), /camera_look/);
 });
