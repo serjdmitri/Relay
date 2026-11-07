@@ -21,6 +21,22 @@ test('presence locks before pausing music and reports lock failures', async () =
   assert.equal(c.pausedByPresence, true);
 });
 
+test('with the standby screen on, leaving does not also lock the Mac (it locked itself whenever you sat still), but music still pauses', async () => {
+  const events = [];
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, {
+    store: { get: (k) => (k === 'settings.owner' ? { enabled: true, awayScreen: true } : { lock: true, pause: true }) },
+    mac: { lockScreen: async () => { events.push('lock'); } },
+    quick: async () => { events.push('pause'); return { reply: 'Paused music.' }; },
+    notice: (_m, status) => events.push(status)
+  });
+  await c.presenceAway();
+  assert.deepEqual(events, ['pause']);
+  c.store.get = (k) => (k === 'settings.owner' ? { enabled: true, awayScreen: false } : { lock: true, pause: false });
+  events.length = 0; await c.presenceAway();
+  assert.deepEqual(events, ['lock'], 'without the standby screen the lock stays');
+});
+
 test('an instant command that can be reversed gets an Undo in the log; one that cannot does not; using it records it', async () => {
   const added = [];
   const timers = { items: [], add(s) { const t = { id: `t${this.items.length}`, seconds: s }; this.items.push(t); return t; }, cancel(id) { this.items = this.items.filter((t) => t.id !== id); } };

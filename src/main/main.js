@@ -97,7 +97,7 @@ const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
 const captureLatch = new CaptureLatch({ onChange: (on) => { if (typeof ask !== 'undefined' && ask) ask.suspended = on; } }); // recording a shortcut pauses shortcuts and "Hey Jarvis", never for long
-let applyModelProvider = null, enrollWin, intrudersWin, cameraWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let standbyBlocker = null, applyModelProvider = null, enrollWin, intrudersWin, cameraWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -1428,6 +1428,8 @@ app.whenReady().then(() => {
   powerMonitor.on('lock-screen', () => { lockedAt = Date.now(); screenLocked = true; lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     try { overlay?.renewIdle(); } catch { /* the old windows stay */ } // windows that sat hidden through the lock can come back blank: start from fresh ones
+    // You have just unlocked the Mac with your password or fingerprint: that is you. A guard screen still up, or an alarm still counting, comes down, and the mouse is handed back.
+    try { if (ownerGuard?.state === 'alarm') ownerGuard.clear('owner'); intruder?.hide(); overlay?.releaseInput(); } catch { /* the screens stay */ }
     screenLocked = false; setTimeout(() => tellAboutVisits(), 1500).unref?.(); // you have just unlocked it: now is when to say who was at the Mac
     lockWatch.set(false);
     // Process overdue work before gathering the briefing; fresh due work stays queued for the regular timer.
@@ -1670,17 +1672,19 @@ app.whenReady().then(() => {
     getIdleSeconds: () => { try { return powerMonitor.getSystemIdleTime(); } catch { return Infinity; } },
     getConfig: () => store.get('settings.owner'),
     onAlarm: ({ seconds, demo }) => { intruder.show({ seconds, demo }); ask.sound('Basso'); if (!demo) startVisit(seconds); },
-    onClear: (reason) => { intruder.hide(); endVisit(({ owner: 'owner-returned', fingerprint: 'fingerprint', trusted: 'trusted' })[reason] || 'ended'); },
-    onLocked: () => { intruder.hide(); endVisit('locked'); },
+    onClear: (reason) => { intruder.hide(); overlay.releaseInput(); endVisit(({ owner: 'owner-returned', fingerprint: 'fingerprint', trusted: 'trusted' })[reason] || 'ended'); },
+    onLocked: () => { intruder.hide(); overlay.releaseInput(); endVisit('locked'); },
     episodes: store.get('ownerEpisodes') || [],
     onEpisode: (_ep, all) => { store.set('ownerEpisodes', all); },
     onOwnerSeen: () => { store.set('ownerArmedAt', Date.now()); tellAboutVisits(); },
-    onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); }
+    onAway: (on) => { if (on) intruder.showAway(); else if (ownerGuard.state !== 'alarm') intruder.hide(); holdStandbyAwake(!!on); }
   });
   // Guarding must not depend on you having been seen since the app last started: a restart (an update, a crash, a wake) while you are away would otherwise leave the Mac unguarded
   // until you sat down again. If you were recognised in the last 24 hours, the guard starts armed.
   if (Date.now() - (Number(store.get('ownerArmedAt')) || 0) < 24 * 3600 * 1000 && ownerState.templates.length > 0) ownerGuard.armed = true;
-  setInterval(() => ownerGuard.step(), 1000);
+  // While the standby screen is up the Mac is kept awake with its display on: it is guarding, so it must not go to sleep or lock itself (Vorssaint or any other keep-awake tool is unaffected, the two simply add up).
+  const holdStandbyAwake = (on) => { try { if (on && standbyBlocker === null) standbyBlocker = powerSaveBlocker.start('prevent-display-sleep'); else if (!on && standbyBlocker !== null) { powerSaveBlocker.stop(standbyBlocker); standbyBlocker = null; } } catch { standbyBlocker = null; } };
+  setInterval(() => { ownerGuard.step(); if (intruder.sweep({ alarmWanted: ownerGuard.state === 'alarm', awayWanted: ownerGuard.awayActive })) { overlay.releaseInput(); if (!ownerGuard.awayActive) holdStandbyAwake(false); } }, 1000);
   // The face setup window (camera in a circle, ring of eight directions): it returns the finished set of numbers, and this decides whether it is a full set and keeps it.
   enrollWin = new (require('./enrollWindow').EnrollWindow)({
     motion: floatingMotion,
