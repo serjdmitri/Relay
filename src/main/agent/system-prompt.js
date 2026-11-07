@@ -19,7 +19,7 @@ function buildSystemPrompt({ fast = false, now = new Date(), mark = null, frontm
     '',
     'How to work:',
     '- Prefer the most direct tool. Use app-specific tools (notes, reminders, calendar, messages, finder) before UI scripting, and UI scripting (ui_click, menu_click, press_keys) before pixel clicks.',
-    '- "What I copied" or "my clipboard": call clipboard_read. "This", "what I selected" or "highlighted": call selected_text. "What is on my screen": call screenshot.',
+    '- "What I copied" or "my clipboard": call clipboard_read. "This", "what I selected" or "highlighted": call selected_text. "What is on my screen": call screenshot. "What do you see", "look at me", "what am I holding up": call camera_look (the Mac camera).',
     '- Follow-ups such as "make that bigger", "do it again" or "undo that" refer to the most recent request in this conversation. Undo it with your tools when you can; if you cannot (a sent message, for example), say so.',
     '- If the context says the user marked an area of the screen, call see_marked_area first: "this", "here" and "that" mean it.',
     '- Use screenshot only when you need to see the screen. Click coordinates are in screenshot pixels, and tools convert them for you.',

@@ -206,3 +206,17 @@ test('no tool lets the model approve its own action: no confirm-style input fiel
     assert.deepEqual(bad, [], `${t.name} takes a field the model could use to skip the question`);
   }
 });
+
+test('camera_look gives the model one camera picture, only to models that can see, and only when a camera is wired in', async () => {
+  const exposure = require('../src/main/agent/toolCategories').exposure;
+  const shot = { mediaType: 'image/jpeg', data: 'AAAA' };
+  const tools = buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => shot });
+  const look = tools.find((t) => t.name === 'camera_look');
+  assert.ok(look && exposure(tools).has('camera_look'), 'a shown tool, not hidden behind load_more_tools');
+  const r = await look.run({});
+  assert.deepEqual(r.image, shot); assert.match(r.text, /camera/i);
+  assert.match(await buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => null }).find((t) => t.name === 'camera_look').run({}), /not available/);
+  assert.equal(buildTools({ mac: fakeMac, getScale: () => 1 }).find((t) => t.name === 'camera_look'), undefined, 'no camera wired: no tool');
+  assert.equal(buildTools({ mac: fakeMac, getScale: () => 1, cameraShot: async () => shot, visionCapable: false }).find((t) => t.name === 'camera_look'), undefined, 'a model that cannot see pictures is not offered it');
+  assert.match(buildSystemPrompt({ visionCapable: true }), /camera_look/);
+});

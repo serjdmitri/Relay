@@ -247,6 +247,8 @@ function parseOwnerCommand(text) {
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-off' };
   if (/^(?:test|show|preview|try) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-demo' };
   if (/^(?:show|open|see|view|list)(?: me)?(?: the| my)? (?:intruders?|strangers?|security)(?: pictures?| photos?| log| visits| shots)?$|^who (?:was|sat|tried|came|has been|used|touched) (?:at|to use|using|on) my (?:computer|mac|laptop)(?: while i was (?:away|gone|out))?$|^who was (?:at|on) my (?:computer|mac|laptop)$/.test(n)) return { type: 'intruders' };
+  if (/^(?:show|open|display|see|bring up|put up)(?: me)?(?: the| my)? (?:camera|webcam)(?: view| feed| picture| window)?$|^(?:show|let me see) (?:me )?(?:my )?(?:face|myself)$/.test(n)) return { type: 'camera-show' };
+  if (/^(?:hide|close|dismiss|put away|get rid of)(?: the| my)? (?:camera|webcam)(?: view| feed| picture| window)?$/.test(n)) return { type: 'camera-hide' };
   if (/^(?:turn on|enable|start|switch on) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-on' };
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-off' };
   if (/^(?:delete|clear|erase|remove) (?:all )?(?:the |my )?(?:intruder|stranger) (?:photos?|pictures?|log|visits|shots)$/.test(n)) return { type: 'intruders-clear' };

@@ -97,7 +97,7 @@ const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
 const captureLatch = new CaptureLatch({ onChange: (on) => { if (typeof ask !== 'undefined' && ask) ask.suspended = on; } }); // recording a shortcut pauses shortcuts and "Hey Jarvis", never for long
-let enrollWin, intrudersWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let enrollWin, intrudersWin, cameraWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -1604,9 +1604,21 @@ app.whenReady().then(() => {
   // kept encrypted on this Mac with the stranger's face numbers (so a second visit by the same face is recognised). Coming back, you are told who was there.
   const intruderLog = new (require('./intruderLog').IntruderLog)({ store, dir: path.join(app.getPath('userData'), 'intruders'), encrypt: (txt) => safeStorage.encryptString(txt), decrypt: (buf) => safeStorage.decryptString(buf) });
   intrudersWin = new (require('./intrudersWindow').IntrudersWindow)({ log: intruderLog, motion: floatingMotion, authorize: () => trustedPeople.authorize(), onChange: () => broadcast() });
+  cameraWin = new (require('./cameraWindow').CameraWindow)({ motion: floatingMotion });
   let currentVisit = null;
   const takeShot = async () => { const wc = presenceSender; if (!wc || wc.isDestroyed()) return null; try { return await wc.executeJavaScript('window.__relaySnapshot && window.__relaySnapshot()'); } catch { return null; } };
-  const startVisit = (seconds) => {
+
+  // "What do you see": one picture from the camera, for the model. From the camera Relay already has open for owner recognition, else from the camera window (opened on the spot, visibly, when
+  // you ask: Relay never looks through the camera without showing you). Returns { mediaType, data } or null. Nothing is saved.
+  ask.cameraShot = async () => {
+    let snap = await takeShot();
+    if (!snap?.jpeg) {
+      cameraWin.open();
+      for (let i = 0; i < 20 && !snap?.jpeg; i++) { await new Promise((r) => setTimeout(r, 400)); snap = await cameraWin.snapshot(); }
+    }
+    const m = /^data:(image\/jpeg);base64,(.+)$/.exec(snap?.jpeg || '');
+    return m ? { mediaType: m[1], data: m[2] } : null;
+  };  const startVisit = (seconds) => {
     if (ownerConfig(store.get('settings.owner')).photos === false) return;
     try { if (!safeStorage.isEncryptionAvailable()) return; } catch { return; }
     const id = intruderLog.begin(seconds); currentVisit = id;
@@ -1707,6 +1719,8 @@ app.whenReady().then(() => {
       return done(list.length ? `I have learned ${list.length} face${list.length === 1 ? '' : 's'}: ${list.map((p) => `${p.name} (${p.learned ? 'I recognise them on my own' : `${p.confirmed} naming${p.confirmed === 1 ? '' : 's'}, ${p.confirmed >= 2 ? 'I ask whether visitors are them' : 'not enough yet to ask'}`})`).join(', ')}.` : 'I have not learned anyone yet, Sir. When someone visits and you say "that\'s" and their name, I will remember the face.');
     }
     if (c.type === 'forget-person') return done(intruderLog.forgetPerson(c.name) ? `I have forgotten ${c.name}'s face and removed the name from their visits.` : `I do not know anyone called ${c.name}.`);
+    if (c.type === 'camera-show') { cameraWin.open(); return done('Here is the camera, Sir. Nothing is saved. Say "hide the camera" when you are done, or ask me what I see.'); }
+    if (c.type === 'camera-hide') { cameraWin.close(); return done('Camera view closed.'); }
     if (c.type === 'intruders') {
       intrudersWin.open(); const list = intruderLog.list();
       return done(list.length ? `Here are the pictures, Sir. ${list.length} visit${list.length === 1 ? '' : 's'} so far. The latest: ${intruderLog.describe(list[0])}` : 'Nobody has sat at your Mac while the alarm was watching, Sir. When someone does, their pictures will be here.');

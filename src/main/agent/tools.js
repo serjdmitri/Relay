@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, skills = null, homework = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, skills = null, homework = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -675,6 +675,20 @@ function buildTools({ mac, firefox, overlay, guides = null, getMark = () => null
       }
     }
   );
+
+  if (visionCapable && cameraShot) {
+    tools.push({
+      name: 'camera_look',
+      description: "Take one picture with the Mac's camera so you can see what is in front of it (the person, an object they are holding up, the room). Use it when the user asks what you see, to look at something, to read or identify something they hold up, or 'look at me'. Returns an image. The picture is not saved.",
+      input_schema: obj({}),
+      describe: () => 'Looking through the camera',
+      run: async () => {
+        const shot = await cameraShot();
+        if (!shot) return 'The camera is not available. Another app may be using it, or Relay may not have camera access.';
+        return { image: { mediaType: shot.mediaType, data: shot.data }, text: 'A picture from the Mac camera (mirrored the way a webcam shows it is not applied: left and right are as the camera sees them).' };
+      }
+    });
+  }
 
   if (visionCapable) {
     tools.push(
