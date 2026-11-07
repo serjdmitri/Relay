@@ -63,6 +63,8 @@ function trustedFlags({ scores = [], trustedScores = [], live = [], threshold = 
 }
 
 // One noted stretch of time, in words: what was seen and the reason it did or did not set off the alarm.
+const NO_BLINK_MS = 60000; // how long a matching face may go without a blink before it counts as a possible picture
+
 function explainEpisode(ep, cfg, locale = 'en-US') {
   const time = new Date(ep.at).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }), who = ep.faces > 1 ? 'people' : 'someone', n = (k) => ep.counts[k] || 0;
   const total = Object.values(ep.counts).reduce((a, b) => a + b, 0) || 1, f = (x) => (x === null || x === undefined ? 'n/a' : Number(x).toFixed(2));
@@ -88,7 +90,7 @@ class OwnerGuard {
     this.episodes = Array.isArray(episodes) ? episodes.slice(-30) : [];
     this.reset();
   }
-  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null;
+  reset() { this.state = 'idle'; this.strangers = 0; this.owners = 0; this.calm = 0; this.deadline = null; this.demo = false; this.seen = 'nobody'; this.awayActive = false; this.noFaceSince = null; this.noBlinkSince = null;
     // Armed once YOU have been recognised (alive) for a few frames in a row this session. Until then nothing alarms, locks or blanks the screen: if recognition does not work
     // for you, it must never be able to lock you out. lastScore is the best match seen, for "owner recognition status".
     this.armed = false; this.lastScore = null; this.lookingAway = false; this.lastDownAt = 0; this.quietUntil = 0; this.watchStart = null; this.lastFrameAt = null; this.activeSteps = 0; this.trustedFrames = 0; this.cur = null; this.calmLooks = 0; }
@@ -104,7 +106,12 @@ class OwnerGuard {
     const known = scores.map((s, i) => ({ s, alive: !cfg.liveness || live[i] !== false, trusted: trusted[i] === true })).filter((k) => Number.isFinite(k.s));
     const trustedHere = known.some((k) => k.trusted);
     // A score between (threshold - margin) and the threshold is "not sure" (a face that is far, turned or badly lit): neither you nor a stranger. Only a clearly low score, or a match with no blink, counts against you.
-    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), stranger = known.some((k) => !k.trusted && (k.s < cfg.threshold - cfg.margin || (k.s >= cfg.threshold && !k.alive)));
+    const owner = known.some((k) => k.s >= cfg.threshold && k.alive), lowStranger = known.some((k) => !k.trusted && k.s < cfg.threshold - cfg.margin);
+    // A face that matches you but has not blinked looks like a picture, but far more often it is you staring at the screen (a real false alarm: 13 looks at a score of 0.76 to 0.83 started the
+    // alarm on you). So that alone only counts against you after a full minute of it; someone who really is not you is caught at once by the low score above.
+    const noBlink = !owner && !lowStranger && known.some((k) => !k.trusted && k.s >= cfg.threshold && !k.alive);
+    this.noBlinkSince = noBlink ? (this.noBlinkSince ?? this.now()) : null;
+    const stranger = lowStranger || (noBlink && this.now() - this.noBlinkSince >= NO_BLINK_MS);
     this.seen = owner ? 'owner' : stranger ? 'stranger' : trustedHere ? 'trusted' : faces ? 'unclear' : 'nobody';
     this.trustedFrames = trustedHere && !owner && !stranger ? this.trustedFrames + 1 : 0;
     if (known.length) this.lastScore = Math.max(...known.map((k) => k.s));

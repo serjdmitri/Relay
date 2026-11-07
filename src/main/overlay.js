@@ -304,7 +304,7 @@ class Overlay {
       this.borderTimer.unref?.();
     }
     this.setHudBlur(this.hudEntry, this.worldView?false:this.getBlur());
-    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, worldView:!!this.worldView, name: this.getName(), visual: this.getVisual() === 'orb' ? 'orb' : 'reactor', border: this.getBorder() !== false } });
+    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, worldView:!!this.worldView, name: this.getName(), visual: 'reactor' /* the orb is switched off for now (hud.js still draws it, nothing asks for it) */, border: this.getBorder() !== false } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
   }
 

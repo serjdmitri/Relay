@@ -12,13 +12,13 @@ const CLOSED = 0.35, OPEN = 0.22; // eye-blink blendshape scores: above CLOSED i
 // for leaving the desk or for a stranger: a face turned away cannot be judged.
 export function lookingAway({ gazeDownL, gazeDownR, matrix } = {}) {
   const g = (Number(gazeDownL) + Number(gazeDownR)) / 2;
-  if (Number.isFinite(g) && g >= 0.5) return true;
+  if (Number.isFinite(g) && g >= 0.4) return true;
   const m = matrix && matrix.length >= 16 ? Array.from(matrix) : null;
   if (!m || !m.every(Number.isFinite)) return false;
   const r = (row, col) => m[col * 4 + row];
   const pitch = (Math.atan2(r(2, 1), Math.abs(r(2, 2))) * 180) / Math.PI;
   const yaw = (Math.asin(Math.max(-1, Math.min(1, r(2, 0)))) * 180) / Math.PI;
-  return Math.abs(pitch) > 25 || Math.abs(yaw) > 40;
+  return Math.abs(pitch) > 20 || Math.abs(yaw) > 30; // someone working at the screen faces it within these angles; you glancing at your phone or the room does not
 }
 
 export class LivenessTracker {
