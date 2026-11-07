@@ -34,7 +34,7 @@ function readiness(st, model) {
 // c: a parsed command. store: get/set. get: async url -> parsed JSON. apply(value): switch the provider with the side effects (stop cloud connections, drop the warm session).
 async function run(c, { store, get, apply = (v) => store.set('settings.model.provider', v) }) {
   const m = store.get('settings.model') || {};
-  const model = m.ollamaModel || RECOMMENDED.text;
+  let model = m.ollamaModel || RECOMMENDED.text;
   const local = m.provider === 'ollama';
   if (c.type === 'local-status') {
     if (!local) return { status: 'done', reply: `I am thinking in the cloud (${m.provider || 'Claude'}). Say "go offline" to think on this Mac instead.`, actions: 0 };
@@ -48,7 +48,9 @@ async function run(c, { store, get, apply = (v) => store.set('settings.model.pro
     return { status: 'done', reply: 'Back online, Sir. I am thinking in the cloud again.', actions: 1 };
   }
   // local-on
-  const st = await ollamaState({ get, url: m.ollamaUrl, model });
+  let st = await ollamaState({ get, url: m.ollamaUrl, model });
+  // the old default (a 14B model, about 9 GB) is too big to sit beside Firefox, Claude and the rest on a 24 GB Mac: use the 7B one instead when that is the one that is installed or needed
+  if (!st.hasModel && model === 'qwen2.5:14b') { model = RECOMMENDED.text; store.set('settings.model.ollamaModel', model); st = await ollamaState({ get, url: m.ollamaUrl, model }); }
   if (!local) { if (m.provider) store.set('settings.model.cloudProvider', m.provider); apply('ollama'); }
   const problem = readiness(st, model);
   const vision = /llava|vision|minicpm-v|qwen2\.5-?vl|qwen3-?vl|gemma3|bakllava|moondream/i.test(model);
