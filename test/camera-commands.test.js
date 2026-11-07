@@ -1,0 +1,31 @@
+const test = require('node:test'), assert = require('node:assert/strict');
+const { parseCameraCommand: p, nextBounds } = require('../src/main/cameraCommands');
+
+test('the camera view is controlled by voice, and only when the camera or view is named', () => {
+  assert.deepEqual(p('make the camera bigger'), { type: 'camera-adjust', action: 'bigger' });
+  assert.deepEqual(p('Jarvis, make the camera view a little smaller.'), { type: 'camera-adjust', action: 'smaller' });
+  assert.deepEqual(p('move the camera left'), { type: 'camera-adjust', action: 'move', direction: 'left' });
+  assert.deepEqual(p('move the view higher'), { type: 'camera-adjust', action: 'move', direction: 'up' });
+  assert.deepEqual(p('make the camera full screen'), { type: 'camera-adjust', action: 'fullscreen' });
+  assert.deepEqual(p('camera normal size'), { type: 'camera-adjust', action: 'reset' });
+  assert.deepEqual(p('fade the edges more'), { type: 'camera-adjust', action: 'fade', amount: 1 });
+  assert.deepEqual(p('fade the edges less'), { type: 'camera-adjust', action: 'fade', amount: -1 });
+  assert.deepEqual(p('hide the boxes'), { type: 'camera-adjust', action: 'boxes', on: false });
+  assert.deepEqual(p('show the boxes'), { type: 'camera-adjust', action: 'boxes', on: true });
+  assert.deepEqual(p('show everything'), { type: 'camera-adjust', action: 'filter', names: [] });
+  assert.deepEqual(p('only show people on camera'), { type: 'camera-adjust', action: 'filter', names: ['people'.replace(/s$/, '')] });
+  assert.deepEqual(p('highlight the cups and phones in the camera'), { type: 'camera-adjust', action: 'filter', names: ['cup', 'phone'] });
+  for (const t of ['make it bigger', 'move left', 'what is the weather', 'show my camera', 'hide the camera', 'open notes', 'make the window bigger']) assert.equal(p(t), null, t);
+});
+
+test('the window grows, shrinks and moves while staying on screen, in a 4:3 shape', () => {
+  const area = { x: 0, y: 25, width: 1440, height: 875 }, b = { x: 700, y: 100, width: 640, height: 480 };
+  const big = nextBounds(b, area, { action: 'bigger' }); assert.equal(big.width, 832); assert.equal(big.height, 624);
+  assert.ok(big.x >= 0 && big.x + big.width <= 1440 && big.y >= 25 && big.y + big.height <= 900);
+  const small = nextBounds(b, area, { action: 'smaller' }); assert.ok(small.width < 640 && small.width >= 240); assert.equal(small.height, Math.round(small.width * 0.75));
+  const tiny = nextBounds({ x: 0, y: 25, width: 260, height: 195 }, area, { action: 'smaller' }); assert.equal(tiny.width, 240, 'never smaller than 240 wide');
+  const right = nextBounds(b, area, { action: 'move', direction: 'right' }); assert.equal(right.x + right.width, 1440, 'stops at the screen edge');
+  const left = nextBounds(b, area, { action: 'move', direction: 'left' }); assert.ok(left.x < b.x);
+  const full = nextBounds(b, area, { action: 'fullscreen' }); assert.equal(full.height <= 875, true); assert.ok(full.width <= 1440);
+  const reset = nextBounds(b, area, { action: 'reset' }); assert.equal(reset.width, 640); assert.equal(reset.x, 400);
+});

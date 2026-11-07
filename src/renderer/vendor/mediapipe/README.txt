@@ -6,3 +6,5 @@ blaze_face_short_range.tflite (Apache License 2.0, Google): the face finder, fro
 Used only by "Pause music when I leave the desk" (opt-in) to tell whether someone is in front of the camera: once a second it counts faces. Nothing is recognised, saved or sent.
 face_landmarker.task (Apache License 2.0, Google): the face landmark and blink finder, from https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 Used only by Owner recognition's liveness check (opt-in) to see whether a face blinks, so a photo of you is not mistaken for you. It runs on this Mac; nothing is saved or sent.
+efficientdet_lite0.tflite (Apache License 2.0, Google): the object finder (80 everyday kinds of object), from https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite
+Used only by the camera view (opt-in, "show my camera") to draw named boxes around what the camera sees. It runs on this Mac; nothing is saved or sent.

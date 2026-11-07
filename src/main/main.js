@@ -1697,6 +1697,7 @@ app.whenReady().then(() => {
       return { ok: true, threshold: ownerConfig(store.get('settings.owner')).threshold, message: `${r.templates.length} angles saved. Owner recognition is on: a stranger at the desk gets the alarm, then the lock after ${seconds} seconds.` };
     }
   });
+  ask.cameraAdjust = (c) => cameraWin.adjust(c);
   ask.localCommand = (c) => require('./localMode').run(c, { store, get: (u) => ask.httpGet(u, true), apply: (v) => applyModelProvider(v) });
   ask.ownerCommand = async (c) => {
     const cfg = () => ownerConfig(store.get('settings.owner'));
