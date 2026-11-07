@@ -97,7 +97,7 @@ const ipcSecurity=require('./ipcSecurity');
 ipcSecurity.protectIpc(ipcMain,path.join(__dirname,'../renderer'));
 ipcSecurity.protectNavigation(app);
 const captureLatch = new CaptureLatch({ onChange: (on) => { if (typeof ask !== 'undefined' && ask) ask.suspended = on; } }); // recording a shortcut pauses shortcuts and "Hey Jarvis", never for long
-let enrollWin, intrudersWin, cameraWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
+let applyModelProvider = null, enrollWin, intrudersWin, cameraWin, screenLocked = false, tellAboutVisits = () => {}, mapPanel, nightlyMaintenance, trustedPeople, presenceSender, modeActions, assistantBackdrop, fitnessPanel, callService, assignmentsPanel, agentsPanel, viewerGuard, ownerGuard, intruder, ownerState, prioritiesPanel, securityPanel, networkPanel, storagePanel, restoreToast, floatingMotion, trashTarget, presence, stickyPanel, store, bridge, overlay, ask, hotkeys, tray, speech, speaker, timers, glass, kokoro, recent, cardPanel, assistPanel, holos, remote, hands, inbound, pluginMgr, panelHub, panelWins, notesSvc, connectivity;
 let prepareTimer = null;
 let voiceProblem = ''; // why the chosen voice could not speak the last reply, if it could not
 let claudeState = { installed: false, loggedIn: false, checked: false };
@@ -617,6 +617,8 @@ function registerIpc() {
   });
   modeActions=new(require('./workModes').WorkModeActions)({store,openApp:name=>ask.mac.openApp(name),queueRoutine:r=>setImmediate(()=>ask.handleText('run '+r.name).catch(e=>ask.notice(e.message,'failed'))),onChange:()=>{ask.dropWarm(true);broadcast();}});
   ask.applyWorkMode=mode=>modeActions.apply(mode);
+  // "Go offline" / "go online" by voice (localMode.js): the same switch as the Settings picker, with the same side effects.
+  applyModelProvider = (value) => { if (value === 'ollama') { googleConnections.cancel(); notionConnection.cancel(); } store.set('settings.model.provider', value); ask.dropWarm(true); if (value === 'ollama') { speaker?.stop(); mapPanel?.close(); } broadcast(); };
   ipcMain.handle('state:set', async (_e, key, value) => {
     if(!ipcSecurity.safeKey(key)) throw Error('Invalid setting path.');
     if(_e.sender!==mainWin?.webContents && _e.sender!==onboardWin?.webContents) throw Error('Open Relay Settings first.');
@@ -1695,6 +1697,7 @@ app.whenReady().then(() => {
       return { ok: true, threshold: ownerConfig(store.get('settings.owner')).threshold, message: `${r.templates.length} angles saved. Owner recognition is on: a stranger at the desk gets the alarm, then the lock after ${seconds} seconds.` };
     }
   });
+  ask.localCommand = (c) => require('./localMode').run(c, { store, get: (u) => ask.httpGet(u, true), apply: (v) => applyModelProvider(v) });
   ask.ownerCommand = async (c) => {
     const cfg = () => ownerConfig(store.get('settings.owner'));
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
