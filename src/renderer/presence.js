@@ -14,6 +14,13 @@ let timer = 0;
 let stopped = false;
 let fileset = null, landmarker = null, lmFailed = false, lmLoading = false, lmBusy = false, recogOn = false, livenessOn = false, lmTimer = 0;
 let lastLm = { t: 0, faces: [] }, watchdog = 0, lastFaces = [];
+// A picture that is black is a closed lid (the Mac kept awake with the lid shut, for example by Vorssaint) or a covered camera: nobody can be seen, so it says nothing about whether you are
+// there. Judging it would count as "you left" (lock the Mac, pause the music) and as "nobody": it is skipped instead.
+const probe = document.createElement('canvas'); probe.width = 16; probe.height = 12;
+function isDark() {
+  try { const x = probe.getContext('2d', { willReadFrequently: true }); x.drawImage(video, 0, 0, 16, 12); const d = x.getImageData(0, 0, 16, 12).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / 4 * 3) < 5; } catch { return false; }
+}
+let darkTicks = 0;
 let facePresent = true, lmLast = 0; // the landmark finder runs about 8 times a second while someone is in view, and only twice a second when nobody is (it was the biggest CPU cost of the camera)
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
@@ -102,6 +109,8 @@ async function start() {
       if (busy || video.readyState < 2) { timer = setTimeout(tick, 200); return; }
       busy = true;
       try {
+        darkTicks = isDark() ? darkTicks + 1 : 0;
+        if (darkTicks >= 3) { facePresent = false; return; } // a black picture: say nothing (the finally below schedules the next look)
         const dets = detector.detectForVideo(video, performance.now()).detections;
         const frame = { faces: dets.length }; facePresent = dets.length > 0;
         // Owner recognition (opt-in): only when asked for. The main process says whether to match faces or to enroll yours.
@@ -119,7 +128,7 @@ async function start() {
             const fresh = landmarker && Date.now() - lastLm.t < 700 && lastLm.faces.length;
             const area = (d) => (d.boundingBox?.width || 0) * (d.boundingBox?.height || 0);
             const faces = fresh ? lastLm.faces.slice().sort((a, b) => b.width - a.width).slice(0, 3).map((f) => ({ lm: f.lm, x: f.x, y: f.y, width: f.width, away: !!f.away }))
-              : dets.slice().sort((a, b) => area(b) - area(a)).slice(0, 3).map((d) => ({ keypoints: d.keypoints, x: d.keypoints?.[2]?.x, y: d.keypoints?.[2]?.y, width: (d.boundingBox?.width || 0) / (video.videoWidth || 1) }));
+              : (landmarker && !lmFailed) ? [] /* the landmark finder is running: a face it does not confirm (a poster, a reflection, a guitar) is not judged as a stranger */ : dets.slice().sort((a, b) => area(b) - area(a)).slice(0, 3).map((d) => ({ keypoints: d.keypoints, x: d.keypoints?.[2]?.x, y: d.keypoints?.[2]?.y, width: (d.boundingBox?.width || 0) / (video.videoWidth || 1) }));
             if (c.mode === 'enroll') {
               if (faces.length === 1 && fresh) { const e = await embed(video, faces[0]); if (e) await relay.presenceEnroll({ embedding: e }); } // enrolling needs the accurate alignment
             } else {

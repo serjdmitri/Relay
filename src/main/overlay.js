@@ -596,6 +596,15 @@ class Overlay {
     this.markFade(e);
   }
 
+  // Give the mouse back: if anything left a full-screen overlay window catching clicks (a mark that never ended, a drop target that thought the pointer was still inside it), clicks would
+  // reach nothing and the Mac would seem frozen. Called after an alarm, when the Mac is unlocked, and whenever the guard screens come down.
+  releaseInput() {
+    try { this.markCancel(); } catch { /* nothing was being marked */ }
+    this.marking = null;
+    if (this.dropTimer) { clearInterval(this.dropTimer); this.dropTimer = null; }
+    for (const e of this.wins.values()) { try { e.accepting = false; if (!e.interactive && !e.win.isDestroyed()) e.win.setIgnoreMouseEvents(true); } catch { /* gone */ } }
+  }
+
   // Everything off at once.
   hide() {
     this.markCancel();

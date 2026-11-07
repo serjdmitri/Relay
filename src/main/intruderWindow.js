@@ -28,7 +28,7 @@ class IntruderWindow {
   }
 
   show({ seconds, demo = false }) {
-    this.state = { active: true, touchId: this.touchId(), mode: 'alarm', endsAt: Date.now() + seconds * 1000, total: seconds, demo };
+    this.state = { active: true, touchId: this.touchId(), mode: 'alarm', endsAt: Date.now() + seconds * 1000, total: seconds, demo, at: Date.now() };
     this.open();
     // The alarm is the moment the owner needs Touch ID, so the sheet comes up on its own (once). If it is cancelled or not accepted the alarm comes back with its button.
     clearTimeout(this.autoTimer);
@@ -41,7 +41,7 @@ class IntruderWindow {
   // The standby screen: you stepped away. Calm, blue, no siren; it stays until main.js hides it.
   showAway() {
     if (this.state.active && this.state.mode === 'alarm') return;
-    this.state = { active: true, touchId: this.touchId(), mode: 'away', since: Date.now() };
+    this.state = { active: true, touchId: this.touchId(), mode: 'away', since: Date.now(), at: Date.now() };
     this.open();
   }
 
@@ -66,6 +66,19 @@ class IntruderWindow {
       win.once('ready-to-show', () => win.showInactive());
       return win;
     });
+  }
+
+  // A screen that is still up when nothing wants it would sit over everything and swallow every click ("I can't do anything and my mouse does not click"). Called every second:
+  // windows with no state, an alarm screen when the guard is no longer in alarm, and a standby screen when you are no longer away all come down. -> true if it took something down.
+  sweep({ alarmWanted = false, awayWanted = false } = {}) {
+    const live = this.wins.some((w) => !w.isDestroyed());
+    if (!live) { this.wins = []; if (this.state.active) this.state = { active: false }; return false; }
+    if (!this.state.active) { this.hide(); return true; }
+    if (this.state.demo || this.busy) return false;
+    const age = Date.now() - (this.state.at || Date.now());
+    if (this.state.mode === 'alarm' && !alarmWanted && age > 5000) { this.hide(); return true; }
+    if (this.state.mode === 'away' && !awayWanted && age > 15000) { this.hide(); return true; }
+    return false;
   }
 
   hide() {

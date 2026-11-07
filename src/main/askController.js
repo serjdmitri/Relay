@@ -2409,7 +2409,11 @@ class AskController {
   async presenceAway() {
     const cfg = this.store.get('settings.presence') || {};
     this.pausedByPresence = false;
-    if (cfg.lock) {
+    // With owner recognition and its standby screen on, the standby screen is what guards the Mac while you are away, and the guard alarms for a stranger: locking the Mac as well meant it
+    // locked itself whenever you sat still or looked away for a minute. The lock stays for people who do not use the standby screen.
+    const owner = this.store.get('settings.owner') || {};
+    const standby = owner.enabled === true && owner.awayScreen !== false;
+    if (cfg.lock && !standby) {
       try { await this.mac.lockScreen(); }
       catch { this.notice('Could not lock the Mac when you left. Check Relay permissions and try locking it manually.', 'failed'); }
     }
