@@ -45,6 +45,7 @@ const { AgentManager, parseAgentCommand, parseAgentsDashboardCommand } = require
 const { parseViewerGuardCommand } = require('./viewerGuard');
 const { parseSelfImproveCommand } = require('./selfImprove');
 const { parseOwnerCommand } = require('./ownerGuard');
+const { EarlyVoice } = require('./earlyVoice');
 const shieldMod = require('./injectionShield');
 const skillImportMod = require('./skillImport');
 const extrasMod = require('./connectors/extras');
@@ -3246,6 +3247,8 @@ class AskController {
   }
 
   async execute(text, requestId) {
+    // speak the first sentence of a plain answer while the rest is still being written (earlyVoice.js); cleared when the answer is spoken
+    this.early = new EarlyVoice({ enabled: !!this.store.get('settings.speakReplies') && !!this.voiceAsk && !this.assistOn && !!this.speaker, speak: (s) => this.speaker.speak(s, { ...profileFor('reply', this.store.get('settings') || {}), lang: detectLanguage(s)?.lang || 'en' }) });
     if (this.offline && flagsMod.isOn(this.store.get('settings'), 'offline')) return this.executeOffline(text);
     // Use the list fetched while you were talking; never wait long for it.
     const runningApps = await Promise.race([this.appsP || this.mac.listApps().catch(() => []), new Promise((r) => setTimeout(() => r(this.lastApps), 500))]);
@@ -3257,8 +3260,8 @@ class AskController {
     const signal = this.abort.signal;
     const onEvent = (e) => {
       if (e.type === 'escalate') this.push({ label: 'Thinking harder' });
-      if (e.type === 'tool-start') this.push({ label: e.label || e.name.replace(/_/g, ' '), stream: '' });
-      if (e.type === 'text-delta') this.streamText(e.text);
+      if (e.type === 'tool-start') { this.early?.toolStarted(); this.push({ label: e.label || e.name.replace(/_/g, ' '), stream: '' }); }
+      if (e.type === 'text-delta') { this.early?.delta(e.text); this.streamText(e.text); }
       if (e.type === 'tool') {
         const actionId = crypto.randomUUID();
         this.store.addAction({ id: actionId, requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
@@ -3448,7 +3451,8 @@ class AskController {
     this.followFor = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote && this.store.get('settings.followUp')?.enabled !== false ? entry.id : null;
     this.awaitingFollowAnswer = !!askAgain;
     this.phone?.jobDone({ text: entry.text, reply, status: res.status, seconds: (Date.now() - (entry.ts || Date.now())) / 1000, remote: !!entry.remote });
-    if ((res.forceSpeak || (this.store.get('settings.speakReplies') && this.voiceAsk)) && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) this.speaker?.speak(spokenReply(reply, askAgain), { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en' });
+    if ((res.forceSpeak || (this.store.get('settings.speakReplies') && this.voiceAsk)) && ['done', 'failed'].includes(res.status) && reply && !entry.remote && !this.assistOn) { const plan = this.early ? this.early.finalize(spokenReply(reply, askAgain)) : { text: spokenReply(reply, askAgain), append: false }; if (plan.text) this.speaker?.speak(plan.text, { ...profileFor(jobFor(reply, res.job), this.store.get('settings') || {}), lang: detectLanguage(reply)?.lang || entry.lang || 'en', append: plan.append }); }
+    this.early = null;
     if (this.followFor) this.followUpSoon(900); // if it is about to be spoken, the follow-up waits for the end of the speech
     clearTimeout(this.doneTimer);
     clearTimeout(this.holdTimer);

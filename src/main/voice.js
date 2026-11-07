@@ -157,8 +157,23 @@ class Speaker {
     return 'system';
   }
 
-  async speak(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice, lang = 'en', quick = false } = {}) {
-    this.stop();
+  // append: wait for what is playing now and speak after it, instead of cutting it off (used to speak the rest of an answer after its first sentence). If anything stops the speaker in the
+  // meantime, the appended words are dropped: you spoke over it.
+  speak(text, opts = {}) {
+    const { append = false, ...rest } = opts;
+    if (append && this.current) {
+      const before = this.stops, prev = this.current;
+      const p = prev.catch(() => {}).then(() => (this.stops === before ? this._speakNow(text, rest, false) : undefined));
+      this.current = p; p.finally(() => { if (this.current === p) this.current = null; }).catch(() => {});
+      return p;
+    }
+    const p = this._speakNow(text, rest, true); this.current = p;
+    p.finally(() => { if (this.current === p) this.current = null; }).catch(() => {});
+    return p;
+  }
+
+  async _speakNow(text, { voice = 'auto', rate = 'normal', volume = 1, kokoroVoice, lang = 'en', quick = false } = {}, doStop = true) {
+    if (doStop) this.stop();
     const say = speakable(text);
     if (!say) return;
     this.currentText = say;
@@ -322,6 +337,7 @@ class Speaker {
   }
 
   stop() {
+    this.stops = (this.stops || 0) + 1;
     this.token++;
     this.busy = false;
     this.setPreparing(false);
