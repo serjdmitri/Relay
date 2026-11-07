@@ -165,17 +165,19 @@ test('the away screen can be turned off, needs owner recognition on, and is not 
 // a face as the camera page reports it: [score], [alive]
 const feedLive = (m, scores, live, secs = 1) => { let last = null; for (let i = 0; i < secs; i++) { m.clock.t += 1000; last = m.g.frame({ faces: scores.length, scores, live }) || last; } return last; };
 
-test('liveness: a face that matches you but is not alive (a picture) is a stranger, never you', async () => {
+test('liveness: a face that matches you but never blinks for a full minute (a picture) is a stranger, never you', async () => {
   const m = make();
-  feedLive(m, [0.9], [false], 3);
-  assert.equal(m.g.state, 'alarm', 'a photo of you held to the camera starts the alarm');
+  feedLive(m, [0.9], [false], 40);
+  assert.equal(m.g.state, 'idle', 'forty seconds of you staring at the screen without a blink is not an alarm (it was one, on you)');
+  feedLive(m, [0.9], [false], 30);
+  assert.equal(m.g.state, 'alarm', 'but a minute of a face that matches you and never blinks is a photo held to the camera');
   feedLive(m, [0.9], [false], 25); await tick();
   assert.equal(m.locks.length, 1, 'and it cannot stop the alarm, either');
 });
 
 test('liveness: a living you stops the alarm that a picture started, and a picture beside you does not start one', () => {
   const m = make();
-  feedLive(m, [0.9], [false], 3); assert.equal(m.g.state, 'alarm');
+  feedLive(m, [0.9], [false], 70); assert.equal(m.g.state, 'alarm');
   feedLive(m, [0.9], [true], 2); assert.equal(m.g.state, 'idle');
   const n = make(); feedLive(n, [0.9, 0.9], [true, false], 30);
   assert.deepEqual(n.log, [], 'you are there and alive; the picture next to you is the viewer guard\'s business');
@@ -460,4 +462,11 @@ test('unclear looks do not hide you: your face, an empty chair, or a long stretc
   m = make({ enabled: true, seconds: 20, threshold: 0.4 }); f = (scores, faces = scores.length) => { m.clock.t += 1000; return m.g.frame({ faces, scores }); };
   f([0.01]); f([0.01]); for (let i = 0; i < 13; i++) f([], 1); f([0.01]);
   assert.equal(events(m, 'alarm').length, 0, 'a long stretch of unclear looks is not a stranger sitting there');
+});
+
+test('a stranger with a low score is still caught at once, even when your own face is steady, and a stranger whose face is turned away is not judged', () => {
+  const m = make(); m.feed([0.02], 4);
+  assert.equal(m.g.state, 'alarm', 'a clearly different face starts the alarm within a few looks');
+  const n = make(); for (let i = 0; i < 20; i++) { n.clock.t += 1000; n.g.frame({ faces: 1, scores: [], down: true }); }
+  assert.deepEqual(n.log, [], 'a face turned away or down is neither you nor a stranger');
 });

@@ -72,6 +72,9 @@ test('looking away: down at the keyboard or turned aside, in either direction, a
   assert.equal(lookingAway({ matrix: pose(10, 15) }), false, 'a small tilt is still facing the camera');
   assert.equal(lookingAway({ matrix: pose(35, 0) }), true); assert.equal(lookingAway({ matrix: pose(-35, 0) }), true, 'up or down');
   assert.equal(lookingAway({ matrix: pose(0, 50) }), true); assert.equal(lookingAway({ matrix: pose(0, -50) }), true);
+  assert.equal(lookingAway({ matrix: pose(0, 33) }), true, 'turned to look at something else');
+  assert.equal(lookingAway({ matrix: pose(22, 0) }), true, 'looking down at a phone or the keyboard');
+  assert.equal(lookingAway({ matrix: pose(15, 25) }), false, 'a normal angle at a screen is still judged');
   assert.equal(lookingAway({ matrix: pose(0, 0, true) }), false, 'the same answer when the matrix axes are flipped');
   assert.equal(lookingAway({ matrix: pose(35, 0, true) }), true);
   assert.equal(lookingAway({ gazeDownL: 0.7, gazeDownR: 0.6 }), true, 'eyes cast down while the head faces the camera');

@@ -753,12 +753,6 @@ const PAGES = {
     ask.append(
       look,
       (() => {
-        const selected = S.settings.assistantVisual === 'orb' ? 'orb' : 'reactor';
-        const row = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Assistant visual</div><div class="seg">${[['reactor', 'Reactor'], ['orb', 'Orb']].map(([v, l]) => `<button data-v="${v}" class="${selected === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Choose the assistant shown while Relay listens, works, and greets you. This applies to the Jarvis look.</div></div>`);
-        row.onclick = (e) => e.target.dataset.v && relay.set('settings.assistantVisual', e.target.dataset.v);
-        return row;
-      })(),
-      (() => {
         const selected = S.settings.reactorIdlePosition === 'corner' ? 'corner' : 'center';
         const row = h(`<div class="row talk" style="flex-wrap:wrap"><div class="t">Idle reactor position</div><div class="seg">${[['center', 'Center'], ['corner', 'Corner']].map(([v, l]) => `<button data-v="${v}" class="${selected === v ? 'on' : ''}">${l}</button>`).join('')}</div><div class="note foot" style="flex-basis:100%">Press Option-I to show or hide the idle reactor.</div></div>`);
         row.onclick = (e) => e.target.dataset.v && relay.set('settings.reactorIdlePosition', e.target.dataset.v);
