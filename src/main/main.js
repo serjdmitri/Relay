@@ -1264,6 +1264,7 @@ app.whenReady().then(() => {
   kokoro = new KokoroVoice({ dir: path.join(app.getPath('userData'), 'voices', 'kokoro'), onProgress: () => broadcast() });
   const omni = new OmniVoice({ python: path.join(app.getPath('userData'), 'omnivoice', 'venv', 'bin', 'python'), worker: app.isPackaged ? path.join(process.resourcesPath, 'native', 'omni-worker.py') : path.join(__dirname, 'tts', 'omni-worker.py') });
   app.once('before-quit', () => omni.stop());
+  setTimeout(() => { if (store.get('settings.tts.engine') === 'omnivoice') omni.warm().catch(() => {}); }, 3000).unref?.(); // load the voice now, not when the first reply needs it
   speaker = new Speaker({
     kokoro, omni, phraseCacheDir:path.join(app.getPath('userData'),'voices','fixed-phrases'),
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),

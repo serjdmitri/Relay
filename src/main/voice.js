@@ -68,6 +68,14 @@ function speakable(text) {
     .trim();
 }
 
+// The wait before the first word is the time to make the first piece, so the first piece is cut short (at a comma, or a space) when it is long: about 70 characters is under a second of speaking.
+function firstShort(pieces, limit = 80) {
+  if (!pieces.length || pieces[0].length <= limit * 1.4) return pieces;
+  const first = pieces[0], cut = Math.max(first.lastIndexOf(', ', limit), first.lastIndexOf('; ', limit), first.lastIndexOf(' ', limit));
+  if (cut < 30) return pieces;
+  return [first.slice(0, cut + 1).trim(), first.slice(cut + 1).trim(), ...pieces.slice(1)].filter(Boolean);
+}
+
 class Speaker {
   // getTts(): { engine, openai: {...key}, elevenlabs: {...key}, kokoro: {...} }, read fresh for every reply.
   // kokoro: the on-device voice (see tts/kokoro.js), or null. fetchFn: for tests.
@@ -217,7 +225,7 @@ class Speaker {
     const make = (piece) => cachedAudio ? Promise.resolve(this.writeTemp(cachedAudio, 'wav')) : (engine === 'omnivoice' ? this.omni.synthesize(piece, { signal, rate }) : engine === 'kokoro'
       ? this.kokoro.synthesize(piece, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate })
       : cloud.synthesize(engine, tts[engine], piece, { rate, fetchFn: this.fetchFn, signal }).then((buf) => this.writeTemp(buf, cloud.EXT[engine] || 'mp3')));
-    const pieces = cloud.sentences(say, 160);
+    const pieces = firstShort(cloud.sentences(say, 160)); // the first piece is kept short so the first sound comes sooner
     let pending = make(pieces[0]);
     try {
       for (let i = 0; i < pieces.length; i++) {
@@ -327,4 +335,4 @@ class Speaker {
   }
 }
 
-module.exports = { Speaker, parseVoices, pickVoice, listVoices, speakable, RATES };
+module.exports = { Speaker, parseVoices, pickVoice, listVoices, speakable, RATES, firstShort };
