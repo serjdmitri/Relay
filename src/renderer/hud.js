@@ -371,6 +371,7 @@
     if (Array.isArray(msg.tasks)) renderTasks(msg.tasks);
     const typing = s === 'input';
     const asking = s === 'confirm';
+    hud.classList.toggle('typing', typing); hud.classList.toggle('asking', asking); // the camera-view corner layout shows the box and buttons only for these
     inEl.style.display = typing ? 'block' : 'none';
     btns.style.display = asking ? 'flex' : 'none';
     if (typing && (msg.reset || shownState !== 'input')) { inEl.value = ''; setTimeout(() => inEl.focus(), 90); }

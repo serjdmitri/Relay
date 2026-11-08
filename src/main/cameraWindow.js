@@ -19,13 +19,13 @@ class CameraWindow {
     this.full = full;
     const win = this.win = new BrowserWindow({
       x: full ? d.x : area.x + area.width - width - 24, y: full ? d.y : area.y + 24, width, height, minWidth: 240, minHeight: 180,
-      frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: true, show: false, skipTaskbar: true,
+      frame: false, enableLargerThanScreen: true, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: true, show: false, skipTaskbar: true,
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false }
     });
-    win.setAlwaysOnTop(true, 'floating'); // below the reactor and the answer card (they are at screen-saver level), so Jarvis stays visible in the corner on top of a full-screen picture
+    win.setAlwaysOnTop(true, 'screen-saver', -1); // screen-saver level lets it cover the menu bar too (a lower level is kept below it); one step under the reactor and the answer card (level 0), so Jarvis stays on top of the picture
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', (e) => e.preventDefault());
     win.loadFile(path.join(__dirname, '../renderer/camera.html'));
-    win.once('ready-to-show', () => { if (full) { this.passThrough(true); win.showInactive(); } else win.show(); if (full) win.webContents.executeJavaScript('window.__camera && window.__camera({ full: true })').catch(() => null); });
+    win.once('ready-to-show', () => { if (full) { this.passThrough(true); win.setBounds(this.display().bounds); win.showInactive(); } else win.show(); if (full) win.webContents.executeJavaScript('window.__camera && window.__camera({ full: true })').catch(() => null); });
     win.on('closed', () => { this.win = null; this.full = false; try { if (this.esc) globalShortcut.unregister('Escape'); } catch { /* gone */ } this.esc = false; try { this.onView(false); } catch { /* the reactor goes back on its own */ } });
     try { this.onView(true); } catch { /* nothing to move */ }
     this.motion?.watchWindow(win, { key: 'camera-view', close: () => win.close(), undo: () => this.open() });
