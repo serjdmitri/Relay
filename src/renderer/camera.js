@@ -5,7 +5,8 @@ import { ObjectDetector, FilesetResolver } from './vendor/mediapipe/vision_bundl
 const video = document.getElementById('v'), canvas = document.getElementById('boxes'), msg = document.getElementById('msg');
 const ctx = canvas.getContext('2d');
 let stream = null, detector = null, seen = [];
-const view = { boxes: true, filter: [], fade: 58 }; // fade: where the solid centre ends, in percent of the way out (lower = softer edges)
+// The boxes are OFF until you ask ("show the boxes"); the finder still runs, so "what do you see" still knows the names.
+const view = { boxes: false, filter: [], fade: 58 }; // fade: where the solid centre ends, in percent of the way out (lower = softer edges)
 
 document.getElementById('x').onclick = () => window.close();
 addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });

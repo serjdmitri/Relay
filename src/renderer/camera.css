@@ -4,7 +4,7 @@ html, body { margin: 0; height: 100%; background: transparent; color: var(--ink)
 /* the picture and its boxes melt into the screen: solid in the middle, fading to nothing at the edges (the width of the fade is --inner, set from voice commands) */
 #view { position: absolute; inset: 0; -webkit-app-region: drag; -webkit-mask-image: radial-gradient(ellipse 72% 72% at 50% 50%, #000 var(--inner), transparent 100%); mask-image: radial-gradient(ellipse 72% 72% at 50% 50%, #000 var(--inner), transparent 100%); }
 /* full screen: the picture fades deeply into dark blue on all four sides, evenly (the width of the fade follows --inner, so "fade the edges more / less" still works) */
-html.full body { background: #08111c; }
+html.full body { background: radial-gradient(ellipse 85% 85% at 50% 50%, #0a1626 0%, #08111c 45%, #000 100%); } /* dark blue in the middle, black at the edges to match the screen's own border */
 html.full #view { --edge: calc((100% - var(--inner)) * .75); -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent), linear-gradient(to bottom, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent); -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent), linear-gradient(to bottom, transparent, #000 var(--edge), #000 calc(100% - var(--edge)), transparent); mask-composite: intersect; }
 video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 video { object-fit: cover; transform: scaleX(-1); } /* mirrored, like a mirror; the boxes are drawn mirrored to match, with the words the right way round */
