@@ -36,6 +36,8 @@ test('the camera view opens full screen and keeps Jarvis in the corner', () => {
   const win = read('src/main/cameraWindow.js'), over = read('src/main/overlay.js'), hud = read('src/renderer/hud.js'), main = read('src/main/main.js'), html = read('src/renderer/overlay.html');
   assert.match(win, /open\(\{ full = true \} = \{\}\)/, 'opens full screen by default');
   assert.match(win, /setAlwaysOnTop\(true, 'floating'\)/, 'below the reactor, so Jarvis shows on top of the picture');
+  assert.match(win, /passThrough\(on\) \{[\s\S]*setIgnoreMouseEvents\(!!on\)/, 'full screen lets every click through: it must never leave the mouse dead');
+  assert.match(win, /this\.passThrough\(true\)/); assert.match(win, /this\.passThrough\(this\.full\)/); assert.match(win, /globalShortcut\.register\('Escape'/);
   assert.match(win, /onView\(true\)/); assert.match(win, /onView\(false\)/);
   assert.match(over, /setCameraView\(on\)/); assert.match(over, /cameraView:!!this\.cameraView/);
   assert.match(hud, /if \(cam && !hard\) m = 'corner'/, 'every state stays in the corner while the camera is up');
