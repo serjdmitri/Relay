@@ -12,6 +12,26 @@ document.getElementById('x').onclick = () => window.close();
 addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
 addEventListener('pagehide', () => { try { stream?.getTracks().forEach((t) => t.stop()); } catch { /* gone */ } });
 
+const $ = (id) => document.getElementById(id);
+function updateBar() {
+  $('b-boxes').setAttribute('aria-pressed', String(view.boxes));
+  $('b-people').setAttribute('aria-pressed', String(view.filter.length === 1 && view.filter[0] === 'person'));
+}
+// The window ignores the mouse when it is full screen (so it never blocks the screen); while the pointer is over the bar it listens, and goes back to ignoring as soon as the pointer leaves.
+const hover = (on) => { try { window.relay?.cameraHover?.(on); } catch { /* no bridge */ } };
+let over = false, lastPing = 0;
+addEventListener('mousemove', (e) => { // forwarded to this page even while the window ignores the mouse
+  const on = !!e.target?.closest?.('#bar'), now = Date.now();
+  if (on && (!over || now - lastPing > 1000)) { lastPing = now; hover(true); }
+  if (!on && over) hover(false);
+  over = on;
+}, true);
+document.documentElement.addEventListener('mouseleave', () => { if (over) { over = false; hover(false); } });
+$('b-boxes').onclick = () => window.__camera({ boxes: !view.boxes });
+$('b-people').onclick = () => { const on = view.filter.length === 1 && view.filter[0] === 'person'; window.__camera({ filter: on ? [] : ['person'], boxes: on ? view.boxes : true }); };
+$('b-close').onclick = () => { hover(false); window.close(); };
+$('b-cam').onclick = () => nextCamera();
+
 window.__camera = (o = {}) => {
   if (Number.isFinite(o.fadeBy)) view.fade = Math.max(8, Math.min(90, view.fade - o.fadeBy * 12)); // "more" fade means a smaller solid centre
   if (typeof o.full === 'boolean') document.documentElement.classList.toggle('full', o.full); // full screen: no faded edges, the picture fills the screen
@@ -19,6 +39,7 @@ window.__camera = (o = {}) => {
   if (Array.isArray(o.filter)) view.filter = o.filter.map((s) => String(s).toLowerCase());
   document.documentElement.style.setProperty('--inner', view.fade + '%');
   if (!view.boxes) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  updateBar();
   return { fade: view.fade, boxes: view.boxes, filter: view.filter };
 };
 
@@ -63,11 +84,35 @@ async function look() {
   } catch { /* a bad picture: skip it */ }
 }
 
+// Which camera: the one that faces whoever is at the computer (the built-in one), not an iPhone or a Desk View camera that happens to be the system default. "Camera" on the bar cycles through the others.
+const FACING = /facetime|built-in|macbook|isight|studio display/i, NOT_FACING = /desk view|iphone|ipad|continuity|virtual|obs/i;
+const constraints = (deviceId) => ({ video: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), width: 1280, height: 720, frameRate: { ideal: 30 } }, audio: false });
+async function cameras() { try { return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); } catch { return []; } }
+async function useCamera(deviceId) {
+  const next = await navigator.mediaDevices.getUserMedia(constraints(deviceId));
+  try { stream?.getTracks().forEach((t) => t.stop()); } catch { /* gone */ }
+  stream = next; video.srcObject = stream; await video.play();
+  try { localStorage.setItem('cameraId', stream.getVideoTracks()[0]?.getSettings?.().deviceId || ''); } catch { /* no storage */ }
+}
+async function nextCamera() {
+  const all = await cameras(); if (all.length < 2) { msg.textContent = 'Only one camera found.'; setTimeout(() => { msg.textContent = ''; }, 2500); return; }
+  const cur = stream?.getVideoTracks()[0]?.getSettings?.().deviceId, i = all.findIndex((d) => d.deviceId === cur), pick = all[(i + 1) % all.length];
+  try { await useCamera(pick.deviceId); msg.textContent = pick.label || 'Next camera'; setTimeout(() => { msg.textContent = ''; }, 2500); } catch { msg.textContent = 'That camera would not start.'; }
+}
+async function preferFacing() {
+  try {
+    const all = await cameras(), cur = stream?.getVideoTracks()[0]?.getSettings?.().deviceId;
+    let want = ''; try { want = localStorage.getItem('cameraId') || ''; } catch { /* no storage */ }
+    const pick = all.find((d) => d.deviceId === want) || all.find((d) => FACING.test(d.label) && !NOT_FACING.test(d.label));
+    if (pick && pick.deviceId !== cur) await useCamera(pick.deviceId);
+  } catch { /* keep the default camera */ }
+}
+
 (async () => {
   try {
     const asked = navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: { ideal: 30 } }, audio: false });
     stream = await Promise.race([asked, new Promise((_, no) => setTimeout(() => no(new Error('CameraTimeout')), 15000))]);
-    video.srcObject = stream; await video.play(); msg.textContent = 'Finding what I can see…';
+    video.srcObject = stream; await video.play(); await preferFacing(); msg.textContent = 'Finding what I can see…';
   } catch (e) {
     const m = String(e?.message || e);
     msg.textContent = /CameraTimeout/.test(m) ? 'The camera did not answer. Another app may be using it.' : /Permission|NotAllowed/i.test(m) ? 'Relay may not use the camera. Allow it in System Settings > Privacy & Security > Camera.' : 'The camera could not start.';

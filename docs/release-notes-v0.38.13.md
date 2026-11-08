@@ -46,7 +46,7 @@ Owner recognition: faster, and it can no longer be left without its camera.
 - **The startup check reports how long the window took to appear** (0.7 s after launch on a clean profile).
 - **Includes Codex's 0.38.6 to 0.38.8** (never published on their own): the God's Eye globe floats over the desktop with optional hover side controls; natural camera, place and layer commands go straight to the map; map readiness follows the engine instead of a fixed wait, and a closed world is kept hidden for two minutes for a quick reopen; short local greetings are prepared ahead as private cached audio (replies and conversations are never cached); local speech no longer decrypts unrelated cloud keys on every request. Codex measured God's Eye command-ready at 3.1 to 4.2 s (was 6.2 s) and a prepared greeting dispatching in about 1 ms. See `docs/release-notes-v0.38.6.md` and `docs/release-notes-v0.38.8.md`. It also includes Codex's 0.38.10 to 0.38.12 (reliability and phone navigation, the wake handoff fix, reactor recovery): see `docs/release-notes-v0.38.10.md`, `v0.38.11.md` and `v0.38.12.md`.
 
-The full test suite passes (1469 tests).
+The full test suite passes (1470 tests).
 
 ## Requirements
 **macOS 26 or later.** Apple Silicon (`arm64`) build attached below. There is no Intel (`x64`) build: the native helpers must be built on an Intel Mac. The app is ad-hoc signed, so the first time you open a downloaded copy, right-click it and choose Open.
