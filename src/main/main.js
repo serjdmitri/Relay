@@ -1564,7 +1564,22 @@ app.whenReady().then(() => {
     store, getConfig: () => store.get('settings.selfImprove'),
     run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
   });
-  nightlyMaintenance=new(require('./nightlyMaintenance').NightlyMaintenance)({store,proposals,settings:()=>({...store.get('settings.selfImprove'),model:store.get('settings.model.ollamaModel'),url:store.get('settings.model.ollamaUrl')}),exportReport:(title,text)=>{try{ask.outputExport(title,text);}catch{}}});
+  // Claude, headless, in a proposal's own worktree: it may read and edit files, nothing else (no commands, no network), so nothing it writes has run (nightClaude.js).
+  const runClaudeHeadless = async ({ cwd, prompt }) => {
+    const claude = await require('./agent/claudeCli').findClaude();
+    if (!claude) return { code: 1, stdout: '', error: 'Claude is not installed' };
+    return new Promise((resolve) => require('child_process').execFile(claude, ['-p', prompt, '--allowedTools', 'Read,Glob,Grep,Edit,Write', '--disallowedTools', 'Bash,WebFetch,WebSearch', '--permission-mode', 'acceptEdits', '--max-turns', '30', '--output-format', 'text'],
+      { cwd, timeout: 40 * 60000, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? 1 : 0, stdout: String(stdout || ''), error: err ? String(stderr || err.message).slice(0, 200) : '' })));
+  };
+  const claudeNight = async (key) => {
+    const nc = require('./nightClaude');
+    const brief = nc.buildBrief({ diagLines: diag.tail(60), speed: require('./latency').describe(store.get('latencyLog')), extra: (store.get('settings.selfImprove') || {}).instruction || '' });
+    diag.log('night-claude', 'started');
+    const r = await nc.runNight({ proposals, runClaude: runClaudeHeadless, brief, key: new Date().toISOString().slice(0, 10) });
+    diag.log('night-claude', r.status + (r.files ? ` ${r.files.length} file(s), ${r.lines} lines` : ''));
+    return r;
+  };
+  nightlyMaintenance=new(require('./nightlyMaintenance').NightlyMaintenance)({store,claudeNight,proposals,settings:()=>({...store.get('settings.selfImprove'),model:store.get('settings.model.ollamaModel'),url:store.get('settings.model.ollamaUrl')}),exportReport:(title,text)=>{try{ask.outputExport(title,text);}catch{}}});
   ipcMain.handle('proposal:review',async(e,id)=>{
     if(e.sender!==mainWin?.webContents)return {error:'Open Settings first.'};
     const p=proposals.find(id);if(!p?.generated)return {error:'No generated proposal to review.'};
@@ -1575,6 +1590,28 @@ app.whenReady().then(() => {
     if(reviewedState!==await proposals.status(p))return {error:'Files changed during review. Review again.'};
     proposals.patch(p.id,{reviewed:true,reviewState:reviewedState});broadcast();return {ok:true};
   });
+  // "Turn on overnight self improvement": Claude prepares one small change a night for you to review (nightClaude.js). Finds your source folder if it does not know it yet.
+  ask.nightCommand = async (c) => {
+    const done = (reply) => ({ status: 'done', reply, actions: 1 });
+    const cfg = store.get('settings.selfImprove') || {};
+    if (c.type === 'night-report') { const m = store.get('nightlyMaintenance'); return { status: 'done', reply: m ? `Last overnight run (${m.status}): ${m.text}` : 'There has been no overnight run yet.', actions: 0 }; }
+    if (c.type === 'night-off') { store.set('settings.selfImprove', { ...cfg, nightly: false, claude: false }); broadcast(); return done('Overnight self-improvement is off. Nothing runs at night.'); }
+    const fsx = require('fs'), pathx = require('path'), looks = (d) => fsx.existsSync(pathx.join(d, '.git')) && fsx.existsSync(pathx.join(d, 'src', 'main', 'main.js'));
+    let repo = cfg.repo && looks(cfg.repo) ? cfg.repo : '';
+    if (!repo) {
+      const hits = [];
+      for (const root of ['Downloads', 'Documents', 'Desktop'].map((d) => pathx.join(os.homedir(), d))) {
+        let a = []; try { a = fsx.readdirSync(root, { withFileTypes: true }); } catch { continue; }
+        for (const e of a) { if (!e.isDirectory()) continue; const d = pathx.join(root, e.name); if (looks(d)) { hits.push(d); continue; } let b = []; try { b = fsx.readdirSync(d, { withFileTypes: true }); } catch { continue; } for (const f of b) if (f.isDirectory() && looks(pathx.join(d, f.name))) hits.push(pathx.join(d, f.name)); }
+      }
+      repo = hits.find((h) => pathx.basename(h) === 'relay-mine') || hits[0] || '';
+    }
+    if (!repo) return { status: 'failed', reply: 'I could not find your Relay source folder in Downloads, Documents or Desktop, so I cannot work on it overnight.' };
+    const branch = await new Promise((res) => require('child_process').execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repo, timeout: 5000 }, (e, out) => res(e ? '' : String(out).trim())));
+    store.set('settings.selfImprove', { ...cfg, repo, base: branch && branch !== 'HEAD' ? branch : (cfg.base || 'main'), nightly: true, claude: true });
+    const ov = ask.overnight.conf(); broadcast();
+    return done(`Overnight self-improvement is on. Between ${ov.from} and ${ov.to} at night, if this Mac is awake and Relay is open, Claude will look for one small, safe improvement to my own code in a separate copy of ${pathx.basename(repo)}. It can only read and edit files there, so nothing it writes has run. In the morning say "what did you improve overnight", read the change, and approve it or throw it away. I never merge, push or install anything by myself.`);
+  };
   ask.selfImproveCommand = async (c) => {
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
     const fail = (r) => ({ status: 'failed', reply: r.error });
