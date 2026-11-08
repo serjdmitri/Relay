@@ -272,7 +272,7 @@ class AskController {
       canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
-      onArmed: (on) => this.overlay.setArmed(on),
+      onArmed: (on) => { this.overlay.setArmed(on); this.diag?.log(on ? 'wake-listening' : 'wake-paused'); },
       onWake: text => this.wakeTriggered(text),
       log: console
     });
@@ -2210,6 +2210,7 @@ class AskController {
           if (this.pendingNaming && this.onNamingAnswer && Date.now() - this.pendingNaming.at < 5 * 60000) { const na = require('./intruderLog').parseNamingAnswer(effective); if (na) { this.lastRequestText = effective; return this.finish(entry, await this.onNamingAnswer(na)); } }
           if (this.cameraAdjust) { const cc = require('./cameraCommands').parseCameraCommand(effective); if (cc) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.cameraAdjust(cc), actions: 0 }); } }
           { const lc2 = require('./latency').parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } return this.finish(entry, { status: 'done', reply: require('./latency').describe(this.store.get('latencyLog')), actions: 0 }); } }
+          { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
           if (this.localCommand) { const lc = require('./localMode').parseLocalCommand(effective); if (lc) { this.lastRequestText = effective; return this.finish(entry, await this.localCommand(lc)); } }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
           if (hybridMod.parseSearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.searchMemory(hybridMod.parseSearchCommand(effective))); }

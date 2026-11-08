@@ -66,6 +66,14 @@ class Hotkeys {
     return this.running;
   }
 
+  // Starts the listener again from scratch. macOS can switch a global key listener off after sleep or when it is busy, and it then hears nothing while still looking alive; the old
+  // handlers are removed first so the keys are not heard twice.
+  restart() {
+    try { this.uIOhook?.removeAllListeners?.(); } catch { /* none */ }
+    this.stop();
+    return this.start();
+  }
+
   stop() {
     try {
       this.uIOhook?.stop();
