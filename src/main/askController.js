@@ -180,6 +180,7 @@ class AskController {
     this.pendingConfirm = null;
     this.prevApp = null;
     this.suspended = false; // true while a shortcut is being recorded in the UI
+    this.lat = new (require('./latency').Latency)({ store: this.store }); // how long Jarvis takes to react (latency.js)
     this.recording = null; // string[] while recording a routine
     this.lastOk = null;
     this.scale = 1;
@@ -259,6 +260,7 @@ class AskController {
       this.speaker.onPreparing = on => { this.overlay.voicePreparing?.(on); if (!on) this.followUpSoon(); };
       this.speaker.onState = (on) => {
         this.overlay.speaking(on);
+        if (on) this.lat?.mark('firstSound');
         if (on) this.barge.arm(); else { this.barge.disarm(); this.followUpSoon(); }
         this.wakeSoon();
       };
@@ -529,6 +531,7 @@ class AskController {
   onShortcut(name, kind) {
     if (name === 'handsPause') { if (kind === 'press') this.onHandsPause?.(); return; }
     if (this.suspended) return;
+    if (name === 'ask' && (kind === 'hold-end' || kind === 'tap')) this.lat?.mark('released');
     if (name === 'reactorIdle' && kind === 'press') {
       if (this.state !== 'idle') return;
       this.reactorIdle = !this.reactorIdle;
@@ -2050,6 +2053,7 @@ class AskController {
     if (!text) return this.runningTask ? this.resumeWork() : this.close();
     if (this.runningTask && this.state === 'working') return this.enqueue(text, { voice }); // preserve the input method while queued
     if (this.state !== 'input') return;
+    if (voice) this.lat?.mark('text');
     if (voice && this.awaitingFollowAnswer) {
       this.awaitingFollowAnswer = false;
       const answer = followUpAnswer(text);
@@ -2205,6 +2209,7 @@ class AskController {
           // "yes" / "no" / "that's Sam" about a visitor Relay just told you about: only heard for five minutes after it asked, so a bare "yes" is never taken for anything else
           if (this.pendingNaming && this.onNamingAnswer && Date.now() - this.pendingNaming.at < 5 * 60000) { const na = require('./intruderLog').parseNamingAnswer(effective); if (na) { this.lastRequestText = effective; return this.finish(entry, await this.onNamingAnswer(na)); } }
           if (this.cameraAdjust) { const cc = require('./cameraCommands').parseCameraCommand(effective); if (cc) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.cameraAdjust(cc), actions: 0 }); } }
+          { const lc2 = require('./latency').parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } return this.finish(entry, { status: 'done', reply: require('./latency').describe(this.store.get('latencyLog')), actions: 0 }); } }
           if (this.localCommand) { const lc = require('./localMode').parseLocalCommand(effective); if (lc) { this.lastRequestText = effective; return this.finish(entry, await this.localCommand(lc)); } }
           if (this.ownerCommand && parseOwnerCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.ownerCommand(parseOwnerCommand(effective))); }
           if (hybridMod.parseSearchCommand(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.searchMemory(hybridMod.parseSearchCommand(effective))); }
@@ -3247,6 +3252,7 @@ class AskController {
   }
 
   async execute(text, requestId) {
+    this.lat?.mark('thinking');
     // speak the first sentence of a plain answer while the rest is still being written (earlyVoice.js); cleared when the answer is spoken
     this.early = new EarlyVoice({ enabled: !!this.store.get('settings.speakReplies') && !!this.voiceAsk && !this.assistOn && !!this.speaker, speak: (s) => this.speaker.speak(s, { ...profileFor('reply', this.store.get('settings') || {}), lang: detectLanguage(s)?.lang || 'en' }) });
     if (this.offline && flagsMod.isOn(this.store.get('settings'), 'offline')) return this.executeOffline(text);
@@ -3261,7 +3267,7 @@ class AskController {
     const onEvent = (e) => {
       if (e.type === 'escalate') this.push({ label: 'Thinking harder' });
       if (e.type === 'tool-start') { this.early?.toolStarted(); this.push({ label: e.label || e.name.replace(/_/g, ' '), stream: '' }); }
-      if (e.type === 'text-delta') { this.early?.delta(e.text); this.streamText(e.text); }
+      if (e.type === 'text-delta') { this.lat?.mark('firstWords'); this.early?.delta(e.text); this.streamText(e.text); }
       if (e.type === 'tool') {
         const actionId = crypto.randomUUID();
         this.store.addAction({ id: actionId, requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
