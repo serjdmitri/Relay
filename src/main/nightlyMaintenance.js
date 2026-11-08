@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path');
 const {OllamaProvider}=require('./agent/providers/ollama');
 class NightlyMaintenance {
-  constructor({store,proposals,settings,exportReport=()=>{},provider,now=Date.now}){Object.assign(this,{store,proposals,settings,exportReport,provider,now});this.busy=false;}
+  constructor({store,proposals,settings,exportReport=()=>{},provider,now=Date.now,claudeNight=null}){Object.assign(this,{store,proposals,settings,exportReport,provider,now,claudeNight});this.busy=false;}
   async run(key){
     const cfg=this.settings()||{};if(!cfg.nightly||this.busy||this.store.get('nightlyMaintenance')?.key===key)return false;
     this.busy=true;this.store.set('nightlyMaintenance',{key,status:'running',at:this.now(),text:'Maintenance started. If interrupted, review proposals before retrying.'});this.store.flush?.();
@@ -37,6 +37,8 @@ class NightlyMaintenance {
           lines.push(`Local draft prepared: ${p.branch}, ${name}. Review before testing; generated code has not run.`);
         }
       }
+      // Claude prepares one small reviewed-in-the-morning change (nightClaude.js): never merged, pushed, installed or run overnight.
+      if(cfg.claude&&this.claudeNight){try{const r=await this.claudeNight(key);if(r?.line)lines.push(r.line);}catch(e){lines.push('Overnight Claude could not finish: '+String(e.message).slice(0,200));}}
       if(!lines.length)lines.push('No proposals or local source-review task configured.');
       lines.push('Live Relay was not changed. Nothing was merged, pushed or installed.');
       const text=lines.join('\n');this.store.set('nightlyMaintenance',{key,status:'done',at:this.now(),text});this.exportReport('Nightly maintenance',text);return true;
