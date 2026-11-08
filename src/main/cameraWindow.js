@@ -1,4 +1,4 @@
-const { BrowserWindow, screen } = require('electron');
+const { BrowserWindow, screen, globalShortcut } = require('electron');
 const path = require('path');
 const { nextBounds } = require('./cameraCommands');
 
@@ -14,7 +14,7 @@ class CameraWindow {
 
   // Opens full screen by default (asking for the camera, or "what do you see", fills the screen); "camera normal size" brings it down to a window.
   open({ full = true } = {}) {
-    if (this.isOpen) { this.win.show(); this.win.moveTop(); return; }
+    if (this.isOpen) { if (this.full) this.win.showInactive(); else this.win.show(); this.win.moveTop(); return; }
     const d = this.display().bounds, area = this.area(), width = full ? d.width : Math.min(640, area.width), height = full ? d.height : Math.round(width * 0.75);
     this.full = full;
     const win = this.win = new BrowserWindow({
@@ -25,10 +25,21 @@ class CameraWindow {
     win.setAlwaysOnTop(true, 'floating'); // below the reactor and the answer card (they are at screen-saver level), so Jarvis stays visible in the corner on top of a full-screen picture
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', (e) => e.preventDefault());
     win.loadFile(path.join(__dirname, '../renderer/camera.html'));
-    win.once('ready-to-show', () => { win.show(); if (full) win.webContents.executeJavaScript('window.__camera && window.__camera({ full: true })').catch(() => null); });
-    win.on('closed', () => { this.win = null; this.full = false; try { this.onView(false); } catch { /* the reactor goes back on its own */ } });
+    win.once('ready-to-show', () => { if (full) { this.passThrough(true); win.showInactive(); } else win.show(); if (full) win.webContents.executeJavaScript('window.__camera && window.__camera({ full: true })').catch(() => null); });
+    win.on('closed', () => { this.win = null; this.full = false; try { if (this.esc) globalShortcut.unregister('Escape'); } catch { /* gone */ } this.esc = false; try { this.onView(false); } catch { /* the reactor goes back on its own */ } });
     try { this.onView(true); } catch { /* nothing to move */ }
     this.motion?.watchWindow(win, { key: 'camera-view', close: () => win.close(), undo: () => this.open() });
+  }
+
+  // Full screen is a picture to look at, never a wall: every click and key goes straight through it to the apps underneath, and Escape (a global key while it is up) or "hide the camera" closes it.
+  // A window you cannot click through would leave the mouse dead on the whole screen.
+  passThrough(on) {
+    if (!this.isOpen) return;
+    try { this.win.setIgnoreMouseEvents(!!on); this.win.setFocusable(!on); } catch { /* the window is going away */ }
+    try {
+      if (on && !this.esc) { this.esc = globalShortcut.register('Escape', () => this.close()) ? true : false; }
+      if (!on && this.esc) { globalShortcut.unregister('Escape'); this.esc = false; }
+    } catch { /* no shortcut: the voice command still closes it */ }
   }
 
   close() { if (this.isOpen) this.win.close(); }
@@ -41,6 +52,7 @@ class CameraWindow {
       const full = c.action === 'fullscreen';
       this.win.setBounds(nextBounds(this.win.getBounds(), full ? this.display().bounds : this.area(), c), true);
       this.full = full ? true : c.action === 'reset' ? false : this.full && c.action === 'move';
+      this.passThrough(this.full);
       await send({ full: this.full });
       return { bigger: 'Bigger.', smaller: 'Smaller.', move: `Moved ${c.direction}.`, fullscreen: 'Full screen. Say "camera normal size" to bring it back, or "hide the camera".', reset: 'Back to normal size, in the middle.' }[c.action];
     }
