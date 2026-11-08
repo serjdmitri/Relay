@@ -36,6 +36,23 @@ function addSample(samples, embedding, { max = 12, tooSimilar = 0.95 } = {}) {
   return { samples: [...samples, embedding.map((x) => Math.round(x * 1e5) / 1e5)], added: true };
 }
 
+// You stopped an alarm with your fingerprint, so the face it saw was you in light or at an angle Relay did not know yet. Which of those faces may be added to the faces you are known by?
+// Only when it is safe: you were recognised in the two minutes before the alarm began, it is one person in every picture, and the face is close to yours without already counting as you (a different
+// person who happened to be there is far from yours). At most two a time, 24 in all. -> { samples, learned }.
+function learnFromAlarm({ templates = [], embeddings = [], sinceSeenMs = Infinity, threshold = 0.363, max = 24, floor = 0.2 } = {}) {
+  const none = { samples: templates, learned: 0 };
+  if (!templates.length || !(sinceSeenMs >= 0 && sinceSeenMs < 120000)) return none;
+  const embs = embeddings.filter((e) => Array.isArray(e) && e.length === 128 && e.every(Number.isFinite));
+  if (!embs.length || embs.length > 6) return none;
+  for (let i = 0; i < embs.length; i++) for (let j = i + 1; j < embs.length; j++) if (cosine(embs[i], embs[j]) < 0.6) return none; // more than one person: learn nothing
+  let samples = templates.slice(), learned = 0;
+  for (const e of embs.slice(0, 2)) {
+    const best = bestScore(e, samples); if (best === null || best < floor || best >= threshold) continue;
+    const r = addSample(samples, e, { max }); if (r.added) { samples = r.samples; learned++; }
+  }
+  return { samples, learned };
+}
+
 // What the enrollment window sends back: [{ pose, embedding }] for the nine poses. Only a set that really covers your face from around is kept: straight ahead plus at least six of
 // the eight directions, every embedding 128 finite numbers, nothing else. Returns { ok, templates, poses } or { ok: false, why } in words.
 const ENROLL_POSES = ['center', 'left', 'topLeft', 'top', 'topRight', 'right', 'bottomRight', 'bottom', 'bottomLeft'];
@@ -247,6 +264,7 @@ function parseOwnerCommand(text) {
   if (/^(?:turn off|disable|stop|switch off) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-off' };
   if (/^(?:test|show|preview|try) (?:the )?(?:away|standby|stand-by) (?:screen|mode)$/.test(n)) return { type: 'away-demo' };
   if (/^(?:show|open|see|view|list)(?: me)?(?: the| my)? (?:intruders?|strangers?|security)(?: pictures?| photos?| log| visits| shots)?$|^who (?:was|sat|tried|came|has been|used|touched) (?:at|to use|using|on) my (?:computer|mac|laptop)(?: while i was (?:away|gone|out))?$|^who was (?:at|on) my (?:computer|mac|laptop)$/.test(n)) return { type: 'intruders' };
+  if (/^(?:undo|forget|remove|delete) (?:what you(?:'ve| have)? learned|the faces you(?:'ve| have)? (?:added|learned)(?: from alarms)?|what you added)(?: from (?:the )?alarms)?$/.test(n)) return { type: 'unlearn' };
   if (/^(?:show|open|display|see|bring up|put up)(?: me)?(?: the| my)? (?:camera|webcam)(?: view| feed| picture| window)?$|^(?:show|let me see) (?:me )?(?:my )?(?:face|myself)$/.test(n)) return { type: 'camera-show' };
   if (/^(?:hide|close|dismiss|put away|get rid of)(?: the| my)? (?:camera|webcam)(?: view| feed| picture| window)?$/.test(n)) return { type: 'camera-hide' };
   if (/^(?:turn on|enable|start|switch on) (?:the )?(?:intruder|stranger) (?:photos?|pictures?|snapshots?|camera)$/.test(n)) return { type: 'photos-on' };
@@ -287,4 +305,4 @@ function openTemplates(rec, decrypt) {
   } catch { return []; }
 }
 
-module.exports = { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, explainEpisode, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };
+module.exports = { learnFromAlarm, OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, explainEpisode, ENROLL_POSES, config, cosine, bestScore, addSample, sealTemplates, openTemplates, parseOwnerCommand, DEFAULTS };

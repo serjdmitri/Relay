@@ -437,7 +437,7 @@ test('episodes are separated by calm looks, saved through a callback, restored o
 
 test('main: a fingerprint stop discards the pictures, the guard starts armed if you were seen in the last day, and "stricter/looser" move the limit within bounds (looser asks for confirmation)', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/main/main.js'), 'utf8');
-  assert.match(src, /if \(outcome === 'fingerprint'\) intruderLog\.remove\(id\); else intruderLog\.finish\(id, outcome\)/, 'that was you, so the pictures are not kept');
+  assert.match(src, /if \(outcome === 'fingerprint'\) \{ learnFromAlarmVisit\(id\); intruderLog\.remove\(id\); \} else intruderLog\.finish\(id, outcome\)/, 'that was you, so the pictures are not kept');
   assert.match(src, /Date\.now\(\) - \(Number\(store\.get\('ownerArmedAt'\)\) \|\| 0\) < 24 \* 3600 \* 1000 && ownerState\.templates\.length > 0\) ownerGuard\.armed = true/);
   assert.match(src, /onOwnerSeen: \(\) => \{ store\.set\('ownerArmedAt', Date\.now\(\)\); tellAboutVisits\(\); \}/);
   assert.match(src, /ownerGuard\.dismiss\('fingerprint'\); store\.set\('ownerArmedAt', Date\.now\(\)\)/);
@@ -469,4 +469,24 @@ test('a stranger with a low score is still caught at once, even when your own fa
   assert.equal(m.g.state, 'alarm', 'a clearly different face starts the alarm within a few looks');
   const n = make(); for (let i = 0; i < 20; i++) { n.clock.t += 1000; n.g.frame({ faces: 1, scores: [], down: true }); }
   assert.deepEqual(n.log, [], 'a face turned away or down is neither you nor a stranger');
+});
+
+test('an alarm you stop with your fingerprint teaches Relay your face, but only when that is safe', () => {
+  const { learnFromAlarm } = require('../src/main/ownerGuard');
+  const unit = (v) => { const n = Math.hypot(...v); return v.map((x) => x / n); };
+  const mk = (i, j) => { const v = new Array(128).fill(0); v[0] = 1; v[i] = j; return unit(v); }; // cosine with mk(1,0) = 1/sqrt(1+j^2)
+  const mine = [mk(1, 0)], near = mk(2, 2.2); // cosine ~0.41? build from j: 1/sqrt(1+4.84)=0.41 (above the 0.363 limit) so use a larger j
+  const lookalike = mk(2, 3.5); // 1/sqrt(1+12.25)=0.275: close to you but below the limit
+  const stranger = mk(2, 20); // ~0.05: nothing like you
+  const base = { templates: mine, sinceSeenMs: 30000, threshold: 0.363 };
+  let r = learnFromAlarm({ ...base, embeddings: [lookalike] }); assert.equal(r.learned, 1); assert.equal(r.samples.length, 2);
+  assert.equal(learnFromAlarm({ ...base, embeddings: [stranger] }).learned, 0, 'a face nothing like yours is never learned');
+  assert.equal(learnFromAlarm({ ...base, embeddings: [near] }).learned, 0, 'a face that already counts as you needs no teaching');
+  assert.equal(learnFromAlarm({ ...base, sinceSeenMs: 300000, embeddings: [lookalike] }).learned, 0, 'you were not seen just before the alarm');
+  assert.equal(learnFromAlarm({ ...base, sinceSeenMs: -5, embeddings: [lookalike] }).learned, 0);
+  assert.equal(learnFromAlarm({ ...base, embeddings: [lookalike, mk(5, 3.5)] }).learned, 0, 'two different people in the pictures: nothing is learned');
+  assert.equal(learnFromAlarm({ ...base, embeddings: [] }).learned, 0); assert.equal(learnFromAlarm({ ...base, templates: [], embeddings: [lookalike] }).learned, 0);
+  r = learnFromAlarm({ ...base, templates: Array.from({ length: 24 }, (_, i) => mk(40 + i, 0.01 * (i + 1))), embeddings: [lookalike] }); assert.equal(r.learned, 0, 'never more than 24 faces');
+  assert.deepEqual(parseOwnerCommand('undo what you learned'), { type: 'unlearn' });
+  assert.deepEqual(parseOwnerCommand('forget the faces you added from alarms'), { type: 'unlearn' });
 });

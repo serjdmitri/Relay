@@ -48,7 +48,7 @@ const { PresenceControl } = require('./presence');
 const { CaptureLatch } = require('./captureLatch');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
-const { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
+const { OwnerGuard, authenticateOwner, acceptEnrollment, trustedFlags, learnFromAlarm, config: ownerConfig, addSample: addOwnerSample, sealTemplates, openTemplates } = require('./ownerGuard');
 const { IntruderWindow } = require('./intruderWindow');
 const { Stickies } = require('./stickies');
 const { StickyPanel } = require('./stickyPanel');
@@ -1642,7 +1642,17 @@ app.whenReady().then(() => {
     }, delay).unref?.();
   };
   // Stopped with your fingerprint: that was you, not an intruder, so the pictures are not kept (and never shown).
-  const endVisit = (outcome) => { if (!currentVisit) return; const id = currentVisit; currentVisit = null; if (outcome === 'fingerprint') intruderLog.remove(id); else intruderLog.finish(id, outcome); broadcast(); };
+  // You stopped the alarm with your fingerprint: that was you, in some light or at some angle Relay did not know yet. The face it saw is added to the faces it knows you by, but only when it is
+  // safe: you were recognised in the two minutes before the alarm began, it is one person in every picture, and that face is close to yours (not someone who merely was there). At most two a
+  // time and 24 in all; "undo what you learned" takes them back out.
+  const learnFromAlarmVisit = (id) => {
+    try {
+      const rec = intruderLog.records().find((r) => r.id === id); if (!rec) return;
+      const r = learnFromAlarm({ templates: ownerState.templates, embeddings: intruderLog.readEmb(rec), sinceSeenMs: rec.at - (Number(store.get('ownerArmedAt')) || 0), threshold: ownerConfig(store.get('settings.owner')).threshold });
+      if (r.learned && ownerState.save(r.samples)) { store.set('ownerLearned', (Number(store.get('ownerLearned')) || 0) + r.learned); diag.log('guard-learned', `${r.learned} new face sample(s) from an alarm you stopped with your fingerprint`); }
+    } catch { /* learning is a bonus: the alarm stop itself already worked */ }
+  };
+  const endVisit = (outcome) => { if (!currentVisit) return; const id = currentVisit; currentVisit = null; if (outcome === 'fingerprint') { learnFromAlarmVisit(id); intruderLog.remove(id); } else intruderLog.finish(id, outcome); broadcast(); };
   tellAboutVisits = () => {
     if (screenLocked || ownerGuard.state !== 'idle') return;
     const pending = intruderLog.pending(); if (!pending.length) return;
@@ -1757,6 +1767,7 @@ app.whenReady().then(() => {
       return done(list.length ? `I have learned ${list.length} face${list.length === 1 ? '' : 's'}: ${list.map((p) => `${p.name} (${p.learned ? 'I recognise them on my own' : `${p.confirmed} naming${p.confirmed === 1 ? '' : 's'}, ${p.confirmed >= 2 ? 'I ask whether visitors are them' : 'not enough yet to ask'}`})`).join(', ')}.` : 'I have not learned anyone yet, Sir. When someone visits and you say "that\'s" and their name, I will remember the face.');
     }
     if (c.type === 'forget-person') return done(intruderLog.forgetPerson(c.name) ? `I have forgotten ${c.name}'s face and removed the name from their visits.` : `I do not know anyone called ${c.name}.`);
+    if (c.type === 'unlearn') { const n = Number(store.get('ownerLearned')) || 0; if (!n) return done('I have not added any faces from alarms, Sir.'); const keep = ownerState.templates.slice(0, Math.max(1, ownerState.templates.length - n)); if (!ownerState.save(keep)) return { status: 'failed', reply: 'I could not save that right now.' }; store.set('ownerLearned', 0); diag.log('guard-unlearned', `${n} sample(s) removed`); broadcast(); return done(`Done. I removed the ${n} face${n === 1 ? '' : 's'} I had added from alarms you stopped.`); }
     if (c.type === 'camera-show') { cameraWin.open(); return done('Here is the camera, Sir. Nothing is saved. Say "hide the camera" when you are done, or ask me what I see.'); }
     if (c.type === 'camera-hide') { cameraWin.close(); return done('Camera view closed.'); }
     if (c.type === 'intruders') {
