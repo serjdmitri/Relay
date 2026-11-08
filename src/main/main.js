@@ -1218,6 +1218,7 @@ function registerIpc() {
   ipcMain.handle('ask:resize', (_e, h) => ask.resize(h));
   ipcMain.handle('ask:interactive', (_e, on) => ask.win && !ask.win.isDestroyed() && ask.win.setIgnoreMouseEvents(!on, { forward: true }));
   ipcMain.handle('ask:hidden', () => ask.finishHide());
+  ipcMain.handle('camera:hover', (_e, on) => cameraWin?.hover(!!on)); // the full-screen camera listens to the mouse only while the pointer is over its control bar
 }
 
 function startBridge() {

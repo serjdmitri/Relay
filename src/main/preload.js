@@ -210,6 +210,7 @@ contextBridge.exposeInMainWorld('relay', {
   finishOnboarding: () => invoke('onboarding:finish'),
   openWindow: (name) => invoke('window:open', name),
   extensionAction: (what) => invoke('firefox:action', what),
+  cameraHover: (on) => invoke('camera:hover', !!on),
   ask: {
     open: (text) => invoke('ask:open', text),
     submit: (text) => invoke('ask:submit', text),

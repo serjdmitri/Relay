@@ -37,7 +37,7 @@ test('the camera view opens full screen and keeps Jarvis in the corner', () => {
   assert.match(win, /open\(\{ full = true \} = \{\}\)/, 'opens full screen by default');
   assert.match(win, /setAlwaysOnTop\(true, 'screen-saver', -1\)/, 'covers the menu bar, one step below the reactor, so Jarvis shows on top of the picture');
   assert.match(win, /enableLargerThanScreen: true/);
-  assert.match(win, /passThrough\(on\) \{[\s\S]*setIgnoreMouseEvents\(!!on\)/, 'full screen lets every click through: it must never leave the mouse dead');
+  assert.match(win, /passThrough\(on\) \{[\s\S]*setIgnoreMouseEvents\(!!on, \{ forward: true \}\)/, 'full screen lets every click through: it must never leave the mouse dead');
   assert.match(win, /this\.passThrough\(true\)/); assert.match(win, /this\.passThrough\(this\.full\)/); assert.match(win, /globalShortcut\.register\('Escape'/);
   assert.match(win, /onView\(true\)/); assert.match(win, /onView\(false\)/);
   assert.match(over, /setCameraView\(on\)/); assert.match(over, /cameraView:!!this\.cameraView/);
@@ -51,4 +51,16 @@ test('the camera view opens full screen and keeps Jarvis in the corner', () => {
   assert.deepEqual(p('box the things you see'), { type: 'camera-adjust', action: 'boxes', on: true });
   assert.match(html, /#hud\.camera-view\.corner #hudline \{ display: -webkit-box; \}/, 'the answer shows beside the corner reactor');
   assert.match(main, /onView: \(on\) =>/);
+});
+
+test('the camera has a control bar and prefers the camera that faces you', () => {
+  const fs = require('fs'), read = (f) => fs.readFileSync(require('path').join(__dirname, '..', f), 'utf8');
+  const html = read('src/renderer/camera.html'), js = read('src/renderer/camera.js'), win = read('src/main/cameraWindow.js'), main = read('src/main/main.js'), pre = read('src/main/preload.js');
+  for (const id of ['b-boxes', 'b-people', 'b-cam', 'b-close']) assert.ok(html.includes(`id="${id}"`), id + ' button');
+  assert.match(js, /FACING = \/facetime\|built-in\|macbook/, 'the built-in camera is preferred');
+  assert.match(js, /NOT_FACING = \/desk view\|iphone/, 'an iPhone or Desk View camera is not the default');
+  assert.match(js, /async function nextCamera\(\)/);
+  assert.match(js, /hover\(true\)/); assert.match(js, /hover\(false\)/);
+  assert.match(win, /hover\(on\) \{[\s\S]*setTimeout\([\s\S]*setIgnoreMouseEvents\(true, \{ forward: true \}\)[\s\S]*3000\)/, 'a timer always puts click-through back');
+  assert.match(main, /ipcMain\.handle\('camera:hover'/); assert.match(pre, /cameraHover: \(on\) => invoke\('camera:hover', !!on\)/);
 });

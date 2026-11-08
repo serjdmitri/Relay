@@ -35,11 +35,19 @@ class CameraWindow {
   // A window you cannot click through would leave the mouse dead on the whole screen.
   passThrough(on) {
     if (!this.isOpen) return;
-    try { this.win.setIgnoreMouseEvents(!!on); this.win.setFocusable(!on); } catch { /* the window is going away */ }
+    try { this.win.setIgnoreMouseEvents(!!on, { forward: true }); this.win.setFocusable(!on); } catch { /* the window is going away */ }
     try {
       if (on && !this.esc) { this.esc = globalShortcut.register('Escape', () => this.close()) ? true : false; }
       if (!on && this.esc) { globalShortcut.unregister('Escape'); this.esc = false; }
     } catch { /* no shortcut: the voice command still closes it */ }
+  }
+
+  // The pointer is over the control bar: listen to the mouse for a moment, then go back to passing clicks through (a timer makes sure it always goes back, even if the page never says the pointer left).
+  hover(on) {
+    if (!this.isOpen || !this.full) return;
+    clearTimeout(this.hoverTimer);
+    try { this.win.setIgnoreMouseEvents(!on, { forward: true }); } catch { return; }
+    if (on) this.hoverTimer = setTimeout(() => { if (this.isOpen && this.full) try { this.win.setIgnoreMouseEvents(true, { forward: true }); } catch { /* gone */ } }, 3000);
   }
 
   close() { if (this.isOpen) this.win.close(); }

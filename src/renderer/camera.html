@@ -11,6 +11,7 @@
 <!-- The live camera picture, drawn here on this Mac with its edges faded into the screen. Boxes and names come from a small object finder that also runs here. Nothing is saved or sent. -->
 <div id="view"><video id="v" autoplay muted playsinline></video><canvas id="boxes"></canvas></div>
 <button id="x" type="button" aria-label="Close the camera">×</button>
+<div id="bar" role="toolbar" aria-label="Camera controls"><button id="b-boxes" type="button" aria-pressed="false">Boxes</button><button id="b-people" type="button" aria-pressed="false">People only</button><button id="b-cam" type="button" title="Switch to the next camera">Camera</button><button id="b-close" type="button">Close</button></div>
 <p id="msg" role="status">Starting the camera…</p>
 <script type="module" src="camera.js"></script>
 </body>
