@@ -1362,6 +1362,16 @@ app.whenReady().then(() => {
     if (Notification.isSupported()) new Notification({ title: 'Overnight report', body: report.summary.charAt(0).toUpperCase() + report.summary.slice(1) + '. Say "what happened overnight" to hear it.', silent: true }).show();
     broadcast();
   };
+  // The overnight wake (wakeScheduler.js): schedule a wake for the start of the overnight window, and hold the Mac awake while overnight work runs, then let it sleep again.
+  const runCmd = (cmd, args) => new Promise((res) => execFile(cmd, args, { timeout: 15000 }, (e, out) => res({ code: e ? (typeof e.code === 'number' ? e.code : 1) : 0, stdout: String(out || '') })));
+  const wake = new (require('./wakeScheduler').WakeScheduler)({ exec: runCmd, spawnDetached: (c, a) => { try { require('child_process').spawn(c, a, { detached: true, stdio: 'ignore' }).unref(); } catch { /* no watchdog: Relay still restores sleep itself */ } }, store, diag, settings: () => store.get('settings.overnightWake'), window: () => ask.overnight.conf(), dir: app.getPath('userData') });
+  setTimeout(() => wake.recover().then(() => wake.arm()).catch(() => {}), 20000).unref?.();
+  setInterval(() => wake.arm().catch(() => {}), 3600000).unref?.();
+  app.on('before-quit', () => { // quitting Relay mid-hold: put sleep back now (the watchdog is the backstop)
+    if (!wake.holding) return;
+    wake.holding = false;
+    try { require('child_process').spawnSync('/usr/bin/sudo', ['-n', '/usr/bin/pmset', '-a', 'disablesleep', wake.state().prev ? '1' : '0'], { timeout: 5000, stdio: 'ignore' }); wake.save({ holding: false }); } catch { /* recover() runs next start */ }
+  });
   let overnightBusy = false;
   const overnightTick = async () => {
     if (overnightBusy) return;
@@ -1371,7 +1381,7 @@ app.whenReady().then(() => {
       let changed = false;
       for (const t of st.interrupted) { ask.overnight.interrupt(t, (store.get('actions') || []).filter((a) => a.requestId === t.runId)); changed = true; }
       if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
-      if (st.run) { await runOvernightTask(st.run); changed = true; }
+      if (st.run) { await wake.withAwake(() => runOvernightTask(st.run), 'night list'); changed = true; }
       const conf=ask.overnight.conf(), now=new Date(), key=String(overnightMod.windowBounds(now,conf).start);
       if(!changed && !ask.overnight.queued().length && ask.canRunScheduled() && conf.enabled && overnightMod.inWindow(now,conf)) {
         if(store.get('overnightPlannedKey')!==key){
@@ -1380,12 +1390,18 @@ app.whenReady().then(() => {
           for(const task of planned)ask.overnight.add(task);
           changed=planned.length>0;
         }
-        if(!changed && nightlyMaintenance) changed=await nightlyMaintenance.run(key);
+        if(!changed && nightlyMaintenance) { const wantNight = !!store.get('settings.selfImprove.nightly') && store.get('nightlyMaintenance')?.key !== key; changed = await (wantNight ? wake.withAwake(() => nightlyMaintenance.run(key), 'overnight improvement') : nightlyMaintenance.run(key)); }
       }
       if (!changed && st.report) overnightReport(st.report);
     } catch (e) { console.error('Overnight tick failed:', e); } finally { overnightBusy = false; }
   };
   setInterval(overnightTick, 30000);
+  // The scheduled wake has just fired: keep the Mac up for a few minutes (it would otherwise doze again within a minute) and start the night's work at once instead of at the next tick.
+  powerMonitor.on('resume', () => {
+    if (!store.get('settings.overnightWake.enabled')) return;
+    wake.arm().catch(() => {});
+    if (overnightMod.inWindow(new Date(), ask.overnight.conf())) { const b = powerSaveBlocker.start('prevent-app-suspension'); setTimeout(() => powerSaveBlocker.stop(b), 180000).unref?.(); setTimeout(() => overnightTick().catch(() => {}), 3000); }
+  });
   ask.overnightCommand = (c) => {
     const conf = ask.overnight.conf(), window = `${conf.from === 0 ? 12 : conf.from > 12 ? conf.from - 12 : conf.from} ${conf.from < 12 ? 'AM' : 'PM'} and ${conf.to === 0 ? 12 : conf.to > 12 ? conf.to - 12 : conf.to} ${conf.to < 12 ? 'AM' : 'PM'}`;
     if (c.type === 'add') {
@@ -1398,6 +1414,28 @@ app.whenReady().then(() => {
     if (c.type === 'cancel') { const t = ask.overnight.cancel(c.n); return t ? `Removed "${t.text}" from tonight's list.` : `There is no task ${c.n} on tonight's list.`; }
     const r = (store.get('overnight') || {}).report;
     return r ? `Last night: ${r.summary}.\n\n${r.text}` : 'There is no overnight report yet.';
+  };
+  // "Set up the overnight wake" / "turn on the overnight wake": see wakeScheduler.js. Relay never types your password: setup is one command you paste into Terminal.
+  ask.wakeCommand = async (c) => {
+    const ws = require('./wakeScheduler'), done = (reply, actions = 1) => ({ status: 'done', reply, actions });
+    const cfg = store.get('settings.overnightWake') || {}, set = (patch) => { store.set('settings.overnightWake', { ...cfg, ...patch }); broadcast(); };
+    const conf = ask.overnight.conf(), hour = `${conf.from === 0 ? 12 : conf.from > 12 ? conf.from - 12 : conf.from} ${conf.from < 12 ? 'AM' : 'PM'}`;
+    if (c.type === 'wake-setup') {
+      const cmd = ws.setupCommand(require('os').userInfo().username);
+      if (!cmd) return done('I could not read your Mac user name safely, so I have not made the setup command.', 0);
+      clipboard.writeText(cmd);
+      return done('I copied one command to your clipboard. Open Terminal, paste it, press Return and type your Mac password when it asks. It lets Relay schedule a wake and keep the Mac awake while it works, and it allows only four exact power commands, nothing else. Then say "turn on the overnight wake".', 0);
+    }
+    if (c.type === 'wake-remove') { set({ enabled: false }); await wake.disarm(); clipboard.writeText(ws.removeCommand()); return done('The overnight wake is off and its wake is cancelled. To remove the permission too, paste the command I copied into Terminal.', 0); }
+    if (c.type === 'wake-off') { set({ enabled: false }); await wake.disarm(); return done('Overnight wake is off. The Mac will sleep as usual and overnight work only runs if it happens to be awake.'); }
+    if (c.type === 'wake-on') {
+      set({ enabled: true });
+      if (!(await wake.ready())) return done('Overnight wake is on, but the one-time permission is missing. Say "set up the overnight wake" and I will give you the command to paste into Terminal.', 0);
+      const r = await wake.arm();
+      return done(r.armed ? `Done. I will wake the Mac at ${hour} every night, hold it awake while the overnight work runs, and let it sleep again after. It needs to be plugged in (say so if you want it on battery too) and Relay must be open. Your own 8 AM wake is not touched.` : 'The permission is there but macOS would not take the wake. Say "what is the wake status" and I will check.');
+    }
+    const s = await wake.status(), p = await wake.power();
+    return done(`Overnight wake is ${s.enabled ? 'on' : 'off'}. ${s.ready ? 'The one-time permission is in place.' : 'The one-time permission is missing: say "set up the overnight wake".'} ${s.armed ? `Next wake: ${s.armed}.` : 'No wake is scheduled.'} ${p.ac ? 'The Mac is plugged in.' : `The Mac is on battery${p.percent !== null ? ` at ${p.percent}%` : ''}, so it will not be held awake${s.battery ? ' below 50%' : ''}.`}`, 0);
   };
   let scheduleStorageFailed = false;
   const tickSchedules = (canRun) => {
