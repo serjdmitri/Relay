@@ -403,7 +403,7 @@ test('intruder pictures: the guard says when you have just been seen, the photos
   for (const [text, type] of [['show the intruder pictures', 'intruders'], ['show intruders', 'intruders'], ['who was at my computer', 'intruders'], ['who sat at my computer while i was away', 'intruders'], ['turn off intruder photos', 'photos-off'], ['turn on the stranger pictures', 'photos-on'], ['delete the intruder photos', 'intruders-clear']]) assert.equal(parseOwnerCommand(text)?.type, type, text);
   assert.equal(parseOwnerCommand('who was at the door'), null);
   const fs = require('node:fs'), path = require('node:path'), main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8'), page = fs.readFileSync(path.join(__dirname, '../src/renderer/presence.js'), 'utf8');
-  assert.match(main, /onAlarm: \(\{ seconds, demo \}\) => \{ intruder\.show\(\{ seconds, demo \}\); ask\.sound\('Basso'\); if \(!demo\) startVisit\(seconds\); \}/, 'the test screen never takes pictures');
+  assert.match(main, /onAlarm: \(\{ seconds, demo \}\) => \{ (?:diag\.log\([^;]*\); )?intruder\.show\(\{ seconds, demo \}\); ask\.sound\('Basso'\); if \(!demo\) startVisit\(seconds\); \}/, 'the test screen never takes pictures');
   assert.match(main, /intruderLog: _intruderLog/, 'the log is never sent to the screen with the rest of the state');
   assert.match(main, /\['enroll','forget','off','liveness-off','intruders-clear','looser','forget-person'\]\.includes\(c\.type\)/, 'deleting the pictures asks the Mac owner to confirm first');
   assert.match(main, /if \(screenLocked \|\| ownerGuard\.state !== 'idle'\) return;/, 'it waits until the screen is unlocked and the alarm is over before telling you');
