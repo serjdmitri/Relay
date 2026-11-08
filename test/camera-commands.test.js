@@ -39,7 +39,11 @@ test('the camera view opens full screen and keeps Jarvis in the corner', () => {
   assert.match(win, /onView\(true\)/); assert.match(win, /onView\(false\)/);
   assert.match(over, /setCameraView\(on\)/); assert.match(over, /cameraView:!!this\.cameraView/);
   assert.match(hud, /if \(cam && !hard\) m = 'corner'/, 'every state stays in the corner while the camera is up');
-  assert.match(hud, /setMode\('center', true\)/, 'typing and confirm boxes still need the centre');
+  assert.doesNotMatch(hud, /setMode\('center', true\)/, 'typing and confirm stay in the corner too');
+  assert.match(html, /#hud\.camera-view\.corner #hudin \{ display: block !important/, 'the typing box shows in the corner');
+  assert.match(read('src/renderer/camera.js'), /const view = \{ boxes: false,/, 'boxes are off until asked');
+  assert.match(read('src/renderer/camera.css'), /#000 100%\)/, 'the full-screen backdrop goes to black at the edges');
+  assert.deepEqual(p('box the things you see'), { type: 'camera-adjust', action: 'boxes', on: true });
   assert.match(html, /#hud\.camera-view\.corner #hudline \{ display: -webkit-box; \}/, 'the answer shows beside the corner reactor');
   assert.match(main, /onView: \(on\) =>/);
 });

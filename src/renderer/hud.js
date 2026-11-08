@@ -352,13 +352,13 @@
       line = msg.notice || msg.hint || '';
       lineClass = msg.notice ? 'warn' : line ? 'dim' : '';
       sub = 'Return to send · Esc to close';
-      setMode('center', true);
+      setMode('center');
       busySince = 0;
     } else if (s === 'confirm') {
       status = 'CONFIRM';
       level = 0;
       line = msg.question || '';
-      setMode('center', true);
+      setMode('center');
       busySince = 0;
     } else {
       on = false;
