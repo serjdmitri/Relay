@@ -274,8 +274,11 @@ class Overlay {
   // ----- the reactor: the Jarvis HUD in the middle of the screen while Relay listens, small in the top left while it works -----
   // msg uses the same fields as the pill ({ state, mode, partial, level, label, text, reply, status, ... }) or { hide: true }.
   setWorldView(on) {this.worldView=!!on;this.hud(on?{state:'reactor-idle',idlePosition:'corner'}:{hide:true});if(on)this.hudEntry?.win.moveTop();}
+  // The camera view is on screen (often full screen): the reactor sits in the corner and stays there, answers included. false puts it back (the caller restores where it was).
+  setCameraView(on) { this.cameraView = !!on; if (on) { this.hud({ state: 'reactor-idle', idlePosition: 'corner' }); this.hudEntry?.win.moveTop(); } }
   hud(msg) {
-    if(this.worldView && msg.hide)msg={state:'reactor-idle',idlePosition:'corner'};
+    if((this.worldView || this.cameraView) && msg.hide)msg={state:'reactor-idle',idlePosition:'corner'};
+    if(this.cameraView && msg.state==='reactor-idle')msg={...msg,idlePosition:'corner'};
     if (msg.hide) {
       clearInterval(this.borderTimer);
       this.borderTimer = null;
@@ -304,7 +307,7 @@ class Overlay {
       this.borderTimer.unref?.();
     }
     this.setHudBlur(this.hudEntry, this.worldView?false:this.getBlur());
-    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, worldView:!!this.worldView, name: this.getName(), visual: 'reactor' /* the orb is switched off for now (hud.js still draws it, nothing asks for it) */, border: this.getBorder() !== false } });
+    this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, worldView:!!this.worldView, cameraView:!!this.cameraView, name: this.getName(), visual: 'reactor' /* the orb is switched off for now (hud.js still draws it, nothing asks for it) */, border: this.getBorder() !== false } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
   }
 

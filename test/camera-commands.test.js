@@ -26,6 +26,20 @@ test('the window grows, shrinks and moves while staying on screen, in a 4:3 shap
   const tiny = nextBounds({ x: 0, y: 25, width: 260, height: 195 }, area, { action: 'smaller' }); assert.equal(tiny.width, 240, 'never smaller than 240 wide');
   const right = nextBounds(b, area, { action: 'move', direction: 'right' }); assert.equal(right.x + right.width, 1440, 'stops at the screen edge');
   const left = nextBounds(b, area, { action: 'move', direction: 'left' }); assert.ok(left.x < b.x);
-  const full = nextBounds(b, area, { action: 'fullscreen' }); assert.equal(full.height <= 875, true); assert.ok(full.width <= 1440);
+  const screenB = { x: 0, y: 0, width: 1440, height: 900 };
+  assert.deepEqual(nextBounds(b, screenB, { action: 'fullscreen' }), screenB, 'full screen is the whole screen, not a 4:3 box');
   const reset = nextBounds(b, area, { action: 'reset' }); assert.equal(reset.width, 640); assert.equal(reset.x, 400);
+});
+
+test('the camera view opens full screen and keeps Jarvis in the corner', () => {
+  const fs = require('fs'), read = (f) => fs.readFileSync(require('path').join(__dirname, '..', f), 'utf8');
+  const win = read('src/main/cameraWindow.js'), over = read('src/main/overlay.js'), hud = read('src/renderer/hud.js'), main = read('src/main/main.js'), html = read('src/renderer/overlay.html');
+  assert.match(win, /open\(\{ full = true \} = \{\}\)/, 'opens full screen by default');
+  assert.match(win, /setAlwaysOnTop\(true, 'floating'\)/, 'below the reactor, so Jarvis shows on top of the picture');
+  assert.match(win, /onView\(true\)/); assert.match(win, /onView\(false\)/);
+  assert.match(over, /setCameraView\(on\)/); assert.match(over, /cameraView:!!this\.cameraView/);
+  assert.match(hud, /if \(cam && !hard\) m = 'corner'/, 'every state stays in the corner while the camera is up');
+  assert.match(hud, /setMode\('center', true\)/, 'typing and confirm boxes still need the centre');
+  assert.match(html, /#hud\.camera-view\.corner #hudline \{ display: -webkit-box; \}/, 'the answer shows beside the corner reactor');
+  assert.match(main, /onView: \(on\) =>/);
 });

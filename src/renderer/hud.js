@@ -279,7 +279,9 @@
     for (const [key, li] of have) if (!keep.has(key)) li.remove();
   }
 
-  function setMode(m) {
+  let cam = false; // the camera view is up: the reactor stays small in the corner, and its answers appear beside it
+  function setMode(m, hard) {
+    if (cam && !hard) m = 'corner';
     mode = m;
     hud.classList.toggle('center', m === 'center');
     hud.classList.toggle('corner', m === 'corner');
@@ -301,6 +303,7 @@
     visual = msg.visual === 'orb' ? 'orb' : 'reactor';
     hud.classList.toggle('frame', msg.border !== false);
     hud.classList.toggle('world-view',!!msg.worldView);
+    cam = !!msg.cameraView; hud.classList.toggle('camera-view', cam);
     if (!on) hud.classList.add('snap'); // appearing from nothing: take its place at once, with no sliding
     const s = msg.state;
     if (s === 'listening' || s === 'input') {
@@ -349,13 +352,13 @@
       line = msg.notice || msg.hint || '';
       lineClass = msg.notice ? 'warn' : line ? 'dim' : '';
       sub = 'Return to send · Esc to close';
-      setMode('center');
+      setMode('center', true);
       busySince = 0;
     } else if (s === 'confirm') {
       status = 'CONFIRM';
       level = 0;
       line = msg.question || '';
-      setMode('center');
+      setMode('center', true);
       busySince = 0;
     } else {
       on = false;

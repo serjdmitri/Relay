@@ -34,7 +34,7 @@ function nextBounds(b, area, c) {
   const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
   if (c.action === 'bigger' || c.action === 'smaller') { const f = c.action === 'bigger' ? 1.3 : 1 / 1.3, w = b.width * f; return fit(cx - w / 2, cy - (w * 0.75) / 2, w, w * 0.75); }
   if (c.action === 'move') { const step = Math.round(Math.min(area.width, area.height) * 0.2), dx = { left: -step, right: step }[c.direction] || 0, dy = { up: -step, down: step }[c.direction] || 0; return fit(b.x + dx, b.y + dy, b.width, b.width * 0.75); }
-  if (c.action === 'fullscreen') return fit(area.x, area.y, area.width, area.width * 0.75);
+  if (c.action === 'fullscreen') return { x: area.x, y: area.y, width: area.width, height: area.height }; // the whole screen: the picture fills it (object-fit: cover), nothing is letterboxed
   if (c.action === 'reset') { const w = Math.min(640, area.width); return fit(area.x + (area.width - w) / 2, area.y + (area.height - w * 0.75) / 2, w, w * 0.75); }
   return b;
 }
