@@ -13,6 +13,7 @@ addEventListener('pagehide', () => { try { stream?.getTracks().forEach((t) => t.
 
 window.__camera = (o = {}) => {
   if (Number.isFinite(o.fadeBy)) view.fade = Math.max(8, Math.min(90, view.fade - o.fadeBy * 12)); // "more" fade means a smaller solid centre
+  if (typeof o.full === 'boolean') document.documentElement.classList.toggle('full', o.full); // full screen: no faded edges, the picture fills the screen
   if (typeof o.boxes === 'boolean') view.boxes = o.boxes;
   if (Array.isArray(o.filter)) view.filter = o.filter.map((s) => String(s).toLowerCase());
   document.documentElement.style.setProperty('--inner', view.fade + '%');

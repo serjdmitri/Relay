@@ -1648,7 +1648,11 @@ app.whenReady().then(() => {
   // kept encrypted on this Mac with the stranger's face numbers (so a second visit by the same face is recognised). Coming back, you are told who was there.
   const intruderLog = new (require('./intruderLog').IntruderLog)({ store, dir: path.join(app.getPath('userData'), 'intruders'), encrypt: (txt) => safeStorage.encryptString(txt), decrypt: (buf) => safeStorage.decryptString(buf) });
   intrudersWin = new (require('./intrudersWindow').IntrudersWindow)({ log: intruderLog, motion: floatingMotion, authorize: () => trustedPeople.authorize(), onChange: () => broadcast() });
-  cameraWin = new (require('./cameraWindow').CameraWindow)({ motion: floatingMotion });
+  cameraWin = new (require('./cameraWindow').CameraWindow)({ motion: floatingMotion, onView: (on) => {
+    if (on) { overlay.setCameraView(true); return; }
+    overlay.cameraView = false; // back to where the reactor was before the camera opened
+    if (ask.state === 'idle' || ask.state === 'done') overlay.hud(ask.reactorIdle ? { state: 'reactor-idle', idlePosition: store.get('settings.reactorIdlePosition') === 'corner' ? 'corner' : 'center' } : { hide: true });
+  } });
   let currentVisit = null;
   const takeShot = async () => { const wc = presenceSender; if (!wc || wc.isDestroyed()) return null; try { return await wc.executeJavaScript('window.__relaySnapshot && window.__relaySnapshot()'); } catch { return null; } };
 

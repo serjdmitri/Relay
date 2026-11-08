@@ -5,23 +5,29 @@ const { nextBounds } = require('./cameraCommands');
 // "Show my camera": the live camera picture floating on the screen with its edges faded away, and a named box (low-opacity fill) round each thing the object finder sees. Voice commands move, resize,
 // fade and filter it (see cameraCommands.js). The picture is drawn here on this Mac and never saved or sent anywhere. snapshot() lets Jarvis take one picture when you ask "what do you see".
 class CameraWindow {
-  constructor({ motion } = {}) { Object.assign(this, { motion }); this.win = null; }
+  // onView(true|false): told when the view opens or closes, so the reactor can sit in the corner while it is showing (and go back to where it was after).
+  constructor({ motion, onView = () => {} } = {}) { Object.assign(this, { motion, onView }); this.win = null; this.full = false; }
 
   get isOpen() { return !!this.win && !this.win.isDestroyed(); }
-  area() { return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea; }
+  display() { return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()); }
+  area() { return this.display().workArea; }
 
-  open() {
+  // Opens full screen by default (asking for the camera, or "what do you see", fills the screen); "camera normal size" brings it down to a window.
+  open({ full = true } = {}) {
     if (this.isOpen) { this.win.show(); this.win.moveTop(); return; }
-    const area = this.area(), width = Math.min(640, area.width), height = Math.round(width * 0.75);
+    const d = this.display().bounds, area = this.area(), width = full ? d.width : Math.min(640, area.width), height = full ? d.height : Math.round(width * 0.75);
+    this.full = full;
     const win = this.win = new BrowserWindow({
-      x: area.x + area.width - width - 24, y: area.y + 24, width, height, minWidth: 240, minHeight: 180,
+      x: full ? d.x : area.x + area.width - width - 24, y: full ? d.y : area.y + 24, width, height, minWidth: 240, minHeight: 180,
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: true, show: false, skipTaskbar: true,
       webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false }
     });
-    win.setAlwaysOnTop(true, 'screen-saver', 1); // above the reactor and the answer card, below the access-denied alarm
+    win.setAlwaysOnTop(true, 'floating'); // below the reactor and the answer card (they are at screen-saver level), so Jarvis stays visible in the corner on top of a full-screen picture
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', (e) => e.preventDefault());
-    win.loadFile(path.join(__dirname, '../renderer/camera.html')); win.once('ready-to-show', () => win.show());
-    win.on('closed', () => { this.win = null; });
+    win.loadFile(path.join(__dirname, '../renderer/camera.html'));
+    win.once('ready-to-show', () => { win.show(); if (full) win.webContents.executeJavaScript('window.__camera && window.__camera({ full: true })').catch(() => null); });
+    win.on('closed', () => { this.win = null; this.full = false; try { this.onView(false); } catch { /* the reactor goes back on its own */ } });
+    try { this.onView(true); } catch { /* nothing to move */ }
     this.motion?.watchWindow(win, { key: 'camera-view', close: () => win.close(), undo: () => this.open() });
   }
 
@@ -29,11 +35,14 @@ class CameraWindow {
 
   // A voice command (from parseCameraCommand). Opens the view first if it is not showing. -> the words to say back.
   async adjust(c) {
-    this.open();
+    this.open({ full: !['bigger', 'smaller', 'move', 'reset'].includes(c.action) });
     const send = (o) => this.win.webContents.executeJavaScript(`window.__camera && window.__camera(${JSON.stringify(o)})`).catch(() => null);
     if (['bigger', 'smaller', 'move', 'fullscreen', 'reset'].includes(c.action)) {
-      this.win.setBounds(nextBounds(this.win.getBounds(), this.area(), c), true);
-      return { bigger: 'Bigger.', smaller: 'Smaller.', move: `Moved ${c.direction}.`, fullscreen: 'Full screen. Say "camera normal size" to bring it back.', reset: 'Back to normal size, in the middle.' }[c.action];
+      const full = c.action === 'fullscreen';
+      this.win.setBounds(nextBounds(this.win.getBounds(), full ? this.display().bounds : this.area(), c), true);
+      this.full = full ? true : c.action === 'reset' ? false : this.full && c.action === 'move';
+      await send({ full: this.full });
+      return { bigger: 'Bigger.', smaller: 'Smaller.', move: `Moved ${c.direction}.`, fullscreen: 'Full screen. Say "camera normal size" to bring it back, or "hide the camera".', reset: 'Back to normal size, in the middle.' }[c.action];
     }
     if (c.action === 'fade') { await send({ fadeBy: c.amount }); return c.amount > 0 ? 'The edges fade more.' : 'The edges fade less.'; }
     if (c.action === 'boxes') { await send({ boxes: c.on }); return c.on ? 'Boxes on.' : 'Boxes off.'; }
