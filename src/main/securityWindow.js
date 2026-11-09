@@ -1,3 +1,4 @@
+const {createFloatingWindow}=require('./floatingWindow');
 const { BrowserWindow, screen, ipcMain, clipboard } = require('electron');
 const path = require('path');
 const A = require('./securityAudit');
@@ -29,9 +30,7 @@ class SecurityWindow {
   open() {
     if (this.win && !this.win.isDestroyed()) { this.win.show(); this.win.moveTop(); return; }
     const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea, width = Math.min(820, area.width), height = Math.min(700, area.height);
-    const win = this.win = new BrowserWindow({ x: area.x + Math.round((area.width - width) / 2), y: area.y + Math.round((area.height - height) / 2), width, height, minWidth: 380, minHeight: 360, frame: false, transparent: true, backgroundColor: '#00000000', resizable: true, show: false, skipTaskbar: true, type: 'panel', webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
-    win.setAlwaysOnTop(true, 'screen-saver', 1); win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); win.setHiddenInMissionControl?.(true);
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })); win.webContents.on('will-navigate', (e) => e.preventDefault());
+    const win = this.win = createFloatingWindow(BrowserWindow,{ x: area.x + Math.round((area.width - width) / 2), y: area.y + Math.round((area.height - height) / 2), width, height, minWidth: 380, minHeight: 360});
     win.loadFile(path.join(__dirname, '../renderer/security.html')); win.once('ready-to-show', () => win.show()); win.on('closed', () => { this.win = null; });
     this.motion?.watchWindow(win, { key: 'security-audit', close: () => win.close(), undo: () => this.open() });
   }
