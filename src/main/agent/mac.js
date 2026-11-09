@@ -1,4 +1,5 @@
 const { shellBlocked, scriptBlocked, pathProblem } = require('../drive/guard');
+const { helpersIn } = require('../appLauncher');
 const { execFile } = require('child_process');
 const os = require('os');
 const path = require('path');
@@ -82,7 +83,7 @@ const { parseFrame } = require('../overlayGeometry');
 
 // axBin: native/relay-ax, which walks the accessibility tree directly and reads on-screen text (System Events needs tens of
 // seconds on big or Electron apps). getView(): { scale, origin } of the last screenshot, to turn a text position into screen points.
-function createMac({ exec = defaultExec, clipboard, capture, getDisplay, axBin = null, getView = () => ({ scale: 1, origin: { x: 0, y: 0 } }) } = {}) {
+function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, getDisplay, axBin = null, getView = () => ({ scale: 1, origin: { x: 0, y: 0 } }) } = {}) {
   let axRefused = false;
   const hasAx = () => !!axBin && !axRefused && fs.existsSync(axBin);
   const ax = async (args) => {
@@ -115,11 +116,14 @@ function createMac({ exec = defaultExec, clipboard, capture, getDisplay, axBin =
     }
   };
 
-  const osa = (script, { signal } = {}) => {
+  // Calendar and Reminders are opened hidden first when they are closed, so you never have to open them yourself (ensureApp is injected; without it nothing is launched).
+  const osa = async (script, { signal } = {}) => {
     const lines = Array.isArray(script) ? script : String(script).split('\n');
     const args = [];
     for (const l of lines) args.push('-e', l);
-    return exec('osascript', args, { signal });
+    const helpers = ensureApp ? helpersIn(lines) : [];
+    for (const name of helpers) await ensureApp(name);
+    return exec('osascript', args, helpers.length ? { signal, timeout: 60000 } : { signal });
   };
   const jxa = (script, { signal } = {}) => exec('osascript', ['-l', 'JavaScript', '-e', script], { signal });
   const lines = (s) => (s ? s.split('\n').filter(Boolean) : []);

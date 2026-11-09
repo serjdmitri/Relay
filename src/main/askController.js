@@ -19,6 +19,7 @@ const { OpenAICompatProvider } = require('./agent/providers/openai');
 const { PRESETS, isPreset } = require('./agent/providers/presets');
 const { McpHost, ClaudeSession, runSmart, findClaude, runClaude } = require('./agent/claudeCli');
 const { createMac } = require('./agent/mac');
+const launcher = require('./appLauncher');
 const { parseQuick, runQuick } = require('./quick');
 const { applyReplacements, applyDictationCommands, applyStyle, styleFor } = require('./dictation');
 const { isUndo, isAgain, isRetry, parseModelCommand } = require('./meta');
@@ -105,6 +106,7 @@ const { parseBriefingCommand, buildBriefing, fetchWeather, parseMacEvents, parse
 const { FocusMode } = require('./focus');
 const ocrLib = require('./ocr');
 const { defaultExec } = require('./agent/mac');
+const quietExec = (cmd, args) => defaultExec(cmd, args, { timeout: 10000 });
 const { jobFor, profileFor } = require('./voiceProfile');
 const { Ducker } = require('./duck');
 const { markRegion } = require('./overlayGeometry');
@@ -243,7 +245,8 @@ class AskController {
     this.frontP = null;
     this.appsP = null;
     this.mcp = new McpHost();
-    this.mac = createMac({ clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
+    this.ensureOllama = () => launcher.ensureOllama({ get: (u) => this.httpGet(u, true), exec: quietExec, fileExists: require('fs').existsSync, spawnDetached: (c, a) => require('child_process').spawn(c, a, { detached: true, stdio: 'ignore' }).unref(), url: this.store.get('settings.model.ollamaUrl') || undefined });
+    this.mac = createMac({ ensureApp: (n) => launcher.ensureApp(n, { exec: quietExec }), clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
@@ -3212,7 +3215,7 @@ class AskController {
   buildProvider() {
     const m = this.store.get('settings.model');
     if (m.provider === 'ollama') {
-      return { provider: new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel }), vision: VISION_RE.test(m.ollamaModel) };
+      return { provider: new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }), vision: VISION_RE.test(m.ollamaModel) };
     }
     if (isPreset(m.provider)) return compatProvider(m);
     return { provider: new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel }), vision: true };
@@ -3224,7 +3227,7 @@ class AskController {
     this.push({ label: 'Using Ollama offline' });
     const m = this.store.get('settings.model');
     try {
-      const res = await new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
+      const res = await new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
       return { status: 'done', reply: (res.text || '').trim() || 'I have no answer for that offline.', actions: 0 };
     } catch (e) { return { status: 'done', reply: /cloud models cannot be used/.test(e.message) ? e.message : 'I am offline and no local model is running. Start Ollama to chat without the internet.', actions: 0 }; }
   }

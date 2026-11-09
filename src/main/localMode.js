@@ -32,7 +32,7 @@ function readiness(st, model) {
 }
 
 // c: a parsed command. store: get/set. get: async url -> parsed JSON. apply(value): switch the provider with the side effects (stop cloud connections, drop the warm session).
-async function run(c, { store, get, apply = (v) => store.set('settings.model.provider', v) }) {
+async function run(c, { store, get, ensure = null, apply = (v) => store.set('settings.model.provider', v) }) {
   const m = store.get('settings.model') || {};
   let model = m.ollamaModel || RECOMMENDED.text;
   const local = m.provider === 'ollama';
@@ -48,6 +48,7 @@ async function run(c, { store, get, apply = (v) => store.set('settings.model.pro
     return { status: 'done', reply: 'Back online, Sir. I am thinking in the cloud again.', actions: 1 };
   }
   // local-on
+  if (ensure) { try { await ensure(); } catch { /* the readiness message below says what is missing */ } } // a closed Ollama is started by Relay
   let st = await ollamaState({ get, url: m.ollamaUrl, model });
   // the old default (a 14B model, about 9 GB) is too big to sit beside Firefox, Claude and the rest on a 24 GB Mac: use the 7B one instead when that is the one that is installed or needed
   if (!st.hasModel && model === 'qwen2.5:14b') { model = RECOMMENDED.text; store.set('settings.model.ollamaModel', model); st = await ollamaState({ get, url: m.ollamaUrl, model }); }

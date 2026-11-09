@@ -2,7 +2,7 @@
 // pick one with native tool support (qwen2.5, llama3.1, mistral-nemo, etc.).
 
 class OllamaProvider {
-  constructor({ url, model, fetchImpl = fetch }) {
+  constructor({ url, model, fetchImpl = fetch, ensure = null }) {
     if (/(?:^|:)cloud$/i.test(String(model || '').trim())) throw new Error('Ollama cloud models cannot be used as a local model. Choose a downloaded model.');
     let address;
     try { address = new URL(url); } catch { throw new Error('Ollama needs a valid local address.'); }
@@ -12,6 +12,7 @@ class OllamaProvider {
     this.url = address.href.replace(/\/$/, '');
     this.model = model;
     this.fetch = fetchImpl;
+    this.ensure = ensure; // async () -> true when Ollama was started: lets a closed Ollama come up by itself
   }
 
   toWire(system, messages) {
@@ -54,14 +55,18 @@ class OllamaProvider {
         : {})
     };
     let res;
+    const send = () => this.fetch(`${this.url}/api/chat`, {
+      method: 'POST',
+      redirect: 'error',
+      signal,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
     try {
-      res = await this.fetch(`${this.url}/api/chat`, {
-        method: 'POST',
-        redirect: 'error',
-        signal,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+      try { res = await send(); } catch (e) {
+        if (e.name === 'AbortError' || !this.ensure || !(await this.ensure())) throw e;
+        res = await send(); // Ollama was closed; Relay started it, so try once more
+      }
     } catch (e) {
       if (e.name === 'AbortError') throw e;
       throw new Error(`Cannot reach Ollama at ${this.url}. Is it running?`);
