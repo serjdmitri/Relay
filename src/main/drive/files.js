@@ -23,14 +23,16 @@ const tilde = (p, home) => (p.startsWith(home + path.sep) ? `~${p.slice(home.len
 const hiddenOrLibrary = (rel) => rel.split(path.sep).some((s, i) => s.startsWith('.') || (i === 0 && s === 'Library') || /\.(app|photoslibrary|musiclibrary|tvlibrary|imovielibrary|fcpbundle|logicx|band|framework|bundle)$/i.test(s));
 
 // What is in a folder, a few levels down: files (kind, size, date) and folders. Projects (code folders) and app packages are listed but not entered.
-function scanFolder(root, { fs, home, depth = 3, maxFiles = 1500 }) {
+function scanFolder(root, { fs, home, depth = 3, maxFiles = 1500, maxEntries = 5000, maxMs = 12000 }) {
   const files = [];
   const dirs = [];
-  let truncated = false;
+  let truncated = false, entriesSeen=0;const started=Date.now();
   const walk = (dir, d) => {
+    if(truncated)return;
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
+      if(truncated || ++entriesSeen>maxEntries || Date.now()-started>maxMs){truncated=true;return;}
       const full = path.join(dir, e.name);
       const rel = path.relative(root, full);
       if (hiddenOrLibrary(path.relative(home, full))) continue;
