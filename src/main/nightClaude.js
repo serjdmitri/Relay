@@ -45,9 +45,11 @@ async function runNight({ proposals, runClaude, brief, key = '', now = Date.now 
   const discard = async (why) => { await proposals.discard(p.id).catch(() => {}); return { status: 'discarded', line: `Overnight Claude's attempt was thrown away: ${why}.` }; };
   if (changed === null) return discard('the workspace could not be read');
   if (!changed.length) return discard(out.error ? `Claude could not finish (${out.error.slice(0, 120)})` : 'it found nothing worth changing');
+  if ((out.code !== undefined && out.code !== 0) || out.error) { await proposals.git(['checkout', '--', '.'], p.dir); await proposals.git(['clean', '-fdq'], p.dir); return discard(`Claude stopped with an error after editing (${String(out.error || 'exit ' + out.code).slice(0, 120)}), so the half-finished change is not trusted`); }
   const bad = changed.filter((f) => !ALLOWED.some((re) => re.test(f)) || f.includes('..'));
   if (bad.length) { await proposals.git(['checkout', '--', '.'], p.dir); await proposals.git(['clean', '-fdq'], p.dir); return discard(`it touched files it may not (${bad.slice(0, 3).join(', ')})`); }
   if (changed.length > MAX_FILES) { await proposals.git(['checkout', '--', '.'], p.dir); await proposals.git(['clean', '-fdq'], p.dir); return discard(`it changed ${changed.length} files, more than ${MAX_FILES}`); }
+  await proposals.git(['add', '-N', '--', '.'], p.dir); // a brand-new file has no "before": mark it so the line count below includes it (otherwise a 1,000-line new file counted as zero)
   const stat = await proposals.git(['diff', '--numstat', 'HEAD'], p.dir);
   const lines = stat.code === 0 ? stat.stdout.split('\n').filter(Boolean).reduce((n, l) => { const [a, d] = l.split('\t'); return n + (Number(a) || 0) + (Number(d) || 0); }, 0) : Infinity;
   if (!(lines <= MAX_CHANGED_LINES)) { await proposals.git(['checkout', '--', '.'], p.dir); await proposals.git(['clean', '-fdq'], p.dir); return discard('the change was too big to review quickly'); }
