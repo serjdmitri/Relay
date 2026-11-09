@@ -14,7 +14,7 @@ export function fingers(l) {
   };
 }
 
-// 'Closed_Fist' | 'Open_Palm' | 'Victory' | 'Pointing_Up' | 'Thumb_Up' | 'Thumb_Down' | 'None' (the names the rest of Relay uses)
+// 'Closed_Fist' | 'Open_Palm' | 'Victory' | 'Pointing_Up' | 'Middle_Finger' | 'Thumb_Up' | 'Thumb_Down' | 'None' (the names the rest of Relay uses)
 export function poseOf(l) {
   if (!l || l.length < 21) return 'None';
   const f = fingers(l);
@@ -27,6 +27,7 @@ export function poseOf(l) {
   if (n === 0) return 'Closed_Fist';
   if (f.index && f.middle && !f.ring && !f.pinky) return 'Victory';
   if (f.index && !f.middle && !f.ring && !f.pinky) return 'Pointing_Up';
+  if (f.middle && !f.index && !f.ring && !f.pinky) return 'Middle_Finger'; // only the middle finger out (the thumb may be anywhere)
   if (n >= 3) return 'Open_Palm';
   return 'None';
 }

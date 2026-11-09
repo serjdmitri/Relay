@@ -1522,7 +1522,34 @@ app.whenReady().then(() => {
   cardPanel.onFile = (p) => ask.drive.openFile(p);
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
   const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
+  // A middle finger held up to the camera shows a hologram of one near your hand (a see-through, click-through window); it fades out when you put your hand down.
+  let fingerWin = null, fingerReady = null, fingerTimer = 0;
+  const fingerHolo = (e) => {
+    try {
+      const W = 240, H = 340;
+      const alive = () => fingerWin && !fingerWin.isDestroyed();
+      const cls = (c) => { if (alive()) fingerReady.then(() => { if (alive()) fingerWin.webContents.executeJavaScript(`document.body.className=${JSON.stringify(c)}`).catch(() => {}); }); };
+      clearTimeout(fingerTimer);
+      if (e.type === 'hide') { if (!alive()) return; cls(''); fingerTimer = setTimeout(() => { if (alive()) fingerWin.hide(); }, 450); return; }
+      if (!alive()) {
+        fingerWin = new BrowserWindow({ width: W, height: H, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
+        fingerWin.setIgnoreMouseEvents(true);
+        fingerWin.setAlwaysOnTop(true, 'screen-saver');
+        fingerWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        fingerWin.setHiddenInMissionControl?.(true);
+        const win = fingerWin;
+        fingerReady = new Promise((r) => win.webContents.once('did-finish-load', r));
+        win.loadFile(path.join(__dirname, '../renderer/finger.html'));
+      }
+      const b = screen.getDisplayNearestPoint({ x: Math.round(e.x), y: Math.round(e.y) }).bounds;
+      const x = Math.max(b.x, Math.min(b.x + b.width - W, Math.round(e.x - W / 2)));
+      const y = Math.max(b.y, Math.min(b.y + b.height - H, Math.round(e.y - H / 2)));
+      fingerWin.setBounds({ x, y, width: W, height: H });
+      if (e.type === 'show' || !fingerWin.isVisible()) { fingerWin.showInactive(); cls('on'); }
+    } catch { /* the hologram is only for fun */ }
+  };
   hands = new HandControl({ motion: floatingMotion,
+    onFinger: fingerHolo,
     externalDrag,maxHands:()=>store.get('settings.hands.maxHands')??4,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,

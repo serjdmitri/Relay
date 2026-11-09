@@ -7,11 +7,12 @@ const { HandPointer } = require('./logic');
 const { recognizeStroke } = require('./shape');
 const { HandTracks } = require('./tracks');
 const momentum = require('./momentum');
+const { FingerWatch } = require('./finger');
 
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4 }) {
+  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {} }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.motion = motion;
     this.sensitivity = sensitivity;
@@ -28,6 +29,8 @@ class HandControl {
     this.secondary = secondary;
     this.floatingAt = floatingAt;
     this.tracks = new HandTracks(secondary ? 2 : 4);
+    // A middle finger held up to the camera: a hologram of one is shown near your hand (main.js draws it) and goes away when you put it down.
+    this.fingerWatch = new FingerWatch({ onShow: (h) => onFinger({ type: 'show', ...this.fingerAt(h) }), onMove: (h) => onFinger({ type: 'move', ...this.fingerAt(h) }), onHide: () => onFinger({ type: 'hide' }), now: () => this.now() });
     this.peer = null;
     this.extraPeers = [];
     this.drag = null;
@@ -99,6 +102,7 @@ class HandControl {
     try { this.cam?.close?.(); } catch { /* gone */ }
     try { this.ring?.close?.(); } catch { /* gone */ }
     clearTimeout(this.handTimer); this.handTimer = null;
+    this.fingerWatch.reset();
     this.setHandMode(false);
     this.cam = null; this.ring = null; this.pos = null;
     this.pointer = new HandPointer({ onEvent: (e) => this.handle(e).catch(() => {}) });
@@ -158,6 +162,7 @@ class HandControl {
       if (h && Number.isFinite(h.x) && Number.isFinite(h.y)) { const c = this.calibration; c.minX = Math.min(c.minX, h.x); c.maxX = Math.max(c.maxX, h.x); c.minY = Math.min(c.minY, h.y); c.maxY = Math.max(c.maxY, h.y); c.samples++; }
       return;
     }
+    if (!this.secondary) this.fingerWatch.update(f);
     // With more than two hands, another person's open palms must not pause everyone.
     const palms = f.hands.length === 2 && f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.42).length === 2;
     if (!palms) { this.pauseHold = null; this.pauseLatched = false; }
@@ -202,6 +207,8 @@ class HandControl {
     this.holos.handMode = on;
     for (const h of this.holos.holos.values()) if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'hand-mode', on);
   }
+
+  fingerAt(h) { return this.toScreen(this.pointer.map(h)); }
 
   toScreen(e) {
     const b = this.display();
