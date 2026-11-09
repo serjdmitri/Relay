@@ -66,6 +66,10 @@ case "events":
     let end = Calendar.current.date(byAdding: .day, value: days, to: start)!
     let evs = store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: nil)).sorted { $0.startDate < $1.startDate }
     print(evs.map { "\($0.title ?? "(no title)") | \(shown.string(from: $0.startDate))" }.joined(separator: "\n"))
+case "calendars":
+    // Which calendar accounts this Mac has (Google, iCloud, Exchange...), so Relay can tell you when your Google calendar is already here. Names only.
+    allowed(.event)
+    print(store.calendars(for: .event).filter { $0.type != .subscription && $0.type != .birthday }.map { "\($0.source.title)|\($0.title)|\($0.allowsContentModifications ? "writable" : "read-only")" }.joined(separator: "\n"))
 case "event-create":
     guard args.count >= 3 else { fail("event-create <title> <start> [end]") }
     allowed(.event)
