@@ -50,12 +50,13 @@ class ProposalWorkspace {
   }
 
   // Runs the project's tests inside the proposal only. The result is remembered together with the exact state of the files it tested.
-  async test(ref) {
+  async test(ref, { signal } = {}) {
+    signal?.throwIfAborted();
     const p = this.find(ref); if (!p) return { error: 'No such proposal.' };
     const before = await this.status(p);
     if(p.generated && (!p.reviewed || p.reviewState!==before)) return {error:'Review the generated diff in Settings before testing. It has not been executed.'};
     if (before === null) return { error: 'The proposal folder is not readable. It may have been moved or removed.' };
-    const r = await this.run(['npm', 'test'], { cwd: p.dir, timeout: 600000 });
+    const r = await this.run(['npm', 'test'], { cwd: p.dir, timeout: 600000, signal });
     const out = `${r.stdout}\n${r.stderr}`;
     const failed = Number((/ℹ fail (\d+)/.exec(out) || [])[1]), passed = Number((/ℹ pass (\d+)/.exec(out) || [])[1]);
     let ok = r.code === 0 && failed === 0 && passed > 0;

@@ -117,12 +117,13 @@ class WakeScheduler {
   async withAwake(fn, reason = 'overnight work') {
     const none = { held: false, shouldStop: () => false };
     if (!this.cfg().enabled || !(await this.ready())) return fn(none);
+    if(this.state().holding && !this.holding && await this.recover()===false)return {skipped:true,reason:'sleep restoration pending'};
     const p = await this.power();
     const allowed = !p.hot && (p.ac || (this.cfg().battery && p.percent !== null && p.percent >= MIN_BATTERY_START));
-    if (!allowed) { this.log('wake-skipped', p.hot ? 'the Mac is running hot' : 'on battery'); return fn(none); }
+    if (!allowed) { this.log('wake-skipped', p.hot ? 'the Mac is running hot' : 'on battery'); return { skipped: true, reason: p.hot ? 'too hot' : 'battery policy' }; }
     const prev = await this.sleepDisabled();
     if (!(await this.setSleepDisabled(true))) return fn(none);
-    this.holding = true; this.stop = false;
+    this.holding = true; this.stop = false; const controller = new AbortController();
     this.save({ holding: true, prev, holdingSince: this.now().getTime() });
     try { this.fs.mkdirSync(this.dir, { recursive: true }); this.fs.writeFileSync(this.hb, String(Date.now())); } catch { /* the watchdog then restores at once, which is the safe direction */ }
     this.spawnDetached('/bin/sh', ['-c', WATCHDOG, 'sh', this.hb, String(CEILING_SECONDS), prev ? '1' : '0']);
@@ -130,10 +131,10 @@ class WakeScheduler {
     this.timer = this.setTimer(async () => {
       try { this.fs.writeFileSync(this.hb, String(Date.now())); } catch { /* retried */ }
       const q = await this.power();
-      if ((!q.ac && (q.percent === null || q.percent <= MIN_BATTERY_KEEP)) || q.hot) { if (!this.stop) this.log('wake-stop', q.hot ? 'too hot' : 'battery low'); this.stop = true; }
+      if ((!q.ac && (q.percent === null || q.percent <= MIN_BATTERY_KEEP)) || q.hot) { if (!this.stop) this.log('wake-stop', q.hot ? 'too hot' : 'battery low'); this.stop = true; controller.abort(new Error(q.hot ? 'Overnight work stopped: Mac is too hot.' : 'Overnight work stopped: battery is low.')); }
     }, HEARTBEAT_MS);
     this.timer?.unref?.();
-    try { return await fn({ held: true, shouldStop: () => this.stop }); }
+    try { return await fn({ held: true, shouldStop: () => this.stop, signal: controller.signal }); }
     finally { await this.release(); }
   }
 
