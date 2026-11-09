@@ -80,3 +80,11 @@ test('the Relay tools list what is there, run reads at once, ask before changes 
     assert.match(await call.run({ tool: 'GMAIL_DELETE_EMAIL', arguments: {} }), /never deletes/);
   } finally { server.close(); }
 });
+
+
+test('MCP finishes a matching SSE reply without waiting for the connection to close',async()=>{
+ let cancelled=false,initSeen;
+ const c=new McpRemote({url:'https://fixture.invalid/mcp',fetchImpl:async(_url,init)=>{initSeen=init;return new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('data: '+JSON.stringify({jsonrpc:'2.0',id:42,result:{ok:true}})+'\r\n\r\n'));},cancel(){cancelled=true;}}),{headers:{'content-type':'text/event-stream'}});}});
+ assert.deepEqual(await c.post({jsonrpc:'2.0',id:42,method:'fixture'}),{ok:true});assert.equal(cancelled,true);assert.equal(initSeen.redirect,'error');
+ const controller=new AbortController();controller.abort();await assert.rejects(c.post({id:1},{signal:controller.signal}),{name:'AbortError'});
+});
