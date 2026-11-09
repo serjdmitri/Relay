@@ -40,7 +40,7 @@ class Drive {
     return `Showing ${Math.min(10, found.length)} of ${found.length} on screen with previews (click one to show it in Finder). Results:\n${found.map((f) => `${f.path} | ${f.kind} | ${size(f.size)} | ${day(f.mtime)}`).join('\n')}`;
   }
 
-  scan({ folder, depth } = {}) {
+  async scan({ folder, depth } = {}, {signal}={}) {
     const root = this.resolve(folder);
     const bad = root === this.home ? '' : pathProblem(path.join(root, 'x'), this.home);
     if (root !== this.home && !root.startsWith(this.home + path.sep)) return 'Relay only looks inside your home folder.';
@@ -48,7 +48,9 @@ class Drive {
     try { if (hasSymlink(root, this.fs, this.home)) return 'That folder path contains a symbolic link, so Relay will not scan it.'; }
     catch { return 'That folder path could not be checked.'; }
     try { if (!this.fs.statSync(root).isDirectory()) return 'That is not a folder.'; } catch { return 'That folder is not there.'; }
-    return describeScan(scanFolder(root, { fs: this.fs, home: this.home, depth: Math.min(5, Math.max(1, +depth || 3)) }), this.home);
+    const options={home:this.home,depth:Math.min(5,Math.max(1,+depth||3)),signal};
+    const result=this.fs===require('fs')?await require('./scanWorker').scanAsync(root,options):scanFolder(root,{fs:this.fs,...options});
+    return describeScan(result,this.home);
   }
 
   // Checks a plan and shows it: where everything goes. Nothing moves yet.

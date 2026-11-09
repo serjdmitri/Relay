@@ -155,15 +155,15 @@ test('a scan lists what is in a folder, and does not go into projects, Library o
   assert.equal(kindOf('x.HEIC'), 'image');
 });
 
-test('scanning a folder refuses a path redirected through a symbolic link', () => {
+test('scanning a folder refuses a path redirected through a symbolic link', async () => {
   const { home, w } = sandbox();
   w('Downloads/visible.txt');
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-scan-outside-'));
   fs.writeFileSync(path.join(outside, 'private.txt'), 'private');
   fs.symlinkSync(outside, path.join(home, 'Downloads/link'));
   const { d } = driveOn(home);
-  assert.match(d.scan({ folder: '~/Downloads/link' }), /symbolic link/);
-  assert.match(d.scan({ folder: '~/Downloads' }), /visible.txt/);
+  assert.match(await d.scan({ folder: '~/Downloads/link' }), /symbolic link/);
+  assert.match(await d.scan({ folder: '~/Downloads' }), /visible.txt/);
 });
 
 test('file search and open do not follow paths into protected or linked folders', async () => {
@@ -354,4 +354,10 @@ test('making files keeps to the same rules: only inside home, no protected place
   assert.deepEqual(bad.trashed, [path.join(home, 'Downloads/a.zip')], 'the half-made file goes to the Trash, not deleted');
   assert.match(await d.make({ action: 'shred', paths: [a] }), /Say zip or convert/);
   assert.deepEqual(trashed, []);
+});
+
+
+test('worker metadata scans can be cancelled without touching files',async()=>{
+ const {scanAsync}=require('../src/main/drive/scanWorker');const {home,w}=sandbox();w('Downloads/keep.txt','keep');
+ const controller=new AbortController();const scan=scanAsync(path.join(home,'Downloads'),{home,signal:controller.signal});controller.abort();await assert.rejects(scan,{name:'AbortError'});assert.equal(fs.readFileSync(path.join(home,'Downloads/keep.txt'),'utf8'),'keep');
 });
