@@ -1821,6 +1821,20 @@ app.whenReady().then(() => {
     } catch { /* the next check tries again */ }
   }, 60000).unref?.();
   const holdStandbyAwake = (on) => { try { if (on && standbyBlocker === null) standbyBlocker = powerSaveBlocker.start('prevent-display-sleep'); else if (!on && standbyBlocker !== null) { powerSaveBlocker.stop(standbyBlocker); standbyBlocker = null; } } catch { standbyBlocker = null; } };
+  // The guard cannot guard a Mac that is asleep: the camera stops and nobody is there to raise the alarm. So while it is on and has recognised you (armed), the Mac is kept from idle sleep: plugged in, the
+  // screen stays on too (the standby screen and the alarm are what you see); on battery only the system is kept awake, so the screen may dim but the camera keeps watching. Not while the Mac is locked.
+  // Closing the lid still sleeps the Mac: macOS does that regardless.
+  let guardHold = null; // { kind, id }
+  const keepGuardAwake = () => {
+    try {
+      const cfg = ownerConfig(store.get('settings.owner'));
+      const want = cfg.enabled && cfg.keepAwake !== false && ownerGuard?.armed && (ownerState?.templates?.length || 0) > 0 && !screenLocked;
+      const kind = want ? (powerMonitor.isOnBatteryPower() ? 'prevent-app-suspension' : 'prevent-display-sleep') : null;
+      if (guardHold && guardHold.kind !== kind) { powerSaveBlocker.stop(guardHold.id); guardHold = null; diag.log('guard-awake-off'); }
+      if (kind && !guardHold) { guardHold = { kind, id: powerSaveBlocker.start(kind) }; diag.log('guard-awake-on', kind === 'prevent-display-sleep' ? 'plugged in: screen and Mac stay on' : 'on battery: Mac stays awake, screen may dim'); }
+    } catch { /* tried again in a few seconds */ }
+  };
+  setInterval(keepGuardAwake, 5000).unref?.();
   setInterval(() => { ownerGuard.step(); if (intruder.sweep({ alarmWanted: ownerGuard.state === 'alarm', awayWanted: ownerGuard.awayActive })) { overlay.releaseInput(); if (!ownerGuard.awayActive) holdStandbyAwake(false); } }, 1000);
   // The face setup window (camera in a circle, ring of eight directions): it returns the finished set of numbers, and this decides whether it is a full set and keeps it.
   enrollWin = new (require('./enrollWindow').EnrollWindow)({

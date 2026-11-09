@@ -68,3 +68,12 @@ test('the camera that watches who is at the Mac is restarted when it is wanted b
   assert.equal(pc.healthy(), false);
   return pc.enable().then(() => { pc.setStatus({ state: 'running' }); pc.frame({ faces: 1 }); assert.equal(pc.healthy(), true); t += 25000; assert.equal(pc.healthy(), false, 'no picture for 25 s'); pc.setStatus({ state: 'error', message: 'x' }); pc.frame({ faces: 1 }); assert.equal(pc.healthy(), false, 'errored'); });
 });
+
+test('the owner guard keeps the Mac from sleeping while it is armed, and can be told not to', () => {
+  const fs = require('fs'), read = (f) => fs.readFileSync(require('path').join(__dirname, '..', f), 'utf8');
+  const main = read('src/main/main.js');
+  assert.match(main, /const keepGuardAwake = \(\) =>/); assert.match(main, /powerMonitor\.isOnBatteryPower\(\) \? 'prevent-app-suspension' : 'prevent-display-sleep'/);
+  assert.match(main, /cfg\.keepAwake !== false && ownerGuard\?\.armed/); assert.match(main, /&& !screenLocked/); assert.match(main, /setInterval\(keepGuardAwake, 5000\)/);
+  const { config } = require('../src/main/ownerGuard');
+  assert.equal(config({}).keepAwake, true); assert.equal(config({ keepAwake: false }).keepAwake, false);
+});
