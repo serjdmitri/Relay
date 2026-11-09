@@ -132,3 +132,18 @@ test('main.js holds the Mac awake around overnight work, restores sleep on quit,
   assert.match(ask, /parseWakeCommand\(effective\)/);
   assert.match(store, /overnightWake: \{ enabled: false, battery: false \}/, 'off until you turn it on');
 });
+
+
+test('failed sleep restoration preserves watchdog and recovery state until a retry succeeds', async () => {
+  const mac = fakeMac(), { w, fsImpl, store } = make(mac);
+  await w.withAwake(async () => { w.setSleepDisabled = async () => false; });
+  assert.equal(store.get('overnightWake').holding, true);
+  assert.equal(fsImpl.f.size, 1, 'watchdog heartbeat kept');
+  assert.equal(await w.recover(), false);
+  assert.equal(store.get('overnightWake').holding, true);
+  w.setSleepDisabled = async () => true;
+  await w.recover();
+  assert.equal(store.get('overnightWake').holding, false);
+  assert.equal(fsImpl.f.size, 0);
+  assert.match(WATCHDOG, /if sudo[\s\S]*then rm/, 'watchdog only exits after restoration succeeds');
+});

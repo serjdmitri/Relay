@@ -54,7 +54,7 @@ function parsePower(batt = '', therm = '') {
 }
 
 // The watchdog: a tiny shell loop run detached (it outlives Relay). It only ever runs the one allowed pmset form, with a value that is 0 or 1.
-const WATCHDOG = 'hb="$1"; ceil="$2"; prev="$3"; start=$(date +%s); while :; do sleep 20; [ -f "$hb" ] || exit 0; n=$(date +%s); m=$(stat -f %m "$hb" 2>/dev/null || echo 0); if [ $((n-m)) -gt ' + STALE_SECONDS + ' ] || [ $((n-start)) -gt "$ceil" ]; then sudo -n ' + PMSET + ' -a disablesleep "$prev"; rm -f "$hb"; exit 0; fi; done';
+const WATCHDOG = 'hb="$1"; ceil="$2"; prev="$3"; start=$(date +%s); while :; do sleep 20; [ -f "$hb" ] || exit 0; n=$(date +%s); m=$(stat -f %m "$hb" 2>/dev/null || echo 0); if [ $((n-m)) -gt ' + STALE_SECONDS + ' ] || [ $((n-start)) -gt "$ceil" ]; then if sudo -n ' + PMSET + ' -a disablesleep "$prev"; then rm -f "$hb"; exit 0; fi; fi; done';
 
 class WakeScheduler {
   // exec(cmd, args) -> Promise<{ code, stdout }>. spawnDetached(cmd, args). settings() -> { enabled, battery }. window() -> { from, to }.
@@ -107,7 +107,9 @@ class WakeScheduler {
   // On start: if Relay died while holding the Mac awake, put sleep back as it was before that hold.
   async recover() {
     const s = this.state();
-    if (s.holding) { await this.setSleepDisabled(s.prev ? 1 : 0); this.save({ holding: false }); this.log('wake-recovered', 'Relay had stopped while holding the Mac awake: sleep restored'); }
+    if (s.holding && !(await this.setSleepDisabled(s.prev ? 1 : 0))) { this.retryRestore(); this.log('wake-recovery-failed', 'Sleep restoration will be retried.'); return false; }
+    this.save({ holding: false }); this.clearTimer(this.restoreTimer); this.restoreTimer = null;
+    if (s.holding) this.log('wake-recovered', 'Sleep restored after an interrupted hold.');
     try { if (this.hb) this.fs.rmSync(this.hb, { force: true }); } catch { /* none */ }
   }
 
@@ -135,12 +137,19 @@ class WakeScheduler {
     finally { await this.release(); }
   }
 
+  retryRestore() {
+    if (this.restoreTimer) return;
+    this.restoreTimer = this.setTimer(() => { if (!this.holding) this.recover().catch(() => {}); }, HEARTBEAT_MS);
+    this.restoreTimer?.unref?.();
+  }
+
   async release() {
     if (!this.holding) return;
     this.holding = false; this.clearTimer(this.timer); this.timer = null;
-    try { this.fs.rmSync(this.hb, { force: true }); } catch { /* the watchdog sees it gone */ }
     const ok = await this.setSleepDisabled(this.state().prev ? 1 : 0);
-    this.save({ holding: !ok }); // if restoring failed, recover() / the watchdog try again
+    this.save({ holding: !ok });
+    if (ok) { try { this.fs.rmSync(this.hb, { force: true }); } catch {} }
+    else this.retryRestore(); // keep the heartbeat so the watchdog can also retry
     this.log('wake-release', ok ? 'sleep restored' : 'could not restore sleep: the watchdog will');
   }
 
