@@ -9,7 +9,7 @@ const RECOMMENDED = { text: 'qwen2.5:7b', textSize: '4.7 GB', vision: 'qwen2.5vl
 function parseLocalCommand(text) {
   const n = String(text || '').trim().replace(/[“”"]/g, '').replace(/^(?:hey |ok |okay )?(?:jarvis|relay)[, ]+/i, '').replace(/^please[, ]+/i, '').replace(/[.!?,]+$/g, '').replace(/\s+/g, ' ').toLowerCase();
   if (/^(?:go|switch|work|run)(?: to)? (?:offline|local|private)(?: mode)?$|^use (?:the |a )?(?:local|offline|private) (?:model|brain|mode)$|^(?:turn on|enable|start|switch on) (?:the )?(?:offline|local|private) (?:mode|model|brain)$|^think locally$|^go private$/.test(n)) return { type: 'local-on' };
-  if (/^(?:go|come|switch|get)(?: back)? online$|^use (?:the |a )?(?:cloud|online) (?:model|brain|mode)$|^(?:turn off|disable|stop|switch off) (?:the )?(?:offline|local|private) (?:mode|model|brain)$|^stop thinking locally$/.test(n)) return { type: 'local-off' };
+  if (/^(?:go|come|switch|get|return|change)(?: back)?(?: to)? (?:online|(?:the )?cloud|claude)(?: mode| model| brain)?$|^(?:use|back to|switch to) (?:the )?(?:cloud|claude|online)(?: mode| model| brain)?$|^(?:leave|exit|quit|end|stop) (?:the )?(?:offline|local|private)(?: mode)?$|^stop being (?:offline|local|private)$|^(?:go|come|switch|get)(?: back)? online$|^use (?:the |a )?(?:cloud|online) (?:model|brain|mode)$|^(?:turn off|disable|stop|switch off) (?:the )?(?:offline|local|private) (?:mode|model|brain)$|^stop thinking locally$/.test(n)) return { type: 'local-off' };
   if (/^(?:am i|are we|are you) (?:offline|local|private|online)(?: right now| now)?$|^which (?:model|brain) (?:are you|am i) (?:using|on)$|^(?:local|offline) (?:model|mode|brain) status$|^what(?:'s| is) (?:your|the) (?:model|brain)$/.test(n)) return { type: 'local-status' };
   return null;
 }
