@@ -88,11 +88,11 @@ test('sleep is restored even when the work throws', async () => {
 });
 
 test('on battery it is not held unless allowed and above 50%; a hot Mac is never held', async () => {
-  let held;
+  let held=false;
   let m = fakeMac({ ac: false, percent: 80 }), a = make(m); await a.w.withAwake(async (s) => { held = s.held; }); assert.equal(held, false, 'battery not allowed');
   m = fakeMac({ ac: false, percent: 80 }); a = make(m, { settings: { battery: true } }); await a.w.withAwake(async (s) => { held = s.held; }); assert.equal(held, true, 'battery allowed and high');
-  m = fakeMac({ ac: false, percent: 40 }); a = make(m, { settings: { battery: true } }); await a.w.withAwake(async (s) => { held = s.held; }); assert.equal(held, false, 'battery too low to start');
-  m = fakeMac({ ac: true, hot: true }); a = make(m); await a.w.withAwake(async (s) => { held = s.held; }); assert.equal(held, false, 'too hot');
+  held=false; m = fakeMac({ ac: false, percent: 40 }); a = make(m, { settings: { battery: true } }); await a.w.withAwake(async (s) => { held = s.held; }); assert.equal(held, false, 'battery too low to start');
+  held=false; m = fakeMac({ ac: true, hot: true }); a = make(m); await a.w.withAwake(async (s) => { held = s.held; }); assert.equal(held, false, 'too hot');
 });
 
 test('a Relay that died while holding puts sleep back on the next start', async () => {
@@ -124,11 +124,34 @@ test('voice commands', () => {
 test('main.js holds the Mac awake around overnight work, restores sleep on quit, and askController routes the voice commands', () => {
   const fs = require('fs'), read = (f) => fs.readFileSync(require('path').join(__dirname, '..', f), 'utf8');
   const main = read('src/main/main.js'), ask = read('src/main/askController.js'), store = read('src/main/store.js');
-  assert.match(main, /wake\.withAwake\(\(\) => runOvernightTask\(st\.run\)/, 'the night list runs held awake');
-  assert.match(main, /wake\.withAwake\(\(\) => nightlyMaintenance\.run\(key\)/, 'overnight improvement runs held awake');
+  assert.match(main, /wake\.withAwake\(context => runOvernightTask\(st\.run,context\)/, 'the night list runs held awake');
+  assert.match(main, /wake\.withAwake\(context => nightlyMaintenance\.run\(key,context\)/, 'overnight improvement runs held awake');
   assert.match(main, /app\.on\('before-quit'[\s\S]*disablesleep/, 'quitting mid-hold restores sleep');
   assert.match(main, /wake\.recover\(\)\.then\(\(\) => wake\.arm\(\)\)/, 'a Relay that died mid-hold recovers, then arms');
   assert.match(main, /ask\.wakeCommand = async/); assert.match(main, /clipboard\.writeText\(cmd\)/, 'setup is a command you paste: Relay never types your password');
   assert.match(ask, /parseWakeCommand\(effective\)/);
   assert.match(store, /overnightWake: \{ enabled: false, battery: false \}/, 'off until you turn it on');
+});
+
+
+test('failed sleep restoration preserves watchdog and recovery state until a retry succeeds', async () => {
+  const mac = fakeMac(), { w, fsImpl, store } = make(mac);
+  await w.withAwake(async () => { w.setSleepDisabled = async () => false; });
+  assert.equal(store.get('overnightWake').holding, true);
+  assert.equal(fsImpl.f.size, 1, 'watchdog heartbeat kept');
+  assert.equal(await w.recover(), false);
+  assert.equal(store.get('overnightWake').holding, true);
+  w.setSleepDisabled = async () => true;
+  await w.recover();
+  assert.equal(store.get('overnightWake').holding, false);
+  assert.equal(fsImpl.f.size, 0);
+  assert.match(WATCHDOG, /if sudo[\s\S]*then rm/, 'watchdog only exits after restoration succeeds');
+});
+
+
+test('thermal changes abort the overnight job and restore sleep',async()=>{
+ const mac=fakeMac();let tick,hot=false;const {w}=make(mac);const power=w.power.bind(w);w.power=async()=>hot?{ac:true,percent:80,hot:true}:power();
+ w.setTimer=fn=>{tick=fn;return{unref(){}};};
+ await w.withAwake(async({signal})=>{assert.equal(signal.aborted,false);hot=true;await tick();assert.equal(signal.aborted,true);assert.match(signal.reason.message,/hot/);});
+ assert.equal(mac.sleepDisabled,0);
 });

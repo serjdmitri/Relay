@@ -409,7 +409,7 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
         description: 'List what is inside a folder (a few levels down) with each file kind, size and date, so you can plan how to tidy it. Read-only. Folders marked as projects are not to be taken apart.',
         input_schema: obj({ folder: str('e.g. ~/Downloads'), depth: { type: 'number', description: 'How many levels down, 1 to 5 (default 3)' } }, ['folder']),
         describe: (i) => `Looking inside ${i.folder}`,
-        run: (i) => drive.scan(i)
+        run: (i,context) => drive.scan(i,context)
       },
       {
         name: 'drive_suggest',

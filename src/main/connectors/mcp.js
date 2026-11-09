@@ -22,11 +22,24 @@ function parseReply(text, contentType, id) {
   try { const j = JSON.parse(text); return Array.isArray(j) ? j.find((x) => x.id === id) || null : j; } catch { return null; }
 }
 
+async function responseReply(res,id,signal){
+ const type=res.headers?.get?.('content-type');
+ if(!/text\/event-stream/.test(type||'')||!res.body?.[Symbol.asyncIterator])return parseReply(await require('../httpBody').readText(res,{maxBytes:2000000,signal}),type,id);
+ const decoder=new TextDecoder();let pending='',bytes=0;
+ for await(const chunk of res.body){
+  signal?.throwIfAborted();bytes+=chunk.length;if(bytes>2000000)throw new McpError('The app response is too large.');
+  pending+=decoder.decode(chunk,{stream:true});let match;
+  while((match=/\r?\n\r?\n/.exec(pending))){const block=pending.slice(0,match.index);pending=pending.slice(match.index+match[0].length);const reply=parseReply(block,type,id);if(reply)return reply;}
+  if(pending.length>500000)throw new McpError('The app event is too large.');
+ }
+ return parseReply(pending+decoder.decode(),type,id);
+}
+
 class McpRemote {
   // headers: e.g. { 'x-api-key': '…' } or { authorization: 'Bearer …' }
   constructor({ url, headers = {}, fetchImpl = fetch, timeoutMs = 30000 }) {
     const u = new URL(url);
-    if (u.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname)) throw new McpError('The address must start with https://');
+    if (!(u.protocol === 'https:' || u.protocol === 'http:' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname))) throw new McpError('The address must start with https://');
     this.url = u.href;
     this.headers = headers;
     this.fetch = fetchImpl;
@@ -36,21 +49,22 @@ class McpRemote {
     this.ready = null;
   }
 
-  async post(body, { expectReply = true } = {}) {
+  async post(body, { expectReply = true, signal } = {}) {
+    signal=signal?AbortSignal.any([signal,AbortSignal.timeout(this.timeoutMs)]):AbortSignal.timeout(this.timeoutMs);
+    signal.throwIfAborted();
     const res = await this.fetch(this.url, {
-      method: 'POST',
+      method: 'POST', redirect:'error',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...this.headers, ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}) },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs)
+      signal
     });
     const sid = res.headers?.get?.('mcp-session-id');
     if (sid) this.sessionId = sid;
     if (res.status === 401 || res.status === 403) throw new McpError('The server rejected the key. Check the address and key in Settings > Connectors.');
     if (res.status === 404 && this.sessionId) { this.sessionId = ''; this.ready = null; throw new McpError('The connection expired; try again.'); }
-    if (!res.ok && res.status !== 202) throw new McpError(`The server answered ${res.status}: ${(await res.text()).slice(0, 160)}`);
+    if (!res.ok && res.status !== 202) throw new McpError(`The server answered ${res.status}: ${await require('../httpBody').readText(res,{maxBytes:1600,truncate:true,signal})}`);
     if (!expectReply) return null;
-    const text = await res.text();
-    const reply = parseReply(text, res.headers?.get?.('content-type'), body.id);
+    const reply = await responseReply(res,body.id,signal);
     if (!reply) throw new McpError('The server did not answer that request.');
     if (reply.error) throw new McpError(String(reply.error.message || 'The server reported an error.').slice(0, 300));
     return reply.result;
@@ -67,16 +81,16 @@ class McpRemote {
     return this.ready;
   }
 
-  async request(method, params) {
+  async request(method, params, {signal}={}) {
     await this.init();
-    return this.post({ jsonrpc: '2.0', id: this.nextId++, method, params });
+    return this.post({ jsonrpc: '2.0', id: this.nextId++, method, params },{signal});
   }
 
-  async listTools() {
+  async listTools({signal}={}) {
     const out = [];
     let cursor;
     for (let page = 0; page < 20; page++) {
-      const r = await this.request('tools/list', cursor ? { cursor } : {});
+      const r = await this.request('tools/list', cursor ? { cursor } : {},{signal});
       out.push(...(r.tools || []));
       cursor = r.nextCursor;
       if (!cursor || out.length >= 500) break;
@@ -85,8 +99,8 @@ class McpRemote {
   }
 
   // The result as text for the model.
-  async callTool(name, args = {}) {
-    const r = await this.request('tools/call', { name: String(name), arguments: args && typeof args === 'object' ? args : {} });
+  async callTool(name, args = {}, {signal}={}) {
+    const r = await this.request('tools/call', { name: String(name), arguments: args && typeof args === 'object' ? args : {} },{signal});
     const text = (r.content || []).map((c) => (c.type === 'text' ? c.text : c.type === 'image' ? '[an image]' : c.type === 'resource' ? `[resource ${c.resource?.uri || ''}]` : '')).filter(Boolean).join('\n');
     const cut = text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n[cut: ${text.length - MAX_TEXT} more characters]` : text;
     return r.isError ? `The app reported a problem: ${cut || 'no details'}` : cut || (r.structuredContent ? JSON.stringify(r.structuredContent).slice(0, MAX_TEXT) : 'Done.');
@@ -129,16 +143,16 @@ const str = (description) => ({ type: 'string', description });
 
 function mcpTools(client, { label = 'your apps' } = {}) {
   let cache = null;
-  const list = async () => cache || (cache = await client.listTools());
+  const list = async context => cache || (cache = await client.listTools(context));
   return [
     {
       name: 'apps_tools',
       description: `List what ${label} can do (the tools of the connected app server, with what each needs), optionally filtered by words. Use it before apps_call. With Composio this includes COMPOSIO_SEARCH_TOOLS to find an action for an app (Gmail, Slack, GitHub, Linear, Google Sheets…) and COMPOSIO_MULTI_EXECUTE_TOOL to run it.`,
       input_schema: obj({ query: str('Words to filter by (optional)') }),
       describe: () => `Looking at ${label}`,
-      run: async (i) => {
+      run: async (i, context) => {
         const q = String(i?.query || '').toLowerCase();
-        const tools = (await list()).filter((t) => !q || `${t.name} ${t.description || ''}`.toLowerCase().includes(q)).slice(0, 40);
+        const tools = (await list(context)).filter((t) => !q || `${t.name} ${t.description || ''}`.toLowerCase().includes(q)).slice(0, 40);
         if (!tools.length) return 'No tool matches. Try fewer words, or none.';
         return tools.map((t) => `${t.name}: ${String(t.description || '').replace(/\s+/g, ' ').slice(0, 220)}\n  input: ${JSON.stringify(t.inputSchema?.properties ? Object.fromEntries(Object.entries(t.inputSchema.properties).slice(0, 12).map(([k, v]) => [k, v.type || 'any'])) : {})}${t.inputSchema?.required?.length ? ` required: ${t.inputSchema.required.join(', ')}` : ''}`).join('\n');
       }
@@ -149,10 +163,10 @@ function mcpTools(client, { label = 'your apps' } = {}) {
       input_schema: obj({ tool: str('The tool name'), arguments: { type: 'object', description: 'The arguments', additionalProperties: true } }, ['tool']),
       confirm: (i) => classifyCall(i.tool, i.arguments, label).confirm || null,
       describe: (i) => `${label}: ${String(i.tool || '').replace(/_/g, ' ').toLowerCase().slice(0, 40)}`,
-      run: async (i) => {
+      run: async (i, context) => {
         const c = classifyCall(i.tool, i.arguments, label);
         if (c.block) return c.block;
-        return client.callTool(i.tool, i.arguments || {});
+        return client.callTool(i.tool, i.arguments || {}, context);
       }
     }
   ];

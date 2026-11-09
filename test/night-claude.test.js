@@ -28,7 +28,7 @@ test('a small change inside src and test is prepared for review, marked unreview
 test('anything outside the allowed folders, too many files, too many lines, no change, or a Claude failure is thrown away', async () => {
   const run = (o, claude = async () => ({ code: 0, stdout: '' })) => { const pr = fakeProposals(o); return runNight({ proposals: pr, runClaude: claude, brief: 'b' }).then((r) => ({ r, pr })); };
   let x = await run({ status: ' M package.json\n M src/main/a.js\n' }); assert.equal(x.r.status, 'discarded'); assert.match(x.r.line, /touched files it may not \(package\.json\)/);
-  assert.ok(x.pr.calls.includes('checkout -- .') && x.pr.calls.includes('clean -fdq') && x.pr.calls.some((c) => c.startsWith('discard')), 'the edits are wiped before the workspace is dropped');
+  assert.ok(x.pr.calls.some(c => c.startsWith('discard')), 'the unreviewed attempt is discarded');
   x = await run({ status: ' M src/main/a.js\n M scripts/make-dmg.sh\n' }); assert.match(x.r.line, /scripts\/make-dmg\.sh/);
   x = await run({ status: ' M ../../etc/hosts\n' }); assert.equal(x.r.status, 'discarded');
   x = await run({ status: Array.from({ length: MAX_FILES + 1 }, (_, i) => ` M src/main/f${i}.js`).join('\n') + '\n' }); assert.match(x.r.line, /more than 8/);

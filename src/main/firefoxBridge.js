@@ -30,9 +30,10 @@ class FirefoxBridge extends EventEmitter {
         } catch {
           return;
         }
+        if (this.socket !== ws) return;
         if (msg.event === 'hello') { this.extVersion = msg.version; this.emit('status', true); return; }
         const p = this.pending.get(msg.id);
-        if (!p) return;
+        if (!p || p.socket !== ws) return;
         this.pending.delete(msg.id);
         clearTimeout(p.timer);
         if (msg.error) p.reject(new Error(msg.error));
@@ -44,6 +45,7 @@ class FirefoxBridge extends EventEmitter {
           this.emit('status', false);
         }
         for (const [id, p] of this.pending) {
+          if (p.socket !== ws) continue;
           clearTimeout(p.timer);
           p.reject(new Error('Firefox extension disconnected.'));
           this.pending.delete(id);
@@ -64,13 +66,16 @@ class FirefoxBridge extends EventEmitter {
         this.pending.delete(id);
         reject(new Error(`Firefox did not answer ${method} in time.`));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, socket: this.socket });
       this.socket.send(JSON.stringify({ id, method, params }));
     });
   }
 
   stop() {
     try {
+      this.socket?.close();
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('Firefox bridge stopped.')); }
+      this.pending.clear(); this.socket = null;
       this.server?.close();
     } catch {}
   }

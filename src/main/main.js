@@ -181,11 +181,16 @@ function openOnboarding() {
   onboardWin.on('closed', () => (onboardWin = null));
 }
 
-function broadcast() {
-  fitnessPanel?.syncPrivacy();
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send('state-changed');
+const refreshStateUi = require('./coalesce').coalesce(() => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send('state-changed');
+  }
   holos?.refreshUi();
   rebuildTray();
+});
+function broadcast() {
+  fitnessPanel?.syncPrivacy();
+  refreshStateUi();
 }
 
 // What Settings shows about the quick lane: whether it has a key, and what it did today. Never the key.
@@ -446,7 +451,7 @@ async function welcomeBack(lockedAt, lastWelcome) {
       if(showCard){if(welcomeToken)card.welcomeToken=welcomeToken;try{await cardPanel?.show(card);heldByCard=!!cardPanel;}catch{}}
       const details=[...w.priorities.slice(0,3).map(p=>p.text),briefing].filter(Boolean).join(' ');
       if(cfg.show!==false&&Notification.isSupported())new Notification({title:greeting,body:(card?.sections||[]).flatMap(s=>s.bullets).slice(0,3).join('\n')||'Your briefing is ready.',silent:true}).show();
-      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())ask.speakText(details);
+      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())await ask.speakText(details);
     }
   }).finally(()=>{
     if(!welcomeToken)return;
@@ -1235,7 +1240,7 @@ function startBridge() {
 // If Chromium's network helper dies and restarts, a window that was already open can end up empty: check the main window shortly after.
 app.on('child-process-gone', (_e, d) => { if (d && /network/i.test(`${d.name || ''} ${d.serviceName || ''}`)) setTimeout(() => checkMainPainted('after the network helper restarted'), 2500); });
 app.whenReady().then(() => {
-  store = new Store(app.getPath('userData'));
+  store = new Store(app.getPath('userData'), { onError: code => diag.log('settings-save-failed', code) });
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
@@ -1340,14 +1345,16 @@ app.whenReady().then(() => {
   // Overnight tasks: work you handed Relay for the night runs unattended inside the overnight window, one at a time; in the morning a report says what was checked, what was only reported, what failed and what needed you.
   ask.overnight = new overnightMod.OvernightQueue({ store, settings: () => store.get('settings.overnight') });
   const clip = (s, n = 300) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
-  const runOvernightTask = async (task) => {
+  const runOvernightTask = async (task, { signal } = {}) => {
+    signal?.throwIfAborted();
     const runId = ask.overnight.begin(task);
     store.addHistory({ id: runId, text: `Overnight: ${task.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: Date.now(), finishedAt: Date.now() });
     ask.activeScheduledId = runId;
     const blocker = powerSaveBlocker.start('prevent-app-suspension'); // the Mac may dim its screen, but does not stop Relay midway
-    let result;
-    try { result = await ask.runScheduled({ text: task.text }); } catch (e) { result = { status: 'failed', reply: e.message }; }
-    finally { powerSaveBlocker.stop(blocker); if (ask.activeScheduledId === runId) ask.activeScheduledId = null; }
+    let result; const cancelled=()=>{if(ask.activeScheduledId===runId)ask.stop();};
+    signal?.addEventListener('abort',cancelled,{once:true});
+    try { signal?.throwIfAborted(); result = await ask.runScheduled({ text: task.text }); } catch (e) { result = { status: 'failed', reply: e.message }; }
+    finally { signal?.removeEventListener('abort',cancelled); powerSaveBlocker.stop(blocker); if (ask.activeScheduledId === runId) ask.activeScheduledId = null; }
     recordScheduledOutcome(store, runId, result);
     const actions = (store.get('actions') || []).filter((a) => a.requestId === runId);
     const v = overnightMod.verifyRun(result || {}, actions, { exists: (p) => require('fs').existsSync(p), home: app.getPath('home') });
@@ -1374,7 +1381,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => { // quitting Relay mid-hold: put sleep back now (the watchdog is the backstop)
     if (!wake.holding) return;
     wake.holding = false;
-    try { require('child_process').spawnSync('/usr/bin/sudo', ['-n', '/usr/bin/pmset', '-a', 'disablesleep', wake.state().prev ? '1' : '0'], { timeout: 5000, stdio: 'ignore' }); wake.save({ holding: false }); } catch { /* recover() runs next start */ }
+    try { const restored=require('child_process').spawnSync('/usr/bin/sudo', ['-n', '/usr/bin/pmset', '-a', 'disablesleep', wake.state().prev ? '1' : '0'], { timeout: 5000, stdio: 'ignore' }); if(restored.status===0){wake.save({ holding: false });require('fs').rmSync(wake.hb,{force:true});} } catch { /* recover() runs next start */ }
   });
   let overnightBusy = false;
   const overnightTick = async () => {
@@ -1385,7 +1392,7 @@ app.whenReady().then(() => {
       let changed = false;
       for (const t of st.interrupted) { ask.overnight.interrupt(t, (store.get('actions') || []).filter((a) => a.requestId === t.runId)); changed = true; }
       if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
-      if (st.run) { await wake.withAwake(() => runOvernightTask(st.run), 'night list'); changed = true; }
+      if (st.run) { await wake.withAwake(context => runOvernightTask(st.run,context), 'night list'); changed = true; }
       const conf=ask.overnight.conf(), now=new Date(), key=String(overnightMod.windowBounds(now,conf).start);
       if(!changed && !ask.overnight.queued().length && ask.canRunScheduled() && conf.enabled && overnightMod.inWindow(now,conf)) {
         if(store.get('overnightPlannedKey')!==key){
@@ -1394,7 +1401,7 @@ app.whenReady().then(() => {
           for(const task of planned)ask.overnight.add(task);
           changed=planned.length>0;
         }
-        if(!changed && nightlyMaintenance) { const wantNight = !!store.get('settings.selfImprove.nightly') && store.get('nightlyMaintenance')?.key !== key; changed = await (wantNight ? wake.withAwake(() => nightlyMaintenance.run(key), 'overnight improvement') : nightlyMaintenance.run(key)); }
+        if(!changed && nightlyMaintenance) { const wantNight = !!store.get('settings.selfImprove.nightly') && store.get('nightlyMaintenance')?.key !== key; changed = await (wantNight ? wake.withAwake(context => nightlyMaintenance.run(key,context), 'overnight improvement') : nightlyMaintenance.run(key)); }
       }
       if (!changed && st.report) overnightReport(st.report);
     } catch (e) { console.error('Overnight tick failed:', e); } finally { overnightBusy = false; }
@@ -1511,8 +1518,10 @@ app.whenReady().then(() => {
     fs: require('fs'), home: os.homedir(), cards: cardPanel,
     move: (from, to) => {
       const bin = app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-move') : path.join(__dirname, '../../native/build/relay-move');
-      const result = require('child_process').spawnSync(bin, [from, to], { timeout: 10000, stdio: 'ignore' });
-      if (result.status !== 0) throw new Error(result.status === 17 ? 'Something appeared at the destination.' : 'Safe file moving could not be confirmed; check both locations.');
+      return new Promise((resolve, reject) => execFile(bin, [from, to], { timeout: 10000, maxBuffer: 4096 }, error => {
+        if (!error) return resolve();
+        reject(new Error(error.code === 17 ? 'Something appeared at the destination.' : 'Safe file moving could not be confirmed; check both locations.'));
+      }));
     },
     exec: (file, args) => new Promise((res) => execFile(file, args, { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => res(out || ''))),
     thumb: async (p) => { try { const img = await nativeImage.createThumbnailFromPath(p, { width: 220, height: 220 }); return img.isEmpty() ? null : `data:image/jpeg;base64,${img.resize({ width: 160 }).toJPEG(72).toString('base64')}`; } catch { return null; } },
@@ -1648,20 +1657,16 @@ app.whenReady().then(() => {
   // Self-improvement workspace: proposals for changes to Relay's own code live in separate git worktrees; tests run there; a passing change becomes one commit. Never merges, pushes or installs.
   const proposals = new ProposalWorkspace({
     store, getConfig: () => store.get('settings.selfImprove'),
-    run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
+    run: (args, { cwd, timeout, signal }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, signal, maxBuffer: 20 * 1024 * 1024, env: require('./nightRunner').nightEnv() }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
   });
   // Claude, headless, in a proposal's own worktree: it may read and edit files, nothing else (no commands, no network), so nothing it writes has run (nightClaude.js).
-  const runClaudeHeadless = async ({ cwd, prompt }) => {
-    const claude = await require('./agent/claudeCli').findClaude();
-    if (!claude) return { code: 1, stdout: '', error: 'Claude is not installed' };
-    return new Promise((resolve) => require('child_process').execFile(claude, ['-p', prompt, '--allowedTools', 'Read,Glob,Grep,Edit,Write', '--disallowedTools', 'Bash,WebFetch,WebSearch', '--permission-mode', 'acceptEdits', '--max-turns', '30', '--output-format', 'text'],
-      { cwd, timeout: 40 * 60000, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? 1 : 0, stdout: String(stdout || ''), error: err ? String(stderr || err.message).slice(0, 200) : '' })));
-  };
-  const claudeNight = async (key) => {
+  const runClaudeHeadless = options => require('./nightRunner').runRestrictedNight({...options,isPrivate:()=>store.get('settings.model.provider')==='ollama'});
+  const claudeNight = async (key, {signal}={}) => {
+    signal?.throwIfAborted();
     const nc = require('./nightClaude');
     const brief = nc.buildBrief({ diagLines: diag.tail(60), speed: require('./latency').describe(store.get('latencyLog')), extra: (store.get('settings.selfImprove') || {}).instruction || '' });
     diag.log('night-claude', 'started');
-    const r = await nc.runNight({ proposals, runClaude: runClaudeHeadless, brief, key: new Date().toISOString().slice(0, 10) });
+    const r = await nc.runNight({ proposals, runClaude: options=>runClaudeHeadless({...options,signal}), brief, key: new Date().toISOString().slice(0, 10) });
     diag.log('night-claude', r.status + (r.files ? ` ${r.files.length} file(s), ${r.lines} lines` : ''));
     return r;
   };
@@ -1669,9 +1674,10 @@ app.whenReady().then(() => {
   ipcMain.handle('proposal:review',async(e,id)=>{
     if(e.sender!==mainWin?.webContents)return {error:'Open Settings first.'};
     const p=proposals.find(id);if(!p?.generated)return {error:'No generated proposal to review.'};
-    await proposals.git(['add','-N','--','.'],p.dir);const diff=await proposals.git(['diff','HEAD','--no-ext-diff'],p.dir);if(diff.code!==0||!diff.stdout.trim())return {error:'No readable diff.'};/* every changed file, tests and brand-new files included, not only src */
+    const marked=await proposals.git(['add','-N','--','.'],p.dir);if(marked.code!==0)return {error:'Cannot include new files in the review.'};const diff=await proposals.git(['diff','HEAD','--no-ext-diff'],p.dir);if(diff.code!==0||!diff.stdout.trim())return {error:'No readable diff.'};/* every changed file, tests and brand-new files included, not only src */
+    if(diff.stdout.length>100000)return {error:'This diff is too large to display completely. Reduce the proposal before approving tests.'};
     const reviewedState=await proposals.status(p);if(!reviewedState)return {error:'Cannot verify proposal files.'};
-    const answer=await dialog.showMessageBox(mainWin,{type:'warning',message:'Review the whole generated change (source, tests, new files) before allowing tests',detail:diff.stdout.slice(0,100000),buttons:['Cancel','Approve testing'],defaultId:0,cancelId:0});
+    const answer=await dialog.showMessageBox(mainWin,{type:'warning',message:'Review the whole generated change (source, tests, new files) before allowing tests',detail:diff.stdout,buttons:['Cancel','Approve testing'],defaultId:0,cancelId:0});
     if(answer.response!==1)return {cancelled:true};
     if(reviewedState!==await proposals.status(p))return {error:'Files changed during review. Review again.'};
     proposals.patch(p.id,{reviewed:true,reviewState:reviewedState});broadcast();return {ok:true};
