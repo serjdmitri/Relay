@@ -109,5 +109,5 @@ test('a camera that dies when the Mac sleeps is started again: the page restarts
   assert.match(page, /log\.length >= 4/, 'four restarts in two minutes and it gives up and says so, so a dead camera cannot loop');
   assert.match(page, /status\('error', \{ message: 'The camera keeps stopping/);
   assert.match(page, /status\('running'\);\n    watchStream\(\);/, 'the watch starts once the camera is running');
-  assert.match(main, /powerMonitor\.on\('resume', \(\) => \{ if \(presence\?\.enabled\) \{ presence\.disable\(\); setTimeout\(/, 'on wake the camera is restarted');
+  assert.match(main, /powerMonitor\.on\('resume', \(\) => reviveSoon\('after wake'\)\)/, 'on wake the camera is restarted, with retries until it delivers pictures');
 });
