@@ -156,3 +156,9 @@ test('the welcome-back card closes by itself (it must not inherit the daily brie
   assert.equal(card.hold, false); assert.match(card.title, /Welcome back, Sir/);
   assert.equal(require('../src/main/briefing').briefingCard(facts, '').hold, true, 'the daily briefing itself still stays until you close it');
 });
+
+test('welcome cleanup waits for the details voice to finish', async () => {
+ const {deliverInStages}=require('../src/main/welcome'); let finishVoice, cleaned=false;
+ const pending=deliverInStages({canDeliver:()=>true,begin:()=>{},collect:async()=>({}),finish:()=>new Promise(r=>finishVoice=r)}).finally(()=>cleaned=true);
+ await new Promise(r=>setImmediate(r)); assert.equal(cleaned,false);finishVoice();await pending;assert.equal(cleaned,true);
+});
