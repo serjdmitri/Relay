@@ -83,3 +83,18 @@ test('the settings file is written readable by its owner only, even when an olde
   s.set('settings.look', 'jarvis2'); s.flush();
   assert.equal(fs.statSync(path.join(dir, 'relay.json')).mode & 0o777, 0o600, 'the next save tightens an older loose file');
 });
+
+test('routine persistence yields while writing and cannot overwrite a newer explicit flush',async()=>{
+ const dir=tmp();let release,started;const writing=new Promise(r=>started=r);
+ const io={...fs.promises,writeFile:async(...args)=>{started();await new Promise(r=>release=r);return fs.promises.writeFile(...args);}};
+ const s=new Store(dir,{io});s.set('settings.look','old');const pending=s.saveAsync();await writing;
+ s.set('settings.look','new');s.flush();release();await pending;
+ assert.equal(new Store(dir).get('settings.look'),'new');assert.equal(fs.statSync(s.file).mode&0o777,0o600);
+ assert.deepEqual(fs.readdirSync(dir),['relay.json']);fs.rmSync(dir,{recursive:true});
+});
+test('failed background saves preserve existing data and report a bounded error code',async()=>{
+ const dir=tmp(),errors=[];const s=new Store(dir,{onError:e=>errors.push(e)});s.flush();const before=fs.readFileSync(s.file,'utf8');
+ s.io={...fs.promises,writeFile:async()=>{throw Object.assign(Error('private path'),{code:'ENOSPC'});}};
+ s.set('settings.look','new');await s.saveAsync();assert.equal(fs.readFileSync(s.file,'utf8'),before);assert.deepEqual(errors,['ENOSPC']);
+ s.io=fs.promises;await s.saveAsync();assert.equal(new Store(dir).get('settings.look'),'new');assert.equal(s.lastError,null);fs.rmSync(dir,{recursive:true});
+});

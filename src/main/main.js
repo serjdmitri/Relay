@@ -1240,7 +1240,7 @@ function startBridge() {
 // If Chromium's network helper dies and restarts, a window that was already open can end up empty: check the main window shortly after.
 app.on('child-process-gone', (_e, d) => { if (d && /network/i.test(`${d.name || ''} ${d.serviceName || ''}`)) setTimeout(() => checkMainPainted('after the network helper restarted'), 2500); });
 app.whenReady().then(() => {
-  store = new Store(app.getPath('userData'));
+  store = new Store(app.getPath('userData'), { onError: code => diag.log('settings-save-failed', code) });
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
