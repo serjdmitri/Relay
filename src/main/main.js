@@ -181,11 +181,16 @@ function openOnboarding() {
   onboardWin.on('closed', () => (onboardWin = null));
 }
 
-function broadcast() {
-  fitnessPanel?.syncPrivacy();
-  for (const w of BrowserWindow.getAllWindows()) w.webContents.send('state-changed');
+const refreshStateUi = require('./coalesce').coalesce(() => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send('state-changed');
+  }
   holos?.refreshUi();
   rebuildTray();
+});
+function broadcast() {
+  fitnessPanel?.syncPrivacy();
+  refreshStateUi();
 }
 
 // What Settings shows about the quick lane: whether it has a key, and what it did today. Never the key.
