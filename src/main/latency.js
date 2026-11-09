@@ -32,7 +32,7 @@ class Latency {
   }
 }
 
-const median = (xs) => { const a = xs.filter((x) => typeof x === 'number').sort((p, q) => p - q); return a.length ? a[Math.floor((a.length - 1) / 2)] : null; };
+const median = (xs) => { const a = xs.filter((x) => Number.isFinite(x) && x>=0).sort((p, q) => p - q); return a.length ? a[Math.floor((a.length - 1) / 2)] : null; };
 
 function parseLatencyCommand(text) {
   const n = String(text || '').trim().replace(/[“”"]/g, '').replace(/^(?:hey |ok |okay )?(?:jarvis|relay)[, ]+/i, '').replace(/^please[, ]+/i, '').replace(/[.!?,]+$/g, '').replace(/\s+/g, ' ').toLowerCase();
@@ -42,6 +42,7 @@ function parseLatencyCommand(text) {
 }
 
 // The words for the report, from the saved records (newest first).
+const percentile95=xs=>{const a=xs.filter(x=>Number.isFinite(x)&&x>=0).sort((x,y)=>x-y);return a.length?a[Math.ceil(a.length*.95)-1]:null;};
 function describe(log = []) {
   const recent = (Array.isArray(log) ? log : []).slice(0, 20);
   if (recent.length < 3) return 'I have timed only ' + recent.length + ' spoken request' + (recent.length === 1 ? '' : 's') + ' so far. Ask me a few things out loud and then ask how fast I am.';
@@ -49,7 +50,8 @@ function describe(log = []) {
   const f = (x) => (x === null ? 'unknown' : x.toFixed(1) + ' seconds');
   const steps = [['hearing you (speech to text)', m.listen], ['thinking up the first words', m.think], ['making the voice', m.speak]].filter(([, v]) => v !== null).sort((a, b) => b[1] - a[1]);
   const slowest = steps[0];
-  return `Over your last ${recent.length} spoken requests the typical wait from letting go of the key to hearing me was ${f(m.total)}. Hearing you took ${f(m.listen)}, thinking up the first words ${f(m.think)}, and making the voice ${f(m.speak)}.${slowest ? ` The slowest part is ${slowest[0]}.` : ''}`;
+  const p95=percentile95(recent.map(r=>r.total));
+  return `Over your last ${recent.length} spoken requests the typical wait from letting go of the key to hearing me was ${f(m.total)}. The 95th-percentile wait was ${f(p95)}. Hearing you took ${f(m.listen)}, thinking up the first words ${f(m.think)}, and making the voice ${f(m.speak)}.${slowest ? ` The slowest part is ${slowest[0]}.` : ''}`;
 }
 
-module.exports = { Latency, parseLatencyCommand, describe, median };
+module.exports = { Latency, parseLatencyCommand, describe, median, percentile95 };
