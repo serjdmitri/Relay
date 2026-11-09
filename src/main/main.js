@@ -446,7 +446,7 @@ async function welcomeBack(lockedAt, lastWelcome) {
       if(showCard){if(welcomeToken)card.welcomeToken=welcomeToken;try{await cardPanel?.show(card);heldByCard=!!cardPanel;}catch{}}
       const details=[...w.priorities.slice(0,3).map(p=>p.text),briefing].filter(Boolean).join(' ');
       if(cfg.show!==false&&Notification.isSupported())new Notification({title:greeting,body:(card?.sections||[]).flatMap(s=>s.bullets).slice(0,3).join('\n')||'Your briefing is ready.',silent:true}).show();
-      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())ask.speakText(details);
+      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())await ask.speakText(details);
     }
   }).finally(()=>{
     if(!welcomeToken)return;
