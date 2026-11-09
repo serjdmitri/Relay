@@ -47,3 +47,14 @@ test('a thumb held straight up or straight down on a closed hand is told from a 
   assert.equal(poseOf(down), 'Thumb_Down');
   assert.equal(poseOf(hand({})), 'Closed_Fist', 'a plain fist is still a fist');
 });
+
+test('only the middle finger out is a middle finger, whichever way the hand is turned; no other pose is mistaken for it', () => {
+  for (const rot of [0, 0.8, -1.2, 2.5, 3.1]) {
+    assert.equal(poseOf(hand({ rot, middle: true })), 'Middle_Finger', `middle finger at ${rot}`);
+    assert.equal(poseOf(hand({ rot, middle: true, thumb: true })), 'Middle_Finger', `with the thumb out at ${rot}`);
+    assert.notEqual(poseOf(hand({ rot, index: true, middle: true })), 'Middle_Finger', 'peace sign');
+    assert.notEqual(poseOf(hand({ rot, index: true })), 'Middle_Finger', 'pointing');
+    assert.notEqual(poseOf(hand({ rot })), 'Middle_Finger', 'fist');
+    assert.notEqual(poseOf(hand({ rot, middle: true, ring: true })), 'Middle_Finger', 'two fingers');
+  }
+});
