@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.sergey.relay.cal</string>
+	<key>CFBundleName</key>
+	<string>Relay Calendar</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Relay reads and adds your calendar events when you ask, without opening the Calendar app.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Relay reads and adds your calendar events when you ask, without opening the Calendar app.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Relay reads and adds your reminders when you ask, without opening the Reminders app.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Relay reads and adds your reminders when you ask, without opening the Reminders app.</string>
+</dict>
+</plist>

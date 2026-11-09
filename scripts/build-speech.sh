@@ -15,6 +15,9 @@ echo "Built native/build/relay-glass"
 # Fast accessibility lookups and on-screen text finding, for pointing and guides.
 swiftc -O -swift-version 5 relay-ax.swift -o build/relay-ax
 echo "Built native/build/relay-ax"
+# Calendar and Reminders straight from the Mac (EventKit), so those apps never have to be open.
+swiftc -O -swift-version 5 relay-cal.swift -o build/relay-cal -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker cal-Info.plist
+echo "Built native/build/relay-cal"
 # On-device text embeddings and PDF text, for "ask my notes".
 # If it does not build here, a stand-in that says "no embeddings" is put in its place, so packing still works and "ask my notes" searches by words only.
 if swiftc -O -swift-version 5 relay-embed.swift -o build/relay-embed; then echo "Built native/build/relay-embed"; else

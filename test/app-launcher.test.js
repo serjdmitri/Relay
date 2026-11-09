@@ -1,47 +1,29 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { ensureApp, ensureOllama, helpersIn } = require('../src/main/appLauncher');
+const { ensureOllama } = require('../src/main/appLauncher');
 const { createMac } = require('../src/main/agent/mac');
 const { OllamaProvider } = require('../src/main/agent/providers/ollama');
 const { run } = require('../src/main/localMode');
 
 const noSleep = async () => {};
-// A fake Mac: apps start running after `delay` pgrep checks.
-const fakeApps = (delay = 2) => { const calls = []; let n = 0, opened = false;
-  const exec = async (cmd, args) => { calls.push([cmd, ...args].join(' ')); if (cmd === '/usr/bin/open') { opened = true; return ''; } if (cmd === '/usr/bin/pgrep') { if (opened && ++n > delay) return '123'; throw new Error('none'); } return ''; };
-  return { exec, calls }; };
-
-test('a closed Calendar is opened hidden and waited for; an open one is left alone', async () => {
-  const m = fakeApps(); assert.equal(await ensureApp('Calendar', { exec: m.exec, sleep: noSleep }), true);
-  assert.ok(m.calls.includes('/usr/bin/open -g -j -a Calendar'), 'background and hidden: no window, no focus steal');
-  const open = { exec: async (c) => (c === '/usr/bin/pgrep' ? '99' : (() => { throw new Error('should not open'); })()) };
-  assert.equal(await ensureApp('Reminders', { exec: open.exec, sleep: noSleep }), true);
+test('mac Calendar and Reminders go through relay-cal (no app opened); without it the AppleScript path is unchanged', async () => {
+  const calls = []; const exec = async (cmd, args) => { calls.push([cmd, ...args]); return ''; };
+  const mac = createMac({ exec, calBin: '/x/relay-cal' });
+  assert.equal(await mac.calendarEvents(2), 'No events.'); assert.deepEqual(calls.pop(), ['/x/relay-cal', 'events', '2']);
+  assert.equal(await mac.remindersList(), 'No open reminders.'); assert.equal(await mac.remindersDue(), 'No reminders due.');
+  await mac.remindersAdd('milk', '2026-11-09T09:00', 'Home'); assert.deepEqual(calls.pop(), ['/x/relay-cal', 'rem-add', 'milk', '2026-11-09T09:00', 'Home']);
+  await mac.remindersAddId('milk', null); assert.deepEqual(calls.pop(), ['/x/relay-cal', 'rem-add-id', 'milk', '']);
+  await mac.remindersDeleteById('ABC'); assert.deepEqual(calls.pop(), ['/x/relay-cal', 'rem-delete', 'ABC']);
+  await mac.remindersComplete('milk'); assert.deepEqual(calls.pop(), ['/x/relay-cal', 'rem-complete', 'milk']);
+  await mac.calendarCreate('Lunch', '2026-11-09T12:00'); assert.deepEqual(calls.pop(), ['/x/relay-cal', 'event-create', 'Lunch', '2026-11-09T12:00', '']);
+  assert.ok(calls.every((c) => !/osascript/.test(c[0])), 'no AppleScript, so no app is launched');
+  calls.length = 0; await createMac({ exec }).calendarEvents(1); assert.equal(calls[0][0], 'osascript');
 });
 
-test('only Calendar and Reminders are ever launched, and it gives up instead of waiting forever', async () => {
-  const m = fakeApps(); assert.equal(await ensureApp('Terminal', { exec: m.exec, sleep: noSleep }), false); assert.equal(m.calls.length, 0);
-  const never = { exec: async (c) => { if (c === '/usr/bin/pgrep') throw new Error('none'); return ''; } };
-  assert.equal(await ensureApp('Calendar', { exec: never.exec, sleep: noSleep, tries: 3 }), false);
-});
-
-test('helpersIn finds which apps a script talks to', () => {
-  assert.deepEqual(helpersIn(['tell application "Calendar"', 'end tell']), ['Calendar']);
-  assert.deepEqual(helpersIn('tell application "Reminders"\ntell application "Calendar"'), ['Reminders', 'Calendar']);
-  assert.deepEqual(helpersIn(['tell application "Notes"']), []);
-});
-
-test('mac Calendar and Reminders commands open the app first, with a longer timeout; without the launcher nothing changes', async () => {
-  const order = []; const exec = async (cmd, args, opts) => { order.push(`${cmd}:${opts && opts.timeout || ''}`); return ''; };
-  const mac = createMac({ exec, ensureApp: async (n) => { order.push('ensure:' + n); return true; } });
-  await mac.calendarEvents(1); assert.deepEqual(order, ['ensure:Calendar', 'osascript:60000']);
-  order.length = 0; await mac.remindersList(); assert.equal(order[0], 'ensure:Reminders');
-  order.length = 0; const plain = createMac({ exec }); await plain.calendarEvents(1); assert.deepEqual(order, ['osascript:']);
-});
-
-test('a closed Ollama is started (app hidden, else ollama serve) and waited for; other addresses are never started', async () => {
+test('a closed Ollama is started (ollama serve, else the app hidden) and waited for; other addresses are never started', async () => {
   let up = false; const get = async () => { if (!up) throw new Error('ECONNREFUSED'); return {}; };
   const calls = []; const exec = async (c, a) => { calls.push([c, ...a].join(' ')); up = true; return ''; };
   assert.equal(await ensureOllama({ get, exec, fileExists: (p) => p === '/Applications/Ollama.app', spawnDetached() { throw new Error('no'); }, sleep: noSleep }), true);
-  assert.deepEqual(calls, ['/usr/bin/open -g -j -a Ollama']);
+  assert.deepEqual(calls, ['/usr/bin/open -g -j -a Ollama'], 'only the app is installed: opened hidden');
   up = false; const spawned = []; assert.equal(await ensureOllama({ get, exec, fileExists: (p) => p === '/usr/local/bin/ollama', spawnDetached: (c, a) => { spawned.push([c, ...a]); up = true; }, sleep: noSleep }), true);
   assert.deepEqual(spawned, [['/usr/local/bin/ollama', 'serve']]);
   up = false; assert.equal(await ensureOllama({ get, exec, fileExists: () => true, spawnDetached() {}, sleep: noSleep, url: 'http://192.168.1.5:11434' }), false);
@@ -64,8 +46,8 @@ test('going offline starts Ollama first, so it reports ready instead of "not run
   assert.match(r.reply, /Local mode is on, Sir/);
 });
 
-test('wiring: askController builds the launcher, main pre-warms Calendar and Reminders', () => {
+test('wiring: askController and main pass the Ollama starter and relay-cal; the package carries relay-cal', () => {
   const fs = require('fs'), read = (f) => fs.readFileSync(require('path').join(__dirname, '..', f), 'utf8');
-  assert.match(read('src/main/askController.js'), /ensureApp: \(n\) => launcher\.ensureApp\(n/); assert.match(read('src/main/askController.js'), /ensure: this\.ensureOllama/);
-  assert.match(read('src/main/main.js'), /\['Calendar', 'Reminders'\]/); assert.match(read('src/main/main.js'), /ensure: ask\.ensureOllama/);
+  assert.match(read('src/main/askController.js'), /calBin: calBin/); assert.match(read('src/main/askController.js'), /ensure: this\.ensureOllama/);
+  assert.match(read('src/main/main.js'), /calBin: calBinPath\(\)/); assert.match(read('src/main/main.js'), /ensure: ask\.ensureOllama/); assert.match(read('package.json'), /native\/build\/relay-cal/); assert.ok(!/ensureApp/.test(read('src/main/main.js')), 'no hidden launch of Calendar or Reminders');
 });

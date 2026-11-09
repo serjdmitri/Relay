@@ -376,6 +376,10 @@ function glassBinPath() {
   return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-glass') : path.join(__dirname, '../../native/build/relay-glass');
 }
 
+function calBinPath() {
+  const p = app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-cal') : path.join(__dirname, '../../native/build/relay-cal');
+  return require('fs').existsSync(p) ? p : null;
+}
 function axBinPath() {
   return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-ax') : path.join(__dirname, '../../native/build/relay-ax');
 }
@@ -1298,7 +1302,7 @@ app.whenReady().then(() => {
     }
   });
   glass = new Glass({ binPath: glassBinPath() });
-  ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), onChange: broadcast });
+  ask = new AskController({ store, bridge, overlay, speech, speaker, timers, glass, axBin: axBinPath(), calBin: calBinPath(), onChange: broadcast });
   ask.memoryExport = (fact) => require('./memoryExport').exportMemory(path.join(app.getPath('desktop'), 'memory'), fact);
   ask.outputExport = (title, text) => require('./memoryExport').exportOutput(path.join(app.getPath('desktop'), 'memory'), title, text);
   // Review a session's notes and keep only the facts you tick: saved as Relay memories, or exported to a file. Nothing happens until you press a button.
@@ -1822,8 +1826,6 @@ app.whenReady().then(() => {
   });
   ask.cameraAdjust = (c) => cameraWin.adjust(c);
   ask.diag = diag;
-  // Calendar and Reminders are opened hidden a little after start, so the morning briefing and reminders work without you opening them first. Ollama is started on demand (only when it is needed).
-  setTimeout(() => { for (const n of ['Calendar', 'Reminders']) require('./appLauncher').ensureApp(n, { exec: (cmd, args) => require('./agent/mac').defaultExec(cmd, args, { timeout: 10000 }) }).catch(() => {}); }, 20000).unref?.();
   ask.localCommand = (c) => require('./localMode').run(c, { store, get: (u) => ask.httpGet(u, true), ensure: ask.ensureOllama, apply: (v) => applyModelProvider(v) });
   ask.ownerCommand = async (c) => {
     const cfg = () => ownerConfig(store.get('settings.owner'));
