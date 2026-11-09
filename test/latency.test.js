@@ -36,3 +36,9 @@ test('"how fast are you" and "clear the speed numbers" are understood, and ordin
   assert.deepEqual(p('clear the speed numbers'), { type: 'latency-clear' });
   for (const t of ['what is the weather', 'speed up the music', 'how fast is a cheetah', 'open notes']) assert.equal(p(t), null, t);
 });
+
+
+test('reaction report exposes slow-tail waits and rejects corrupt timing values',()=>{
+ const {percentile95,median}=require('../src/main/latency');assert.equal(percentile95([1,2,3,4,20,NaN,-1]),20);assert.equal(median([NaN,1,2]),1);
+ assert.match(describe([1,1,10].map(total=>({listen:.1,think:.2,speak:.3,total}))),/95th-percentile wait was 10.0 seconds/);
+});

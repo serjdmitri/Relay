@@ -155,3 +155,12 @@ test('a file that is not text is refused, not downloaded', async () => {
   const { g } = api({ 'fields=name,mimeType': { name: 'pic.png', mimeType: 'image/png' } });
   await assert.rejects(() => g.driveRead(null, 'x'), /cannot read as text/);
 });
+
+
+test('Drive downloads are bounded, cancelled and refuse redirects',async()=>{
+ const {g}=api({});g.call=async()=>({name:'large.txt',mimeType:'text/plain'});g.token=async()=> 'fixture';
+ let cancelled=false,seen;
+ g.fetch=async(_url,init)=>{seen=init;return new Response(new ReadableStream({pull(c){c.enqueue(new Uint8Array(90000).fill(65));},cancel(){cancelled=true;}}));};
+ const result=await g.driveRead(null,'fixture');assert.equal(result.text.length,20000);assert.equal(result.cut,true);assert.equal(cancelled,true);assert.equal(seen.redirect,'error');assert.ok(seen.signal);
+ const ac=new AbortController();ac.abort();await assert.rejects(g.driveRead(null,'fixture',{signal:ac.signal}),{name:'AbortError'});
+});

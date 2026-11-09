@@ -50,12 +50,13 @@ class ProposalWorkspace {
   }
 
   // Runs the project's tests inside the proposal only. The result is remembered together with the exact state of the files it tested.
-  async test(ref) {
+  async test(ref, { signal } = {}) {
+    signal?.throwIfAborted();
     const p = this.find(ref); if (!p) return { error: 'No such proposal.' };
     const before = await this.status(p);
     if(p.generated && (!p.reviewed || p.reviewState!==before)) return {error:'Review the generated diff in Settings before testing. It has not been executed.'};
     if (before === null) return { error: 'The proposal folder is not readable. It may have been moved or removed.' };
-    const r = await this.run(['npm', 'test'], { cwd: p.dir, timeout: 600000 });
+    const r = await this.run(['npm', 'test'], { cwd: p.dir, timeout: 600000, signal });
     const out = `${r.stdout}\n${r.stderr}`;
     const failed = Number((/ℹ fail (\d+)/.exec(out) || [])[1]), passed = Number((/ℹ pass (\d+)/.exec(out) || [])[1]);
     let ok = r.code === 0 && failed === 0 && passed > 0;
@@ -84,13 +85,14 @@ class ProposalWorkspace {
   }
 
   // Removes the proposal's folder. Refuses when it has changes that were not committed. The branch and any commit are kept.
-  async discard(ref) {
+  async discard(ref, { discardGenerated = false } = {}) {
     const p = this.find(ref); if (!p) return { error: 'No such proposal.' };
     const state = await this.status(p);
-    if (state && state.trim() && !p.commit) return { error: 'This proposal has changes that were not saved. Commit them or remove them yourself first; nothing was deleted.' };
+    if (discardGenerated && (p.reviewed || p.commit)) return { error: 'Reviewed or committed proposals need manual cleanup.' };
+    if (!discardGenerated && state && state.trim() && !p.commit) return { error: 'This proposal has changes that were not saved. Commit them or remove them yourself first; nothing was deleted.' };
     const { repo } = this.conf();
-    const r = await this.git(['worktree', 'remove', p.dir], repo);
-    if (r.code !== 0 && state !== null) return { error: `Could not remove the folder: ${clean(r.stderr, 160)}` };
+    const r = await this.git(['worktree', 'remove', ...(discardGenerated ? ['--force'] : []), p.dir], repo);
+    if (r.code !== 0) return { error: `Could not remove the folder: ${clean(r.stderr, 160)}` };
     this.patch(p.id, { discarded: this.now() });
     return { proposal: p };
   }

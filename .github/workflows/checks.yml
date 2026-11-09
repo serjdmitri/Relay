@@ -1,0 +1,28 @@
+name: Checks
+on:
+  push:
+    branches: [main, codex/review-fixes]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Check native syntax
+        run: |
+          for file in native/*.swift ios/*.swift ios/Navigation/*.swift ios/Tests/*.swift; do
+            xcrun swiftc -frontend -parse "$file"
+          done
+      - run: npm audit --omit=dev --audit-level=high
