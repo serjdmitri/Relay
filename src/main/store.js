@@ -154,7 +154,8 @@ function merge(base, over) {
 }
 
 class Store {
-  constructor(dir) {
+  constructor(dir, { io = fs.promises, onError = () => {} } = {}) {
+    this.io = io; this.onError = onError; this.lastError = null; this._generation = 0; this._writing = Promise.resolve();
     this.file = path.join(dir, 'relay.json');
     let loaded = {};
     try {
@@ -189,11 +190,34 @@ class Store {
 
   save() {
     clearTimeout(this._timer);
-    this._timer = setTimeout(() => this.flush(), 150);
+    this._timer = setTimeout(() => this.saveAsync(), 150);
+  }
+
+  // Serialize routine writes off the main thread. Explicit flush remains synchronous
+  // for shutdown and security-critical checkpoints, and invalidates stale queued writes.
+  saveAsync() {
+    clearTimeout(this._timer);
+    const generation = ++this._generation;
+    const snapshot = JSON.stringify(this.data, null, 2);
+    const tmp = `${this.file}.${process.pid}.${generation}.tmp`;
+    this._writing = this._writing.then(async () => {
+      if (generation !== this._generation) return;
+      try {
+        await this.io.mkdir(path.dirname(this.file), { recursive: true });
+        await this.io.writeFile(tmp, snapshot, { mode: 0o600, flag: 'wx' });
+        // This small atomic commit cannot race an explicit flush on the JS thread.
+        if (generation === this._generation) { fs.renameSync(tmp, this.file); this.lastError = null; }
+      } catch (e) {
+        this.lastError = e.code || 'WRITE_FAILED';
+        try { this.onError(this.lastError); } catch {}
+      } finally { try { await this.io.unlink(tmp); } catch {} }
+    });
+    return this._writing;
   }
 
   flush() {
     clearTimeout(this._timer);
+    this._generation++;
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const tmp = this.file + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), { mode: 0o600 }); // settings hold encrypted keys and your history: owner only
