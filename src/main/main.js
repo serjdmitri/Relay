@@ -673,7 +673,7 @@ function registerIpc() {
       const provider = isPreset(m.provider)
         ? compatProvider(m).provider
         : m.provider === 'ollama'
-        ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel })
+        ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: ask.ensureOllama })
         : new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel, maxTokens: 16 });
       const r = await provider.step({ system: 'Reply with the single word OK.', messages: [{ role: 'user', content: [{ type: 'text', text: 'ping' }] }], tools: [] });
       return { ok: true, text: r.text.slice(0, 40) };
@@ -1822,7 +1822,9 @@ app.whenReady().then(() => {
   });
   ask.cameraAdjust = (c) => cameraWin.adjust(c);
   ask.diag = diag;
-  ask.localCommand = (c) => require('./localMode').run(c, { store, get: (u) => ask.httpGet(u, true), apply: (v) => applyModelProvider(v) });
+  // Calendar and Reminders are opened hidden a little after start, so the morning briefing and reminders work without you opening them first. Ollama is started on demand (only when it is needed).
+  setTimeout(() => { for (const n of ['Calendar', 'Reminders']) require('./appLauncher').ensureApp(n, { exec: (cmd, args) => require('./agent/mac').defaultExec(cmd, args, { timeout: 10000 }) }).catch(() => {}); }, 20000).unref?.();
+  ask.localCommand = (c) => require('./localMode').run(c, { store, get: (u) => ask.httpGet(u, true), ensure: ask.ensureOllama, apply: (v) => applyModelProvider(v) });
   ask.ownerCommand = async (c) => {
     const cfg = () => ownerConfig(store.get('settings.owner'));
     const done = (reply) => ({ status: 'done', reply, actions: 1 });
