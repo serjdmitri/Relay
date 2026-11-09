@@ -1279,14 +1279,15 @@ class AskController {
     return { lessons: this.store.get('lessons') || [], inferred: this.store.get('inferred') || [] };
   }
 
-  rememberFact(fact) {
+  rememberFact(fact, { noExport = false } = {}) {
+    const exporting = !!this.memoryExport && !noExport; // an interview writes one file at its end instead of one per answer
     if (mem.isSecret(fact)) return { status: 'failed', reply: "I don't keep passwords, card numbers or other secrets." };
     const { list, added } = mem.addFact(this.store.get('memories') || [], fact, { id: crypto.randomUUID() });
     if (added) {
-      if (this.memoryExport) list[0].exportPending = true;
+      if (exporting) list[0].exportPending = true;
       this.store.set('memories', list);
       this.onChange();
-      if (this.memoryExport) {
+      if (exporting) {
         try { this.memoryExport(list[0].text); }
         catch { return { status: 'done', reply: 'I saved that in Relay, but could not create its import file in Desktop/memory.' }; }
         delete list[0].exportPending;
@@ -1294,7 +1295,7 @@ class AskController {
         return { status: 'done', reply: 'I saved that in Relay and made a text file in Desktop/memory for Sentient OS import.' };
       }
     }
-    if (!added && this.memoryExport) {
+    if (!added && exporting) {
       const normalized = mem.clean(fact).slice(0, mem.MAX_LEN).toLowerCase();
       const pending = list.find((item) => item.exportPending && item.text.toLowerCase() === normalized);
       if (pending) {
@@ -2202,6 +2203,26 @@ class AskController {
           const cc = require('./calls/service').parseCallCommand(effective);
           if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
         }
+        if (!opts.shown && !opts.scheduled && this.store.get('settings.memory') !== false) {
+          // "interview me": one question at a time; each answer is remembered like "remember that..."
+          const iv = require('./interview');
+          this.interview = this.interview || new iv.Interview();
+          if (!this.interview.active && iv.parseStart(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: `Okay. I will ask a few questions and remember your answers. Say skip to pass on one, or stop any time. ${this.interview.start()}`, actions: 0 }); }
+          if (this.interview.active) {
+            const r = iv.parseReply(effective);
+            if (r.type === 'leave') this.interview.end(); // a question or a command of its own: the interview waits, and is not started again unless asked
+            else {
+              const out = this.interview.step(r); let note = '';
+              if (out.fact) { const saved = this.rememberFact(out.fact, { noExport: true }); if (saved.status === 'failed') note = `${saved.reply} `; else (this.interviewFacts = this.interviewFacts || []).push(out.fact); }
+              if (out.done && this.interviewFacts?.length) { // one text file for Sentient OS with everything from this interview, not one per answer
+                const text = this.interviewFacts.join('\n'); this.interviewFacts = [];
+                if (this.memoryExport) { try { this.memoryExport(text); note += 'I saved your answers in one file in Desktop/memory for Sentient OS. '; } catch { note += 'I could not write the Desktop/memory file. '; } }
+              }
+              this.lastRequestText = effective;
+              return this.finish(entry, { status: 'done', reply: `${note}${out.say}`, actions: 0 });
+            }
+          }
+        }
         if (!opts.shown && !opts.scheduled && this.sessionNotes) { const command = require('./sessionNotes').parseSessionCommand(effective); if (command) return this.finish(entry, await this.sessionNotes.command(command)); }
         if (!opts.shown && !opts.scheduled && require('./school').parseSchoolCommand(effective)) return this.finish(entry, await this.showSchoolAssignments());
         if (!opts.shown && !opts.scheduled) {
@@ -2214,6 +2235,8 @@ class AskController {
           if (this.cameraAdjust) { const cc = require('./cameraCommands').parseCameraCommand(effective); if (cc) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.cameraAdjust(cc), actions: 0 }); } }
           { const lc2 = require('./latency').parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } return this.finish(entry, { status: 'done', reply: require('./latency').describe(this.store.get('latencyLog')), actions: 0 }); } }
           if (this.wakeCommand) { const wc = require('./wakeScheduler').parseWakeCommand(effective); if (wc) { this.lastRequestText = effective; return this.finish(entry, await this.wakeCommand(wc)); } }
+          if (this.commandCenter && require('./commandCenter').parseCommandCenter(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.commandCenter()); }
+          if (this.pageCommand) { const pc = require('./pageWatch').parsePageWatchCommand(effective); if (pc) { this.lastRequestText = effective; return this.finish(entry, await this.pageCommand(pc)); } }
           if (this.nightCommand) { const nc = require('./nightClaude').parseNightCommand(effective); if (nc) { this.lastRequestText = effective; return this.finish(entry, await this.nightCommand(nc)); } }
           { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
           if (this.localCommand) { const lc = require('./localMode').parseLocalCommand(effective); if (lc) { this.lastRequestText = effective; return this.finish(entry, await this.localCommand(lc)); } }
@@ -3279,6 +3302,12 @@ class AskController {
         this.store.addAction({ id: actionId, requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
         // what can be put back: moved files, files Relay made (the new file goes to the Trash)
         if (e.ok && (e.name === 'drive_apply' || e.name === 'drive_make') && this.drive?.lastLogId) { const logId = this.drive.lastLogId; this.undos.register(actionId, () => this.drive.undo(logId)); }
+        // a reminder or calendar event Relay just made (with the native helper): the Undo button deletes exactly that one
+        if (e.ok && (e.name === 'reminders_add' || e.name === 'calendar_create') && this.mac.lastCreated?.id) {
+          const made = this.mac.lastCreated;
+          if (e.name === 'reminders_add' && made.kind === 'reminder') this.undos.register(actionId, () => this.mac.remindersDeleteById(made.id), 'Delete the reminder');
+          if (e.name === 'calendar_create' && made.kind === 'event') this.undos.register(actionId, () => this.mac.calendarDeleteById(made.id), 'Delete the event');
+        }
         this.onChange();
       }
     };

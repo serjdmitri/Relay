@@ -19,6 +19,7 @@ function scoreEvent(e) {
     case 'plugin': return Math.max(0, Math.min(1, Number(e.importance) || 0.5));
     case 'security': return e.severity === 'critical' ? 1 : e.severity === 'high' ? 0.9 : e.severity === 'medium' ? 0.6 : 0;
     case 'folder': return 0.5;
+    case 'page': return 0.7; // you asked to be told
     default: return 0.3;
   }
 }
@@ -29,6 +30,7 @@ const textFor = (e) => {
     case 'battery': return `The battery is at ${e.percent} percent. Plug in soon.`;
     case 'job': return e.status === 'failed' ? `That did not work: ${e.title}.` : `Finished: ${e.title}.`;
     case 'folder': return `New in ${e.title}: ${e.name}.`;
+    case 'page': return `${e.title} changed${e.detail ? `: ${e.detail}` : ''}.`;
     case 'security': return e.summary ? String(e.title) : `Security warning: ${e.title}.`;
     case 'mail': return e.digest
       ? `${e.count} new emails, from ${e.names.length > 1 ? `${e.names.slice(0, -1).join(', ')} and ${e.names[e.names.length - 1]}` : e.names[0]}${e.count > e.names.length ? ' and others' : ''}.`
@@ -38,7 +40,7 @@ const textFor = (e) => {
 };
 
 // The event's own identity, so the same thing is not told twice.
-const keyOf = (e) => (e.type === 'calendar' ? `cal:${e.title}:${e.start}` : e.type === 'battery' ? `bat:${e.percent <= 10 ? 10 : 20}` : e.type === 'job' ? `job:${e.id || e.title}` : e.type === 'mail' ? `mail:${e.id}` : e.type === 'folder' ? `folder:${e.title}:${e.name}` : e.type === 'security' ? `sec:${e.id}:${e.severity}` : `${e.type}:${e.title}`);
+const keyOf = (e) => (e.type === 'calendar' ? `cal:${e.title}:${e.start}` : e.type === 'battery' ? `bat:${e.percent <= 10 ? 10 : 20}` : e.type === 'job' ? `job:${e.id || e.title}` : e.type === 'mail' ? `mail:${e.id}` : e.type === 'folder' ? `folder:${e.title}:${e.name}` : e.type === 'security' ? `sec:${e.id}:${e.severity}` : e.type === 'page' ? `page:${e.id}` : `${e.type}:${e.title}`);
 
 const inQuiet = (q, date) => { if (!q?.on) return false; const h = date.getHours(); return q.from > q.to ? h >= q.from || h < q.to : h >= q.from && h < q.to; };
 

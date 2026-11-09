@@ -75,6 +75,12 @@ case "event-create":
     else if let c = store.calendars(for: .event).first(where: { $0.allowsContentModifications }) { ev.calendar = c }
     else { fail("No calendar that can be changed.") }
     do { try store.save(ev, span: .thisEvent, commit: true) } catch { fail("Could not save the event: \(error.localizedDescription)") }
+    print(ev.eventIdentifier ?? "") // so the caller can undo it
+case "event-delete":
+    guard args.count >= 2 else { fail("event-delete <id>") }
+    allowed(.event)
+    guard let ev = store.event(withIdentifier: args[1]) else { fail("No event with that id.") }
+    do { try store.remove(ev, span: .thisEvent, commit: true) } catch { fail("Could not delete: \(error.localizedDescription)") }
 case "rem-list":
     allowed(.reminder)
     reminders { print($0.map { $0.title ?? "" }.joined(separator: "\n")) }
@@ -85,7 +91,7 @@ case "rem-due":
 case "rem-add":
     guard args.count >= 2 else { fail("rem-add <title> [due] [list]") }
     allowed(.reminder)
-    _ = newReminder(args[1], args.count > 2 && !args[2].isEmpty ? args[2] : nil, list: args.count > 3 && !args[3].isEmpty ? args[3] : nil, alarm: false)
+    print(newReminder(args[1], args.count > 2 && !args[2].isEmpty ? args[2] : nil, list: args.count > 3 && !args[3].isEmpty ? args[3] : nil, alarm: false).calendarItemIdentifier) // so the caller can undo it
 case "rem-add-id":
     guard args.count >= 2 else { fail("rem-add-id <title> [due]") }
     allowed(.reminder)

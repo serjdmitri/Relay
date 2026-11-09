@@ -652,6 +652,7 @@ function registerIpc() {
     if (key === 'settings.model.provider' && value === 'ollama') {speaker?.stop();mapPanel?.close();}
     if(key==='settings.hands.maxHands'&&hands?.enabled){hands.disable();hands.enable().catch(e=>ask.notice(e.message,'failed'));}
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
+    if ((key === 'settings.hands.pinchClick' || key === 'settings.hands.tabNumbers') && hands?.enabled && value !== false) hands.externalDrag?.start();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
@@ -1530,7 +1531,7 @@ app.whenReady().then(() => {
   });
   cardPanel.onFile = (p) => ask.drive.openFile(p);
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
-  const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
+  const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, wanted: () => store.get('settings.hands.pinchClick') !== false || store.get('settings.hands.tabNumbers') !== false, notify: m => ask.notice(m, 'failed') });
   // A middle finger held up to the camera shows a hologram of one near your hand (a see-through, click-through window); it fades out when you put your hand down.
   let fingerWin = null, fingerReady = null, fingerTimer = 0;
   const fingerHolo = (e) => {
@@ -1559,6 +1560,19 @@ app.whenReady().then(() => {
   };
   hands = new HandControl({ motion: floatingMotion,
     onFinger: fingerHolo,
+    pinchClick: () => store.get('settings.hands.pinchClick') !== false,
+    extraGestures: () => store.get('settings.hands.extraGestures') !== false,
+    // true when the gesture did something: the rock sign plays music, a still palm stops Relay mid-sentence, a wave opens the mic, a thumb answers a yes/no Relay is asking
+    onGesture: (type) => {
+      const idle = ['idle', 'done'].includes(ask.state);
+      if (type === 'stop') return ask.interruptSpeech();
+      if (type === 'wave') { if (!idle) return false; ask.listenFromHand(null).catch(() => {}); return true; }
+      if (type === 'rock') { if (!idle) return false; ask.handleText('play some music').catch(() => {}); return true; }
+      if (type === 'confirm-yes') return ask.remoteConfirm(true);
+      if (type === 'confirm-no') return ask.remoteConfirm(false);
+      return false;
+    },
+    tabNumbers: () => store.get('settings.hands.tabNumbers') !== false,
     externalDrag,maxHands:()=>store.get('settings.hands.maxHands')??4,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
@@ -2048,7 +2062,7 @@ app.whenReady().then(() => {
     if (event.type === 'job' && callService?.config().enabled && callService.config().offerOnCompletion && !callService.privateMode() && !callsQuiet(callService.config(), Date.now())) {
       try { callService.prepare(`Review the task status: ${event.title}. Relay reported ${event.status}. Do not claim details beyond that status.`, { source: 'job', occurrence: `job:${event.id}` }); } catch {}
     }
-    if (event.type !== 'security' && !flagsMod.isOn(store.get('settings'), 'proactive')) return; // security warnings do not wait for the experimental switch
+    if (event.type !== 'security' && event.type !== 'page' && !flagsMod.isOn(store.get('settings'), 'proactive')) return; // a page you asked to watch does not wait for the experimental switch either // security warnings do not wait for the experimental switch
     const o = store.get('settings.proactive') || {};
     const d = alerts.decide(event, { mode: o.mode, quiet: o.quiet, busy: !!ask.meeting?.active || ask.state === 'listening' || !!ask.speaker?.speaking, away: !!ask.lockWatch?.locked });
     if (d.how === 'drop') return;
@@ -2094,6 +2108,30 @@ app.whenReady().then(() => {
     if (b) surface(b);
     if (tickN++ % 5 === 0) { try { for (const e of calendarEvents(parseCalendar(await ask.mac.calendarEvents(1)))) surface(e); } catch { /* no calendar access: Doctor and Permissions say so */ } }
   }, 60000);
+  // "Tell me when this page changes": pages you chose are re-read every half hour (public https only); a real change is told once, with what is new.
+  const { PageWatcher } = require('./pageWatch');
+  const pageWatcher = new PageWatcher({ load: () => store.get('pageWatches') || [], save: (v) => store.set('pageWatches', v), fetchPage: (u) => require('./safeFetch').safeGet(u), onChange: (e) => surface(e) });
+  setInterval(() => { if (!ask.offline) pageWatcher.checkDue().catch(() => {}); }, 60000).unref?.();
+  // "Command center": one card with today, what is due, running jobs, the owner guard, watched pages and what Relay last did.
+  ask.commandCenter = async () => {
+    const cc = require('./commandCenter');
+    const facts = await ask.briefingFacts({ includeGreeting: false }).catch(() => null);
+    const oc = ownerConfig(store.get('settings.owner'));
+    const card = cc.buildCenter({ events: facts?.events, due: facts?.due, tasks: ask.taskList?.(), guard: { on: !!oc.enabled, armed: !!ownerGuard?.armed, keepAwake: oc.keepAwake !== false }, pages: pageWatcher.list(), actions: store.get('actions') || [], undoable: ask.undos.ids() });
+    await cardPanel.show(card);
+    return { status: 'done', reply: 'Here is your command center.', actions: 0 };
+  };
+  ask.pageCommand = async (c) => {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const activeUrl = async () => { try { const tabs = await bridge.call('tabs.list', {}); return (Array.isArray(tabs) ? tabs : tabs?.tabs || []).find((t) => t.active)?.url || null; } catch { return null; } };
+    if (c.type === 'page-list') { const l = pageWatcher.list(); return done(l.length ? `I am watching ${l.length} page${l.length === 1 ? '' : 's'}: ${l.map((w) => w.label).join(', ')}.` : 'I am not watching any pages. Say "tell me when example.com changes".'); }
+    if (c.type === 'page-unwatch') { const what = c.what === 'this' ? await activeUrl() : c.what; if (!what) return done('I could not see which page you mean. Say its address.'); const n = pageWatcher.remove(what); return done(n ? `Okay, I stopped watching ${n === 1 ? 'it' : `${n} pages`}.` : 'I was not watching that.'); }
+    const url = c.target === 'this' ? await activeUrl() : c.target;
+    if (!url) return done('I could not see your current page. Open it in Firefox with the Relay extension, or say its address.');
+    const r = pageWatcher.add(url);
+    if (!r.ok) return done(r.error);
+    return done(r.already ? 'I am already watching that page.' : `Okay. I will tell you when ${r.label} changes. I check about every half hour, and what I keep is only a fingerprint of the page, not the page.`, 1);
+  };
   // New email: check connected Gmail accounts every few minutes and tell you about what arrived (the first check only learns what is already there).
   const mailWatch = new MailWatch({ load: () => store.get('mailSeen') || {}, save: (v) => store.set('mailSeen', v) });
   let mailTick = 0;
