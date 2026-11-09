@@ -1642,9 +1642,9 @@ app.whenReady().then(() => {
   ipcMain.handle('proposal:review',async(e,id)=>{
     if(e.sender!==mainWin?.webContents)return {error:'Open Settings first.'};
     const p=proposals.find(id);if(!p?.generated)return {error:'No generated proposal to review.'};
-    const diff=await proposals.git(['diff','--no-ext-diff','--', 'src'],p.dir);if(diff.code!==0||!diff.stdout.trim())return {error:'No readable source diff.'};
+    await proposals.git(['add','-N','--','.'],p.dir);const diff=await proposals.git(['diff','HEAD','--no-ext-diff'],p.dir);if(diff.code!==0||!diff.stdout.trim())return {error:'No readable diff.'};/* every changed file, tests and brand-new files included, not only src */
     const reviewedState=await proposals.status(p);if(!reviewedState)return {error:'Cannot verify proposal files.'};
-    const answer=await dialog.showMessageBox(mainWin,{type:'warning',message:'Review the generated source change before allowing tests',detail:diff.stdout.slice(0,100000),buttons:['Cancel','Approve testing'],defaultId:0,cancelId:0});
+    const answer=await dialog.showMessageBox(mainWin,{type:'warning',message:'Review the whole generated change (source, tests, new files) before allowing tests',detail:diff.stdout.slice(0,100000),buttons:['Cancel','Approve testing'],defaultId:0,cancelId:0});
     if(answer.response!==1)return {cancelled:true};
     if(reviewedState!==await proposals.status(p))return {error:'Files changed during review. Review again.'};
     proposals.patch(p.id,{reviewed:true,reviewState:reviewedState});broadcast();return {ok:true};

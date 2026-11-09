@@ -55,3 +55,16 @@ test('turning overnight self-improvement on, off and asking for the report are u
   for (const t of ['what did you improve overnight', 'what did you fix last night', 'overnight improvement report']) assert.deepEqual(p(t), { type: 'night-report' }, t);
   for (const t of ['what is the weather', 'improve my essay', 'turn on dark mode']) assert.equal(p(t), null, t);
 });
+
+test('a brand-new file is counted in the size limit, and a Claude error after editing is not trusted', async () => {
+  // the fake answers numstat only once the new file has been marked with "add -N", like git does
+  const calls = []; let marked = false;
+  const pr = { create: async () => ({ proposal: { id: 'x', branch: 'b', dir: '/tmp/w' } }), discard: async () => ({}), patch() {},
+    git: async (args) => { calls.push(args.join(' ')); if (args[0] === 'add') marked = true; if (args[0] === 'status') return { code: 0, stdout: '?? test/big.test.js\n' }; if (args[0] === 'diff') return { code: 0, stdout: marked ? '1000\t0\ttest/big.test.js\n' : '' }; return { code: 0, stdout: '' }; } };
+  const r = await runNight({ proposals: pr, runClaude: async () => ({ code: 0, stdout: '' }), brief: 'b' });
+  assert.equal(r.status, 'discarded'); assert.match(r.line, /too big/); assert.ok(calls.indexOf('add -N -- .') < calls.indexOf('diff --numstat HEAD'), 'marked before counting');
+  const mk = () => ({ create: async () => ({ proposal: { id: 'x', branch: 'b', dir: '/tmp/w' } }), discard: async () => ({}), patch() {}, git: async (a) => ({ code: 0, stdout: a[0] === 'status' ? ' M src/a.js\n' : a[0] === 'diff' ? '2\t1\tsrc/a.js\n' : '' }) });
+  const e = await runNight({ proposals: mk(), runClaude: async () => ({ code: 1, stdout: 'SUMMARY: ok', error: 'timed out' }), brief: 'b' });
+  assert.equal(e.status, 'discarded'); assert.match(e.line, /error after editing/);
+  assert.equal((await runNight({ proposals: mk(), runClaude: async () => ({ code: 0, stdout: 'SUMMARY: ok' }), brief: 'b' })).status, 'ready');
+});
