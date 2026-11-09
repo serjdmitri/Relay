@@ -84,13 +84,14 @@ class ProposalWorkspace {
   }
 
   // Removes the proposal's folder. Refuses when it has changes that were not committed. The branch and any commit are kept.
-  async discard(ref) {
+  async discard(ref, { discardGenerated = false } = {}) {
     const p = this.find(ref); if (!p) return { error: 'No such proposal.' };
     const state = await this.status(p);
-    if (state && state.trim() && !p.commit) return { error: 'This proposal has changes that were not saved. Commit them or remove them yourself first; nothing was deleted.' };
+    if (discardGenerated && (p.reviewed || p.commit)) return { error: 'Reviewed or committed proposals need manual cleanup.' };
+    if (!discardGenerated && state && state.trim() && !p.commit) return { error: 'This proposal has changes that were not saved. Commit them or remove them yourself first; nothing was deleted.' };
     const { repo } = this.conf();
-    const r = await this.git(['worktree', 'remove', p.dir], repo);
-    if (r.code !== 0 && state !== null) return { error: `Could not remove the folder: ${clean(r.stderr, 160)}` };
+    const r = await this.git(['worktree', 'remove', ...(discardGenerated ? ['--force'] : []), p.dir], repo);
+    if (r.code !== 0) return { error: `Could not remove the folder: ${clean(r.stderr, 160)}` };
     this.patch(p.id, { discarded: this.now() });
     return { proposal: p };
   }
