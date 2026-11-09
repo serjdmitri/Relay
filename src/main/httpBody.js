@@ -1,7 +1,7 @@
 // Bound bytes while reading, before decoding. Shared by external-service clients.
 async function readText(response, { maxBytes = 2000000, signal, truncate = false } = {}) {
   signal?.throwIfAborted();
-  if (!truncate && Number(response.headers?.get?.('content-length')) > maxBytes) throw Error('Response exceeds the size limit.');
+  if (!truncate && Number(response.headers?.get?.('content-length')) > maxBytes) { await response.body?.cancel?.().catch(()=>{}); throw Error('Response exceeds the size limit.'); }
   if (!response.body?.[Symbol.asyncIterator]) {
     const text = await response.text(); // test adapters; fetch Responses use the bounded stream below
     signal?.throwIfAborted();

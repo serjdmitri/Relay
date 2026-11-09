@@ -4,7 +4,7 @@ const {spawn}=require('child_process');
 class GodsEyeServer {
  constructor({configFile,spawnFn=spawn,fetchFn=fetch,wait=ms=>new Promise(r=>setTimeout(r,ms)),now=Date.now,startupMs=60000}){Object.assign(this,{configFile,spawnFn,fetchFn,wait,now,startupMs});this.child=null;this.starting=null;}
  config(){try{const c=JSON.parse(fs.readFileSync(this.configFile,'utf8'));if(!path.isAbsolute(c.repo)||!path.isAbsolute(c.node)||!fs.existsSync(c.node)||!fs.existsSync(path.join(c.repo,'node_modules/vite/bin/vite.js')))return null;return c;}catch{return null;}}
- async health(url,{signal,timeoutMs=1500}={}){try{const limit=AbortSignal.timeout(Math.max(1,Math.ceil(timeoutMs))),combined=signal?AbortSignal.any([signal,limit]):limit;const r=await this.fetchFn(url,{redirect:'error',signal:combined});return r.ok && /God.s Eye View/i.test(await require('./httpBody').readText(r,{maxBytes:20000,signal:combined}));}catch{return false;}}
+ async health(url,{signal,timeoutMs=1500}={}){try{const limit=AbortSignal.timeout(Math.max(1,Math.ceil(timeoutMs))),combined=signal?AbortSignal.any([signal,limit]):limit;const r=await this.fetchFn(url,{redirect:'error',signal:combined});return r.ok && /God.s Eye View/i.test(await require('./httpBody').readText(r,{maxBytes:20000,truncate:true,signal:combined}));}catch{return false;}}
  async ensure(url='http://127.0.0.1:4173/'){
   if(this.starting)return this.starting;
   if(await this.health(url))return {ready:true,started:false};
