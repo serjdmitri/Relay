@@ -10,3 +10,11 @@ test('startup has a real deadline including slow health checks, and stop cancels
  await assert.rejects(s.start('http://127.0.0.1:4173/'),/still starting/);assert.equal(now,3000);assert.equal(calls,2);
  s.wait=async()=>s.stop();now=0;await assert.rejects(s.start('http://127.0.0.1:4173/'),{name:'AbortError'});
 });
+test('startup diagnoses port/dependency failures without returning raw server output',async()=>{
+ for(const [raw,expected] of [['secret-token EADDRINUSE',/Port 4173/],['secret-token ERR_MODULE_NOT_FOUND',/dependencies/],['secret-token EACCES',/permissions/]]){
+  const child=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>{};
+  const s=new GodsEyeServer({configFile:'none',spawnFn:()=>child,wait:async()=>{child.stderr.emit('data',Buffer.from(raw));child.emit('exit',1);}});
+  s.config=()=>({repo:'/r',node:'/n'});s.health=async()=>false;
+  await assert.rejects(s.start('http://127.0.0.1:4173/'),e=>expected.test(e.message)&&!e.message.includes('secret-token'));
+ }
+});
