@@ -112,7 +112,7 @@ async function applyPlan(plan, { fs, trashItem, home, move }) {
       if (fs.existsSync(m.to)) throw new Error('Something appeared at the destination.');
       fs.mkdirSync(path.dirname(m.to), { recursive: true });
       if (typeof move !== 'function') throw new Error('Safe file moving is unavailable.');
-      move(m.from, m.to);
+      await move(m.from, m.to);
       done.push({ from: m.from, to: m.to });
     } catch (e) { failed.push({ path: m.from, reason: e.code === 'EXDEV' ? 'That is on another drive; Relay does not move across drives.' : e.message }); }
   }
@@ -124,7 +124,7 @@ async function applyPlan(plan, { fs, trashItem, home, move }) {
 }
 
 // Puts a finished plan's moves back where they were (never over anything that is there now).
-function undoMoves(entry, { fs, home, move }) {
+async function undoMoves(entry, { fs, home, move }) {
   const back = [];
   const left = [];
   for (const d of [...entry.done].reverse()) {
@@ -134,7 +134,7 @@ function undoMoves(entry, { fs, home, move }) {
       if (fs.existsSync(d.from)) { left.push({ path: d.to, reason: 'Something is in its old place now.' }); continue; }
       fs.mkdirSync(path.dirname(d.from), { recursive: true });
       if (typeof move !== 'function') throw new Error('Safe file moving is unavailable.');
-      move(d.to, d.from);
+      await move(d.to, d.from);
       back.push(d);
     } catch (e) { left.push({ path: d.to, reason: e.message }); }
   }

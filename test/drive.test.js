@@ -49,7 +49,7 @@ test('a plan moves files into folders, never over anything, and nothing is lost'
   assert.equal(fs.readFileSync(path.join(home, 'Documents/PDFs/invoice (2).pdf'), 'utf8'), 'A');
   assert.ok(!fs.existsSync(a));
   // undo puts everything back
-  const undone = undoMoves(res, { fs });
+  const undone = await undoMoves(res, { fs });
   assert.equal(undone.back.length, 3);
   assert.equal(fs.readFileSync(a, 'utf8'), 'A');
   assert.ok(!fs.existsSync(path.join(home, 'Documents/PDFs/invoice (2).pdf')));
@@ -101,7 +101,7 @@ test('moves and undo fail closed when safe moving is unavailable', async () => {
   assert.equal(fs.readFileSync(source, 'utf8'), 'original');
   const dest = w('Documents/Sorted/item.txt', 'moved');
   fs.unlinkSync(source);
-  const restored = undo({ done: [{ from: source, to: dest }] }, { fs, home });
+  const restored = await undo({ done: [{ from: source, to: dest }] }, { fs, home });
   assert.equal(restored.back.length, 0);
   assert.equal(fs.readFileSync(dest, 'utf8'), 'moved');
 });

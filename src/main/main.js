@@ -1518,8 +1518,10 @@ app.whenReady().then(() => {
     fs: require('fs'), home: os.homedir(), cards: cardPanel,
     move: (from, to) => {
       const bin = app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-move') : path.join(__dirname, '../../native/build/relay-move');
-      const result = require('child_process').spawnSync(bin, [from, to], { timeout: 10000, stdio: 'ignore' });
-      if (result.status !== 0) throw new Error(result.status === 17 ? 'Something appeared at the destination.' : 'Safe file moving could not be confirmed; check both locations.');
+      return new Promise((resolve, reject) => execFile(bin, [from, to], { timeout: 10000, maxBuffer: 4096 }, error => {
+        if (!error) return resolve();
+        reject(new Error(error.code === 17 ? 'Something appeared at the destination.' : 'Safe file moving could not be confirmed; check both locations.'));
+      }));
     },
     exec: (file, args) => new Promise((res) => execFile(file, args, { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => res(out || ''))),
     thumb: async (p) => { try { const img = await nativeImage.createThumbnailFromPath(p, { width: 220, height: 220 }); return img.isEmpty() ? null : `data:image/jpeg;base64,${img.resize({ width: 160 }).toJPEG(72).toString('base64')}`; } catch { return null; } },

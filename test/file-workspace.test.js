@@ -24,7 +24,7 @@ test('preview leaves files alone; apply and persistent undo preserve content and
   const r = await x.workspace.apply(plan.id); assert.equal(r.done.length,1); assert.equal(fs.readFileSync(plan.moves[0].to,'utf8'),'example');
   assert.equal(fs.readFileSync(path.join(x.root,'Organized/PDFs/report.pdf'),'utf8'),'existing');
   await assert.rejects(x.workspace.apply(plan.id),/expired/);
-  const fresh = new FileWorkspace(x); const undo = fresh.undo(plan.id);
+  const fresh = new FileWorkspace(x); const undo = await fresh.undo(plan.id);
   assert.equal(undo.count,1); assert.equal(fs.readFileSync(p,'utf8'),'example'); assert.equal(fresh.history(x.id).length,0);
 });
 test('recent files, incomplete downloads, hidden files, directories and code projects are protected', t => {
@@ -44,14 +44,22 @@ test('changed files, occupied targets, symlink destinations and revoked access f
 });
 test('undo retains changed files and collisions for retry and recovers a pre-move journal interruption', async t => {
   const x=setup(t); const p=x.file('a.pdf'); const plan=x.workspace.preview(x.id); await x.workspace.apply(plan.id);
-  x.file('a.pdf','new occupant'); let r=x.workspace.undo(plan.id); assert.equal(r.count,0); assert.equal(r.failed.length,1); assert.equal(x.workspace.history(x.id).length,1);
-  fs.unlinkSync(p); r=x.workspace.undo(plan.id); assert.equal(r.count,1);
+  x.file('a.pdf','new occupant'); let r=await x.workspace.undo(plan.id); assert.equal(r.count,0); assert.equal(r.failed.length,1); assert.equal(x.workspace.history(x.id).length,1);
+  fs.unlinkSync(p); r=await x.workspace.undo(plan.id); assert.equal(r.count,1);
   const pending=x.workspace.preview(x.id); x.store.data.workspaceMoves=[{id:pending.id,rootId:x.id,moves:[{...pending.moves[0],stamp:require('../src/main/drive/workspace').stamp(fs.statSync(p))}]}];
-  r=x.workspace.undo(pending.id); assert.equal(r.failed.length,0); assert.ok(fs.existsSync(p)); assert.equal(x.workspace.history(x.id).length,0);
+  r=await x.workspace.undo(pending.id); assert.equal(r.failed.length,0); assert.ok(fs.existsSync(p)); assert.equal(x.workspace.history(x.id).length,0);
 });
 test('a native response failure after a successful move keeps a recoverable journal', async t => {
   const x=setup(t); x.file('a.pdf'); const plan=x.workspace.preview(x.id);
   x.workspace.move=(from,to)=>{x.move(from,to);throw Error('Native response interrupted');};
   const r=await x.workspace.apply(plan.id); assert.equal(r.failed.length,1); assert.equal(x.workspace.history(x.id)[0].count,1);
-  x.workspace.move=x.move; assert.equal(x.workspace.undo(plan.id).count,1);
+  x.workspace.move=x.move; assert.equal((await x.workspace.undo(plan.id)).count,1);
+});
+test('async moves yield to the UI and same-folder operations cannot overlap',async t=>{
+ const x=setup(t);const p=x.file('a.pdf');const plan=x.workspace.preview(x.id);let release;
+ x.workspace.move=async(from,to)=>{await new Promise(r=>release=r);x.move(from,to);};
+ const pending=x.workspace.apply(plan.id);await new Promise(r=>setImmediate(r));assert.ok(fs.existsSync(p));
+ await assert.rejects(x.workspace.undo(plan.id),/already being/);release();assert.equal((await pending).done.length,1);
+ x.workspace.move=async(from,to)=>{await new Promise(r=>setImmediate(r));x.move(from,to);};
+ assert.equal((await x.workspace.undo(plan.id)).count,1);assert.ok(fs.existsSync(p));
 });
