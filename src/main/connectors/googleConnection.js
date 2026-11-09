@@ -1,8 +1,10 @@
 const fs=require('fs');
 const {connectAccount}=require('./google');
 const {desktopCredentials,grantedServices,scopesFor}=require('./googleSetup');
+const easy=require('./googleEasy');
+const path=require('path');
 function publicGoogle(g={}){return{clientId:g.clientId||'',accounts:(g.accounts||[]).map(a=>a.email),connections:(g.accounts||[]).map(a=>({email:a.email,services:Array.isArray(a.scopes)?grantedServices(a.scopes):null}))};}
-function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,shell,getWindow,onChange,getApi,resetApi}){
+function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,shell,getWindow,onChange,getApi,resetApi,macCalendars=null,downloadsDir=path.join(require('os').homedir(),'Downloads'),fsImpl=fs,setTimer=setInterval,clearTimer=clearInterval}){
  let pending=null;
  const config=()=>store.get('settings.connectors.google')||{};
  const local=()=>store.get('settings.model.provider')==='ollama';
@@ -23,7 +25,7 @@ function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,s
   let c;try{c=desktopCredentials(fs.readFileSync(file,'utf8'));}catch(e){return{ok:false,error:e.message};}return saveClient(c.clientId,c.clientSecret);
  });
  handle('cancel',()=>{cancel();return{ok:true};});
- handle('connect',async(options={})=>{
+ const connectNow=async(options={})=>{
   if(local())return{ok:false,error:'Google sign-in is disabled in local/private mode.'};
   if(pending)return{ok:false,error:'A Google sign-in is already open. Finish or cancel it first.'};
   const g=config(),secret=decryptKey(g.clientSecretEnc);if(!g.clientId||!secret)return{ok:false,error:'Import or save the Google Desktop app credentials first.'};
@@ -35,7 +37,46 @@ function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,s
    const encrypted=encryptKey(r.refreshToken),rest=(config().accounts||[]).filter(a=>a.email.toLowerCase()!==r.email.toLowerCase());
    store.set('settings.connectors.google.accounts',[...rest,{email:r.email,refreshEnc:encrypted,...(r.scopes?{scopes:r.scopes}:{})}]);store.flush();resetApi();onChange();return{ok:true,email:r.email,services:r.scopes?grantedServices(r.scopes):null};
   }catch(e){return{ok:false,error:ac.signal.aborted?'Sign-in cancelled.':e.message};}finally{if(pending===ac)pending=null;}
+ };
+ handle('connect',connectNow);
+ // Calendar through macOS: is a Google calendar already on this Mac (added in Internet Accounts)? Then Relay needs no setup for it.
+ handle('mac',async()=>{
+  if(!macCalendars)return{ok:true,known:false,google:[]};
+  try{const list=await macCalendars();return{ok:true,known:Array.isArray(list),google:easy.googleCalendars(list).map(c=>({account:c.account,name:c.name,writable:c.writable}))};}
+  catch{return{ok:false,error:'Allow Calendars for Relay in System Settings > Privacy & Security > Calendars to see this.'};}
  });
+ // Guided setup: the pages in order (opened one at a time from the window), and a watch on Downloads for the credentials file Google makes at the end.
+ // When it appears Relay saves it and starts the sign-in by itself. The watch ends by itself after twenty minutes.
+ let watch=null,guideMessage='';
+ const stopWatch=()=>{if(watch){clearTimer(watch.timer);watch=null;}};
+ const startWatch=()=>{
+  stopWatch();guideMessage='Waiting for the credentials file to appear in Downloads…';const started=Date.now(),seen=new Set();let busy=false;
+  const timer=setTimer(async()=>{
+   if(busy)return;
+   if(Date.now()-started>20*60000){stopWatch();guideMessage='Stopped watching Downloads. Click Guided setup to start again.';onChange();return;}
+   busy=true;
+   try{
+    const entries=[];for(const name of fsImpl.readdirSync(downloadsDir)){if(!/^client_secret.*\.json$/i.test(name))continue;try{const st=fsImpl.statSync(path.join(downloadsDir,name));entries.push({name,size:st.size,mtimeMs:st.mtimeMs});}catch{}}
+    const hit=easy.findCredentialFile(entries);
+    if(!hit||seen.has(hit.name+hit.mtimeMs))return;
+    seen.add(hit.name+hit.mtimeMs);
+    let c;try{c=desktopCredentials(fsImpl.readFileSync(path.join(downloadsDir,hit.name),'utf8'));}catch(e){guideMessage='Found '+hit.name+' but it is not a Desktop app credentials file: '+e.message;onChange();return;}
+    stopWatch();guideMessage='Found your credentials. Saving them…';onChange();
+    const saved=await saveClient(c.clientId,c.clientSecret);
+    if(saved&&saved.ok===false){guideMessage=saved.error||'Could not save the credentials.';onChange();return;}
+    guideMessage='Credentials saved. Finish signing in in your browser…';onChange();
+    const r=await connectNow({});
+    guideMessage=r.ok?'Connected '+r.email+'. You can delete the downloaded credentials file now.':(r.error||'Sign-in did not finish. Click Connect with Google.');onChange();
+   }catch(e){guideMessage='Could not read Downloads: '+e.message;}
+   finally{busy=false;}
+  },2500);
+  watch={timer};
+ };
+ handle('internet-accounts',()=>{shell.openExternal('x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension');return{ok:true};});
+ handle('guide',()=>{startWatch();return{ok:true,steps:easy.STEPS.map(x=>({title:x.title,text:x.text}))};});
+ handle('guide-open',i=>{const step=easy.STEPS[Number(i)];if(!step)return{ok:false};shell.openExternal(step.url);return{ok:true};});
+ handle('guide-status',()=>({ok:true,watching:!!watch,message:guideMessage}));
+ handle('guide-stop',()=>{stopWatch();guideMessage='';return{ok:true};});
  handle('check',async email=>{
   if(local())return{ok:false,error:'Google checks are disabled in local/private mode.'};
   const g=config(),acct=(g.accounts||[]).find(a=>a.email===email);if(!acct)return{ok:false,error:'This account is no longer connected.'};
@@ -55,6 +96,6 @@ function registerGoogleConnections({ipcMain,store,encryptKey,decryptKey,dialog,s
   if(hit){try{await fetch('https://oauth2.googleapis.com/revoke',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:decryptKey(hit.refreshEnc)}),signal:AbortSignal.timeout(10000),redirect:'error'});}catch{ return{ok:true,warning:'Removed locally. Revoke access in your Google account if it remains listed there.'};}}
   return{ok:true};
  });
- return{cancel};
+ return{cancel,startGuide:()=>{startWatch();return easy.STEPS;},openStep:i=>{const step=easy.STEPS[Number(i)];if(step)shell.openExternal(step.url);}};
 }
 module.exports={registerGoogleConnections,publicGoogle};

@@ -254,6 +254,11 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
     },
     // What the last reminder or event Relay made was (only with the native helper), so the activity log can offer Undo: { kind: 'reminder' | 'event', id } or null.
     get lastCreated() { return lastCreated; },
+    // The calendars this Mac has: [{ account, name, writable }] (with the native helper), or null.
+    async calendarSources() {
+      if (!calBin) return null;
+      return String(await cal(['calendars']) || '').split('\n').filter(Boolean).map((l) => { const [account, name, rw] = l.split('|'); return { account: account || '', name: name || '', writable: rw === 'writable' }; });
+    },
     async calendarDeleteById(id) {
       if (!calBin) throw new Error('Needs the native calendar helper.');
       await cal(['event-delete', id]);
@@ -362,6 +367,13 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
       } finally {
         clipRestore(clipboard, before);
       }
+    },
+    // The music app that is playing right now (Music or Spotify), or null. Never opens an app that is closed.
+    async musicPlaying() {
+      for (const app of ['Music', 'Spotify']) {
+        try { if (/playing/i.test(await osa([`if application ${q(app)} is running then`, `tell application ${q(app)} to return (player state as text)`, 'end if', 'return "off"']))) return app; } catch { /* not scriptable */ }
+      }
+      return null;
     },
     // Music and Spotify: op is play, pause, next or previous.
     async mediaControl(app, op) {

@@ -111,7 +111,7 @@ try {
   relay.onHandPreview((on) => { previewOn = !!on; card.hidden = !previewOn; });
   relay.onHandConfig?.((c) => showHitbox(c.margin));
   relay.onHandAction((a) => {
-    const t = a.type === 'swipe' ? `Swipe ${a.dir === 'left' ? '←' : '→'}` : a.type === 'tab' ? `Tab ${a.n}` : ACTIONS[a.type];
+    const t = a.type === 'swipe' ? `Swipe ${a.dir === 'left' ? '←' : '→'}` : a.type === 'tab' ? `Tab ${a.n}` : a.type === 'volume' ? `Volume ${a.n}%` : ACTIONS[a.type];
     if (!t) return;
     actEl.textContent = t; actEl.classList.add('on');
     clearTimeout(actTimer); actTimer = setTimeout(() => actEl.classList.remove('on'), 1300);

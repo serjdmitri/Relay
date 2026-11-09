@@ -2236,6 +2236,9 @@ class AskController {
           { const lc2 = require('./latency').parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } return this.finish(entry, { status: 'done', reply: require('./latency').describe(this.store.get('latencyLog')), actions: 0 }); } }
           if (this.wakeCommand) { const wc = require('./wakeScheduler').parseWakeCommand(effective); if (wc) { this.lastRequestText = effective; return this.finish(entry, await this.wakeCommand(wc)); } }
           if (this.commandCenter && require('./commandCenter').parseCommandCenter(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.commandCenter()); }
+          if (this.signCommand) { const sg = require('./hands/apps').parseSignCommand(effective); if (sg) { this.lastRequestText = effective; return this.finish(entry, await this.signCommand(sg)); } }
+          if (this.eyeCommand) { const ec = require('./eyeBreak').parseEyeCommand(effective); if (ec) { this.lastRequestText = effective; return this.finish(entry, await this.eyeCommand(ec)); } }
+          if (this.googleSetupCommand && require('./connectors/googleEasy').parseGoogleSetup(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.googleSetupCommand()); }
           if (this.pageCommand) { const pc = require('./pageWatch').parsePageWatchCommand(effective); if (pc) { this.lastRequestText = effective; return this.finish(entry, await this.pageCommand(pc)); } }
           if (this.nightCommand) { const nc = require('./nightClaude').parseNightCommand(effective); if (nc) { this.lastRequestText = effective; return this.finish(entry, await this.nightCommand(nc)); } }
           { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
@@ -2443,7 +2446,7 @@ class AskController {
   // You left the desk (the camera has seen no face for a while): pause what is playing, and lock the screen if that is asked for.
   async presenceAway() {
     const cfg = this.store.get('settings.presence') || {};
-    this.pausedByPresence = false;
+    this.pausedByPresence = false; this.pausedVideoByPresence = false;
     // With owner recognition and its standby screen on, the standby screen is what guards the Mac while you are away, and the guard alarms for a stranger: locking the Mac as well meant it
     // locked itself whenever you sat still or looked away for a minute. The lock stays for people who do not use the standby screen.
     const owner = this.store.get('settings.owner') || {};
@@ -2452,9 +2455,17 @@ class AskController {
       try { await this.mac.lockScreen(); }
       catch { this.notice('Could not lock the Mac when you left. Check Relay permissions and try locking it manually.', 'failed'); }
     }
-    if (cfg.pause !== false) {
-      const r = await this.quick('pause').catch(() => null);
-      if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
+    if (cfg.pause !== false || cfg.pauseVideo !== false) {
+      const pm = require('./presenceMedia');
+      const musicApp = this.mac.musicPlaying ? await this.mac.musicPlaying().catch(() => null) : null;
+      let tabs = [];
+      if (this.bridge?.isConnected?.()) { try { const l = await this.bridge.call('tabs.list', {}); tabs = (Array.isArray(l) ? l : l?.tabs || []).filter((t) => t.audible); } catch { /* no browser tabs to look at */ } }
+      const d = pm.decideAway({ keepMusic: cfg.keepMusic === true, pauseVideo: cfg.pauseVideo !== false, musicApp, tabs });
+      if (cfg.pause !== false && d.pauseMusicApp) {
+        const r = await this.quick('pause').catch(() => null);
+        if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
+      }
+      if (d.pauseVideo) { try { await this.mac.mediaKey('play'); this.pausedVideoByPresence = true; } catch { /* no media key: leave it */ } }
     }
   }
 
@@ -2462,7 +2473,8 @@ class AskController {
   async presenceBack() {
     const cfg = this.store.get('settings.presence') || {};
     if (this.pausedByPresence && cfg.resume !== false) await this.quick('play').catch(() => {});
-    this.pausedByPresence = false;
+    if (this.pausedVideoByPresence && cfg.resume !== false) await this.mac.mediaKey('play').catch(() => {});
+    this.pausedByPresence = false; this.pausedVideoByPresence = false;
   }
 
   // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).

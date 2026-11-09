@@ -95,8 +95,9 @@ const DEFAULTS = {
     owner: { enabled: false, seconds: 20, threshold: 0.363 }, // owner recognition (opt-in): a face that is not yours while you are away starts the access-denied alarm, then locks after this many seconds
     overnightWake: { enabled: false, battery: false }, // wake the Mac for the overnight window and keep it awake while overnight work runs (wakeScheduler.js; needs a one-time permission you give in Terminal)
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
-    presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
-    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true }, // Hand control: move holograms in the air through the camera (opt-in)
+    presence: { enabled: false, awayAfter: 60, pause: true, resume: true, keepMusic: false, pauseVideo: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
+    eyeBreaks: { enabled: false, everyMin: 20, seconds: 20, speak: true }, // opt-in: every 20 minutes at the screen, the screens blur for 20 seconds and you look far away
+    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true, airScroll: true }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

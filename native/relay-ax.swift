@@ -223,6 +223,13 @@ case "hand-drag":
               x.isFinite, y.isFinite, abs(x) < 100000, abs(y) < 100000 else { continue }
         let point = CGPoint(x: x, y: y)
         switch op {
+        case "scroll":
+            // Air scroll: a pinch dragged up or down scrolls whatever is under the hand, a few pixels at a time. dy > 0 moves the content down.
+            if held { break }
+            if let dy = m["dy"] as? Double, dy.isFinite, abs(dy) < 2000, let e = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: Int32(dy), wheel2: 0, wheel3: 0) {
+                e.location = point
+                e.post(tap: .cghidEventTap)
+            }
         case "click":
             // A pinch tap: one ordinary click where the hand points, never on Relay's own windows (those get their clicks another way).
             if held || relayOwnsTop(point) { print("click-declined") }

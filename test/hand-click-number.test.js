@@ -56,7 +56,7 @@ test('clicks, tab numbers and the "is a browser in front" question go to the hel
   assert.equal(x.drag.click({ x: 5, y: 6 }), false, 'not running yet: it starts for next time');
   x.child.stdout.write('ready\n');
   assert.equal(x.drag.click({ x: 5, y: 6 }), true);
-  assert.equal(x.drag.tab(3), true); assert.equal(x.drag.tab(0), false); assert.equal(x.drag.tab(10), false);
+  assert.equal(await x.drag.tab(3), true); assert.equal(await x.drag.tab(0), false); assert.equal(await x.drag.tab(10), false);
   assert.equal(x.drag.begin({}, { x: 1, y: 1 }), false, 'dragging itself is still off');
   const q = x.drag.frontIsBrowser(); x.child.stdout.write('front:browser\n');
   assert.equal(await q, true);
@@ -100,6 +100,7 @@ test('a pinch tap with nothing of Relay\'s under the hand is a real click there;
 test('a number held up goes to that tab, and not while hand control is paused or the setting is off', async () => {
   const a = rig(); await a.hc.enable();
   for (let i = 0; i < 30; i++) a.hc.frame({ t: a.tick(50), hands: [hand('Open_Palm', 3)] });
+  await new Promise((r) => setImmediate(r));
   assert.deepEqual(a.calls.filter((c) => c[0] === 'tab'), [['tab', 3]]);
   assert.deepEqual(a.acts.filter((x) => x.type === 'tab'), [{ type: 'tab', n: 3 }]);
   const off = rig({ tabNumbers: false }); await off.hc.enable();
@@ -127,4 +128,19 @@ test('the native helper only clicks outside Relay, only presses Command+number i
   assert.match(swift, /org\.mozilla\.firefox/);
   assert.match(read('src/main/store.js'), /pinchClick: true, tabNumbers: true/);
   assert.match(read('src/renderer/hands.js'), /count: countOf\(l\)/);
+});
+
+test('a tab number is logged at every step, works without the helper through System Events, and says so when it cannot', async () => {
+  const logs = [], notes = []; const pressed = [];
+  const mk = (over) => { const child = new EventEmitter(); child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); return { child, drag: new ExternalDrag({ bin: '/fake', allowed: () => true, spawnFn: () => child, wanted: () => true, log: (k, m) => logs.push(`${k}: ${m}`), notify: (m) => notes.push(m), ...over }) }; };
+  const a = mk({ front: async () => 'org.mozilla.firefox', pressTab: async (n) => { pressed.push(n); } });
+  assert.equal(await a.drag.tab(3), true); assert.deepEqual(pressed, [3]);
+  assert.ok(logs.some((l) => /number 3: sent through System Events/.test(l)));
+  const b = mk({ front: async () => 'com.apple.finder', pressTab: async (n) => { pressed.push(n); } });
+  assert.equal(await b.drag.tab(2), false); assert.deepEqual(pressed, [3], 'Finder in front: no key press');
+  assert.ok(logs.some((l) => /no browser in front \(com\.apple\.finder\)/.test(l)));
+  assert.equal(await b.drag.frontIsBrowser(), false); assert.equal(await a.drag.frontIsBrowser(), true, 'the front app is read without the helper');
+  const c = mk({ front: async () => 'org.mozilla.firefox', pressTab: async () => { throw new Error('not allowed'); } });
+  assert.equal(await c.drag.tab(4), false); assert.equal(await c.drag.tab(5), false);
+  assert.equal(notes.length, 1, 'told once how to fix it'); assert.match(notes[0], /Accessibility/);
 });
