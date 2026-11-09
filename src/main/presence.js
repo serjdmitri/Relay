@@ -42,6 +42,8 @@ class PresenceControl {
   }
 
   get enabled() { return !!this.cam; }
+  // Is the camera really delivering pictures? (running, and a picture in the last 20 seconds). A camera that died with the lid, or whose page gave up, is not healthy even though it is "on".
+  healthy() { return !!this.cam && this.status === 'running' && this.now() - (this.lastFrameAt || 0) < 20000; }
   get state() { return this.tracker.state; }
 
   async enable() {
@@ -64,7 +66,7 @@ class PresenceControl {
     const allowed = await this.askAccess();
     if (generation !== this.generation) return { ok: true, cancelled: true };
     if (!allowed) { this.status = 'error'; this.message = 'Camera access is off. Turn it on for Relay in System Settings > Privacy & Security > Camera.'; this.onChange(); return { ok: false, error: this.message }; }
-    this.tracker.reset();
+    this.tracker.reset(); this.lastFrameAt = 0;
     const cam = await this.createCamera();
     if (generation !== this.generation) { try { cam?.close?.(); } catch {} return { ok: true, cancelled: true }; }
     this.cam = cam;
@@ -94,6 +96,7 @@ class PresenceControl {
   frame(f) {
     if (!this.cam || !f || !Number.isFinite(f.faces)) return;
     this.faces = f.faces;
+    this.lastFrameAt = this.now();
     const secs = Math.min(600, Math.max(10, Number(this.getConfig()?.awayAfter) || 60));
     this.tracker.awayAfterMs = secs * 1000;
     this.tracker.update({ faces: f.faces, t: this.now() });
