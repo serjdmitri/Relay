@@ -96,10 +96,10 @@ class PresenceControl {
   frame(f) {
     if (!this.cam || !f || !Number.isFinite(f.faces)) return;
     this.faces = f.faces;
-    this.lastFrameAt = this.now();
     const secs = Math.min(600, Math.max(10, Number(this.getConfig()?.awayAfter) || 60));
     this.tracker.awayAfterMs = secs * 1000;
-    this.tracker.update({ faces: f.faces, t: this.now() });
+    const t = this.now(); this.lastFrameAt = t;
+    this.tracker.update({ faces: f.faces, t });
   }
 }
 
