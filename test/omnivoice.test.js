@@ -55,3 +55,13 @@ test('OmniVoice receives the chosen synthesis speed rather than changing playbac
  await voice.synthesize('A calm report',{rate:'slower'});assert.equal(sent.speed,.9);
  voice.stop();
 });
+
+
+test('cancelled queued speech never reaches the worker and foreground replies beat prewarming',async()=>{
+ const {EventEmitter}=require('events'),{PassThrough}=require('stream');const child=new EventEmitter();child.stdin=new EventEmitter();child.stdout=new PassThrough();child.kill=()=>{};const sent=[];child.stdin.write=line=>{sent.push(JSON.parse(line));};
+ const voice=new OmniVoice({python:process.execPath,spawnFn:()=>child});const active=voice.synthesize('first');const ac=new AbortController();const obsolete=voice.synthesize('obsolete',{signal:ac.signal});ac.abort();await assert.rejects(obsolete,{name:'AbortError'});
+ const warm=voice.synthesize('warm',{background:true}),reply=voice.synthesize('reply');assert.equal(sent.length,1);
+ child.stdout.write(JSON.stringify({id:sent[0].id,ok:true})+'\n');await active;assert.equal(sent[1].text,'reply');
+ child.stdout.write(JSON.stringify({id:sent[1].id,ok:true})+'\n');await reply;assert.equal(sent[2].text,'warm');
+ child.stdout.write(JSON.stringify({id:sent[2].id,ok:true})+'\n');await warm;assert.equal(sent.some(m=>m.text==='obsolete'),false);voice.stop();
+});

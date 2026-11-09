@@ -133,7 +133,7 @@ class Speaker {
     const saved=this.prepared(key);if(saved){this.preparedAudio.set(key,saved);return Promise.resolve();}
     if (this.preparing) return this.preparing.then(()=>this.prepare({rate,kokoroVoice,text}));
     this.preparing = (async () => {
-      const file = await (engine === 'omnivoice' ? this.omni.synthesize(text, { rate })
+      const file = await (engine === 'omnivoice' ? this.omni.synthesize(text, { rate, background: true })
         : this.kokoro.synthesize(text, { ...(tts.kokoro || {}), ...(kokoroVoice ? { voice: kokoroVoice } : {}), rate }));
       try { const audio=fs.readFileSync(file);this.preparedAudio.set(key,audio);const cached=this.phraseFile(key);if(cached){try{fs.mkdirSync(this.phraseCacheDir,{recursive:true,mode:0o700});fs.writeFileSync(cached+'.tmp',audio,{mode:0o600});fs.renameSync(cached+'.tmp',cached);}catch{}}if(this.preparedAudio.size>8)this.preparedAudio.delete(this.preparedAudio.keys().next().value); } finally { this.discard(file); }
     })().catch(() => {}).finally(() => { this.preparing = null; });
