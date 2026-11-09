@@ -51,3 +51,9 @@ test('wiring: askController and main pass the Ollama starter and relay-cal; the 
   assert.match(read('src/main/askController.js'), /calBin: calBin/); assert.match(read('src/main/askController.js'), /ensure: this\.ensureOllama/);
   assert.match(read('src/main/main.js'), /calBin: calBinPath\(\)/); assert.match(read('src/main/main.js'), /ensure: ask\.ensureOllama/); assert.match(read('package.json'), /native\/build\/relay-cal/); assert.ok(!/ensureApp/.test(read('src/main/main.js')), 'no hidden launch of Calendar or Reminders');
 });
+
+test('every natural way of leaving local mode is understood', () => {
+  const { parseLocalCommand: p } = require('../src/main/localMode');
+  for (const t of ['go online', 'go back online', 'go back to cloud', 'switch back to the cloud', 'use claude', 'go back to claude', 'switch to cloud mode', 'back to the cloud', 'stop being offline', 'exit offline mode', 'Jarvis, go back to the cloud.']) assert.deepEqual(p(t), { type: 'local-off' }, t);
+  assert.deepEqual(p('go offline'), { type: 'local-on' }); assert.equal(p('go to the cloud storage'), null);
+});
