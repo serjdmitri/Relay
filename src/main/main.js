@@ -1469,12 +1469,28 @@ app.whenReady().then(() => {
   let lastWelcome = 0;
   // After the Mac wakes (the lid was closed) the camera stream is often dead: start the camera again, so recognition and the standby screen see you and not a frozen picture.
   powerMonitor.on('resume', () => { diag.log('resume', 'the Mac woke'); try { overlay?.renewIdle(); } catch { /* the old windows stay */ } reviveListening('after wake'); });
-  powerMonitor.on('resume', () => { if (presence?.enabled) { presence.disable(); setTimeout(() => { if (store.get('settings.presence.enabled') || ownerConfig(store.get('settings.owner')).enabled) presence.enable().then(() => broadcast()).catch(() => {}); }, 2500).unref?.(); } });
+  // The camera that watches who is at the Mac. It is started again whenever it is wanted but not delivering pictures: after the lid, after unlocking, when its page gave up, or when it never came back.
+  const cameraWanted = () => !!store.get('settings.presence.enabled') || (ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0);
+  let reviving = false;
+  const revivePresence = async (why) => {
+    try {
+      if (reviving || screenLocked || !presence || !cameraWanted() || presence.healthy() || presence.pending) return;
+      reviving = true;
+      presence.disable();
+      await new Promise((r) => setTimeout(r, 1500));
+      const r = await presence.enable();
+      diag.log(r.ok ? 'camera-restarted' : 'camera-failed', why + (r.ok ? '' : ': ' + String(r.error || '').slice(0, 80)));
+      broadcast();
+    } catch (e) { diag.log('camera-failed', why + ': ' + String(e.message).slice(0, 80)); } finally { reviving = false; }
+  };
+  // Right after the lid opens the camera is often not ready yet: look again a few times, and stop as soon as it is delivering pictures.
+  const reviveSoon = (why) => { for (const s of [3, 10, 25, 60]) setTimeout(() => revivePresence(why), s * 1000).unref?.(); };
+  powerMonitor.on('resume', () => reviveSoon('after wake'));
   powerMonitor.on('lock-screen', () => { diag.log('lock-screen'); lockedAt = Date.now(); screenLocked = true; lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     try { overlay?.renewIdle(); } catch { /* the old windows stay */ } // windows that sat hidden through the lock can come back blank: start from fresh ones
     // You have just unlocked the Mac with your password or fingerprint: that is you. A guard screen still up, or an alarm still counting, comes down, and the mouse is handed back.
-    diag.log('unlock-screen'); reviveListening('after unlock');
+    diag.log('unlock-screen'); reviveListening('after unlock'); reviveSoon('after unlock');
     try { if (ownerGuard?.state === 'alarm') ownerGuard.clear('owner'); intruder?.hide(); overlay?.releaseInput(); } catch { /* the screens stay */ }
     screenLocked = false; setTimeout(() => tellAboutVisits(), 1500).unref?.(); // you have just unlocked it: now is when to say who was at the Mac
     lockWatch.set(false);
@@ -1793,6 +1809,7 @@ app.whenReady().then(() => {
   setInterval(() => {
     try {
       if (screenLocked) return;
+      revivePresence('check');
       if (ask.suspended && !captureLatch.on) { ask.suspended = false; diag.log('selfcheck', 'shortcuts were paused with no recording going on: resumed'); }
       if (store.get('settings.wake.enabled') && ['idle', 'done'].includes(ask.state) && !ask.wake.armed && ask.wake.canListen() && !ask.meeting?.active) { ask.wake.refresh(); diag.log('selfcheck', 'Hey Jarvis was not listening while idle: started it'); }
       if (hotkeys) {

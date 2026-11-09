@@ -57,3 +57,14 @@ test('every natural way of leaving local mode is understood', () => {
   for (const t of ['go online', 'go back online', 'go back to cloud', 'switch back to the cloud', 'use claude', 'go back to claude', 'switch to cloud mode', 'back to the cloud', 'stop being offline', 'exit offline mode', 'Jarvis, go back to the cloud.']) assert.deepEqual(p(t), { type: 'local-off' }, t);
   assert.deepEqual(p('go offline'), { type: 'local-on' }); assert.equal(p('go to the cloud storage'), null);
 });
+
+test('the camera that watches who is at the Mac is restarted when it is wanted but not delivering pictures', () => {
+  const fs = require('fs'), read = (f) => fs.readFileSync(require('path').join(__dirname, '..', f), 'utf8');
+  const main = read('src/main/main.js');
+  assert.match(main, /const revivePresence = async/); assert.match(main, /powerMonitor\.on\('resume', \(\) => reviveSoon\('after wake'\)\)/);
+  assert.match(main, /reviveListening\('after unlock'\); reviveSoon\('after unlock'\)/); assert.match(main, /revivePresence\('check'\)/);
+  const { PresenceControl } = require('../src/main/presence');
+  let t = 1000; const pc = new PresenceControl({ getConfig: () => ({}), askAccess: async () => true, createCamera: async () => ({ close() {} }), onAway() {}, onBack() {}, notify() {}, now: () => t });
+  assert.equal(pc.healthy(), false);
+  return pc.enable().then(() => { pc.setStatus({ state: 'running' }); pc.frame({ faces: 1 }); assert.equal(pc.healthy(), true); t += 25000; assert.equal(pc.healthy(), false, 'no picture for 25 s'); pc.setStatus({ state: 'error', message: 'x' }); pc.frame({ faces: 1 }); assert.equal(pc.healthy(), false, 'errored'); });
+});
