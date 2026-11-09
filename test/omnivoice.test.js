@@ -11,7 +11,7 @@ test('OmniVoice is local and falls back when unavailable', () => {
 test('cancelling an OmniVoice reply drops only that reply and keeps the loaded model, and its late file is deleted', async () => {
   const { EventEmitter } = require('node:events'), fs = require('node:fs'), { PassThrough } = require('node:stream');
   const child = new EventEmitter(); child.stdin = new EventEmitter(); child.stdout = new PassThrough(); child.kill = () => { child.killed = true; };
-  let sent; child.stdin.write = (line) => { sent = JSON.parse(line); return true; };
+  let sent; child.stdin.write = (line) => { const request=JSON.parse(line);if(!request.cancel)sent=request;return true; };
   const o = new OmniVoice({ python: process.execPath, spawnFn: () => child });
   const abort = new AbortController();
   const pending = o.synthesize('hello', { signal: abort.signal });
@@ -64,4 +64,11 @@ test('cancelled queued speech never reaches the worker and foreground replies be
  child.stdout.write(JSON.stringify({id:sent[0].id,ok:true})+'\n');await active;assert.equal(sent[1].text,'reply');
  child.stdout.write(JSON.stringify({id:sent[1].id,ok:true})+'\n');await reply;assert.equal(sent[2].text,'warm');
  child.stdout.write(JSON.stringify({id:sent[2].id,ok:true})+'\n');await warm;assert.equal(sent.some(m=>m.text==='obsolete'),false);voice.stop();
+});
+test('active cancellation notifies the worker and keeps a watchdog until it acknowledges',async()=>{
+ const {EventEmitter}=require('events'),{PassThrough}=require('stream');const child=new EventEmitter();child.stdin=new EventEmitter();child.stdout=new PassThrough();child.kill=()=>{child.killed=true;};const sent=[];child.stdin.write=line=>sent.push(JSON.parse(line));
+ const voice=new OmniVoice({python:process.execPath,spawnFn:()=>child,timeoutMs:30}),ac=new AbortController();
+ const pending=voice.synthesize('cancel me',{signal:ac.signal});ac.abort();await assert.rejects(pending,{name:'AbortError'});
+ assert.deepEqual(sent[1],{cancel:sent[0].id});assert.equal(child.killed,undefined);
+ await new Promise(r=>setTimeout(r,60));assert.equal(child.killed,true);assert.equal(voice.activeId,null);
 });
