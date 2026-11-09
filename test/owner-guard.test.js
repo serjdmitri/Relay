@@ -14,7 +14,7 @@ function make(cfg = { enabled: true, seconds: 20, threshold: 0.4 }, extra = {}) 
 const events = (m, kind) => m.log.filter((e) => e[0] === kind);
 
 test('the time is adjustable within safe limits, and it is off unless turned on', () => {
-  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12, photos: true });
+  assert.deepEqual(config({ enabled: true }), { enabled: true, seconds: 20, threshold: 0.363, awayScreen: true, keepAwake: true, awaySeconds: 45, liveness: true, margin: 0.12, photos: true });
   assert.equal(config({ seconds: 1 }).seconds, 5); assert.equal(config({ seconds: 9999 }).seconds, 120); assert.equal(config({ seconds: 45 }).seconds, 45);
   assert.equal(config({ threshold: 5 }).threshold, 0.7); assert.equal(config({ enabled: 'true' }).enabled, false);
   const m = make({ enabled: false }); m.feed([0.01], 60);
