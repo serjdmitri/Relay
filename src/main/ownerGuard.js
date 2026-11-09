@@ -6,11 +6,11 @@
 // Honest limits: recognition can be wrong (poor light, glasses, a different angle: you may be flagged for a few seconds, which is why two frames of
 // you cancel it), a VIDEO of you blinking can fool it (a still photo cannot: the liveness check wants a blink), and covering the camera makes it blind rather than suspicious.
 
-const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, awaySeconds: 45, liveness: true, margin: 0.12, photos: true }; // 0.363 is the published cosine threshold for the SFace model
+const DEFAULTS = { enabled: false, seconds: 20, threshold: 0.363, awayScreen: true, keepAwake: true, awaySeconds: 45, liveness: true, margin: 0.12, photos: true }; // 0.363 is the published cosine threshold for the SFace model
 const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 function config(raw) {
   const c = raw && typeof raw === 'object' ? raw : {};
-  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false, margin: clamp(c.margin, 0, 0.3, DEFAULTS.margin), photos: c.photos !== false };
+  return { enabled: c.enabled === true, seconds: Math.round(clamp(c.seconds, 5, 120, DEFAULTS.seconds)), threshold: clamp(c.threshold, 0.2, 0.7, DEFAULTS.threshold), awayScreen: c.awayScreen !== false, keepAwake: c.keepAwake !== false, awaySeconds: Math.round(clamp(c.awaySeconds, 10, 600, DEFAULTS.awaySeconds)), liveness: c.liveness !== false, margin: clamp(c.margin, 0, 0.3, DEFAULTS.margin), photos: c.photos !== false };
 }
 
 // ---- matching ----
