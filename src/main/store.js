@@ -96,7 +96,7 @@ const DEFAULTS = {
     overnightWake: { enabled: false, battery: false }, // wake the Mac for the overnight window and keep it awake while overnight work runs (wakeScheduler.js; needs a one-time permission you give in Terminal)
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
-    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true }, // Hand control: move holograms in the air through the camera (opt-in)
+    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

@@ -170,13 +170,63 @@ case "hand-drag":
         }
         return false
     }
+    let browserIds: Set<String> = ["org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "org.mozilla.nightly", "com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.google.Chrome", "com.google.Chrome.canary", "company.thebrowser.Browser", "com.brave.Browser", "com.microsoft.edgemac", "org.chromium.Chromium", "com.vivaldi.Vivaldi", "com.operasoftware.Opera"]
+    func frontIsBrowser() -> Bool {
+        guard let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return false }
+        return browserIds.contains(id)
+    }
+    // Key codes of 1 to 9 on a Mac keyboard. Command+1 to 8 is "tab N" and Command+9 is "the last tab" in every browser above.
+    let digitKeys: [Int: CGKeyCode] = [1: 18, 2: 19, 3: 20, 4: 21, 5: 23, 6: 22, 7: 26, 8: 28, 9: 25]
+    func pressCommand(_ key: CGKeyCode) {
+        for down in [true, false] {
+            guard let e = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { continue }
+            e.flags = .maskCommand
+            e.post(tap: .cghidEventTap)
+        }
+    }
+    func relayOwnsTop(_ point: CGPoint) -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return false }
+        for w in windows {
+            guard (w[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = w[kCGWindowBounds as String] as? [String: Any],
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary), rect.contains(point) else { continue }
+            return (w[kCGWindowOwnerName as String] as? String ?? "").lowercased() == "relay"
+        }
+        return false
+    }
+    var lastClickAt = Date.distantPast
+    var lastClickPoint = CGPoint.zero
+    var lastClickCount = 0
+    // Two pinch taps close together on the same spot make a double click, three a triple.
+    func emitClick(_ point: CGPoint) {
+        let now = Date()
+        let again = now.timeIntervalSince(lastClickAt) < 0.45 && hypot(point.x - lastClickPoint.x, point.y - lastClickPoint.y) < 8
+        let count = again ? min(lastClickCount + 1, 3) : 1
+        lastClickAt = now; lastClickPoint = point; lastClickCount = count
+        for type in [CGEventType.leftMouseDown, CGEventType.leftMouseUp] {
+            guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left) else { continue }
+            event.setIntegerValueField(.mouseEventClickState, value: Int64(count))
+            event.post(tap: .cghidEventTap)
+        }
+    }
     print("ready")
     while let line = readLine() {
         guard let data = line.data(using: .utf8), let m = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let op = m["op"] as? String, let x = m["x"] as? Double, let y = m["y"] as? Double,
+              let op = m["op"] as? String else { continue }
+        // Questions that need no position: is a web browser in front, and press Command+number in it (the browser's own "go to tab N").
+        if op == "front" { print(frontIsBrowser() ? "front:browser" : "front:other"); continue }
+        if op == "tab" {
+            if let n = m["n"] as? Int, let key = digitKeys[n], frontIsBrowser() { pressCommand(key); print("tab:\(n)") } else { print("tab:declined") }
+            continue
+        }
+        guard let x = m["x"] as? Double, let y = m["y"] as? Double,
               x.isFinite, y.isFinite, abs(x) < 100000, abs(y) < 100000 else { continue }
         let point = CGPoint(x: x, y: y)
         switch op {
+        case "click":
+            // A pinch tap: one ordinary click where the hand points, never on Relay's own windows (those get their clicks another way).
+            if held || relayOwnsTop(point) { print("click-declined") }
+            else { emit(.mouseMoved, point); emitClick(point); print("clicked") }
         case "down":
             if !held && eligible(point) { emit(.mouseMoved, point); emit(.leftMouseDown, point); held = true; last = point; print("down") }
             else { print("not-draggable") }

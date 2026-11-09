@@ -727,6 +727,9 @@ const PAGES = {
     hrow.onclick = async () => { const r = await relay.setHands(!(handsOn && hs.status !== 'error')); if (r && !r.ok) alert(r.error); };
     hcard.append(hrow);
     hcard.append(toggleRow('Move app windows and tabs with hands', 'With Accessibility permission, make a fist over a window’s top bar or a browser tab, move it, and open your hand to release. One system drag at a time.', 'settings.hands.appDragging'));
+    hcard.append(toggleRow('Click with a pinch', 'Tap your thumb and index finger together over anything on the screen (a browser tab, a button, a link) to click it. Needs Accessibility permission.', 'settings.hands.pinchClick'));
+    hcard.append(toggleRow('Show a number to switch browser tabs', 'With a web browser in front, hold up 1 to 5 fingers (or two hands for up to 9) for a second to go to that tab. A peace sign means tab 2 there, so it does not open the mic inside a browser.', 'settings.hands.tabNumbers'));
+    hcard.append(toggleRow('More hand signs', 'A rock sign plays music, an open palm held still stops Relay talking, waving opens the mic, and a thumb up or down answers a yes or no question Relay asks (never one that must be approved at the Mac).', 'settings.hands.extraGestures'));
     const handMargin = Math.round((S.settings.hands?.margin ?? 0.22) * 100);
     const handCal = h(`<div class="row"><div class="grow"><div class="t">Hand reach</div><div class="d">Increase this to reach the edges with smaller movements. The dashed box in Hand view shows the tracking area; drag its header to move the view. Swipe an open hand to shift a panel, or hold a thumbs-down to close it.</div></div><input type="range" min="4" max="35" value="${handMargin}" aria-label="Hand reach"><span>${handMargin}%</span></div>`);
     const handRange = $('input', handCal);

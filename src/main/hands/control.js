@@ -8,11 +8,12 @@ const { recognizeStroke } = require('./shape');
 const { HandTracks } = require('./tracks');
 const momentum = require('./momentum');
 const { FingerWatch } = require('./finger');
+const { CountWatch } = require('./count');
 
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {} }) {
+  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {}, pinchClick = () => true, tabNumbers = () => true, extraGestures = () => true, onGesture = () => false }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.motion = motion;
     this.sensitivity = sensitivity;
@@ -29,6 +30,9 @@ class HandControl {
     this.secondary = secondary;
     this.floatingAt = floatingAt;
     this.tracks = new HandTracks(secondary ? 2 : 4);
+    this.pinchClick = pinchClick; this.tabNumbers = tabNumbers; this.extraGestures = extraGestures; this.onGesture = onGesture;
+    // A number held up with the fingers (1 to 9) goes to that tab when a web browser is in front (Command+N, through the helper).
+    this.countWatch = new CountWatch({ onNumber: (n) => this.showNumber(n), now: () => this.now() });
     // A middle finger held up to the camera: a hologram of one is shown near your hand (main.js draws it) and goes away when you put it down.
     this.fingerWatch = new FingerWatch({ onShow: (h) => onFinger({ type: 'show', ...this.fingerAt(h) }), onMove: (h) => onFinger({ type: 'move', ...this.fingerAt(h) }), onHide: () => onFinger({ type: 'hide' }), now: () => this.now() });
     this.peer = null;
@@ -73,13 +77,13 @@ class HandControl {
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor(0);
     if (!this.secondary) {
-      this.peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
+      this.peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true, pinchClick: this.pinchClick, tabNumbers: this.tabNumbers, extraGestures: this.extraGestures, onGesture: this.onGesture });
       this.peer.claims = this.claims;
       this.peer.glides = this.glides;
       this.peer.enabled = true;
       this.peer.ring = this.createCursor(1);
       this.extraPeers = Array.from({ length: this.trackLimit-2 }, (_,index) => {
-        const peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true });
+        const peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true, pinchClick: this.pinchClick, tabNumbers: this.tabNumbers, extraGestures: this.extraGestures, onGesture: this.onGesture });
         peer.claims = this.claims; peer.glides = this.glides; peer.enabled = true; peer.ring = this.createCursor(index+2);
         return peer;
       });
@@ -102,7 +106,7 @@ class HandControl {
     try { this.cam?.close?.(); } catch { /* gone */ }
     try { this.ring?.close?.(); } catch { /* gone */ }
     clearTimeout(this.handTimer); this.handTimer = null;
-    this.fingerWatch.reset();
+    this.fingerWatch.reset(); this.countWatch.reset();
     this.setHandMode(false);
     this.cam = null; this.ring = null; this.pos = null;
     this.pointer = new HandPointer({ onEvent: (e) => this.handle(e).catch(() => {}) });
@@ -162,7 +166,7 @@ class HandControl {
       if (h && Number.isFinite(h.x) && Number.isFinite(h.y)) { const c = this.calibration; c.minX = Math.min(c.minX, h.x); c.maxX = Math.max(c.maxX, h.x); c.minY = Math.min(c.minY, h.y); c.maxY = Math.max(c.maxY, h.y); c.samples++; }
       return;
     }
-    if (!this.secondary) this.fingerWatch.update(f);
+    if (!this.secondary) { this.fingerWatch.update(f); if (!this.paused && this.tabNumbers()) this.countWatch.update(f); else this.countWatch.reset(); }
     // With more than two hands, another person's open palms must not pause everyone.
     const palms = f.hands.length === 2 && f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.42).length === 2;
     if (!palms) { this.pauseHold = null; this.pauseLatched = false; }
@@ -206,6 +210,12 @@ class HandControl {
     this.handMode = on;
     this.holos.handMode = on;
     for (const h of this.holos.holos.values()) if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'hand-mode', on);
+  }
+
+  // A held number: "go to tab N" in the browser in front. 9 or more means the last tab. Nothing happens if no browser is in front.
+  showNumber(n) {
+    if (!this.enabled || this.paused || !this.tabNumbers() || !this.externalDrag) return;
+    if (this.externalDrag.tab(n) && this.preview) { try { this.cam?.action?.({ type: 'tab', n }); } catch { /* the view is only a hint */ } }
   }
 
   fingerAt(h) { return this.toScreen(this.pointer.map(h)); }
@@ -378,6 +388,7 @@ class HandControl {
       setTimeout(() => this.ringState('open'), 220);
       const h = this.target(pt);
       if (h && !this.claimedByOther(h)) { this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); }
+      else if (!h && !this.floatingAt(pt) && this.pinchClick() && this.externalDrag?.click(pt)) { try { this.cam?.action?.({ type: 'click' }); } catch { /* the view is only a hint */ } } // nothing of Relay's is there: a real click on whatever is under the hand
       return;
     }
     if (e.type === 'point') { const h = this.holos.holoNear(pt, 330); if (h && !this.claimedByOther(h)) { this.ringState('click'); setTimeout(() => this.ringState('open'), 300); this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); this.send(h, 'mouseUp', pt); } return; }
@@ -394,9 +405,13 @@ class HandControl {
       }
       const h = this.holos.holoNear(pt, 330); if (h) this.holos.step(h.id, e.dir === 'right' ? 1 : -1); return;
     }
+    // rock sign, a still open palm, a wave: what they do is Relay's to say (main.js). A thumb up or down answers a question Relay is asking, if one is waiting.
+    if ((e.type === 'rock' || e.type === 'stop' || e.type === 'wave') && this.extraGestures()) { if (this.onGesture(e.type)) { this.ringState('click'); setTimeout(() => this.ringState('open'), 400); } return; }
+    if ((e.type === 'thumbup' || e.type === 'thumbdown') && this.extraGestures() && this.onGesture(e.type === 'thumbup' ? 'confirm-yes' : 'confirm-no')) { this.ringState('click'); setTimeout(() => this.ringState('open'), 400); return; }
     if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
     if (e.type === 'thumbdown') { const panel = this.floatingAt(pt); if (panel) { if (!this.claims.has(panel.key)) { this.stopGlide(panel.key); panel.close(); } return; } const h = this.holos.holoNear(pt, 330); if (h && !this.claimedByOther(h)) this.holos.close(h.id); return; }
     if (e.type === 'mic') {
+      if (this.tabNumbers() && this.externalDrag && await this.externalDrag.frontIsBrowser()) return; // in a browser a held peace sign is the number 2 (tab 2), not the mic
       const choice = this.shortcut();
       if (choice !== 'listen') { this.onShortcut(choice); return; }
       const h = this.holos.holoNear(pt, 330) || this.holos.latest();
