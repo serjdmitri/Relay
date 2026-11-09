@@ -1,5 +1,4 @@
 const { shellBlocked, scriptBlocked, pathProblem } = require('../drive/guard');
-const { helpersIn } = require('../appLauncher');
 const { execFile } = require('child_process');
 const os = require('os');
 const path = require('path');
@@ -83,7 +82,7 @@ const { parseFrame } = require('../overlayGeometry');
 
 // axBin: native/relay-ax, which walks the accessibility tree directly and reads on-screen text (System Events needs tens of
 // seconds on big or Electron apps). getView(): { scale, origin } of the last screenshot, to turn a text position into screen points.
-function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, getDisplay, axBin = null, getView = () => ({ scale: 1, origin: { x: 0, y: 0 } }) } = {}) {
+function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getDisplay, axBin = null, getView = () => ({ scale: 1, origin: { x: 0, y: 0 } }) } = {}) {
   let axRefused = false;
   const hasAx = () => !!axBin && !axRefused && fs.existsSync(axBin);
   const ax = async (args) => {
@@ -116,15 +115,14 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
     }
   };
 
-  // Calendar and Reminders are opened hidden first when they are closed, so you never have to open them yourself (ensureApp is injected; without it nothing is launched).
-  const osa = async (script, { signal } = {}) => {
+  const osa = (script, { signal } = {}) => {
     const lines = Array.isArray(script) ? script : String(script).split('\n');
     const args = [];
     for (const l of lines) args.push('-e', l);
-    const helpers = ensureApp ? helpersIn(lines) : [];
-    for (const name of helpers) await ensureApp(name);
-    return exec('osascript', args, helpers.length ? { signal, timeout: 60000 } : { signal });
+    return exec('osascript', args, { signal });
   };
+  // Calendar and Reminders go through relay-cal (EventKit) when it is there: it reads the calendar database directly, so those apps never have to be open or show in the Dock.
+  const cal = (args) => exec(calBin, args, { timeout: 60000 });
   const jxa = (script, { signal } = {}) => exec('osascript', ['-l', 'JavaScript', '-e', script], { signal });
   const lines = (s) => (s ? s.split('\n').filter(Boolean) : []);
 
@@ -224,6 +222,7 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
 
     // Reminders
     async remindersAdd(title, due, list) {
+      if (calBin) { await cal(['rem-add', title, due || '', list || '']); return `Added reminder "${title}"${due ? ' due ' + due : ''}.`; }
       const script = ['tell application "Reminders"'];
       script.push(list ? `set theList to list ${q(list)}` : 'set theList to default list');
       const props = [`name:${q(title)}`];
@@ -237,6 +236,7 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
     },
     // Returns the reminder's id so it can be deleted again (undo). Sets both the due date and the alert time.
     async remindersAddId(title, due) {
+      if (calBin) return cal(['rem-add-id', title, due || '']);
       const script = ['tell application "Reminders"', 'set theList to default list'];
       const props = [`name:${q(title)}`];
       if (due) {
@@ -247,10 +247,12 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
       return osa(script);
     },
     async remindersDeleteById(id) {
+      if (calBin) { await cal(['rem-delete', id]); return 'Deleted the reminder.'; }
       await osa(['tell application "Reminders"', `delete (first reminder whose id is ${q(id)})`, 'end tell']);
       return 'Deleted the reminder.';
     },
     async remindersList() {
+      if (calBin) return (await cal(['rem-list'])) || 'No open reminders.';
       const out = await osa([
         'tell application "Reminders"', 'set out to {}',
         'repeat with r in (reminders whose completed is false)', 'set end of out to name of r', 'end repeat',
@@ -260,6 +262,7 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
     },
     // Open reminders that are due by the end of today (or overdue): "name | due date" lines, or "No reminders due."
     async remindersDue() {
+      if (calBin) return (await cal(['rem-due'])) || 'No reminders due.';
       const out = await osa([
         'tell application "Reminders"', 'set e to current date', 'set time of e to 0', 'set e to e + 1 * days', 'set out to {}',
         'repeat with r in (reminders whose completed is false)', 'try', 'set d to due date of r', 'if d is not missing value and d < e then set end of out to (name of r) & " | " & (d as string)', 'end try', 'end repeat',
@@ -268,11 +271,13 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
       return out || 'No reminders due.';
     },
     async remindersComplete(title) {
+      if (calBin) return cal(['rem-complete', title]);
       return osa(['tell application "Reminders"', `set r to (reminders whose name is ${q(title)} and completed is false)`, 'if (count of r) = 0 then return "No open reminder with that exact name."', 'set completed of item 1 of r to true', 'return "Completed."', 'end tell']);
     },
 
     // Calendar
     async calendarEvents(days = 1) {
+      if (calBin) return (await cal(['events', String(+days || 1)])) || 'No events.';
       const out = await osa([
         'tell application "Calendar"', 'set s to current date', 'set time of s to 0', `set e to s + ${+days} * days`, 'set out to {}',
         'repeat with c in calendars', 'repeat with ev in (every event of c whose start date is greater than or equal to s and start date is less than e)',
@@ -282,6 +287,7 @@ function createMac({ exec = defaultExec, ensureApp = null, clipboard, capture, g
       return out || 'No events.';
     },
     async calendarCreate(title, start, end) {
+      if (calBin) { await cal(['event-create', title, start, end || '']); return `Created event "${title}" at ${start}.`; }
       const script = ['tell application "Calendar"', ...dateScript('s', start)];
       if (end) script.push(...dateScript('e', end));
       else script.push('set e to s + 1 * hours');

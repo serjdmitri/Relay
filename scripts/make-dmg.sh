@@ -23,6 +23,7 @@ xattr -cr "$APP"
 codesign --force --sign - "$APP/Contents/Resources/native/relay-speech"
 codesign --force --sign - "$APP/Contents/Resources/native/relay-glass"
 codesign --force --sign - "$APP/Contents/Resources/native/relay-ax"
+codesign --force --sign - "$APP/Contents/Resources/native/relay-cal"
 # Ad-hoc signature. Required to launch on Apple Silicon. It is not a Developer ID signature,
 # so downloaded copies need right-click > Open the first time (see README).
 codesign --force --deep --sign - "$APP"

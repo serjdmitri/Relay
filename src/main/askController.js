@@ -165,7 +165,7 @@ async function untilStopped(promise, signal) {
 }
 
 class AskController {
-  constructor({ store, bridge, overlay, speech, speaker, timers, glass, axBin = null, onChange }) {
+  constructor({ store, bridge, overlay, speech, speaker, timers, glass, axBin = null, calBin = null, onChange }) {
     this.store = store;
     this.bridge = bridge;
     this.overlay = overlay;
@@ -246,7 +246,7 @@ class AskController {
     this.appsP = null;
     this.mcp = new McpHost();
     this.ensureOllama = () => launcher.ensureOllama({ get: (u) => this.httpGet(u, true), exec: quietExec, fileExists: require('fs').existsSync, spawnDetached: (c, a) => require('child_process').spawn(c, a, { detached: true, stdio: 'ignore' }).unref(), url: this.store.get('settings.model.ollamaUrl') || undefined });
-    this.mac = createMac({ ensureApp: (n) => launcher.ensureApp(n, { exec: quietExec }), clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
+    this.mac = createMac({ calBin: calBin, clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
