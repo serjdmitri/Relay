@@ -1624,12 +1624,7 @@ app.whenReady().then(() => {
     run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
   });
   // Claude, headless, in a proposal's own worktree: it may read and edit files, nothing else (no commands, no network), so nothing it writes has run (nightClaude.js).
-  const runClaudeHeadless = async ({ cwd, prompt }) => {
-    const claude = await require('./agent/claudeCli').findClaude();
-    if (!claude) return { code: 1, stdout: '', error: 'Claude is not installed' };
-    return new Promise((resolve) => require('child_process').execFile(claude, ['-p', prompt, '--allowedTools', 'Read,Glob,Grep,Edit,Write', '--disallowedTools', 'Bash,WebFetch,WebSearch', '--permission-mode', 'acceptEdits', '--max-turns', '30', '--output-format', 'text'],
-      { cwd, timeout: 40 * 60000, maxBuffer: 10 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? 1 : 0, stdout: String(stdout || ''), error: err ? String(stderr || err.message).slice(0, 200) : '' })));
-  };
+  const runClaudeHeadless = options => require('./nightRunner').runRestrictedNight({...options,isPrivate:()=>store.get('settings.model.provider')==='ollama'});
   const claudeNight = async (key) => {
     const nc = require('./nightClaude');
     const brief = nc.buildBrief({ diagLines: diag.tail(60), speed: require('./latency').describe(store.get('latencyLog')), extra: (store.get('settings.selfImprove') || {}).instruction || '' });
