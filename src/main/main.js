@@ -1340,14 +1340,16 @@ app.whenReady().then(() => {
   // Overnight tasks: work you handed Relay for the night runs unattended inside the overnight window, one at a time; in the morning a report says what was checked, what was only reported, what failed and what needed you.
   ask.overnight = new overnightMod.OvernightQueue({ store, settings: () => store.get('settings.overnight') });
   const clip = (s, n = 300) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
-  const runOvernightTask = async (task) => {
+  const runOvernightTask = async (task, { signal } = {}) => {
+    signal?.throwIfAborted();
     const runId = ask.overnight.begin(task);
     store.addHistory({ id: runId, text: `Overnight: ${task.text}`, status: 'unknown', reply: 'Started or interrupted; the outcome has not been confirmed.', ts: Date.now(), finishedAt: Date.now() });
     ask.activeScheduledId = runId;
     const blocker = powerSaveBlocker.start('prevent-app-suspension'); // the Mac may dim its screen, but does not stop Relay midway
-    let result;
-    try { result = await ask.runScheduled({ text: task.text }); } catch (e) { result = { status: 'failed', reply: e.message }; }
-    finally { powerSaveBlocker.stop(blocker); if (ask.activeScheduledId === runId) ask.activeScheduledId = null; }
+    let result; const cancelled=()=>{if(ask.activeScheduledId===runId)ask.stop();};
+    signal?.addEventListener('abort',cancelled,{once:true});
+    try { signal?.throwIfAborted(); result = await ask.runScheduled({ text: task.text }); } catch (e) { result = { status: 'failed', reply: e.message }; }
+    finally { signal?.removeEventListener('abort',cancelled); powerSaveBlocker.stop(blocker); if (ask.activeScheduledId === runId) ask.activeScheduledId = null; }
     recordScheduledOutcome(store, runId, result);
     const actions = (store.get('actions') || []).filter((a) => a.requestId === runId);
     const v = overnightMod.verifyRun(result || {}, actions, { exists: (p) => require('fs').existsSync(p), home: app.getPath('home') });
@@ -1374,7 +1376,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => { // quitting Relay mid-hold: put sleep back now (the watchdog is the backstop)
     if (!wake.holding) return;
     wake.holding = false;
-    try { require('child_process').spawnSync('/usr/bin/sudo', ['-n', '/usr/bin/pmset', '-a', 'disablesleep', wake.state().prev ? '1' : '0'], { timeout: 5000, stdio: 'ignore' }); wake.save({ holding: false }); } catch { /* recover() runs next start */ }
+    try { const restored=require('child_process').spawnSync('/usr/bin/sudo', ['-n', '/usr/bin/pmset', '-a', 'disablesleep', wake.state().prev ? '1' : '0'], { timeout: 5000, stdio: 'ignore' }); if(restored.status===0){wake.save({ holding: false });require('fs').rmSync(wake.hb,{force:true});} } catch { /* recover() runs next start */ }
   });
   let overnightBusy = false;
   const overnightTick = async () => {
@@ -1385,7 +1387,7 @@ app.whenReady().then(() => {
       let changed = false;
       for (const t of st.interrupted) { ask.overnight.interrupt(t, (store.get('actions') || []).filter((a) => a.requestId === t.runId)); changed = true; }
       if (st.skip.length) { ask.overnight.skip(st.skip, 'The Mac was asleep, or Relay was busy or closed, for the whole overnight window, so it was not run.'); changed = true; }
-      if (st.run) { await wake.withAwake(() => runOvernightTask(st.run), 'night list'); changed = true; }
+      if (st.run) { await wake.withAwake(context => runOvernightTask(st.run,context), 'night list'); changed = true; }
       const conf=ask.overnight.conf(), now=new Date(), key=String(overnightMod.windowBounds(now,conf).start);
       if(!changed && !ask.overnight.queued().length && ask.canRunScheduled() && conf.enabled && overnightMod.inWindow(now,conf)) {
         if(store.get('overnightPlannedKey')!==key){
@@ -1394,7 +1396,7 @@ app.whenReady().then(() => {
           for(const task of planned)ask.overnight.add(task);
           changed=planned.length>0;
         }
-        if(!changed && nightlyMaintenance) { const wantNight = !!store.get('settings.selfImprove.nightly') && store.get('nightlyMaintenance')?.key !== key; changed = await (wantNight ? wake.withAwake(() => nightlyMaintenance.run(key), 'overnight improvement') : nightlyMaintenance.run(key)); }
+        if(!changed && nightlyMaintenance) { const wantNight = !!store.get('settings.selfImprove.nightly') && store.get('nightlyMaintenance')?.key !== key; changed = await (wantNight ? wake.withAwake(context => nightlyMaintenance.run(key,context), 'overnight improvement') : nightlyMaintenance.run(key)); }
       }
       if (!changed && st.report) overnightReport(st.report);
     } catch (e) { console.error('Overnight tick failed:', e); } finally { overnightBusy = false; }
@@ -1621,15 +1623,16 @@ app.whenReady().then(() => {
   // Self-improvement workspace: proposals for changes to Relay's own code live in separate git worktrees; tests run there; a passing change becomes one commit. Never merges, pushes or installs.
   const proposals = new ProposalWorkspace({
     store, getConfig: () => store.get('settings.selfImprove'),
-    run: (args, { cwd, timeout }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, maxBuffer: 20 * 1024 * 1024, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}` } }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
+    run: (args, { cwd, timeout, signal }) => new Promise((resolve) => require('child_process').execFile(args[0], args.slice(1), { cwd, timeout, signal, maxBuffer: 20 * 1024 * 1024, env: require('./nightRunner').nightEnv() }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || err?.message || '') })))
   });
   // Claude, headless, in a proposal's own worktree: it may read and edit files, nothing else (no commands, no network), so nothing it writes has run (nightClaude.js).
   const runClaudeHeadless = options => require('./nightRunner').runRestrictedNight({...options,isPrivate:()=>store.get('settings.model.provider')==='ollama'});
-  const claudeNight = async (key) => {
+  const claudeNight = async (key, {signal}={}) => {
+    signal?.throwIfAborted();
     const nc = require('./nightClaude');
     const brief = nc.buildBrief({ diagLines: diag.tail(60), speed: require('./latency').describe(store.get('latencyLog')), extra: (store.get('settings.selfImprove') || {}).instruction || '' });
     diag.log('night-claude', 'started');
-    const r = await nc.runNight({ proposals, runClaude: runClaudeHeadless, brief, key: new Date().toISOString().slice(0, 10) });
+    const r = await nc.runNight({ proposals, runClaude: options=>runClaudeHeadless({...options,signal}), brief, key: new Date().toISOString().slice(0, 10) });
     diag.log('night-claude', r.status + (r.files ? ` ${r.files.length} file(s), ${r.lines} lines` : ''));
     return r;
   };
