@@ -7,7 +7,7 @@ const { planDownloads } = require('./nightly');
 const stamp = st => ({ dev: st.dev, ino: st.ino, size: st.size, mtimeMs: st.mtimeMs });
 const same = (st, saved) => Object.entries(saved).every(([k, v]) => st[k] === v);
 class FileWorkspace {
-  constructor({ access, store, move, io = fs }) { Object.assign(this, { access, store, move, io }); this.plans = new Map(); }
+  constructor({ access, store, move, io = fs }) { Object.assign(this, { access, store, move, io }); this.plans = new Map(); this.busy = new Set(); }
   journal() { return this.store.get('workspaceMoves') || []; }
   write(entries) { this.store.data.workspaceMoves = entries; this.store.save(); }
   history(id) { return this.journal().filter(e => e.rootId === id).map(e => ({ id: e.id, createdAt: e.createdAt, count: e.moves.length })); }
@@ -31,14 +31,20 @@ class FileWorkspace {
     const bad = pathProblem(p, root.path);
     if (bad || hasSymlink(p, this.io, root.path)) throw new Error(bad || 'A path contains a symbolic link.');
   }
-  async apply(id) {
+  async exclusive(rootId, run) {
+    if (this.busy.has(rootId)) throw Error('This folder is already being organized or restored. Wait for it to finish.');
+    this.busy.add(rootId);
+    try { return await run(); } finally { this.busy.delete(rootId); }
+  }
+  apply(id) { return this.exclusive(this.plans.get(id)?.rootId, () => this.applyNow(id)); }
+  async applyNow(id) {
     const plan = this.plans.get(id); this.plans.delete(id); // a second click cannot replay the plan
     if (!plan || Date.now() - plan.createdAt > 1800000) throw new Error('Preview expired. Make a fresh preview.');
     const root = this.access.require(plan.rootId, true);
     if (isProject(root.path, this.io)) throw new Error('The folder became a code project; make a fresh preview.');
     const entry = { id, rootId: root.id, createdAt: Date.now(), moves: [] };
     const entries = [...this.journal(), entry];
-    const result = await applyPlan({ ...plan, trash: [] }, { fs: this.io, home: root.path, move: (from, to) => {
+    const result = await applyPlan({ ...plan, trash: [] }, { fs: this.io, home: root.path, move: async (from, to) => {
       this.access.require(root.id, true);
       this.safe(root, from); this.safe(root, to);
       const expected = plan.moves.find(m => m.from === from).stamp;
@@ -48,7 +54,12 @@ class FileWorkspace {
       if (typeof this.move !== 'function') throw new Error('Safe file moving is unavailable.');
       const record = { from, to, stamp: expected };
       entry.moves.push(record); this.write(entries); // persist before moving, so interrupted work can be undone
-      try { this.move(from, to); }
+      try {
+        if (this.store.saveAsync) { await this.store.saveAsync(); if (this.store.lastError) throw Error('Could not save the undo record. No move started.'); }
+        this.access.require(root.id, true); this.safe(root, from); this.safe(root, to);
+        if (!same(this.io.lstatSync(from), expected)) throw Error('File changed before moving. Left in place.');
+        await this.move(from, to);
+      }
       catch (err) {
         // A failed native response can be ambiguous. Retain the record only if the file actually moved.
         if (this.io.existsSync(from) || !this.io.existsSync(to) || !same(this.io.lstatSync(to), expected)) { entry.moves.pop(); this.write(entries); }
@@ -58,7 +69,8 @@ class FileWorkspace {
     if (!entry.moves.length) this.write(entries.filter(e => e !== entry));
     return { ...result, history: this.history(root.id) };
   }
-  undo(id) {
+  undo(id) { return this.exclusive(this.journal().find(e => e.id === id)?.rootId, () => this.undoNow(id)); }
+  async undoNow(id) {
     const entries = this.journal(); const entry = entries.find(e => e.id === id);
     if (!entry) throw new Error('No undo record remains for that organization.');
     const root = this.access.require(entry.rootId, true);
@@ -71,7 +83,7 @@ class FileWorkspace {
         if (!same(this.io.lstatSync(m.to), m.stamp)) throw new Error('File changed after organization. Left in place.');
         if (this.io.existsSync(m.from)) throw new Error('Its original name is occupied. Left in place.');
         if (typeof this.move !== 'function') throw new Error('Safe file moving is unavailable.');
-        this.move(m.to, m.from); count++;
+        await this.move(m.to, m.from); count++;
         entry.moves = entry.moves.filter(x => x !== m); this.write(entries);
       } catch (e) { failed.push({ path: m.to, reason: e.message }); }
     }
