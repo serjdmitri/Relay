@@ -21,7 +21,8 @@ class BargeIn {
     this.arming = true;
     const epoch = this.epoch = (this.epoch || 0) + 1;
     try {
-      await this.speech.listen(this.getDevice(), { echoCancellation: c.echoCancellation === true });
+      const result = await this.speech.listen(this.getDevice(), { echoCancellation: c.echoCancellation === true });
+      if (c.echoCancellation && result?.echoActive !== true) this.log.warn?.('Microphone echo processing is unavailable on the selected audio route.');
       if (this.epoch !== epoch) return;
       this.armed = true;
       this.since = Date.now();

@@ -118,3 +118,7 @@ test('if even the fresh helper cannot start, the error is reported and that help
   await assert.rejects(speech.listen(), /timed out/); assert.equal(killed, 2); assert.equal(speech.child, null);
   assert.equal(speech.restartHelper('x'), false, 'nothing left to restart');
 });
+test('experimental echo option and active status are passed through the native helper',async()=>{
+ let captured;const {speech}=harness((cmd,emit)=>{captured=cmd;if(cmd.cmd==='start')emit({event:'listening',echoActive:true});});
+ const result=await speech.listen('default',{echoCancellation:true});assert.equal(captured.echoCancellation,true);assert.equal(result.echoActive,true);speech.stop();
+});

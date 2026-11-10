@@ -131,9 +131,9 @@ class Speech extends EventEmitter {
   async listen(device = 'auto', { echoCancellation = false } = {}) {
     const attempt = (ms) => this.request({ cmd: 'start', device, ...(echoCancellation ? { echoCancellation: true } : {}) }, ['listening'], ms);
     const stuck = (e) => /timed out/i.test(e.message);
-    try { await attempt(this.everListened ? this.quickStartMs : this.startTimeoutMs); return; }
+    try { return await attempt(this.everListened ? this.quickStartMs : this.startTimeoutMs); }
     catch (e) { if (!stuck(e)) throw e; this.restartHelper(`it did not start listening in time`); }
-    try { await attempt(this.startTimeoutMs); }
+    try { return await attempt(this.startTimeoutMs); }
     catch (e) { if (stuck(e)) this.restartHelper('a fresh helper did not start listening either'); throw e; }
   }
 
