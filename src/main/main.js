@@ -655,6 +655,8 @@ function registerIpc() {
     if (key === 'settings.model.provider' && value === 'ollama') {speaker?.stop();mapPanel?.close();}
     if(key==='settings.hands.maxHands'&&hands?.enabled){hands.disable();hands.enable().catch(e=>ask.notice(e.message,'failed'));}
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
+    if (key === 'settings.ambient' || String(key).startsWith('settings.ambient.')) ask.syncAmbient();
+    if ((key === 'settings.hands.pinchClick' || key === 'settings.hands.tabNumbers') && hands?.enabled && value !== false) hands.externalDrag?.start();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
@@ -1022,7 +1024,7 @@ function registerIpc() {
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
-  const googleConnections = registerGoogleConnections({ ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
+  const googleConnections = registerGoogleConnections({ macCalendars: () => ask.mac.calendarSources(), ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
   registerSchoolConnection({ ipcMain, store, getWindow: () => mainWin, getBridge: () => bridge, openFirefox: url => new Promise((resolve, reject) => execFile('/usr/bin/open', ['-a', 'Firefox', url], { timeout: 5000 }, e => e ? reject(e) : resolve())), checkAssignments: () => ask.handleText('check my assignments'), onChange: broadcast });
   ask.sessionNotes = require('./sessionNotes').registerSessionNotes({ ipcMain, store, getWindow: () => mainWin, onChange: broadcast, exportDir: () => path.join(app.getPath('desktop'), 'memory'), confirmDelete: async () => (await dialog.showMessageBox(mainWin, { type: 'warning', message: 'Delete these local session notes?', detail: 'Existing History entries, export files and Sentient OS notes are separate and will remain.', buttons: ['Delete session', 'Cancel'], defaultId: 1, cancelId: 1 })).response === 0, openMemory: () => openMain('memory'), showMatches: (sessions, query) => cardPanel.show({ kind: 'list', hold: true, title: 'Session notes: ' + query, summary: 'Local conversation notes; requests and replies are not independently verified facts.', items: sessions.map(s => ({ title: s.title, subtitle: new Date(s.created).toLocaleString(), note: s.entries.filter(e => (e.request + ' ' + e.reply).toLowerCase().includes(query.toLowerCase())).slice(0, 2).map(e => e.request + ': ' + e.reply).join('\n').slice(0, 1500) })), facts: [], links: [] }) });
 
@@ -1250,7 +1252,7 @@ app.whenReady().then(() => {
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
-  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getBackdrop:()=>({opacity:store.get('settings.assistantBlurStrength')??.7,image:assistantBackdrop?.image||''}), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath() });
+  overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getBackdrop:()=>({opacity:store.get('settings.assistantBlurStrength')??.7,image:assistantBackdrop?.image||''}), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath(), log: (k, m) => diag.log(k, m) });
   overlay.watchDisplays();
   restoreToast = new (require('./restoreToast').RestoreToast)(path.join(__dirname, 'preload.js'));
   trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
@@ -1536,8 +1538,64 @@ app.whenReady().then(() => {
   });
   cardPanel.onFile = (p) => ask.drive.openFile(p);
   cardPanel.onHolo = (id) => holos.openFromLibrary(id).then(() => cardPanel.hide()).catch(() => {});
-  const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, notify: m => ask.notice(m, 'failed') });
+  const externalDrag = new ExternalDrag({ bin: axBinPath(), allowed: () => systemPreferences.isTrustedAccessibilityClient?.(false) === true, enabled: () => store.get('settings.hands.appDragging') !== false, wanted: () => store.get('settings.hands.pinchClick') !== false || store.get('settings.hands.tabNumbers') !== false,
+    front: () => new Promise((res) => execFile('/usr/bin/lsappinfo', ['front'], { timeout: 1500 }, (e, asn) => { if (e) return res(null); execFile('/usr/bin/lsappinfo', ['info', '-only', 'bundleid', String(asn).trim()], { timeout: 1500 }, (e2, out) => res(e2 ? null : (/bundleID="([^"]+)"/.exec(String(out)) || [])[1] || null)); })),
+    pressTab: (n) => new Promise((res, rej) => execFile('/usr/bin/osascript', ['-e', `tell application "System Events" to keystroke "${n}" using command down`], { timeout: 4000 }, (e, _o, err) => (e ? rej(new Error(String(err || e.message))) : res()))),
+    log: (k, m) => diag.log(k, m), notify: m => ask.notice(m, 'failed') });
+  // A middle finger held up to the camera shows a hologram of one near your hand (a see-through, click-through window); it fades out when you put your hand down.
+  let fingerWin = null, fingerReady = null, fingerTimer = 0;
+  const fingerHolo = (e) => {
+    try {
+      const W = 240, H = 340;
+      const alive = () => fingerWin && !fingerWin.isDestroyed();
+      const cls = (c) => { if (alive()) fingerReady.then(() => { if (alive()) fingerWin.webContents.executeJavaScript(`document.body.className=${JSON.stringify(c)}`).catch(() => {}); }); };
+      clearTimeout(fingerTimer);
+      if (e.type === 'hide') { if (!alive()) return; cls(''); fingerTimer = setTimeout(() => { if (alive()) fingerWin.hide(); }, 450); return; }
+      if (!alive()) {
+        fingerWin = new BrowserWindow({ width: W, height: H, show: false, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, focusable: false, resizable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
+        fingerWin.setIgnoreMouseEvents(true);
+        fingerWin.setAlwaysOnTop(true, 'screen-saver');
+        fingerWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        fingerWin.setHiddenInMissionControl?.(true);
+        const win = fingerWin;
+        fingerReady = new Promise((r) => win.webContents.once('did-finish-load', r));
+        win.loadFile(path.join(__dirname, '../renderer/finger.html'));
+      }
+      const b = screen.getDisplayNearestPoint({ x: Math.round(e.x), y: Math.round(e.y) }).bounds;
+      const x = Math.max(b.x, Math.min(b.x + b.width - W, Math.round(e.x - W / 2)));
+      const y = Math.max(b.y, Math.min(b.y + b.height - H, Math.round(e.y - H / 2)));
+      fingerWin.setBounds({ x, y, width: W, height: H });
+      if (e.type === 'show' || !fingerWin.isVisible()) { fingerWin.showInactive(); cls('on'); }
+    } catch { /* the hologram is only for fun */ }
+  };
   hands = new HandControl({ motion: floatingMotion,
+    onFinger: fingerHolo,
+    pinchClick: () => store.get('settings.hands.pinchClick') !== false,
+    extraGestures: () => store.get('settings.hands.extraGestures') !== false,
+    airScroll: () => store.get('settings.hands.airScroll') !== false,
+    // volume of the Mac: 'get' -> 0..100, 'set', n
+    onVolume: (op, n) => new Promise((res, rej) => execFile('/usr/bin/osascript', ['-e', op === 'get' ? 'output volume of (get volume settings)' : `set volume output volume ${Math.max(0, Math.min(100, Math.round(Number(n) || 0)))}`], { timeout: 3000 }, (e, out) => (e ? rej(e) : res(op === 'get' ? Number(String(out).trim()) : true)))),
+    // a swipe with nothing of Relay's under the hand: the app in front decides (browser: next or previous tab; Music or Spotify: next or previous track; slides: next or previous slide)
+    appSwipe: async (dir) => {
+      const apps = require('./hands/apps');
+      const script = apps.scriptFor(apps.swipeAction(await hands.externalDrag.front(), dir));
+      if (!script) return false;
+      await new Promise((res, rej) => execFile('/usr/bin/osascript', script.flatMap((l) => ['-e', l]), { timeout: 4000 }, (e, _o, err) => (e ? rej(new Error(String(err || e.message))) : res())));
+      return true;
+    },
+    // true when the gesture did something: the rock sign plays music, a still palm stops Relay mid-sentence, a wave opens the mic, a thumb answers a yes/no Relay is asking
+    onGesture: (type) => {
+      const idle = ['idle', 'done'].includes(ask.state);
+      if (type === 'stop') return ask.interruptSpeech();
+      const custom = store.get(`settings.hands.signCommands.${type}`); // a job of your own for the sign ("when I show the rock sign, ...")
+      if (custom && (type === 'wave' || type === 'rock' || type === 'stop')) { if (type === 'stop' && ask.interruptSpeech()) return true; if (!idle) return false; ask.handleText(String(custom)).catch(() => {}); return true; }
+      if (type === 'wave') { if (!idle) return false; ask.listenFromHand(null).catch(() => {}); return true; }
+      if (type === 'rock') { if (!idle) return false; ask.handleText('play some music').catch(() => {}); return true; }
+      if (type === 'confirm-yes') return ask.remoteConfirm(true);
+      if (type === 'confirm-no') return ask.remoteConfirm(false);
+      return false;
+    },
+    tabNumbers: () => store.get('settings.hands.tabNumbers') !== false,
     externalDrag,maxHands:()=>store.get('settings.hands.maxHands')??4,
     preview: !!store.get('settings.hands.preview'),
     sensitivity: () => store.get('settings.hands.margin') ?? 0.22,
@@ -1813,6 +1871,7 @@ app.whenReady().then(() => {
     setTimeout(() => {
       try { if (hotkeys && hotkeys.restart()) diag.log('hotkeys-restarted', why); else if (hotkeys) diag.log('hotkeys-failed', why + (hotkeys.error ? ': ' + hotkeys.error : '')); } catch (e) { diag.log('hotkeys-failed', String(e.message).slice(0, 80)); }
       try { if (store.get('settings.wake.enabled')) { ask.wake.disarm(); ask.wake.refresh(); diag.log('wake-restarted', why); } } catch { /* it is retried by the check below */ }
+      try { if (glass?.child) { glass.stop(); diag.log('glass-restarted', why); } } catch { /* it starts again the next time the pill is shown */ } // the see-through pill's helper can hang across sleep too, and then Jarvis answers with nothing on screen
     }, 1500).unref?.();
   };
   // Every minute: is the listening alive? A shortcut recording that never ended, a wake listener that is not armed while Relay is idle, and a key listener that has heard nothing while you were
@@ -2027,7 +2086,7 @@ app.whenReady().then(() => {
     if (event.type === 'job' && callService?.config().enabled && callService.config().offerOnCompletion && !callService.privateMode() && !callsQuiet(callService.config(), Date.now())) {
       try { callService.prepare(`Review the task status: ${event.title}. Relay reported ${event.status}. Do not claim details beyond that status.`, { source: 'job', occurrence: `job:${event.id}` }); } catch {}
     }
-    if (event.type !== 'security' && !flagsMod.isOn(store.get('settings'), 'proactive')) return; // security warnings do not wait for the experimental switch
+    if (event.type !== 'security' && event.type !== 'page' && !flagsMod.isOn(store.get('settings'), 'proactive')) return; // a page you asked to watch does not wait for the experimental switch either // security warnings do not wait for the experimental switch
     const o = store.get('settings.proactive') || {};
     const d = alerts.decide(event, { mode: o.mode, quiet: o.quiet, busy: !!ask.meeting?.active || ask.state === 'listening' || !!ask.speaker?.speaking, away: !!ask.lockWatch?.locked });
     if (d.how === 'drop') return;
@@ -2073,6 +2132,80 @@ app.whenReady().then(() => {
     if (b) surface(b);
     if (tickN++ % 5 === 0) { try { for (const e of calendarEvents(parseCalendar(await ask.mac.calendarEvents(1)))) surface(e); } catch { /* no calendar access: Doctor and Permissions say so */ } }
   }, 60000);
+  // "Tell me when this page changes": pages you chose are re-read every half hour (public https only); a real change is told once, with what is new.
+  const { PageWatcher } = require('./pageWatch');
+  const pageWatcher = new PageWatcher({ load: () => store.get('pageWatches') || [], save: (v) => store.set('pageWatches', v), fetchPage: (u) => require('./safeFetch').safeGet(u), onChange: (e) => surface(e) });
+  setInterval(() => { if (!ask.offline) pageWatcher.checkDue().catch(() => {}); }, 60000).unref?.();
+  // "Command center": one card with today, what is due, running jobs, the owner guard, watched pages and what Relay last did.
+  ask.commandCenter = async () => {
+    const cc = require('./commandCenter');
+    const facts = await ask.briefingFacts({ includeGreeting: false }).catch(() => null);
+    const oc = ownerConfig(store.get('settings.owner'));
+    const card = cc.buildCenter({ events: facts?.events, due: facts?.due, tasks: ask.taskList?.(), guard: { on: !!oc.enabled, armed: !!ownerGuard?.armed, keepAwake: oc.keepAwake !== false }, pages: pageWatcher.list(), actions: store.get('actions') || [], undoable: ask.undos.ids() });
+    await cardPanel.show(card);
+    return { status: 'done', reply: 'Here is your command center.', actions: 0 };
+  };
+  // Eye breaks (opt-in): the screens blur for 20 seconds every 20 minutes of work, and Relay asks you to look far away. Skip ends it early.
+  const eyeMod = require('./eyeBreak');
+  let eyeWins = [];
+  const closeEye = () => { for (const w of eyeWins) { try { if (!w.isDestroyed()) w.close(); } catch { /* gone */ } } eyeWins = []; };
+  const showEyeBreak = (seconds, { speak = true } = {}) => {
+    if (eyeWins.length) return;
+    for (const d of screen.getAllDisplays()) {
+      const w = new BrowserWindow({ x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, show: false, frame: false, transparent: true, backgroundColor: '#00000000', vibrancy: 'hud', hasShadow: false, focusable: false, resizable: false, movable: false, skipTaskbar: true, enableLargerThanScreen: true, type: 'panel' });
+      w.setAlwaysOnTop(true, 'screen-saver');
+      w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      w.setHiddenInMissionControl?.(true);
+      w.webContents.on('will-navigate', (e, url) => { if (url.startsWith('relay-skip:')) { e.preventDefault(); closeEye(); } });
+      w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(eyeMod.breakHtml(seconds))}`);
+      w.once('ready-to-show', () => w.showInactive());
+      eyeWins.push(w);
+    }
+    setTimeout(closeEye, (seconds + 3) * 1000).unref?.();
+    diag.log('eye-break', `${seconds}s`);
+    if (speak && !ask.meeting?.active) ask.speakText(`Eye break. Look at something far away for ${seconds} seconds.`);
+  };
+  const eyeBreaks = new eyeMod.EyeBreaks({ cfg: () => store.get('settings.eyeBreaks'), idleSeconds: () => { try { return powerMonitor.getSystemIdleTime(); } catch { return 0; } }, busy: () => !!ask.meeting?.active || ask.state === 'listening' || screenLocked, start: (sec) => showEyeBreak(sec, { speak: (store.get('settings.eyeBreaks') || {}).speak !== false }) });
+  setInterval(() => eyeBreaks.tick(), eyeMod.TICK_MS).unref?.();
+  ask.eyeCommand = async (c) => {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = store.get('settings.eyeBreaks') || {};
+    if (c.type === 'eye-on') { store.set('settings.eyeBreaks', { ...cfg, enabled: true }); eyeBreaks.reset(); broadcast(); return done(`Okay. After about ${cfg.everyMin || 20} minutes of work I will blur your screens for ${cfg.seconds || 20} seconds and ask you to look far away. Say "turn off eye breaks" to stop.`, 1); }
+    if (c.type === 'eye-off') { store.set('settings.eyeBreaks', { ...cfg, enabled: false }); closeEye(); broadcast(); return done('Eye breaks are off.', 1); }
+    if (c.type === 'eye-now') { showEyeBreak(Math.max(5, Number(cfg.seconds) || 20), { speak: false }); return done('Look at something far away.'); }
+    if (c.type === 'eye-snooze') { eyeBreaks.snooze(10); closeEye(); return done('Okay, no eye break for ten minutes.'); }
+    const m = eyeBreaks.minutesLeft();
+    return done(m === null ? 'Eye breaks are off. Say "turn on eye breaks".' : `Your next eye break is in about ${m} minute${m === 1 ? '' : 's'}.`);
+  };
+  // "Connect Google": opens Connections with the guided setup running, and says the easy way first (add the account to the Mac for Calendar).
+  ask.googleSetupCommand = async () => {
+    let onMac = [];
+    try { onMac = require('./connectors/googleEasy').googleCalendars(await ask.mac.calendarSources()); } catch { /* no calendar access yet */ }
+    openMain('connectors');
+    googleConnections.startGuide();
+    const first = onMac.length ? 'Your Google calendar is already on this Mac, so Calendar works with no setup. ' : 'For Calendar, the fastest way is to add your Google account in System Settings, Internet Accounts. ';
+    return { status: 'done', reply: `${first}For Gmail, Drive, Docs and Sheets I opened Connections with the guided setup. Follow the four steps there; when the credentials file lands in Downloads I will pick it up and start the sign-in myself.`, actions: 1 };
+  };
+  // "When I show the rock sign, ...": gives a sign a job of your own (it runs like anything you say, so a routine name works too).
+  ask.signCommand = async (c) => {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cur = store.get('settings.hands.signCommands') || {};
+    if (c.type === 'sign-reset') { store.set('settings.hands.signCommands', {}); broadcast(); return done('Okay, your hand signs are back to normal.'); }
+    if (c.type === 'sign-list') { const names = { rock: 'the rock sign', wave: 'a wave', stop: 'a still open palm' }; const mine = Object.entries(cur).map(([k, v]) => `${names[k] || k}: ${v}`); return done(`The rock sign plays music, a wave opens the mic, a still open palm stops me talking, and a thumb answers a yes or no. ${mine.length ? `Your own: ${mine.join('; ')}.` : 'You have not set any of your own.'}`); }
+    store.set('settings.hands.signCommands', { ...cur, [c.sign]: c.command.slice(0, 200) }); broadcast();
+    return done(`Okay. When you show ${c.sign === 'stop' ? 'a still open palm' : c.sign === 'wave' ? 'a wave' : 'the rock sign'}, I will: ${c.command}.`, 1);
+  };
+  ask.pageCommand = async (c) => {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const activeUrl = async () => { try { const tabs = await bridge.call('tabs.list', {}); return (Array.isArray(tabs) ? tabs : tabs?.tabs || []).find((t) => t.active)?.url || null; } catch { return null; } };
+    if (c.type === 'page-list') { const l = pageWatcher.list(); return done(l.length ? `I am watching ${l.length} page${l.length === 1 ? '' : 's'}: ${l.map((w) => w.label).join(', ')}.` : 'I am not watching any pages. Say "tell me when example.com changes".'); }
+    if (c.type === 'page-unwatch') { const what = c.what === 'this' ? await activeUrl() : c.what; if (!what) return done('I could not see which page you mean. Say its address.'); const n = pageWatcher.remove(what); return done(n ? `Okay, I stopped watching ${n === 1 ? 'it' : `${n} pages`}.` : 'I was not watching that.'); }
+    const url = c.target === 'this' ? await activeUrl() : c.target;
+    if (!url) return done('I could not see your current page. Open it in Firefox with the Relay extension, or say its address.');
+    const r = pageWatcher.add(url);
+    if (!r.ok) return done(r.error);
+    return done(r.already ? 'I am already watching that page.' : `Okay. I will tell you when ${r.label} changes. I check about every half hour, and what I keep is only a fingerprint of the page, not the page.`, 1);
+  };
   // New email: check connected Gmail accounts every few minutes and tell you about what arrived (the first check only learns what is already there).
   const mailWatch = new MailWatch({ load: () => store.get('mailSeen') || {}, save: (v) => store.set('mailSeen', v) });
   let mailTick = 0;

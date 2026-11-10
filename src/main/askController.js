@@ -77,7 +77,10 @@ const council = require('./council');
 const { describe: describeNotification } = require('./notifications');
 const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
-const { parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
+const { Budget, parseBudgetCommand } = require('./budget');
+const ambientMod = require('./ambient');
+const nutritionMod = require('./nutrition');
+const { parseDismiss, parseGoodbye, goodbyeReply, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
 const codexCli = require('./agent/codexCli');
 const assist = require('./assist');
 const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
@@ -224,6 +227,7 @@ class AskController {
     this.prevExchange = null; // the last finished request and its answer, so "that's wrong" has something to refer to
     this.currentRequest = '';
     this.noticeCount = 0;
+    this.budget = new Budget({ load: () => this.store.get('spendByDay') || {}, save: (v) => this.store.set('spendByDay', v), cfg: () => this.store.get('settings.budget') });
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -285,6 +289,11 @@ class AskController {
       onText: (t) => { if (this.assistOn) this.watcher.push(t); }, onSegment: (t) => { if (this.assistOn) this.watcher.flush(t); }
     });
     // The private answer assistant: finds a question in the live text (the same stretches the notes use) and answers it in a window screen sharing cannot see.
+    // Ambient answers (opt-in, ambient.js): a factual question heard while "Hey Jarvis" listens is answered quietly in the private window.
+    this.ambient = { on: false, limiter: new ambientMod.AmbientLimiter({ perHour: 6 }), hideTimer: null, seq: 0 };
+    this.ambientWatcher = new assist.QuestionWatcher({ getNames: () => [], getMode: () => 'any', onQuestion: ({ question }) => this.ambientQuestion(question) });
+    speech.on('partial', (t) => { if (this.ambient.on && this.wake && this.wake.armed && typeof t === 'string') this.ambientWatcher.push(t); });
+    this.syncAmbient();
     this.assistOn = false;
     this.assistPanel = null; // set by the app: the private window
     this.watcher = new assist.QuestionWatcher({
@@ -329,6 +338,7 @@ class AskController {
     if (!this.lastUsage || this.lastUsage.id !== id || typeof c.cost !== 'number') return;
     const used = { ...this.lastUsage.used, cost: c.cost };
     this.lastUsage.used = used;
+    this.budget?.add(c.cost); // counts toward your spend limit
     const text = usage.usageLine({ ...used, limit: usage.limitForModel(used.model, this.freshRate()) });
     this.store.updateHistory(id, { usage: used, usageText: text });
     if (this.state === 'done' && this.store.get('settings.showUsage') !== false) this.push({ usage: text });
@@ -446,6 +456,7 @@ class AskController {
       this.position(56);
     }
     this.visible = true;
+    if (fresh) this.diag?.log('pill-shown', this.useGlass() ? 'glass' : 'plain'); // so "he answered but never showed up" can be traced
     if (fresh && this.useGlass()) {
       const d = this.disp || screen.getPrimaryDisplay();
       this.glassHeight = 56;
@@ -1279,14 +1290,15 @@ class AskController {
     return { lessons: this.store.get('lessons') || [], inferred: this.store.get('inferred') || [] };
   }
 
-  rememberFact(fact) {
+  rememberFact(fact, { noExport = false } = {}) {
+    const exporting = !!this.memoryExport && !noExport; // an interview writes one file at its end instead of one per answer
     if (mem.isSecret(fact)) return { status: 'failed', reply: "I don't keep passwords, card numbers or other secrets." };
     const { list, added } = mem.addFact(this.store.get('memories') || [], fact, { id: crypto.randomUUID() });
     if (added) {
-      if (this.memoryExport) list[0].exportPending = true;
+      if (exporting) list[0].exportPending = true;
       this.store.set('memories', list);
       this.onChange();
-      if (this.memoryExport) {
+      if (exporting) {
         try { this.memoryExport(list[0].text); }
         catch { return { status: 'done', reply: 'I saved that in Relay, but could not create its import file in Desktop/memory.' }; }
         delete list[0].exportPending;
@@ -1294,7 +1306,7 @@ class AskController {
         return { status: 'done', reply: 'I saved that in Relay and made a text file in Desktop/memory for Sentient OS import.' };
       }
     }
-    if (!added && this.memoryExport) {
+    if (!added && exporting) {
       const normalized = mem.clean(fact).slice(0, mem.MAX_LEN).toLowerCase();
       const pending = list.find((item) => item.exportPending && item.text.toLowerCase() === normalized);
       if (pending) {
@@ -1831,7 +1843,11 @@ class AskController {
     if (this.state !== 'idle' && this.state !== 'done') return;
     this.wake?.disarm();
     const inline = commandAfterWake(heard, this.store.get('settings.wake.phrase') || 'hey jarvis');
+    this.diag?.log('wake-heard', inline ? 'with a command after it' : 'the phrase only');
     if (inline) return this.handleText(inline, { voice: true });
+    // Quick start (the default): a short chime, then the microphone opens at once. Saying "Yes, Sir." first makes you wait for the whole phrase before you can speak.
+    // settings.wake.spokenAck turns the spoken greeting back on.
+    if (this.store.get('settings.wake.spokenAck') !== true) { this.sound('Tink'); await new Promise((r) => setTimeout(r, 60)); if (!['idle', 'done'].includes(this.state)) return; return this.listen('ask', false, { auto: true }); }
     if (this.store.get('settings.speakReplies') && this.speaker) {
       this.state = 'waking';
       this.ensureWindow();
@@ -2087,6 +2103,19 @@ class AskController {
       this.close();
       return { status: 'done', reply: '', actions: 0, dismissed: true };
     }
+    // "Goodbye": say it back, do not listen for another command, and put Relay away. Not while a quiz or checklist is running (where "that's all" means something else), or for a request that came from the phone or a schedule.
+    if (!this.runningTask && !opts.shown && !opts.scheduled && !opts.drain && !opts.remote && !this.quiz && !this.checklist && parseGoodbye(text)) {
+      const line = goodbyeReply(text);
+      this.lastRequestText = text;
+      this.followFor = null; clearTimeout(this.followTimer); this.awaitingFollowAnswer = false;
+      this.cardPanel?.hide();
+      this.state = 'done';
+      this.push({ label: line, text: line });
+      try { if (this.voiceAsk && this.store.get('settings.speakReplies') && this.speaker) await this.speaker.speak(line, { ...profileFor('reply', this.store.get('settings') || {}), quick: true }); } catch { /* a missed goodbye is not worth an error */ }
+      this.followFor = null; clearTimeout(this.followTimer);
+      this.close();
+      return { status: 'done', reply: line, actions: 0, dismissed: true };
+    }
     if (!opts.drain && !opts.scheduled && flagsMod.isOn(this.store.get('settings'), 'memoryV2') && this.prevExchange && lessons.looksLikeCorrection(text)) this.learnLesson(this.prevExchange, text);
     this.currentRequest = text;
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
@@ -2107,7 +2136,8 @@ class AskController {
     this.win.setFocusable(false);
     this.push({ label: 'Thinking', text: opts.shown || text });
     clearTimeout(this.ackTimer);
-    if (this.voiceAsk && !opts.remote && !opts.scheduled && !opts.shown && this.store.get('settings.speakReplies') && this.speaker) {
+    // "On it, Sir." before the real answer is off unless settings.spokenOnIt is turned on: it made you hear two replies for one question.
+    if (this.store.get('settings.spokenOnIt') === true && this.voiceAsk && !opts.remote && !opts.scheduled && !opts.shown && this.store.get('settings.speakReplies') && this.speaker) {
       const task = this.runningTask;
       this.ackTimer = setTimeout(() => {
         if (this.runningTask === task && this.state === 'working' && !this.speaker.speaking) Promise.resolve(this.speaker.speak('On it, Sir.', { ...profileFor('quiet', this.store.get('settings') || {}), quick: true })).catch(() => {});
@@ -2202,6 +2232,26 @@ class AskController {
           const cc = require('./calls/service').parseCallCommand(effective);
           if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
         }
+        if (!opts.shown && !opts.scheduled && this.store.get('settings.memory') !== false) {
+          // "interview me": one question at a time; each answer is remembered like "remember that..."
+          const iv = require('./interview');
+          this.interview = this.interview || new iv.Interview();
+          if (!this.interview.active && iv.parseStart(effective)) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: `Okay. I will ask a few questions and remember your answers. Say skip to pass on one, or stop any time. ${this.interview.start()}`, actions: 0 }); }
+          if (this.interview.active) {
+            const r = iv.parseReply(effective);
+            if (r.type === 'leave') this.interview.end(); // a question or a command of its own: the interview waits, and is not started again unless asked
+            else {
+              const out = this.interview.step(r); let note = '';
+              if (out.fact) { const saved = this.rememberFact(out.fact, { noExport: true }); if (saved.status === 'failed') note = `${saved.reply} `; else (this.interviewFacts = this.interviewFacts || []).push(out.fact); }
+              if (out.done && this.interviewFacts?.length) { // one text file for Sentient OS with everything from this interview, not one per answer
+                const text = this.interviewFacts.join('\n'); this.interviewFacts = [];
+                if (this.memoryExport) { try { this.memoryExport(text); note += 'I saved your answers in one file in Desktop/memory for Sentient OS. '; } catch { note += 'I could not write the Desktop/memory file. '; } }
+              }
+              this.lastRequestText = effective;
+              return this.finish(entry, { status: 'done', reply: `${note}${out.say}`, actions: 0 });
+            }
+          }
+        }
         if (!opts.shown && !opts.scheduled && this.sessionNotes) { const command = require('./sessionNotes').parseSessionCommand(effective); if (command) return this.finish(entry, await this.sessionNotes.command(command)); }
         if (!opts.shown && !opts.scheduled && require('./school').parseSchoolCommand(effective)) return this.finish(entry, await this.showSchoolAssignments());
         if (!opts.shown && !opts.scheduled) {
@@ -2214,6 +2264,14 @@ class AskController {
           if (this.cameraAdjust) { const cc = require('./cameraCommands').parseCameraCommand(effective); if (cc) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.cameraAdjust(cc), actions: 0 }); } }
           { const lc2 = require('./latency').parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } return this.finish(entry, { status: 'done', reply: require('./latency').describe(this.store.get('latencyLog')), actions: 0 }); } }
           if (this.wakeCommand) { const wc = require('./wakeScheduler').parseWakeCommand(effective); if (wc) { this.lastRequestText = effective; return this.finish(entry, await this.wakeCommand(wc)); } }
+          if (this.commandCenter && require('./commandCenter').parseCommandCenter(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.commandCenter()); }
+          if (this.signCommand) { const sg = require('./hands/apps').parseSignCommand(effective); if (sg) { this.lastRequestText = effective; return this.finish(entry, await this.signCommand(sg)); } }
+          if (this.eyeCommand) { const ec = require('./eyeBreak').parseEyeCommand(effective); if (ec) { this.lastRequestText = effective; return this.finish(entry, await this.eyeCommand(ec)); } }
+          if (this.googleSetupCommand && require('./connectors/googleEasy').parseGoogleSetup(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.googleSetupCommand()); }
+          { const bc = parseBudgetCommand(effective); if (bc) { this.lastRequestText = effective; return this.finish(entry, this.budgetCommand(bc)); } }
+          { const am = ambientMod.parseAmbientCommand(effective); if (am) { this.lastRequestText = effective; return this.finish(entry, this.ambientCommand(am)); } }
+          { const nu = nutritionMod.parseNutritionCommand(effective, { enabled: !!(this.store.get('settings.nutrition') || {}).enabled }); if (nu) { this.lastRequestText = effective; return this.finish(entry, await this.nutritionCommand(nu)); } }
+          if (this.pageCommand) { const pc = require('./pageWatch').parsePageWatchCommand(effective); if (pc) { this.lastRequestText = effective; return this.finish(entry, await this.pageCommand(pc)); } }
           if (this.nightCommand) { const nc = require('./nightClaude').parseNightCommand(effective); if (nc) { this.lastRequestText = effective; return this.finish(entry, await this.nightCommand(nc)); } }
           { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
           if (this.localCommand) { const lc = require('./localMode').parseLocalCommand(effective); if (lc) { this.lastRequestText = effective; return this.finish(entry, await this.localCommand(lc)); } }
@@ -2420,7 +2478,7 @@ class AskController {
   // You left the desk (the camera has seen no face for a while): pause what is playing, and lock the screen if that is asked for.
   async presenceAway() {
     const cfg = this.store.get('settings.presence') || {};
-    this.pausedByPresence = false;
+    this.pausedByPresence = false; this.pausedVideoByPresence = false;
     // With owner recognition and its standby screen on, the standby screen is what guards the Mac while you are away, and the guard alarms for a stranger: locking the Mac as well meant it
     // locked itself whenever you sat still or looked away for a minute. The lock stays for people who do not use the standby screen.
     const owner = this.store.get('settings.owner') || {};
@@ -2429,9 +2487,17 @@ class AskController {
       try { await this.mac.lockScreen(); }
       catch { this.notice('Could not lock the Mac when you left. Check Relay permissions and try locking it manually.', 'failed'); }
     }
-    if (cfg.pause !== false) {
-      const r = await this.quick('pause').catch(() => null);
-      if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
+    if (cfg.pause !== false || cfg.pauseVideo !== false) {
+      const pm = require('./presenceMedia');
+      const musicApp = this.mac.musicPlaying ? await this.mac.musicPlaying().catch(() => null) : null;
+      let tabs = [];
+      if (this.bridge?.isConnected?.()) { try { const l = await this.bridge.call('tabs.list', {}); tabs = (Array.isArray(l) ? l : l?.tabs || []).filter((t) => t.audible); } catch { /* no browser tabs to look at */ } }
+      const d = pm.decideAway({ keepMusic: cfg.keepMusic === true, pauseVideo: cfg.pauseVideo !== false, musicApp, tabs });
+      if (cfg.pause !== false && d.pauseMusicApp) {
+        const r = await this.quick('pause').catch(() => null);
+        if (r && /^Paused/.test(r.reply)) this.pausedByPresence = true; // only what it paused is started again
+      }
+      if (d.pauseVideo) { try { await this.mac.mediaKey('play'); this.pausedVideoByPresence = true; } catch { /* no media key: leave it */ } }
     }
   }
 
@@ -2439,7 +2505,8 @@ class AskController {
   async presenceBack() {
     const cfg = this.store.get('settings.presence') || {};
     if (this.pausedByPresence && cfg.resume !== false) await this.quick('play').catch(() => {});
-    this.pausedByPresence = false;
+    if (this.pausedVideoByPresence && cfg.resume !== false) await this.mac.mediaKey('play').catch(() => {});
+    this.pausedByPresence = false; this.pausedVideoByPresence = false;
   }
 
   // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).
@@ -3257,8 +3324,93 @@ class AskController {
     return true;
   }
 
+  // The food log (off until you turn it on, nutrition.js): "log two eggs and toast", "how many calories today".
+  async nutritionCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = this.store.get('settings.nutrition') || {};
+    if (c.type === 'nutrition-on') { this.store.set('settings.nutrition', { ...cfg, enabled: true }); this.onChange(); return done('Nutrition tracking is on. Say "log two eggs and toast" or "I had a chicken salad, 450 calories", and ask "how many calories today". If you do not give the calories I will estimate them, and say so. It stays on this Mac. Say "turn off nutrition tracking" to stop.', 1); }
+    if (c.type === 'nutrition-off') { this.store.set('settings.nutrition', { ...cfg, enabled: false }); this.onChange(); return done('Nutrition tracking is off. Your log is kept.', 1); }
+    const log = this.store.get('nutritionLog') || [];
+    const today = nutritionMod.todayEntries(log);
+    if (c.type === 'nutrition-total') { const t = nutritionMod.totals(today); return done(today.length ? `About ${t.kcal} calories and ${t.protein} grams of protein so far today, from ${today.length} ${today.length === 1 ? 'entry' : 'entries'}.` : 'Nothing logged today.'); }
+    if (c.type === 'nutrition-list') return done(today.length ? 'Today: ' + today.map((e) => `${e.text}${e.kcal ? ` (${e.kcal})` : ''}`).join('; ') + '.' : 'Nothing logged today.');
+    if (c.type === 'nutrition-clear') { this.store.set('nutritionLog', log.filter((e) => !today.includes(e))); this.onChange(); return done("Today's food log is cleared.", 1); }
+    let kcal = c.kcal, protein = 0, guessed = false;
+    if (!kcal) {
+      try { const e = await nutritionMod.estimate({ provider: this.buildProvider().provider, food: c.food, signal: AbortSignal.timeout(20000) }); if (e) { kcal = e.kcal; protein = e.protein; guessed = true; } } catch { /* no estimate */ }
+    }
+    this.store.set('nutritionLog', [...log, { id: crypto.randomUUID(), ts: Date.now(), text: c.food.slice(0, 160), kcal: kcal || 0, protein }].slice(-1500)); this.onChange();
+    const t = nutritionMod.totals(nutritionMod.todayEntries(this.store.get('nutritionLog')));
+    return done(`Logged ${c.food}${kcal ? `, ${guessed ? 'about ' : ''}${kcal} calories${guessed ? ' (my estimate)' : ''}` : ', with no calories since I could not estimate them'}. Today so far: about ${t.kcal}.`, 1);
+  }
+
+  syncAmbient() {
+    const cfg = this.store.get('settings.ambient') || {};
+    this.ambient.on = !!cfg.enabled;
+    this.ambient.limiter.perHour = Math.max(1, Math.min(30, Number(cfg.perHour) || 6));
+    if (!this.ambient.on) { this.ambientWatcher.reset(); clearTimeout(this.ambient.hideTimer); }
+  }
+
+  // The model for ambient answers: a local one (Ollama) unless you allowed the one you use for everything else.
+  ambientProvider() {
+    const m = this.store.get('settings.model') || {}, cfg = this.store.get('settings.ambient') || {};
+    if (cfg.localOnly !== false) return m.ollamaModel ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }) : null;
+    return this.buildProvider().provider;
+  }
+
+  async ambientQuestion(question) {
+    if (!this.ambient.on || !this.assistPanel) return;
+    if (this.meeting?.active || this.assistOn || !['idle', 'done'].includes(this.state) || this.speaker?.speaking || this.offline) return;
+    if (require('./proactive').inQuiet((this.store.get('settings.proactive') || {}).quiet, new Date())) return;
+    if (!ambientMod.isLookupQuestion(question) || !this.ambient.limiter.allow(question)) return;
+    const provider = this.ambientProvider();
+    if (!provider) return;
+    const id = ++this.ambient.seq;
+    try {
+      const answer = await ambientMod.answerOnce({ provider, question, signal: AbortSignal.timeout(20000) });
+      if (!answer || id !== this.ambient.seq || !this.ambient.on) return;
+      this.assistPanel.update({ id, question, stage: 'done', text: answer });
+      clearTimeout(this.ambient.hideTimer);
+      this.ambient.hideTimer = setTimeout(() => this.assistPanel?.hide(), 25000);
+    } catch { /* stay quiet: an answer nobody asked for is never worth an error */ }
+  }
+
+  ambientCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = this.store.get('settings.ambient') || {}, m = this.store.get('settings.model') || {};
+    if (c.type === 'ambient-off') { this.store.set('settings.ambient', { ...cfg, enabled: false }); this.syncAmbient(); this.onChange(); return done('Ambient answers are off.', 1); }
+    if (cfg.localOnly !== false && !m.ollamaModel) return done('Ambient answers use a local model, so nothing you overhear leaves this Mac, and no local model is set up. Add one in Settings (Ollama), or allow a cloud model for it in the ambient settings.');
+    if (!this.store.get('settings.wake.enabled')) return done('Ambient answers listen through "Hey Jarvis", which is off. Turn on hands-free activation first.');
+    this.store.set('settings.ambient', { ...cfg, enabled: true }); this.syncAmbient(); this.onChange();
+    return done('Ambient answers are on. When someone near you asks a factual question I can answer, I will show the answer quietly in the private window, never out loud. Nothing you overhear is saved. Say "turn off ambient answers" to stop.', 1);
+  }
+
+  // Your spend limit, checked before each request. At 80% it says so once a day; at the limit it stops (action "block") or asks (action "ask", the default).
+  async budgetGate() {
+    const cfg = this.store.get('settings.budget') || {};
+    if (!cfg.enabled) return null;
+    const r = this.budget.check();
+    if (r.state === 'warn') { if (this.budget.shouldWarn(r)) this.notice(r.text, 'done'); return null; }
+    if (r.state !== 'over') return null;
+    if (cfg.action === 'block') return { status: 'stopped', reply: `${r.text} I have not run this. Say "ignore the limit for today" to carry on, or raise it, for example "set my ${r.which} limit to ${Math.ceil(r.limit * 2)} dollars".`, actions: 0 };
+    if (!(await this.askConfirm({ question: `${r.text} Run this anyway?` }))) return { status: 'stopped', reply: 'Okay, I did not run it.', actions: 0 };
+    return null;
+  }
+
+  budgetCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = this.store.get('settings.budget') || {};
+    if (c.type === 'budget-status') return done(this.budget.status());
+    if (c.type === 'budget-ignore') { this.budget.ignoreToday(); return done('Okay, I will not enforce the spend limit for the rest of today.', 1); }
+    if (c.type === 'budget-off') { this.store.set('settings.budget', { ...cfg, enabled: false }); this.onChange(); return done('Spend limits are off.', 1); }
+    if (c.type === 'budget-on') { this.store.set('settings.budget', { ...cfg, enabled: true }); this.onChange(); return done('Spend limits are on. ' + this.budget.status(), 1); }
+    this.store.set('settings.budget', { ...cfg, [c.which]: c.value, enabled: true }); this.onChange();
+    return done('Okay. Your ' + (c.which === 'dailyUsd' ? 'daily' : 'monthly') + ' limit is ' + String.fromCharCode(36) + c.value + ', and limits are on. ' + (cfg.action === 'block' ? 'I will stop at the limit.' : 'I will ask before going over.'), 1);
+  }
+
   async execute(text, requestId) {
     this.lat?.mark('thinking');
+    { const g = await this.budgetGate(); if (g) return g; } // a spend limit you set: stops, or asks, before the model is used
     // speak the first sentence of a plain answer while the rest is still being written (earlyVoice.js); cleared when the answer is spoken
     this.early = new EarlyVoice({ enabled: !!this.store.get('settings.speakReplies') && !!this.voiceAsk && !this.assistOn && !!this.speaker, speak: (s) => this.speaker.speak(s, { ...profileFor('reply', this.store.get('settings') || {}), lang: detectLanguage(s)?.lang || 'en' }) });
     if (this.offline && flagsMod.isOn(this.store.get('settings'), 'offline')) return this.executeOffline(text);
@@ -3279,6 +3431,12 @@ class AskController {
         this.store.addAction({ id: actionId, requestId, tool: e.name, input: e.input, result: e.result, ok: e.ok, ts: Date.now() });
         // what can be put back: moved files, files Relay made (the new file goes to the Trash)
         if (e.ok && (e.name === 'drive_apply' || e.name === 'drive_make') && this.drive?.lastLogId) { const logId = this.drive.lastLogId; this.undos.register(actionId, () => this.drive.undo(logId)); }
+        // a reminder or calendar event Relay just made (with the native helper): the Undo button deletes exactly that one
+        if (e.ok && (e.name === 'reminders_add' || e.name === 'calendar_create') && this.mac.lastCreated?.id) {
+          const made = this.mac.lastCreated;
+          if (e.name === 'reminders_add' && made.kind === 'reminder') this.undos.register(actionId, () => this.mac.remindersDeleteById(made.id), 'Delete the reminder');
+          if (e.name === 'calendar_create' && made.kind === 'event') this.undos.register(actionId, () => this.mac.calendarDeleteById(made.id), 'Delete the event');
+        }
         this.onChange();
       }
     };

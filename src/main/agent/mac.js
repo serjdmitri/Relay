@@ -123,6 +123,7 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
   };
   // Calendar and Reminders go through relay-cal (EventKit) when it is there: it reads the calendar database directly, so those apps never have to be open or show in the Dock.
   const cal = (args) => exec(calBin, args, { timeout: 60000 });
+  let lastCreated = null;
   const jxa = (script, { signal } = {}) => exec('osascript', ['-l', 'JavaScript', '-e', script], { signal });
   const lines = (s) => (s ? s.split('\n').filter(Boolean) : []);
 
@@ -222,7 +223,7 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
 
     // Reminders
     async remindersAdd(title, due, list) {
-      if (calBin) { await cal(['rem-add', title, due || '', list || '']); return `Added reminder "${title}"${due ? ' due ' + due : ''}.`; }
+      if (calBin) { const id = String((await cal(['rem-add', title, due || '', list || ''])) || '').trim(); lastCreated = id ? { kind: 'reminder', id } : null; return `Added reminder "${title}"${due ? ' due ' + due : ''}.`; }
       const script = ['tell application "Reminders"'];
       script.push(list ? `set theList to list ${q(list)}` : 'set theList to default list');
       const props = [`name:${q(title)}`];
@@ -250,6 +251,18 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
       if (calBin) { await cal(['rem-delete', id]); return 'Deleted the reminder.'; }
       await osa(['tell application "Reminders"', `delete (first reminder whose id is ${q(id)})`, 'end tell']);
       return 'Deleted the reminder.';
+    },
+    // What the last reminder or event Relay made was (only with the native helper), so the activity log can offer Undo: { kind: 'reminder' | 'event', id } or null.
+    get lastCreated() { return lastCreated; },
+    // The calendars this Mac has: [{ account, name, writable }] (with the native helper), or null.
+    async calendarSources() {
+      if (!calBin) return null;
+      return String(await cal(['calendars']) || '').split('\n').filter(Boolean).map((l) => { const [account, name, rw] = l.split('|'); return { account: account || '', name: name || '', writable: rw === 'writable' }; });
+    },
+    async calendarDeleteById(id) {
+      if (!calBin) throw new Error('Needs the native calendar helper.');
+      await cal(['event-delete', id]);
+      return 'Deleted the event.';
     },
     async remindersList() {
       if (calBin) return (await cal(['rem-list'])) || 'No open reminders.';
@@ -287,7 +300,7 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
       return out || 'No events.';
     },
     async calendarCreate(title, start, end) {
-      if (calBin) { await cal(['event-create', title, start, end || '']); return `Created event "${title}" at ${start}.`; }
+      if (calBin) { const id = String((await cal(['event-create', title, start, end || ''])) || '').trim(); lastCreated = id ? { kind: 'event', id } : null; return `Created event "${title}" at ${start}.`; }
       const script = ['tell application "Calendar"', ...dateScript('s', start)];
       if (end) script.push(...dateScript('e', end));
       else script.push('set e to s + 1 * hours');
@@ -354,6 +367,13 @@ function createMac({ exec = defaultExec, calBin = null, clipboard, capture, getD
       } finally {
         clipRestore(clipboard, before);
       }
+    },
+    // The music app that is playing right now (Music or Spotify), or null. Never opens an app that is closed.
+    async musicPlaying() {
+      for (const app of ['Music', 'Spotify']) {
+        try { if (/playing/i.test(await osa([`if application ${q(app)} is running then`, `tell application ${q(app)} to return (player state as text)`, 'end if', 'return "off"']))) return app; } catch { /* not scriptable */ }
+      }
+      return null;
     },
     // Music and Spotify: op is play, pause, next or previous.
     async mediaControl(app, op) {

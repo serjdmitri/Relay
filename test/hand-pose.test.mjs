@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fingers, poseOf, pinchOf } from '../src/renderer/hand-pose.js';
+import { fingers, poseOf, pinchOf, countOf } from '../src/renderer/hand-pose.js';
 
 // A hand pointing up, drawn from the wrist: each finger is a base, a middle joint, a joint and a tip along a line; a curled finger folds
 // back toward the palm so its tip is no farther from the wrist than its middle joint.
@@ -46,4 +46,27 @@ test('a thumb held straight up or straight down on a closed hand is told from a 
   down[4] = { x: down[0].x, y: down[0].y + 0.3 }; down[3] = { x: down[0].x, y: down[0].y + 0.2 }; down[2] = { x: down[0].x, y: down[0].y + 0.1 };
   assert.equal(poseOf(down), 'Thumb_Down');
   assert.equal(poseOf(hand({})), 'Closed_Fist', 'a plain fist is still a fist');
+});
+
+test('only the middle finger out is a middle finger, whichever way the hand is turned; no other pose is mistaken for it', () => {
+  for (const rot of [0, 0.8, -1.2, 2.5, 3.1]) {
+    assert.equal(poseOf(hand({ rot, middle: true })), 'Middle_Finger', `middle finger at ${rot}`);
+    assert.equal(poseOf(hand({ rot, middle: true, thumb: true })), 'Middle_Finger', `with the thumb out at ${rot}`);
+    assert.notEqual(poseOf(hand({ rot, index: true, middle: true })), 'Middle_Finger', 'peace sign');
+    assert.notEqual(poseOf(hand({ rot, index: true })), 'Middle_Finger', 'pointing');
+    assert.notEqual(poseOf(hand({ rot })), 'Middle_Finger', 'fist');
+    assert.notEqual(poseOf(hand({ rot, middle: true, ring: true })), 'Middle_Finger', 'two fingers');
+  }
+});
+
+test('the number of fingers held out is counted, whichever way the hand is turned', () => {
+  for (const rot of [0, 0.8, -1.2, 2.5]) {
+    assert.equal(countOf(hand({ rot })), 0);
+    assert.equal(countOf(hand({ rot, index: true })), 1);
+    assert.equal(countOf(hand({ rot, index: true, middle: true })), 2);
+    assert.equal(countOf(hand({ rot, index: true, middle: true, ring: true })), 3);
+    assert.equal(countOf(hand({ rot, index: true, middle: true, ring: true, pinky: true })), 4);
+    assert.equal(countOf(hand({ rot, thumb: true, index: true, middle: true, ring: true, pinky: true })), 5);
+  }
+  assert.equal(countOf(null), 0);
 });

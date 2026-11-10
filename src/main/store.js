@@ -43,7 +43,7 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
-    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false }, // on-device wake phrase; optionally require two claps immediately beforehand
+    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false, spokenAck: false }, // on-device wake phrase; optionally require two claps immediately beforehand
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
     briefing: { city: '', name: '', units: 'f', schoolUrl: '', sources: {} }, // an optional signed-in school assignment page
@@ -69,7 +69,7 @@ const DEFAULTS = {
     learnWords: true, // after you dictate, notice words you fixed by hand and learn them
     recent: true, // a glass list of recent asks opens when you rest the pointer on the left edge
     buddy: true, // a small helper follows your pointer while Relay works
-    speakReplies: false,
+    spokenOnIt: false, speakReplies: false,
     dictation: true, // off: the Dictate shortcut (right ⌘) does nothing
     saveDictation: true, // off: dictated text is typed but not kept in History
     glass: true, // draw the pill as real see-through glass when this Mac can
@@ -95,8 +95,12 @@ const DEFAULTS = {
     owner: { enabled: false, seconds: 20, threshold: 0.363 }, // owner recognition (opt-in): a face that is not yours while you are away starts the access-denied alarm, then locks after this many seconds
     overnightWake: { enabled: false, battery: false }, // wake the Mac for the overnight window and keep it awake while overnight work runs (wakeScheduler.js; needs a one-time permission you give in Terminal)
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
-    presence: { enabled: false, awayAfter: 60, pause: true, resume: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
-    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true }, // Hand control: move holograms in the air through the camera (opt-in)
+    presence: { enabled: false, awayAfter: 60, pause: true, resume: true, keepMusic: false, pauseVideo: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
+    nutrition: { enabled: false }, // opt-in food log by voice ("log two eggs"); off, nothing listens for food phrases
+    ambient: { enabled: false, localOnly: true, perHour: 6 }, // opt-in: a factual question heard near you is answered quietly in the private window, by a local model
+    budget: { enabled: false, dailyUsd: 0, monthlyUsd: 0, action: 'ask', warnAt: 0.8 }, // spend limits you set (opt-in): at the limit Relay asks (or stops) before using the model
+    eyeBreaks: { enabled: false, everyMin: 20, seconds: 20, speak: true }, // opt-in: every 20 minutes at the screen, the screens blur for 20 seconds and you look far away
+    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true, airScroll: true }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

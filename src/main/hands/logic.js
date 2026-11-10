@@ -69,6 +69,9 @@ class HandPointer {
     this.hold('Thumb_Up', 'thumbup', h, t, dt, x, y);
     this.hold('Thumb_Down', 'thumbdown', h, t, dt, x, y);
     this.hold('Pointing_Up', 'point', h, t, dt, x, y);
+    this.hold('Rock', 'rock', h, t, dt, x, y);
+    this.stillPalm(h, t, x, y);
+    this.wave(h, t, x, y);
 
     // ---- fist in one hand, pinch in the other: the pinching hand draws ----
     const second = hands[1];
@@ -163,6 +166,32 @@ class HandPointer {
       k.away += dt * 1000;
       if (k.away > 900) { k.since = 0; k.done = false; }
     }
+  }
+
+  // An open palm held still for a moment (a "stop" sign): fires once, and again only after the hand moves or goes away.
+  stillPalm(h, t, x, y) {
+    if (h.gesture === 'Open_Palm' && h.pinch >= 0.42) {
+      if (!this.still || Math.hypot(x - this.still.x, y - this.still.y) > 0.05) this.still = { t0: t, x, y, done: false };
+      else if (!this.still.done && t - this.still.t0 >= 1100) { this.still.done = true; this.emit({ type: 'stop', x, y }); }
+    } else this.still = null;
+  }
+
+  // An open hand waved side to side (three turns within a second and a half, a good way across): 'wave', then quiet for three seconds.
+  wave(h, t, x, y) {
+    if (h.gesture !== 'Open_Palm' || h.pinch < 0.42) { this.waveTrail = []; this.waveDir = 0; return; }
+    const tr = this.waveTrail || (this.waveTrail = []);
+    tr.push({ t, x });
+    while (tr.length && t - tr[0].t > 1500) tr.shift();
+    if (this.waveAt !== undefined && t - this.waveAt < 3000) return;
+    const T = 0.05; // how far back it has to come to count as a turn
+    let dir = 0, ref = tr[0].x, turns = 0, lo = Infinity, hi = -Infinity;
+    for (const s of tr) {
+      lo = Math.min(lo, s.x); hi = Math.max(hi, s.x);
+      if (dir === 0) { if (s.x - ref > T) { dir = 1; ref = s.x; } else if (ref - s.x > T) { dir = -1; ref = s.x; } }
+      else if (dir > 0) { if (s.x > ref) ref = s.x; else if (ref - s.x > T) { dir = -1; ref = s.x; turns++; } }
+      else if (s.x < ref) ref = s.x; else if (s.x - ref > T) { dir = 1; ref = s.x; turns++; }
+    }
+    if (turns >= 3 && hi - lo >= 0.12) { this.waveAt = t; this.waveTrail = []; this.emit({ type: 'wave', x, y }); }
   }
 
   // A quick flick of the open hand sideways: the next or the previous. Slow pointing is never a swipe.
