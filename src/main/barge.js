@@ -21,7 +21,7 @@ class BargeIn {
     this.arming = true;
     const epoch = this.epoch = (this.epoch || 0) + 1;
     try {
-      await this.speech.listen(this.getDevice());
+      await this.speech.listen(this.getDevice(), { echoCancellation: c.echoCancellation === true });
       if (this.epoch !== epoch) return;
       this.armed = true;
       this.since = Date.now();

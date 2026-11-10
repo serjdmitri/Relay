@@ -831,6 +831,7 @@ const PAGES = {
         wait.onchange = () => { const v = Number(wait.value); if (Number.isFinite(v)) relay.set('settings.followUp.seconds', Math.max(3, Math.min(20, v))); };
         return row;
       })(),
+      toggleRow('Experimental microphone echo processing', 'Try macOS voice processing during interruptions on the default microphone. Effectiveness depends on the audio route; if unavailable, normal listening is used.', 'settings.bargeIn.echoCancellation'),
       toggleRow('Interrupt by talking', 'While Relay is speaking, say “stop” or just start talking and it stops mid-sentence. Works best with headphones (without them it can hear itself).', 'settings.bargeIn.enabled'),
       (() => {
         const cur = (S.settings.bargeIn && S.settings.bargeIn.mode) || 'talk';
