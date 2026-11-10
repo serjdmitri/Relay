@@ -47,6 +47,7 @@
     'Move app windows and tabs with hands': 'Mover ventanas y pestañas con las manos',
     'Click with a pinch': 'Hacer clic con un pellizco',
     'More hand signs': 'Más gestos con las manos',
+    'Say "Yes, Sir." when I wake it': 'Decir «Sí, señor» cuando lo despierto',
     'Eye breaks': 'Descansos para los ojos',
     'Keep music playing when I leave': 'Seguir con la música cuando me voy',
     'Pause videos when I leave': 'Pausar los vídeos cuando me voy',

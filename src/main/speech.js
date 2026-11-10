@@ -6,8 +6,9 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 
 class Speech extends EventEmitter {
-  constructor({ binPath, spawnFn = spawn, log = console }) {
+  constructor({ binPath, spawnFn = spawn, log = console, startTimeoutMs = 15000, quickStartMs = 4000 }) {
     super();
+    this.startTimeoutMs = startTimeoutMs; this.quickStartMs = quickStartMs; this.everListened = false;
     this.binPath = binPath;
     this.spawnFn = spawnFn;
     this.log = log;
@@ -27,6 +28,7 @@ class Speech extends EventEmitter {
     if (!this.available) throw new Error('The dictation helper is missing. Rebuild Relay with npm run pack.');
     const child = this.spawnFn(this.binPath, [], { stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
+    this.everListened = false; // a new helper may take a few seconds to load its recogniser the first time
     this.buf = '';
     child.stdout.on('data', (d) => this._onData(d.toString()));
     child.stderr.on('data', (d) => this.log.error?.('relay-speech:', d.toString().trim()));
@@ -72,7 +74,7 @@ class Speech extends EventEmitter {
       case 'acoustic': this.emit('acoustic', {rms:msg.rms,peak:msg.peak}); return;
       case 'level': this.emit('level', msg.value || 0); return;
       case 'preparing': this.emit('preparing', msg.fraction ?? 0); return;
-      case 'listening': this.listening = true; break;
+      case 'listening': this.listening = true; this.everListened = true; break;
       case 'final': this.listening = false; break;
       case 'error': this.lastError = msg; this.listening = false; break;
       default: break;
@@ -123,8 +125,26 @@ class Speech extends EventEmitter {
   }
 
   // device: "auto" (built-in mic when a Bluetooth headset is the default), "default", or a device UID.
+  // Opening the microphone normally takes well under a second. A helper that has listened before and does not answer "start" within a few seconds is stuck
+  // (it can hang after the Mac sleeps or the microphone changes): it is killed and the start is tried once more on a fresh one, inside the same call, so a
+  // key press or "Hey Jarvis" just works instead of failing after 30 seconds. A brand new helper gets longer, because its first start loads the recogniser.
   async listen(device = 'auto') {
-    await this.request({ cmd: 'start', device }, ['listening'], 30000);
+    const attempt = (ms) => this.request({ cmd: 'start', device }, ['listening'], ms);
+    const stuck = (e) => /timed out/i.test(e.message);
+    try { await attempt(this.everListened ? this.quickStartMs : this.startTimeoutMs); return; }
+    catch (e) { if (!stuck(e)) throw e; this.restartHelper(`it did not start listening in time`); }
+    try { await attempt(this.startTimeoutMs); }
+    catch (e) { if (stuck(e)) this.restartHelper('a fresh helper did not start listening either'); throw e; }
+  }
+
+  // Throw the helper away (it respawns on the next request). Safe when there is none.
+  restartHelper(why = '') {
+    const c = this.child;
+    if (!c) return false;
+    this.log.error?.('relay-speech restarted:', why);
+    this._onExit(c, 'The dictation helper was restarted.'); // forget it now, so the next request cannot reuse the stuck one
+    try { c.kill('SIGKILL'); } catch { /* already gone */ }
+    return true;
   }
 
   async finish() {
