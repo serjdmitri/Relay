@@ -71,7 +71,7 @@ function heardWake(text, phrase) {
 class WakeWord {
   // speech: the Speech wrapper (events 'partial', and listen()/cancel()).
   // getConfig(): { enabled, phrase }. canListen(): false while Relay is busy, speaking or being configured.
-  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout, handoffMs = 450 }) {
+  constructor({ speech, getConfig, canListen, getFront = () => null, onWake, onArmed = () => {}, getDevice = () => 'auto', log = console, restartMs = 90000, setTimer = setTimeout, clearTimer = clearTimeout, handoffMs = 280 }) {
     this.speech = speech;
     this.getConfig = getConfig;
     this.canListen = canListen;

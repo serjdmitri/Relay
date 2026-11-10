@@ -3,7 +3,7 @@
 #   bash scripts/install-local.sh [arm64|x64]
 # Why the signing matters: macOS ties Relay's saved keys (Keychain), Accessibility, Camera and other permissions to how the app is signed. Signed the same way every time,
 # an update keeps all of them. Signed differently (ad-hoc is a new identity per build), macOS asks again for the Keychain after every install, and until you answer,
-# Relay's main thread waits and its window stays blank. The old app is kept in ~/Downloads as a backup.
+# Relay's main thread waits and its window stays blank. The old app is replaced, not kept: no backup copies pile up (every version is on GitHub).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ "$(uname)" = "Darwin" ] || { echo "Run this on your Mac."; exit 1; }
@@ -27,13 +27,12 @@ codesign --force --deep --sign "$IDENT" "$APP"
 codesign --verify --deep --strict "$APP"
 NEW_DR=$(dr "$APP")
 
-# 3. keep the old app as a backup, then copy the new one in
+# 3. replace the old app (no backup copy: each one was ~350 MB and the history is on GitHub), then copy the new one in
 OLD_DR=""
 if [ -d "$DEST" ]; then
   OLD=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$DEST/Contents/Info.plist" 2>/dev/null || echo old)
   OLD_DR=$(dr "$DEST")
-  BACKUP="$HOME/Downloads/Relay-$OLD-backup.app"; [ -e "$BACKUP" ] && BACKUP="$HOME/Downloads/Relay-$OLD-backup-$(date +%H%M%S).app"
-  mv "$DEST" "$BACKUP"; echo "Kept the old Relay $OLD at $BACKUP"
+  rm -rf "$DEST"; echo "Replaced Relay $OLD."
 fi
 ditto "$APP" "$DEST"
 echo "Installed Relay $NEW."
