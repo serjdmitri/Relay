@@ -337,6 +337,7 @@ function rebuildTray() {
     { label: last ? `Last: ${last.length > 48 ? last.slice(0, 48) + '…' : last}` : 'Last: nothing yet', enabled: false },
     { type: 'separator' },
     { label: 'Private Meeting Answers', type: 'checkbox', checked: !!ask.assistOn, click: (item) => { (item.checked ? ask.startMeeting({ assist: true }).then((r) => ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done')) : Promise.resolve(ask.assistStop())).finally(() => rebuildTray()); } },
+    ask.listenPause.paused() ? { label: 'Resume Hey Jarvis', click: () => { ask.listenPause.resume(); } } : { label: 'Pause Hey Jarvis for an hour', enabled: !!store.get('settings.wake.enabled'), click: () => { ask.listenPause.pause(3600); } },
     { label: 'Take Meeting Notes', type: 'checkbox', checked: !!ask.meeting?.active, click: (item) => { (item.checked ? ask.startMeeting().then((r) => ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done')) : ask.stopMeeting().then((r) => r && ask.notice(r.reply, r.status === 'failed' ? 'failed' : 'done'))).finally(() => rebuildTray()); } },
     { label: 'Listen for “Hey Jarvis”', type: 'checkbox', checked: !!store.get('settings.wake.enabled'), click: (item) => { store.set('settings.wake.enabled', item.checked); ask.wake.refresh(); broadcast(); rebuildTray(); } },
     { label: 'Recent asks on the left edge', type: 'checkbox', checked: store.get('settings.recent') !== false, click: (item) => { store.set('settings.recent', item.checked); broadcast(); rebuildTray(); } },
@@ -1876,7 +1877,7 @@ app.whenReady().then(() => {
       if (screenLocked) return;
       revivePresence('check');
       if (ask.suspended && !captureLatch.on) { ask.suspended = false; diag.log('selfcheck', 'shortcuts were paused with no recording going on: resumed'); }
-      if (store.get('settings.wake.enabled') && ['idle', 'done'].includes(ask.state) && !ask.wake.armed && ask.wake.canListen() && !ask.meeting?.active) { ask.wake.refresh(); diag.log('selfcheck', 'Hey Jarvis was not listening while idle: started it'); }
+      if (store.get('settings.wake.enabled') && !ask.listenPause.paused() && ['idle', 'done'].includes(ask.state) && !ask.wake.armed && ask.wake.canListen() && !ask.meeting?.active) { ask.wake.refresh(); diag.log('selfcheck', 'Hey Jarvis was not listening while idle: started it'); }
       if (hotkeys) {
         const active = powerMonitor.getSystemIdleTime() < 20;
         if (active && hotkeys.eventsSeen === lastKeys) activeChecks++; else activeChecks = 0;
@@ -2189,6 +2190,7 @@ app.whenReady().then(() => {
     store.set('settings.hands.signCommands', { ...cur, [c.sign]: c.command.slice(0, 200) }); broadcast();
     return done(`Okay. When you show ${c.sign === 'stop' ? 'a still open palm' : c.sign === 'wave' ? 'a wave' : 'the rock sign'}, I will: ${c.command}.`, 1);
   };
+  ask.onListenPauseChange = () => { try { rebuildTray(); broadcast(); } catch { /* the menu is rebuilt on the next change */ } };
   ask.pageCommand = async (c) => {
     const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
     const activeUrl = async () => { try { const tabs = await bridge.call('tabs.list', {}); return (Array.isArray(tabs) ? tabs : tabs?.tabs || []).find((t) => t.active)?.url || null; } catch { return null; } };

@@ -79,6 +79,7 @@ const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
 const { Budget, parseBudgetCommand } = require('./budget');
 const ambientMod = require('./ambient');
+const { ListenPause, parseListenCommand } = require('./listenPause');
 const nutritionMod = require('./nutrition');
 const { parseDismiss, parseGoodbye, goodbyeReply, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
 const codexCli = require('./agent/codexCli');
@@ -272,10 +273,11 @@ class AskController {
         this.wakeSoon();
       };
     }
+    this.listenPause = new ListenPause({ onChange: () => { try { this.wake && this.wake.refresh(); } catch { /* the check below retries */ } this.onListenPauseChange && this.onListenPauseChange(); } });
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ mode:this.store.get('settings.wake.mode'), enabled: !!this.store.get('settings.wake.enabled'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
+      getConfig: () => ({ mode:this.store.get('settings.wake.mode'), enabled: !!this.store.get('settings.wake.enabled') && !(this.listenPause && this.listenPause.paused()), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
       canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
@@ -2271,6 +2273,7 @@ class AskController {
           { const bc = parseBudgetCommand(effective); if (bc) { this.lastRequestText = effective; return this.finish(entry, this.budgetCommand(bc)); } }
           { const am = ambientMod.parseAmbientCommand(effective); if (am) { this.lastRequestText = effective; return this.finish(entry, this.ambientCommand(am)); } }
           { const nu = nutritionMod.parseNutritionCommand(effective, { enabled: !!(this.store.get('settings.nutrition') || {}).enabled }); if (nu) { this.lastRequestText = effective; return this.finish(entry, await this.nutritionCommand(nu)); } }
+          { const lp = parseListenCommand(effective); if (lp) { this.lastRequestText = effective; return this.finish(entry, this.listenCommand(lp)); } }
           if (this.pageCommand) { const pc = require('./pageWatch').parsePageWatchCommand(effective); if (pc) { this.lastRequestText = effective; return this.finish(entry, await this.pageCommand(pc)); } }
           if (this.nightCommand) { const nc = require('./nightClaude').parseNightCommand(effective); if (nc) { this.lastRequestText = effective; return this.finish(entry, await this.nightCommand(nc)); } }
           { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
@@ -3342,6 +3345,18 @@ class AskController {
     this.store.set('nutritionLog', [...log, { id: crypto.randomUUID(), ts: Date.now(), text: c.food.slice(0, 160), kcal: kcal || 0, protein }].slice(-1500)); this.onChange();
     const t = nutritionMod.totals(nutritionMod.todayEntries(this.store.get('nutritionLog')));
     return done(`Logged ${c.food}${kcal ? `, ${guessed ? 'about ' : ''}${kcal} calories${guessed ? ' (my estimate)' : ''}` : ', with no calories since I could not estimate them'}. Today so far: about ${t.kcal}.`, 1);
+  }
+
+  // "Pause listening" (listenPause.js): Hey Jarvis (and with it the overheard-question answers) off for a while, without Settings.
+  listenCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    if (c.type === 'listen-status') return done(this.listenPause.describe());
+    if (c.type === 'listen-resume') return done(this.listenPause.resume() ? 'Okay, I am listening for Hey Jarvis again.' : 'I was already listening.', 1);
+    if (!this.store.get('settings.wake.enabled')) return done('Hey Jarvis is already off in Settings, so there is nothing to pause.');
+    this.listenPause.pause(c.seconds);
+    const mins = c.seconds ? Math.round(c.seconds / 60) : 0;
+    const span = !c.seconds ? '' : mins >= 90 ? ' for about ' + Math.round(mins / 60) + ' hours' : ' for ' + mins + ' minute' + (mins === 1 ? '' : 's');
+    return done('Okay, I stopped listening for Hey Jarvis' + span + '. ' + (c.seconds ? 'I will start again by myself. ' : '') + 'The Option key still works. To start listening again, press it and say "resume listening", or use the menu bar.', 1);
   }
 
   syncAmbient() {
