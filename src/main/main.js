@@ -1864,6 +1864,7 @@ app.whenReady().then(() => {
     setTimeout(() => {
       try { if (hotkeys && hotkeys.restart()) diag.log('hotkeys-restarted', why); else if (hotkeys) diag.log('hotkeys-failed', why + (hotkeys.error ? ': ' + hotkeys.error : '')); } catch (e) { diag.log('hotkeys-failed', String(e.message).slice(0, 80)); }
       try { if (store.get('settings.wake.enabled')) { ask.wake.disarm(); ask.wake.refresh(); diag.log('wake-restarted', why); } } catch { /* it is retried by the check below */ }
+      try { if (glass?.child) { glass.stop(); diag.log('glass-restarted', why); } } catch { /* it starts again the next time the pill is shown */ } // the see-through pill's helper can hang across sleep too, and then Jarvis answers with nothing on screen
     }, 1500).unref?.();
   };
   // Every minute: is the listening alive? A shortcut recording that never ended, a wake listener that is not armed while Relay is idle, and a key listener that has heard nothing while you were

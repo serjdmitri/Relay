@@ -446,6 +446,7 @@ class AskController {
       this.position(56);
     }
     this.visible = true;
+    if (fresh) this.diag?.log('pill-shown', this.useGlass() ? 'glass' : 'plain'); // so "he answered but never showed up" can be traced
     if (fresh && this.useGlass()) {
       const d = this.disp || screen.getPrimaryDisplay();
       this.glassHeight = 56;
@@ -1832,6 +1833,7 @@ class AskController {
     if (this.state !== 'idle' && this.state !== 'done') return;
     this.wake?.disarm();
     const inline = commandAfterWake(heard, this.store.get('settings.wake.phrase') || 'hey jarvis');
+    this.diag?.log('wake-heard', inline ? 'with a command after it' : 'the phrase only');
     if (inline) return this.handleText(inline, { voice: true });
     // Quick start (the default): a short chime, then the microphone opens at once. Saying "Yes, Sir." first makes you wait for the whole phrase before you can speak.
     // settings.wake.spokenAck turns the spoken greeting back on.
