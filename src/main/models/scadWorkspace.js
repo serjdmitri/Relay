@@ -18,8 +18,9 @@ class ScadWorkspace {
     if (!stat.isFile() || stat.size > MAX_BYTES) throw Error('Choose an OpenSCAD file under 1 MB.');
     const text = this.io.readFileSync(source, 'utf8');
     const edited = editParameter(text, parameter, value);
-    const previous = text.split(/\r?\n/).find((line, i) => line !== edited.split(/\r?\n/)[i]);
-    const next = edited.split(/\r?\n/).find((line, i) => line !== text.split(/\r?\n/)[i]);
+    const beforeLines = text.split(/\r?\n/), afterLines = edited.split(/\r?\n/);
+    const changed = beforeLines.findIndex((line, i) => line !== afterLines[i]);
+    const previous = beforeLines[changed], next = afterLines[changed];
     if (!previous || !next) throw Error('The parameter is already set to that value.');
     const id = crypto.randomUUID(), hash = crypto.createHash('sha256').update(text).digest('hex');
     this.previews.set(id, { source, edited, hash, previous: previous.trim(), next: next.trim(), at: this.now() });
