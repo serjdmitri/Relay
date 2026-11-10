@@ -16,6 +16,7 @@ const DEFAULTS = {
     menuSnap: true, // align floating menus near a screen edge without resizing
     talking: 'tap-or-hold', // tap-or-hold | tap | hold
     playSounds: true,
+    soundVolume: 1, // volume of state cues, independent of spoken replies
     duckAudio: true, // lower other audio while listening
     meeting: { hidden: true, nameOnly: false, names: '', input: '' }, // private answers in meetings: hide the window from screen sharing, answer only when your name is said, the names, the audio source ("" = the microphone setting)
     failover: { codex: true, until: 0 }, // when Claude is out of usage, carry on with Codex (signed in with ChatGPT) without a word; `until` is when Claude is tried again
