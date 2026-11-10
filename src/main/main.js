@@ -1249,6 +1249,7 @@ function startBridge() {
 // If Chromium's network helper dies and restarts, a window that was already open can end up empty: check the main window shortly after.
 app.on('child-process-gone', (_e, d) => { if (d && /network/i.test(`${d.name || ''} ${d.serviceName || ''}`)) setTimeout(() => checkMainPainted('after the network helper restarted'), 2500); });
 app.whenReady().then(() => {
+  require('./startupWatch').begin({ dir: app.getPath('userData'), exe: app.getPath('exe'), packaged: app.isPackaged }); // a start that hangs (it has, inside the key listener) is force-quit and reopened after about 40 seconds (startupWatch.js)
   const stopShortcut = 'Control+Alt+Escape';
   try { stopShortcutReady = globalShortcut.register(stopShortcut, stopActiveWork); } catch { stopShortcutReady = false; }
   if (stopShortcutReady) app.once('will-quit', () => globalShortcut.unregister(stopShortcut));
@@ -2363,6 +2364,8 @@ app.whenReady().then(() => {
   bootDoneAt = Date.now(); // the setup above ran to its end without throwing
   if (store.get('onboardingDone')) openMain(process.env.RELAY_PAGE || 'home');
   else openOnboarding();
+  require('./startupWatch').ready({ dir: app.getPath('userData') }); // starting finished: a start that never gets here is restarted by the watchdog
+  diag.log('started', 'ready');
 });
 
 app.on('second-instance', () => openMain('home'));
