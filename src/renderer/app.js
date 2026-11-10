@@ -234,6 +234,7 @@ const PAGES = {
       return el;
     };
     const activate=async action=>{try{const r=await relay.activateAssistant(action);if(r?.error)alert(r.error);}catch(e){alert(e.message);}};
+    gs.append(row('command', 'Stop active work', 'Stop the current request, background agents and speech; pause hand control.', '<span class="kbd">⌃⌥Esc</span>', () => relay.ask.stopActive()));
     gs.append(row('wave', 'Show Jarvis', 'Open the reactor without starting the microphone.', '<span class="kbd">⌥I</span>', () => activate('show'), true));
     gs.append(row('wave', 'Ask Relay', 'Say what you want done. It acts, then checks that it worked.', `<span class="kbd">${esc(S.labels.ask)}</span>`, () => activate('talk'), true));
     gs.append(row('mic', 'Dictate', 'Talk, and the words are typed where your cursor is.', `<span class="kbd">${esc(S.labels.dictate)}</span>`));
