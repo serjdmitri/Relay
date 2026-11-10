@@ -4,4 +4,4 @@ test('renders only via the sandbox and cleans up its temporary source',async t=>
  const result=await renderScad('cube(2);',{engine,tempRoot:tmp,run:async (bin,args,opts)=>{assert.equal(bin,'/usr/bin/sandbox-exec');assert.match(args[1],/deny default/);assert.equal(opts.env.HOME,opts.env.TMPDIR);assert.equal(opts.env.OPENAI_API_KEY,undefined);input=args.at(-1);fs.writeFileSync(args.at(-2),Buffer.alloc(100));}});
  assert.equal(result.length,100);assert.equal(fs.existsSync(input),false);
 });
-test('missing renderer and invalid source fail without execution',async()=>{await assert.rejects(renderScad('cube(2);',{engine:'/not-installed'}),/not installed/);await assert.rejects(renderScad('x'.repeat(1024*1024+1)),/too large/);});
+test('missing renderer and invalid source fail without execution',async()=>{await assert.rejects(renderScad('cube(2);',{engine:'/not-installed',wasmEngine:'/not-installed'}),/not installed/);await assert.rejects(renderScad('x'.repeat(1024*1024+1)),/too large/);});
