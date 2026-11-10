@@ -1833,6 +1833,9 @@ class AskController {
     this.wake?.disarm();
     const inline = commandAfterWake(heard, this.store.get('settings.wake.phrase') || 'hey jarvis');
     if (inline) return this.handleText(inline, { voice: true });
+    // Quick start (the default): a short chime, then the microphone opens at once. Saying "Yes, Sir." first makes you wait for the whole phrase before you can speak.
+    // settings.wake.spokenAck turns the spoken greeting back on.
+    if (this.store.get('settings.wake.spokenAck') !== true) { this.sound('Tink'); await new Promise((r) => setTimeout(r, 60)); if (!['idle', 'done'].includes(this.state)) return; return this.listen('ask', false, { auto: true }); }
     if (this.store.get('settings.speakReplies') && this.speaker) {
       this.state = 'waking';
       this.ensureWindow();

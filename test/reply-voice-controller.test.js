@@ -115,13 +115,22 @@ test('wake greeting finishes before the microphone opens and can be dismissed', 
     const calls = [];
     const c = Object.create(AskController.prototype);
     Object.assign(c, { state: 'idle', wake: { disarm: () => calls.push('disarm'), refresh() {}, canListen: () => false },
-      store: { get: k => k === 'settings.speakReplies' ? true : {} },
+      store: { get: k => k === 'settings.speakReplies' || k === 'settings.wake.spokenAck' ? true : {} },
       ensureWindow() {}, ready: Promise.resolve(), reveal: () => calls.push('show'),
       speaker: { speak: async text => { calls.push(text); if (dismissed) c.state = 'idle'; } },
       listen: async () => calls.push('listen') });
     await c.wakeTriggered();
     assert.deepEqual(calls, dismissed ? ['disarm', 'show', 'Yes, Sir.'] : ['disarm', 'show', 'Yes, Sir.', 'listen']);
   }
+});
+
+test('by default the wake phrase gets a short chime and the microphone opens at once, without waiting for "Yes, Sir."', async () => {
+  const calls = [];
+  const c = Object.create(AskController.prototype);
+  Object.assign(c, { state: 'idle', wake: { disarm: () => calls.push('disarm') }, store: { get: (k) => (k === 'settings.speakReplies' ? true : undefined) },
+    sound: (n) => calls.push('sound:' + n), speaker: { speak: async (t) => calls.push(t) }, listen: async () => calls.push('listen') });
+  await c.wakeTriggered();
+  assert.deepEqual(calls, ['disarm', 'sound:Tink', 'listen']);
 });
 
 test('idle reactor shortcut toggles only when the assistant is idle', () => {
