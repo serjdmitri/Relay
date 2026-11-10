@@ -2202,6 +2202,10 @@ class AskController {
           this.cardPanel?.reset(); this.onResetMenus?.();
           return this.finish(entry, { status: 'done', reply: 'Reset the menu layout, Sir.', actions: 0 });
         }
+        if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?(?:continue|resume)(?: (?:speaking|reading|your answer|the answer))?[.!?]*$/i.test(text.trim())) {
+          const remainder = this.speaker?.takeInterrupted?.();
+          return this.finish(entry, { status: remainder ? 'done' : 'failed', reply: remainder || 'There is no interrupted answer to resume, Sir.', actions: 0, preserveLastReply: true, forceSpeak: !!remainder && !entry.remote, noFollowUp: true });
+        }
         if (!opts.shown && !opts.scheduled && /^(?:(?:hey )?(?:jarvis|relay)[, ]+)?(?:please )?(?:read|say|speak|repeat) (?:your |the )?(?:last |previous )(?:answer|reply|response)(?: (?:again|aloud|out loud))?[.!?]*$/i.test(text.trim())) {
           const previous = this.store.get('lastReply');
           return this.finish(entry, { status: previous ? 'done' : 'failed', reply: previous || 'There is no reply to read yet.', actions: 0, preserveLastReply: true, forceSpeak: !entry.remote, noFollowUp: true });
