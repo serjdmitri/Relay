@@ -128,8 +128,8 @@ class Speech extends EventEmitter {
   // Opening the microphone normally takes well under a second. A helper that has listened before and does not answer "start" within a few seconds is stuck
   // (it can hang after the Mac sleeps or the microphone changes): it is killed and the start is tried once more on a fresh one, inside the same call, so a
   // key press or "Hey Jarvis" just works instead of failing after 30 seconds. A brand new helper gets longer, because its first start loads the recogniser.
-  async listen(device = 'auto') {
-    const attempt = (ms) => this.request({ cmd: 'start', device }, ['listening'], ms);
+  async listen(device = 'auto', { echoCancellation = false } = {}) {
+    const attempt = (ms) => this.request({ cmd: 'start', device, ...(echoCancellation ? { echoCancellation: true } : {}) }, ['listening'], ms);
     const stuck = (e) => /timed out/i.test(e.message);
     try { await attempt(this.everListened ? this.quickStartMs : this.startTimeoutMs); return; }
     catch (e) { if (!stuck(e)) throw e; this.restartHelper(`it did not start listening in time`); }
