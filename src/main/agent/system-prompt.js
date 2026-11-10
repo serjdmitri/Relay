@@ -13,7 +13,7 @@ function buildContext({ now = new Date(), frontmost, runningApps = [], mark = nu
   return lines.join('\n');
 }
 
-function buildSystemPrompt({ fast = false, now = new Date(), mark = null, frontmost, runningApps = [], vocabulary = [], routines = [], firefoxConnected, screen, visionCapable = true, withContext = true, files = null, memory = '' }) {
+function buildSystemPrompt({ fast = false, style = '', now = new Date(), mark = null, frontmost, runningApps = [], vocabulary = [], routines = [], firefoxConnected, screen, visionCapable = true, withContext = true, files = null, memory = '' }) {
   const lines = [
     'You are Relay, a voice-driven assistant that operates the user\'s Mac. The user dictated a request (speech-to-text, so expect small transcription errors) and you carry it out with the tools provided.',
     '',
@@ -46,6 +46,7 @@ function buildSystemPrompt({ fast = false, now = new Date(), mark = null, frontm
     ''
   ];
   if (withContext) lines.push(buildContext({ now, frontmost, runningApps, mark, files, memory }));
+  if (style) lines.push('', style); // how to talk (personality.js)
   else lines.push('Each request starts with a short context block (the time, the frontmost app, the running apps). Use it.');
   if (screen) lines.push(`Main display: ${screen.width}x${screen.height} points.`);
   lines.push(firefoxConnected

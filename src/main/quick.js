@@ -405,6 +405,14 @@ async function runQuick(cmd, mac, ctx = {}) {
     }
     case 'now-playing': {
       const { states, playing } = await players(mac);
+      // Nothing playing in Music or Spotify: a browser tab making sound (a YouTube video, a music site) says what it is in its title. Free, and exact, unlike listening through the microphone.
+      if (!playing && ctx.audibleTabs) {
+        const tabs = await ctx.audibleTabs().catch(() => []);
+        if (tabs && tabs.length) {
+          const t = tabs[0], title = String(t.title || '').replace(/\s*[-|\u2013\u2014]\s*(?:YouTube(?: Music)?|Spotify|SoundCloud|Apple Music|Bandcamp|Deezer|Tidal)\s*$/i, '').trim();
+          return { tool: 'media', input: { op: 'now-playing', app: 'browser' }, reply: title ? `A browser tab is playing: ${title}.` : 'A browser tab is playing, but it has no title I can read.', readonly: true };
+        }
+      }
       const target = playing || states.find((x) => x.state.includes('paused'));
       if (!target) return { tool: 'media', input: { op: 'now-playing' }, reply: 'Nothing is playing.', readonly: true };
       const track = await nowPlaying(mac, target.app);

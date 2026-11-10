@@ -2,7 +2,10 @@
 // pick one with native tool support (qwen2.5, llama3.1, mistral-nemo, etc.).
 
 class OllamaProvider {
-  constructor({ url, model, fetchImpl = fetch, ensure = null }) {
+  // keepAlive: how long Ollama keeps the model in memory after a request (its own default is 5 minutes, so after a short break every request first had to load the model again,
+  // which took seconds). numPredict: the longest reply, in tokens: a spoken answer never needs more, and a local model that rambles is slow.
+  constructor({ url, model, fetchImpl = fetch, ensure = null, keepAlive = '30m', numPredict = 700 }) {
+    this.keepAlive = keepAlive; this.numPredict = numPredict;
     if (/(?:^|:)cloud$/i.test(String(model || '').trim())) throw new Error('Ollama cloud models cannot be used as a local model. Choose a downloaded model.');
     let address;
     try { address = new URL(url); } catch { throw new Error('Ollama needs a valid local address.'); }
@@ -45,10 +48,18 @@ class OllamaProvider {
     return out;
   }
 
+  // Load the model into memory now (no answer is asked for), so the first real request does not wait for it. Never throws.
+  async warm() {
+    const send = () => this.fetch(this.url + '/api/generate', { method: 'POST', redirect: 'error', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: this.model, keep_alive: this.keepAlive }) });
+    try { const r = await send(); return !!(r && r.ok); } catch { return false; }
+  }
+
   async step({ system, messages, tools, signal }) {
     const body = {
       model: this.model,
       stream: false,
+      keep_alive: this.keepAlive,
+      options: { num_predict: this.numPredict },
       messages: this.toWire(system, messages),
       ...(tools?.length
         ? { tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) }

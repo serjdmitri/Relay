@@ -70,11 +70,11 @@ class Speech extends EventEmitter {
 
   _onEvent(msg) {
     switch (msg.event) {
-      case 'partial': this.emit('partial', msg.text || ''); return;
+      case 'partial': this.lastPartial = msg.text || ''; this.emit('partial', this.lastPartial); return;
       case 'acoustic': this.emit('acoustic', {rms:msg.rms,peak:msg.peak}); return;
       case 'level': this.emit('level', msg.value || 0); return;
       case 'preparing': this.emit('preparing', msg.fraction ?? 0); return;
-      case 'listening': this.listening = true; this.everListened = true; break;
+      case 'listening': this.listening = true; this.everListened = true; this.lastPartial = ''; break;
       case 'final': this.listening = false; break;
       case 'error': this.lastError = msg; this.listening = false; break;
       default: break;
@@ -151,6 +151,20 @@ class Speech extends EventEmitter {
     if (!this.child) return '';
     const msg = await this.request({ cmd: 'stop' }, ['final'], 15000);
     return (msg.text || '').trim();
+  }
+
+  // After you let go of the key, the recogniser finishes the last words, which usually takes a fraction of a second but sometimes several. Waiting for it is the slowest step of
+  // answering by voice. This gives it graceMs; if the final text has not come by then, the live text heard so far is used (it has everything except, at worst, the very last
+  // word) and the late final is ignored. If nothing was heard yet, it waits for the real one. Used for spoken requests; dictation into other apps keeps waiting for the exact text.
+  async finishFast(graceMs = 600) {
+    if (!this.child) return '';
+    const pending = this.finish().catch(() => '');
+    const done = await Promise.race([pending.then((t) => ({ t })), new Promise((r) => { const h = setTimeout(() => r(null), graceMs); h.unref?.(); })]);
+    if (done) return done.t || (this.lastPartial || '').trim();
+    const live = (this.lastPartial || '').trim();
+    if (!live) return pending;
+    this.log.error?.('speech: used the live text; the final took longer than ' + graceMs + ' ms');
+    return live;
   }
 
   cancel() {

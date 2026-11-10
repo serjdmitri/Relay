@@ -664,7 +664,7 @@ function registerIpc() {
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
-    if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase' || key === 'settings.wake.mode') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
+    if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase' || key === 'settings.wake.mode' || key === 'settings.wake.engine') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
   });
@@ -1057,6 +1057,19 @@ function registerIpc() {
   ipcMain.handle('activity:undo', (_e, id) => ask.undoAction(id));
   ipcMain.handle('notify:topic', () => { const t = newTopic(); store.set('settings.notify.ntfyTopic', t); broadcast(); return t; });
   ipcMain.handle('notify:test', () => ask.phone.test());
+  // "Hey Jarvis" listener page (wakeModel.js): only that page may report, and only that it heard the phrase, how it is doing, or how voice-like the sound is.
+  let wakePageSender = null;
+  ask.createWakePage = ({ onClosed }) => {
+    const win = new BrowserWindow({ width: 200, height: 120, show: false, focusable: false, skipTaskbar: true, webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false } });
+    const wc = win.webContents; wakePageSender = wc;
+    win.on('closed', () => { if (wakePageSender === wc) wakePageSender = null; try { onClosed && onClosed(); } catch { /* shutting down */ } });
+    win.loadFile(path.join(__dirname, '../renderer/wakemodel.html'));
+    return { close: () => { if (!win.isDestroyed()) win.close(); }, send: (channel, payload) => { if (!wc.isDestroyed()) wc.send(channel, payload); } };
+  };
+  ipcMain.handle('wakemodel:heard', (e, m) => { if (e.sender === wakePageSender) ask.wakeModel.heard(Number(m?.score) || 1); });
+  ipcMain.handle('wakemodel:status', (e, s) => { if (e.sender === wakePageSender) ask.wakeModel.status({ state: String(s?.state || ''), message: s?.message }); });
+  ipcMain.handle('wakemodel:voice', (e, v) => { if (e.sender === wakePageSender) ask.wakeModel.voice(v?.p); });
+  ipcMain.handle('wakemodel:config', (e) => (e.sender === wakePageSender ? { threshold: Number(store.get('settings.wake.threshold')) || 0.5 } : {}));
   ipcMain.handle('presence:frame', (e, f) => {
     if (e.sender !== presenceSender) return;
     presence?.frame(f);
@@ -1288,7 +1301,10 @@ app.whenReady().then(() => {
   kokoro = new KokoroVoice({ dir: path.join(app.getPath('userData'), 'voices', 'kokoro'), onProgress: () => broadcast() });
   const omni = new OmniVoice({ python: path.join(app.getPath('userData'), 'omnivoice', 'venv', 'bin', 'python'), worker: app.isPackaged ? path.join(process.resourcesPath, 'native', 'omni-worker.py') : path.join(__dirname, 'tts', 'omni-worker.py') });
   app.once('before-quit', () => omni.stop());
-  setTimeout(() => { if (store.get('settings.tts.engine') === 'omnivoice') omni.warm().catch(() => {}); }, 3000).unref?.(); // load the voice now, not when the first reply needs it
+  // Battery saver (on by default): unplugged, the voice model is not loaded at launch and is unloaded after five idle minutes (it is started again by the next reply).
+  const saveBattery = () => { try { return store.get('settings.batterySaver') !== false && !!powerMonitor.isOnBatteryPower?.(); } catch { return false; } };
+  setTimeout(() => { if (store.get('settings.tts.engine') === 'omnivoice' && !saveBattery()) omni.warm().catch(() => {}); }, 3000).unref?.();
+  setInterval(() => { try { if (saveBattery() && omni.idleMs() > 5 * 60000 && omni.unload()) diag.log('battery-saver', 'voice model unloaded after 5 idle minutes'); } catch { /* try again next minute */ } }, 60000).unref?.(); // load the voice now, not when the first reply needs it
   speaker = new Speaker({
     kokoro, omni, phraseCacheDir:path.join(app.getPath('userData'),'voices','fixed-phrases'),
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
@@ -1306,7 +1322,7 @@ app.whenReady().then(() => {
     }
   });
   speaker.prepare(profileFor('quiet', store.get('settings') || {}));
-  const prepareGreeting=async()=>{const profile=profileFor('reply',store.get('settings')||{}),name=store.get('settings.welcome.name')||'Sir';for(const text of new Set([welcome.greetingFor(Date.now(),name),...['morning','afternoon','evening','night'].map(part=>`Good ${part}, ${name}.`)]))await speaker.prepare({...profile,text});};
+  const prepareGreeting=async()=>{const profile=profileFor('reply',store.get('settings')||{}),name=store.get('settings.welcome.name')||'Sir';for(const text of new Set([welcome.greetingFor(Date.now(),name),...['morning','afternoon','evening','night'].map(part=>`Good ${part}, ${name}.`),...['Goodbye, Sir.','See you later, Sir.','Good night, Sir.','Very good, Sir. Goodbye.','Yes, Sir.','Okay.']]))await speaker.prepare({...profile,text});};
   prepareGreeting();
   timers = new Timers({
     store,

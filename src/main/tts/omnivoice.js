@@ -9,6 +9,10 @@ class OmniVoice {
   constructor({ python, worker = path.join(__dirname, 'omni-worker.py'), spawnFn = spawn, timeoutMs = 60000 } = {}) {
     this.timeoutMs = timeoutMs; this.activeTimer = null; this.python = python; this.worker = worker; this.spawnFn = spawnFn; this.pending = new Map(); this.child = null; this.cancelled = new Map(); this.ready = false; this.queue = []; this.activeId = null;
   }
+  // Milliseconds since a real reply was last spoken with it (Infinity if never): the battery saver unloads it when it has been idle a while.
+  idleMs() { return this.lastUsed ? Date.now() - this.lastUsed : Infinity; }
+  // Unload the model (about 400 MB) from memory. The next reply starts it again, which takes a few seconds. True if there was something to stop.
+  unload() { const c = this.child; if (!c) return false; try { c.kill(); } catch { /* already gone */ } return true; }
   installed() { return !!this.python && fs.existsSync(this.python) && fs.existsSync(this.worker); }
   start() {
     if (this.child) return;
@@ -38,6 +42,7 @@ class OmniVoice {
   // steps: how many refinement steps the voice takes (more is smoother and slower: 16 was the old fixed value; 10 is about a third faster and sounds the same for short replies).
   synthesize(text, { signal, rate = 'normal', steps = STEPS, background = false } = {}) {
     if (!this.installed()) return Promise.reject(new Error('OmniVoice is not installed'));
+    if (!background) this.lastUsed = Date.now();
     if (signal?.aborted) return Promise.reject(Object.assign(new Error('Stopped'), { name: 'AbortError' }));
     if(this.queue.length>=4)return Promise.reject(new Error('OmniVoice queue is full.'));
     this.start();

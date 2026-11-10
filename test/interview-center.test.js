@@ -33,7 +33,7 @@ test('the interview is routed before other commands, saves answers without one f
   const ask = read('src/main/askController.js');
   assert.ok(ask.indexOf("require('./interview')") < ask.indexOf('parseSessionCommand(effective)'), 'checked first, so an answer is not taken for a command');
   assert.match(ask, /rememberFact\(out\.fact, \{ noExport: true \}\)/);
-  assert.match(ask, /rememberFact\(fact, \{ noExport = false \} = \{\}\)/);
+  assert.match(ask, /rememberFact\(fact, \{ noExport = false, layer = 'durable' \} = \{\}\)/);
   assert.match(ask, /one text file for Sentient OS/);
 });
 

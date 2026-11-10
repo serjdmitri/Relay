@@ -44,10 +44,11 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
-    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false, spokenAck: false }, // on-device wake phrase; optionally require two claps immediately beforehand
+    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false, spokenAck: false, engine: 'model' }, // on-device wake phrase; optionally require two claps immediately beforehand
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
-    briefing: { city: '', name: '', units: 'f', schoolUrl: '', sources: {} }, // an optional signed-in school assignment page
+    briefing: { city: '', name: '', units: 'f', schoolUrl: '', sources: {}, say: { weather: false }, onlyNew: true }, // say: which parts are read aloud (the card shows everything; the weather is shown, not spoken); onlyNew: a repeat briefing the same day says only what is new
+    // an optional signed-in school assignment page
     language: { reply: 'auto', ui: 'en' }, // what language answers come in: auto (the one you asked in) or a code like 'es'
     followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
     autoSend: { enabled: true, silenceSeconds: 1.5 }, // tap to ask: submit after a pause; off for noisy environments
@@ -97,6 +98,9 @@ const DEFAULTS = {
     overnightWake: { enabled: false, battery: false }, // wake the Mac for the overnight window and keep it awake while overnight work runs (wakeScheduler.js; needs a one-time permission you give in Terminal)
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, keepMusic: false, pauseVideo: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
+    batterySaver: true, // unplugged: the voice model is not pre-loaded and is unloaded after 5 idle minutes; the local model is kept for 5 minutes instead of 30
+    persona: { key: '', custom: '' }, // how Relay talks ("be concise", "talk like a butler"); empty is its usual style
+    scenes: { away: '', back: '' }, // what to run when you leave the desk or come back (needs the presence camera); empty means nothing
     nutrition: { enabled: false }, // opt-in food log by voice ("log two eggs"); off, nothing listens for food phrases
     ambient: { enabled: false, localOnly: true, perHour: 6 }, // opt-in: a factual question heard near you is answered quietly in the private window, by a local model
     budget: { enabled: false, dailyUsd: 0, monthlyUsd: 0, action: 'ask', warnAt: 0.8 }, // spend limits you set (opt-in): at the limit Relay asks (or stops) before using the model
