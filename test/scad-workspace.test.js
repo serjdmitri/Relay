@@ -1,0 +1,7 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),os=require('os'),path=require('path');const {ScadWorkspace}=require('../src/main/models/scadWorkspace');
+test('preview and save a new copy, reject changed source and never overwrite',t=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'relay-scad-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));const file=path.join(home,'part.scad');fs.writeFileSync(file,'width=20;\ncube(width);\n');const w=new ScadWorkspace({home});const p=w.preview({file,parameter:'width',value:24});assert.match(w.summary(p.id),/width=20/);const saved=w.save(p.id);assert.equal(fs.readFileSync(file,'utf8'),'width=20;\ncube(width);\n');assert.equal(fs.readFileSync(saved,'utf8'),'width=24;\ncube(width);\n');const next=w.preview({file,parameter:'width',value:30});fs.writeFileSync(file,'width=25;\ncube(width);\n');assert.throws(()=>w.save(next.id),/changed/);
+});
+test('reject symbolic links and expired or unknown previews',t=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'relay-scad-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));fs.writeFileSync(path.join(home,'a.scad'),'width=1;\n');fs.symlinkSync(path.join(home,'a.scad'),path.join(home,'b.scad'));let now=0;const w=new ScadWorkspace({home,now:()=>now});assert.throws(()=>w.preview({file:path.join(home,'b.scad'),parameter:'width',value:2}),/symbolic/);const p=w.preview({file:path.join(home,'a.scad'),parameter:'width',value:2});now=600001;assert.equal(w.summary(p.id),null);assert.throws(()=>w.save(p.id),/expired/);
+});
