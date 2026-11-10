@@ -1,7 +1,7 @@
 // Keep a launch-provided phone key out of every child model/tool process.
 const blandLaunchKey = process.env.BLAND_API_KEY || '';
 delete process.env.BLAND_API_KEY;
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor, safeStorage, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog, clipboard, systemPreferences, Notification, nativeTheme, screen, powerMonitor, safeStorage, powerSaveBlocker, globalShortcut } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -252,6 +252,7 @@ function publicState() {
     speech: { available: speech.available, ...speechInfo },
     dictations: d.dictations.slice(0, 200),
     firefoxConnected: bridge.isConnected(),
+    stopShortcutReady,
     hotkeysRunning: hotkeys.running,
     hotkeysSeen: hotkeys.eventsSeen > 0,
     hotkeysError: hotkeys.error,
@@ -318,12 +319,16 @@ async function handsCommand(cmd) {
   return 'Hand view is on, top right. Hold a hand up to the camera.';
 }
 
+let stopShortcutReady = false;
+function stopActiveWork() { const result = require('./stopActivity').stopActivity({ ask, hands, motion: floatingMotion, overlay }); if (!result.ok) { diag.log('stop-active-failed', result.failed.join(', ')); if (Notification.isSupported()) new Notification({title:'Relay could not stop everything',body:`Check: ${result.failed.join(', ')}`}).show(); } return result; }
+
 function rebuildTray() {
   if (!tray) return;
   const askLabel = label(store.get('settings.shortcuts.ask'));
   const last = store.get('lastReply');
   tray.setContextMenu(Menu.buildFromTemplate(uiText.localizeMenu([
     { label: hotkeys.running ? `Ready · ${askLabel} to ask` : 'Shortcuts off (see Permissions)', enabled: false },
+    { label: 'Stop Active Work', click: () => stopActiveWork() },
     { label: 'Type a Request…', click: () => ask.open() },
     { label: 'Set Up Owner Recognition…', click: () => { Promise.resolve(ask.ownerCommand?.({ type: 'enroll' })).then((r) => { if (r?.status === 'failed') ask.notice(r.reply, 'failed'); }).catch((e) => ask.notice(e.message, 'failed')); } },
     { label: ask.agents.running().length ? `Stop ${ask.agents.running().length} Background Agent${ask.agents.running().length === 1 ? '' : 's'}` : 'No Background Agents', enabled: ask.agents.running().length > 0, click: () => ask.agents.stop() },
@@ -1225,6 +1230,7 @@ function registerIpc() {
   ipcMain.handle('recent:hit', (_e, on) => recent?.setHit(!!on));
   ipcMain.handle('files:drop', (_e, paths) => ask.attachFiles(paths));
   ipcMain.handle('ask:submit', (_e, text) => ask.submit(text));
+  ipcMain.handle('ask:stop-active', () => stopActiveWork());
   ipcMain.handle('ask:cancel', () => ask.cancelAll());
   ipcMain.handle('ask:confirm', (_e, yes) => ask.pendingConfirm?.(!!yes));
   ipcMain.handle('ask:resize', (_e, h) => ask.resize(h));
@@ -1243,6 +1249,9 @@ function startBridge() {
 // If Chromium's network helper dies and restarts, a window that was already open can end up empty: check the main window shortly after.
 app.on('child-process-gone', (_e, d) => { if (d && /network/i.test(`${d.name || ''} ${d.serviceName || ''}`)) setTimeout(() => checkMainPainted('after the network helper restarted'), 2500); });
 app.whenReady().then(() => {
+  const stopShortcut = 'Control+Alt+Escape';
+  try { stopShortcutReady = globalShortcut.register(stopShortcut, stopActiveWork); } catch { stopShortcutReady = false; }
+  if (stopShortcutReady) app.once('will-quit', () => globalShortcut.unregister(stopShortcut));
   store = new Store(app.getPath('userData'), { onError: code => diag.log('settings-save-failed', code) });
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
