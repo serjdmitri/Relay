@@ -215,6 +215,7 @@ contextBridge.exposeInMainWorld('relay', {
     open: (text) => invoke('ask:open', text),
     submit: (text) => invoke('ask:submit', text),
     cancel: () => invoke('ask:cancel'),
+    stopActive: () => invoke('ask:stop-active'),
     confirm: (yes) => invoke('ask:confirm', yes),
     resize: (h) => invoke('ask:resize', h),
     interactive: (on) => invoke('ask:interactive', on),

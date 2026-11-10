@@ -511,7 +511,9 @@ class AskController {
 
   sound(name) {
     if (!this.store.get('settings.playSounds')) return;
-    execFile('afplay', [`/System/Library/Sounds/${name}.aiff`], () => {});
+    const raw = Number(this.store.get('settings.soundVolume'));
+    const volume = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 1;
+    if (volume > 0) execFile('afplay', ['-v', String(volume), `/System/Library/Sounds/${name}.aiff`], () => {});
   }
 
   // ----- lower other audio while listening -----
