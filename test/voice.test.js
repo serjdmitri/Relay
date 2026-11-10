@@ -206,3 +206,7 @@ test('the "jarvis" voice stays a man\'s: Daniel first, then other known British 
   assert.equal(pickJarvis([v('Kate', 'en_GB'), v('Samantha', 'en_US')]), null, 'no known man at all: no pick here (the caller then chooses, and the OmniVoice voice is told to be a man anyway)');
   assert.equal(pickJarvis([v('Fred', 'en_US', 'Novelty'), v('Kate', 'en_GB')]), null, 'novelty voices are never picked');
 });
+test('interrupted speech can resume from the last audio segment',()=>{
+ const {Speaker}=require('../src/main/voice');const s=new Speaker();s.busy=true;s.currentRemainder='The unfinished sentence. The rest.';s.stop();
+ assert.equal(s.takeInterrupted(),'The unfinished sentence. The rest.');assert.equal(s.takeInterrupted(),'');
+});
