@@ -96,6 +96,9 @@ const DEFAULTS = {
     overnightWake: { enabled: false, battery: false }, // wake the Mac for the overnight window and keep it awake while overnight work runs (wakeScheduler.js; needs a one-time permission you give in Terminal)
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, keepMusic: false, pauseVideo: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
+    nutrition: { enabled: false }, // opt-in food log by voice ("log two eggs"); off, nothing listens for food phrases
+    ambient: { enabled: false, localOnly: true, perHour: 6 }, // opt-in: a factual question heard near you is answered quietly in the private window, by a local model
+    budget: { enabled: false, dailyUsd: 0, monthlyUsd: 0, action: 'ask', warnAt: 0.8 }, // spend limits you set (opt-in): at the limit Relay asks (or stops) before using the model
     eyeBreaks: { enabled: false, everyMin: 20, seconds: 20, speak: true }, // opt-in: every 20 minutes at the screen, the screens blur for 20 seconds and you look far away
     hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true, airScroll: true }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
