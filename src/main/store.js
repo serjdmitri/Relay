@@ -52,7 +52,7 @@ const DEFAULTS = {
     language: { reply: 'auto', ui: 'en' }, // what language answers come in: auto (the one you asked in) or a code like 'es'
     followUp: { enabled: true, seconds: 6 }, // after a spoken ask is answered, keep listening this many seconds for the next thing
     autoSend: { enabled: true, silenceSeconds: 1.5 }, // tap to ask: submit after a pause; off for noisy environments
-    bargeIn: { enabled: true, mode: 'talk' }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones
+    bargeIn: { enabled: true, mode: 'talk', echoCancellation: false }, // talk over Relay to stop it (talk), or only by saying stop (word); works best with headphones
     focus: { apps: ['Messages', 'Slack', 'Discord', 'Mail', 'Telegram', 'WhatsApp', 'Steam', 'Twitter', 'Instagram', 'Facebook', 'Reddit'], minutes: 25, shortcutOn: 'Relay Focus On', shortcutOff: 'Relay Focus Off', reopen: true }, // focus mode by voice: apps it closes, default length, and the two Shortcuts that switch Do Not Disturb
     downloadsTidy: { enabled: true, hour: 21, minute: 0, lastRun: '' }, // each evening: work out where new downloads belong and SHOW it (nothing moves until you say yes; nothing is ever deleted)
     voices: { quiet: { volume: 0.55 }, reading: {} }, // how confirmations and long answers sound (see voiceProfile.js)

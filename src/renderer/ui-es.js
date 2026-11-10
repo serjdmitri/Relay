@@ -68,6 +68,7 @@
     // menu bar
     'Type a Request…': 'Escribir una petición…', 'Set Up Owner Recognition…': 'Configurar el reconocimiento del propietario…', 'No Background Agents': 'Sin agentes en segundo plano', 'No Holograms': 'Sin hologramas', 'Hand control (camera)': 'Control con las manos (cámara)', 'Show Hand View (top right)': 'Mostrar la vista de la mano (arriba a la derecha)', 'Hand control (camera): problem, click to retry': 'Control con las manos (cámara): hay un problema, haz clic para reintentar',
     'Resume Hey Jarvis': 'Reanudar Hey Jarvis', 'Pause Hey Jarvis for an hour': 'Pausar Hey Jarvis una hora',
+    'Experimental microphone echo processing': 'Procesamiento experimental del eco del micrófono',
     'Sound cue volume': 'Volumen de avisos',
     'Stop Active Work': 'Detener tareas activas', 'Stop active work': 'Detener tareas activas', 'Shortcut unavailable': 'Atajo no disponible',
     'Stop Speaking': 'Dejar de hablar', 'Speak Last Reply': 'Leer la última respuesta', 'Copy Last Reply': 'Copiar la última respuesta', 'Last: nothing yet': 'Última: nada todavía', 'Take Meeting Notes': 'Tomar notas de la reunión', 'Model Speed': 'Velocidad del modelo', 'Fast (Haiku)': 'Rápido (Haiku)', 'Smart (Sonnet)': 'Inteligente (Sonnet)', 'Deep (Opus)': 'Profundo (Opus)',

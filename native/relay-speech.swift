@@ -156,16 +156,19 @@ final class Mic: @unchecked Sendable {
   private let output: AVAudioFormat
   private let continuation: AsyncStream<AnalyzerInput>.Continuation
   private let device: AudioDeviceID?
+  private let echoRequested: Bool
+  private(set) var echoActive = false
   private var levelWindow = LevelWindow()
   private var observer: NSObjectProtocol?
   private var running = false
   private var useDefault = false // set when the chosen device would not start
   private let lock = NSLock()
 
-  init(output: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, device: AudioDeviceID?) {
+  init(output: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, device: AudioDeviceID?, echoRequested: Bool = false) {
     self.output = output
     self.continuation = continuation
     self.device = device
+    self.echoRequested = echoRequested
   }
 
   private func selectDevice() {
@@ -225,6 +228,11 @@ final class Mic: @unchecked Sendable {
 
   private func startOnce() throws {
     selectDevice()
+    echoActive = false
+    if echoRequested {
+      do { try engine.inputNode.setVoiceProcessingEnabled(true); echoActive = true }
+      catch { debug("Voice processing unavailable; using the normal microphone.") }
+    }
     let format = engine.inputNode.inputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
       throw NSError(domain: "relay", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input is available."])
@@ -450,7 +458,7 @@ actor Engine {
     return Prepared(locale: locale, transcriber: transcriber, analyzer: analyzer, format: format)
   }
 
-  func start(device pref: String?) async throws {
+  func start(device pref: String?, echoRequested: Bool = false) async throws {
     guard mic == nil else { return }
     let p = try await ensurePrepared()
     prepared = nil
@@ -468,12 +476,12 @@ actor Engine {
       return acc.text
     }
     activeAnalyzer = p.analyzer
-    let mic = Mic(output: p.format, continuation: continuation, device: resolveInput(pref)?.id)
+    let mic = Mic(output: p.format, continuation: continuation, device: resolveInput(pref)?.id, echoRequested: echoRequested)
     self.mic = mic
     do {
       // Capture first: Bluetooth inputs can take a moment, and the stream keeps early buffers.
       try mic.start()
-      emit(["event": "listening"])
+      emit(["event": "listening", "echoActive": mic.echoActive])
       try await p.analyzer.start(inputSequence: stream)
     } catch {
       await teardown(cancel: true)
@@ -605,7 +613,7 @@ struct RelaySpeech {
           emit(["event": "prepared"])
         } catch { fail(error.localizedDescription, code: "prepare") }
       case "start":
-        do { try await engine.start(device: msg["device"] as? String) } catch { fail(error.localizedDescription, code: "start") }
+        do { try await engine.start(device: msg["device"] as? String, echoRequested: msg["echoCancellation"] as? Bool ?? false) } catch { fail(error.localizedDescription, code: "start") }
       case "stop":
         do {
           let text = try await engine.stop()

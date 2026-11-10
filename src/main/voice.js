@@ -177,6 +177,7 @@ class Speaker {
     const say = speakable(text);
     if (!say) return;
     this.currentText = say;
+    this.currentRemainder = say;
     const tts = this.getTts() || { engine: 'system' };
     const selected = this.engineFor(tts, lang);
     const cachedAudio = quick ? this.prepared(JSON.stringify([this.acknowledgementKey(selected, tts, rate, kokoroVoice),say])) : null;
@@ -244,6 +245,7 @@ class Speaker {
     let pending = make(pieces[0]);
     try {
       for (let i = 0; i < pieces.length; i++) {
+        this.currentRemainder = pieces.slice(i).join(' ');
         this.setPreparing(true);
         const file = await pending;
         pending = null;
@@ -252,6 +254,7 @@ class Speaker {
         if (pending) pending.catch(() => {});
         try { await this.play(file, token, volume); } finally { this.discard(file); }
         if (token !== this.token) return;
+        this.currentRemainder = pieces.slice(i + 1).join(' ');
       }
     } finally {
       if (pending) pending.then(file => this.discard(file), () => {});
@@ -336,7 +339,11 @@ class Speaker {
     return !!this.child || this.busy;
   }
 
+  takeInterrupted() { const text = this.interruptedRemainder || ''; this.interruptedRemainder = ''; return text; }
+
   stop() {
+    if (this.speaking && this.currentRemainder) this.interruptedRemainder = this.currentRemainder;
+    this.currentRemainder = '';
     this.stops = (this.stops || 0) + 1;
     this.token++;
     this.busy = false;
