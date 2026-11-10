@@ -77,6 +77,9 @@ const council = require('./council');
 const { describe: describeNotification } = require('./notifications');
 const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
+const { Budget, parseBudgetCommand } = require('./budget');
+const ambientMod = require('./ambient');
+const nutritionMod = require('./nutrition');
 const { parseDismiss, parseGoodbye, goodbyeReply, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
 const codexCli = require('./agent/codexCli');
 const assist = require('./assist');
@@ -224,6 +227,7 @@ class AskController {
     this.prevExchange = null; // the last finished request and its answer, so "that's wrong" has something to refer to
     this.currentRequest = '';
     this.noticeCount = 0;
+    this.budget = new Budget({ load: () => this.store.get('spendByDay') || {}, save: (v) => this.store.set('spendByDay', v), cfg: () => this.store.get('settings.budget') });
     this.undos = new UndoRegistry(); // action id -> how to reverse it (the activity log's Undo button)
     this.phone = new PhoneNotifier({ getConfig: () => this.store.get('settings.notify'), sendMessage: (to, text) => this.mac.messagesSend(to, text) });
     this.scheduler = null; // set by the app: the list of scheduled requests
@@ -285,6 +289,11 @@ class AskController {
       onText: (t) => { if (this.assistOn) this.watcher.push(t); }, onSegment: (t) => { if (this.assistOn) this.watcher.flush(t); }
     });
     // The private answer assistant: finds a question in the live text (the same stretches the notes use) and answers it in a window screen sharing cannot see.
+    // Ambient answers (opt-in, ambient.js): a factual question heard while "Hey Jarvis" listens is answered quietly in the private window.
+    this.ambient = { on: false, limiter: new ambientMod.AmbientLimiter({ perHour: 6 }), hideTimer: null, seq: 0 };
+    this.ambientWatcher = new assist.QuestionWatcher({ getNames: () => [], getMode: () => 'any', onQuestion: ({ question }) => this.ambientQuestion(question) });
+    speech.on('partial', (t) => { if (this.ambient.on && this.wake && this.wake.armed && typeof t === 'string') this.ambientWatcher.push(t); });
+    this.syncAmbient();
     this.assistOn = false;
     this.assistPanel = null; // set by the app: the private window
     this.watcher = new assist.QuestionWatcher({
@@ -329,6 +338,7 @@ class AskController {
     if (!this.lastUsage || this.lastUsage.id !== id || typeof c.cost !== 'number') return;
     const used = { ...this.lastUsage.used, cost: c.cost };
     this.lastUsage.used = used;
+    this.budget?.add(c.cost); // counts toward your spend limit
     const text = usage.usageLine({ ...used, limit: usage.limitForModel(used.model, this.freshRate()) });
     this.store.updateHistory(id, { usage: used, usageText: text });
     if (this.state === 'done' && this.store.get('settings.showUsage') !== false) this.push({ usage: text });
@@ -2258,6 +2268,9 @@ class AskController {
           if (this.signCommand) { const sg = require('./hands/apps').parseSignCommand(effective); if (sg) { this.lastRequestText = effective; return this.finish(entry, await this.signCommand(sg)); } }
           if (this.eyeCommand) { const ec = require('./eyeBreak').parseEyeCommand(effective); if (ec) { this.lastRequestText = effective; return this.finish(entry, await this.eyeCommand(ec)); } }
           if (this.googleSetupCommand && require('./connectors/googleEasy').parseGoogleSetup(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.googleSetupCommand()); }
+          { const bc = parseBudgetCommand(effective); if (bc) { this.lastRequestText = effective; return this.finish(entry, this.budgetCommand(bc)); } }
+          { const am = ambientMod.parseAmbientCommand(effective); if (am) { this.lastRequestText = effective; return this.finish(entry, this.ambientCommand(am)); } }
+          { const nu = nutritionMod.parseNutritionCommand(effective, { enabled: !!(this.store.get('settings.nutrition') || {}).enabled }); if (nu) { this.lastRequestText = effective; return this.finish(entry, await this.nutritionCommand(nu)); } }
           if (this.pageCommand) { const pc = require('./pageWatch').parsePageWatchCommand(effective); if (pc) { this.lastRequestText = effective; return this.finish(entry, await this.pageCommand(pc)); } }
           if (this.nightCommand) { const nc = require('./nightClaude').parseNightCommand(effective); if (nc) { this.lastRequestText = effective; return this.finish(entry, await this.nightCommand(nc)); } }
           { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
@@ -3311,8 +3324,93 @@ class AskController {
     return true;
   }
 
+  // The food log (off until you turn it on, nutrition.js): "log two eggs and toast", "how many calories today".
+  async nutritionCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = this.store.get('settings.nutrition') || {};
+    if (c.type === 'nutrition-on') { this.store.set('settings.nutrition', { ...cfg, enabled: true }); this.onChange(); return done('Nutrition tracking is on. Say "log two eggs and toast" or "I had a chicken salad, 450 calories", and ask "how many calories today". If you do not give the calories I will estimate them, and say so. It stays on this Mac. Say "turn off nutrition tracking" to stop.', 1); }
+    if (c.type === 'nutrition-off') { this.store.set('settings.nutrition', { ...cfg, enabled: false }); this.onChange(); return done('Nutrition tracking is off. Your log is kept.', 1); }
+    const log = this.store.get('nutritionLog') || [];
+    const today = nutritionMod.todayEntries(log);
+    if (c.type === 'nutrition-total') { const t = nutritionMod.totals(today); return done(today.length ? `About ${t.kcal} calories and ${t.protein} grams of protein so far today, from ${today.length} ${today.length === 1 ? 'entry' : 'entries'}.` : 'Nothing logged today.'); }
+    if (c.type === 'nutrition-list') return done(today.length ? 'Today: ' + today.map((e) => `${e.text}${e.kcal ? ` (${e.kcal})` : ''}`).join('; ') + '.' : 'Nothing logged today.');
+    if (c.type === 'nutrition-clear') { this.store.set('nutritionLog', log.filter((e) => !today.includes(e))); this.onChange(); return done("Today's food log is cleared.", 1); }
+    let kcal = c.kcal, protein = 0, guessed = false;
+    if (!kcal) {
+      try { const e = await nutritionMod.estimate({ provider: this.buildProvider().provider, food: c.food, signal: AbortSignal.timeout(20000) }); if (e) { kcal = e.kcal; protein = e.protein; guessed = true; } } catch { /* no estimate */ }
+    }
+    this.store.set('nutritionLog', [...log, { id: crypto.randomUUID(), ts: Date.now(), text: c.food.slice(0, 160), kcal: kcal || 0, protein }].slice(-1500)); this.onChange();
+    const t = nutritionMod.totals(nutritionMod.todayEntries(this.store.get('nutritionLog')));
+    return done(`Logged ${c.food}${kcal ? `, ${guessed ? 'about ' : ''}${kcal} calories${guessed ? ' (my estimate)' : ''}` : ', with no calories since I could not estimate them'}. Today so far: about ${t.kcal}.`, 1);
+  }
+
+  syncAmbient() {
+    const cfg = this.store.get('settings.ambient') || {};
+    this.ambient.on = !!cfg.enabled;
+    this.ambient.limiter.perHour = Math.max(1, Math.min(30, Number(cfg.perHour) || 6));
+    if (!this.ambient.on) { this.ambientWatcher.reset(); clearTimeout(this.ambient.hideTimer); }
+  }
+
+  // The model for ambient answers: a local one (Ollama) unless you allowed the one you use for everything else.
+  ambientProvider() {
+    const m = this.store.get('settings.model') || {}, cfg = this.store.get('settings.ambient') || {};
+    if (cfg.localOnly !== false) return m.ollamaModel ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }) : null;
+    return this.buildProvider().provider;
+  }
+
+  async ambientQuestion(question) {
+    if (!this.ambient.on || !this.assistPanel) return;
+    if (this.meeting?.active || this.assistOn || !['idle', 'done'].includes(this.state) || this.speaker?.speaking || this.offline) return;
+    if (require('./proactive').inQuiet((this.store.get('settings.proactive') || {}).quiet, new Date())) return;
+    if (!ambientMod.isLookupQuestion(question) || !this.ambient.limiter.allow(question)) return;
+    const provider = this.ambientProvider();
+    if (!provider) return;
+    const id = ++this.ambient.seq;
+    try {
+      const answer = await ambientMod.answerOnce({ provider, question, signal: AbortSignal.timeout(20000) });
+      if (!answer || id !== this.ambient.seq || !this.ambient.on) return;
+      this.assistPanel.update({ id, question, stage: 'done', text: answer });
+      clearTimeout(this.ambient.hideTimer);
+      this.ambient.hideTimer = setTimeout(() => this.assistPanel?.hide(), 25000);
+    } catch { /* stay quiet: an answer nobody asked for is never worth an error */ }
+  }
+
+  ambientCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = this.store.get('settings.ambient') || {}, m = this.store.get('settings.model') || {};
+    if (c.type === 'ambient-off') { this.store.set('settings.ambient', { ...cfg, enabled: false }); this.syncAmbient(); this.onChange(); return done('Ambient answers are off.', 1); }
+    if (cfg.localOnly !== false && !m.ollamaModel) return done('Ambient answers use a local model, so nothing you overhear leaves this Mac, and no local model is set up. Add one in Settings (Ollama), or allow a cloud model for it in the ambient settings.');
+    if (!this.store.get('settings.wake.enabled')) return done('Ambient answers listen through "Hey Jarvis", which is off. Turn on hands-free activation first.');
+    this.store.set('settings.ambient', { ...cfg, enabled: true }); this.syncAmbient(); this.onChange();
+    return done('Ambient answers are on. When someone near you asks a factual question I can answer, I will show the answer quietly in the private window, never out loud. Nothing you overhear is saved. Say "turn off ambient answers" to stop.', 1);
+  }
+
+  // Your spend limit, checked before each request. At 80% it says so once a day; at the limit it stops (action "block") or asks (action "ask", the default).
+  async budgetGate() {
+    const cfg = this.store.get('settings.budget') || {};
+    if (!cfg.enabled) return null;
+    const r = this.budget.check();
+    if (r.state === 'warn') { if (this.budget.shouldWarn(r)) this.notice(r.text, 'done'); return null; }
+    if (r.state !== 'over') return null;
+    if (cfg.action === 'block') return { status: 'stopped', reply: `${r.text} I have not run this. Say "ignore the limit for today" to carry on, or raise it, for example "set my ${r.which} limit to ${Math.ceil(r.limit * 2)} dollars".`, actions: 0 };
+    if (!(await this.askConfirm({ question: `${r.text} Run this anyway?` }))) return { status: 'stopped', reply: 'Okay, I did not run it.', actions: 0 };
+    return null;
+  }
+
+  budgetCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cfg = this.store.get('settings.budget') || {};
+    if (c.type === 'budget-status') return done(this.budget.status());
+    if (c.type === 'budget-ignore') { this.budget.ignoreToday(); return done('Okay, I will not enforce the spend limit for the rest of today.', 1); }
+    if (c.type === 'budget-off') { this.store.set('settings.budget', { ...cfg, enabled: false }); this.onChange(); return done('Spend limits are off.', 1); }
+    if (c.type === 'budget-on') { this.store.set('settings.budget', { ...cfg, enabled: true }); this.onChange(); return done('Spend limits are on. ' + this.budget.status(), 1); }
+    this.store.set('settings.budget', { ...cfg, [c.which]: c.value, enabled: true }); this.onChange();
+    return done('Okay. Your ' + (c.which === 'dailyUsd' ? 'daily' : 'monthly') + ' limit is ' + String.fromCharCode(36) + c.value + ', and limits are on. ' + (cfg.action === 'block' ? 'I will stop at the limit.' : 'I will ask before going over.'), 1);
+  }
+
   async execute(text, requestId) {
     this.lat?.mark('thinking');
+    { const g = await this.budgetGate(); if (g) return g; } // a spend limit you set: stops, or asks, before the model is used
     // speak the first sentence of a plain answer while the rest is still being written (earlyVoice.js); cleared when the answer is spoken
     this.early = new EarlyVoice({ enabled: !!this.store.get('settings.speakReplies') && !!this.voiceAsk && !this.assistOn && !!this.speaker, speak: (s) => this.speaker.speak(s, { ...profileFor('reply', this.store.get('settings') || {}), lang: detectLanguage(s)?.lang || 'en' }) });
     if (this.offline && flagsMod.isOn(this.store.get('settings'), 'offline')) return this.executeOffline(text);

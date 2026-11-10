@@ -892,6 +892,20 @@ const PAGES = {
       })(),
       toggleRow('Hide the answer window from screen sharing', 'On: the private window is excluded from screen shares and recordings. It is not guaranteed with every capture tool, so use “Test the private window” with the app you share with. Off: it shows like any window.', 'settings.meeting.hidden'),
       toggleRow('Only answer when my name is said', 'Off: any question in the meeting gets an answer. On: only a question with one of your names right before or after it.', 'settings.meeting.nameOnly'),
+      toggleRow('Food log by voice', 'Off by default. On: say "log two eggs and toast" or "I had a chicken salad, 450 calories", then ask "how many calories today". Without calories Relay estimates them and says so. Kept on this Mac.', 'settings.nutrition.enabled'),
+      toggleRow('Answer questions I overhear', 'Opt-in. While Hey Jarvis is listening, a factual question said near you ("how far is the moon?") gets a quiet answer in the private window, never out loud. Nothing you overhear is saved. Needs Hey Jarvis on.', 'settings.ambient.enabled'),
+      toggleRow('Only use a local model for them', 'On: overheard questions are answered by a local model (Ollama), so nothing leaves this Mac. Off: the model you use for everything else answers them.', 'settings.ambient.localOnly'),
+      (() => {
+        const b = S.settings.budget || {};
+        const row = h(`<div class="row"><div class="grow"><div class="t">Spend limits</div><div class="d">Off until you turn it on. Set the most you want to spend per day and per month (at API prices, counted on this Mac). At 80% Relay tells you once; at the limit it asks first, or stops. Say "set my daily limit to 5 dollars" or "how much have I spent".</div><div class="field-row" style="margin-top:8px"><label>Daily <input class="field" data-day type="number" min="0" step="1" style="width:90px" aria-label="Daily limit in dollars"></label> <label>Monthly <input class="field" data-month type="number" min="0" step="1" style="width:90px" aria-label="Monthly limit in dollars"></label> <select data-action aria-label="At the limit"><option value="ask">Ask before going over</option><option value="block">Stop at the limit</option></select></div></div><div class="toggle ${b.enabled ? 'on' : ''}" data-on></div></div>`);
+        const day = row.querySelector('[data-day]'), month = row.querySelector('[data-month]'), act = row.querySelector('[data-action]');
+        day.value = b.dailyUsd || ''; month.value = b.monthlyUsd || ''; act.value = b.action === 'block' ? 'block' : 'ask';
+        row.querySelector('[data-on]').onclick = () => relay.set('settings.budget.enabled', !b.enabled);
+        day.onchange = () => relay.set('settings.budget.dailyUsd', Math.max(0, Number(day.value) || 0));
+        month.onchange = () => relay.set('settings.budget.monthlyUsd', Math.max(0, Number(month.value) || 0));
+        act.onchange = () => relay.set('settings.budget.action', act.value);
+        return row;
+      })(),
       toggleRow('Eye breaks', 'Opt-in. After about 20 minutes of work your screens blur for 20 seconds and Relay asks you to look at something far away (the 20-20-20 rule). Time only counts while you are active; nothing is recorded. Say "turn off eye breaks" any time.', 'settings.eyeBreaks.enabled'),
       toggleRow('Evening recap', 'Around 8:30 PM Relay shows a notification with what it did today: what it changed, anything worth a second look (sent, moved to the Trash, ran a command), and what you can undo with one tap in History > Actions. Say “daily recap” or “what did you do today” any time. Only shown on days when something changed.', 'settings.recap.enabled'),
       toggleRow('Clipboard history', 'Remembers the text you copy, so you can ask “what did I copy earlier?”. Kept only in memory (never saved to disk, gone when Relay quits), for a day. Never kept: anything a password manager marks as secret, or that looks like a password, key, card or social security number. Say “clear my clipboard history” any time.', 'settings.clipboardHistory.enabled'),

@@ -652,6 +652,7 @@ function registerIpc() {
     if (key === 'settings.model.provider' && value === 'ollama') {speaker?.stop();mapPanel?.close();}
     if(key==='settings.hands.maxHands'&&hands?.enabled){hands.disable();hands.enable().catch(e=>ask.notice(e.message,'failed'));}
     if (key === 'settings.hands.margin') hands?.cam?.syncConfig?.();
+    if (key === 'settings.ambient' || String(key).startsWith('settings.ambient.')) ask.syncAmbient();
     if ((key === 'settings.hands.pinchClick' || key === 'settings.hands.tabNumbers') && hands?.enabled && value !== false) hands.externalDrag?.start();
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
