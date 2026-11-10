@@ -384,6 +384,10 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
         describe: () => 'Changing the model',
         run: async (i) => models.edit(i)
       });
+      if (models.scad) {
+        tools.push({ name: 'preview_scad_parameter', description: 'Preview changing one standalone numeric parameter in a local OpenSCAD .scad file. Do not claim the file changed. Show the before and after and ask the user before saving; this never executes the file.', input_schema: obj({ file: str('Absolute path to the .scad file in the home folder'), parameter: str('Numeric parameter name'), value: { type: 'number', description: 'New numeric value' } }, ['file','parameter','value']), describe: () => 'Previewing OpenSCAD change', run: async i => { try { const p = models.scad.preview(i); return `Preview ${p.id} for ${p.source}:\n${p.before}\n→ ${p.after}\nNothing has been saved. Ask before using save_scad_copy.`; } catch(e) { return e.message; } } });
+        tools.push({ name: 'save_scad_copy', description: 'After previewing, save the approved OpenSCAD parameter edit as a new file, leaving the original unchanged.', input_schema: obj({ id: str('Preview id') }, ['id']), describe: () => 'Saving OpenSCAD copy', confirm: i => models.scad.summary(i.id), run: async i => { try { const file = models.scad.save(i.id); return `Saved a new copy: ${file}. The original is unchanged.`; } catch(e) { return e.message; } } });
+      }
       tools.push({
         name: 'read_3d',
         description: 'Read the shapes of the designed 3D model on screen, with their names, sizes and places, as the user has it now (they may have edited it by hand). Use it before edit_3d when you are not sure.',
