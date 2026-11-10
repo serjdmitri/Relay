@@ -77,7 +77,7 @@ const council = require('./council');
 const { describe: describeNotification } = require('./notifications');
 const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
-const { parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
+const { parseDismiss, parseGoodbye, goodbyeReply, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
 const codexCli = require('./agent/codexCli');
 const assist = require('./assist');
 const { ClaudeAnswerer, ProviderAnswerer } = require('./assistModel');
@@ -2092,6 +2092,19 @@ class AskController {
       this.cardPanel?.hide();
       this.close();
       return { status: 'done', reply: '', actions: 0, dismissed: true };
+    }
+    // "Goodbye": say it back, do not listen for another command, and put Relay away. Not while a quiz or checklist is running (where "that's all" means something else), or for a request that came from the phone or a schedule.
+    if (!this.runningTask && !opts.shown && !opts.scheduled && !opts.drain && !opts.remote && !this.quiz && !this.checklist && parseGoodbye(text)) {
+      const line = goodbyeReply(text);
+      this.lastRequestText = text;
+      this.followFor = null; clearTimeout(this.followTimer); this.awaitingFollowAnswer = false;
+      this.cardPanel?.hide();
+      this.state = 'done';
+      this.push({ label: line, text: line });
+      try { if (this.voiceAsk && this.store.get('settings.speakReplies') && this.speaker) await this.speaker.speak(line, { ...profileFor('reply', this.store.get('settings') || {}), quick: true }); } catch { /* a missed goodbye is not worth an error */ }
+      this.followFor = null; clearTimeout(this.followTimer);
+      this.close();
+      return { status: 'done', reply: line, actions: 0, dismissed: true };
     }
     if (!opts.drain && !opts.scheduled && flagsMod.isOn(this.store.get('settings'), 'memoryV2') && this.prevExchange && lessons.looksLikeCorrection(text)) this.learnLesson(this.prevExchange, text);
     this.currentRequest = text;
