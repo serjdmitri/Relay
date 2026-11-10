@@ -21,3 +21,9 @@ test('waking and unlocking restart the pill helper, and the wake and the pill le
   assert.match(main, /glass\.stop\(\); diag\.log\('glass-restarted', why\)/);
   assert.match(ask, /diag\?\.log\('wake-heard'/); assert.match(ask, /diag\?\.log\('pill-shown'/);
 });
+
+test('"On it, Sir." is not spoken before the real answer unless it is switched on', () => {
+  const ask = fs.readFileSync(path.join(__dirname, '../src/main/askController.js'), 'utf8');
+  assert.match(ask, /if \(this\.store\.get\('settings\.spokenOnIt'\) === true && this\.voiceAsk/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../src/main/store.js'), 'utf8'), /spokenOnIt: false/);
+});

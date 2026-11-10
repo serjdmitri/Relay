@@ -18,7 +18,8 @@ const MARK_MIN = 28; // a path smaller than this (points) is not a circle
 const BUDDY_MAX_MS = 5 * 60 * 1000; // a safety net: the buddy never stays on screen longer than this
 
 class Overlay {
-  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false, getBackdrop = () => ({}), getRecentRect = () => null, borderBin = null }) {
+  constructor({ isEnabled, isBuddy = () => true, getLook = () => 'classic', getName = () => 'J.A.R.V.I.S', getVisual = () => 'reactor', getBorder = () => true, getBlur = () => false, getBackdrop = () => ({}), getRecentRect = () => null, borderBin = null, log = () => {}, probeMs = 1500, notReadyMs = 2500 }) {
+    this.log = log; this.probeMs = probeMs; this.notReadyMs = notReadyMs; // self-healing: see heal()
     this.isEnabled = isEnabled; // "Relay cursor": the halo, drawings and guides
     this.isBuddy = isBuddy; // "Buddy cursor": the helper that follows the pointer
     this.getName = getName; // the name shown in the reactor's core
@@ -95,9 +96,9 @@ class Overlay {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     win.loadFile(path.join(__dirname, '../renderer/overlay.html'));
-    e = { win, display, shapes: false, card: false, halo: false, buddy: false, hud: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
+    e = { notReadySince: Date.now(), win, display, shapes: false, card: false, halo: false, buddy: false, hud: false, haloTimer: null, ready: false, queue: [], markShow: false, markTimer: null };
     // A page that has not finished loading would drop what we send it, so hold commands until it has.
-    win.webContents.on('did-start-loading', () => { e.ready = false; });
+    win.webContents.on('did-start-loading', () => { e.ready = false; e.notReadySince = Date.now(); });
     win.webContents.on('render-process-gone', (_event, details) => {
       e.ready = false;
       if (win.isDestroyed() || this.quitting || details.reason === 'clean-exit') return;
@@ -109,7 +110,7 @@ class Overlay {
       win.webContents.reload();
     });
     win.webContents.on('did-finish-load', () => {
-      e.ready = true;
+      e.ready = true; e.notReadySince = null;
       for (const cmd of e.queue) if (!win.isDestroyed()) win.webContents.send('overlay:cmd', cmd);
       e.queue = [];
       if (e.look) win.webContents.send('overlay:cmd', { type: 'look', look: e.look });
@@ -132,7 +133,11 @@ class Overlay {
     if (!e || e.win.isDestroyed()) return;
     if (cmd.type === 'hud') e.lastHud = cmd;
     if (e.ready) e.win.webContents.send('overlay:cmd', cmd);
-    else if (e.queue.length < 60) e.queue.push(cmd);
+    else {
+      if (e.queue.length < 60) e.queue.push(cmd);
+      // A page that never becomes ready would keep Jarvis invisible while he talks: if it is still not ready shortly after something was sent, replace it.
+      if (cmd.type === 'hud' && !e.notReadyTimer) e.notReadyTimer = setTimeout(() => { e.notReadyTimer = null; if (!e.ready) this.heal(e, 'its page was not ready'); }, this.notReadyMs);
+    }
   }
 
   // A window is on screen only while it has something to show.
@@ -149,6 +154,41 @@ class Overlay {
       e.win.showInactive();
       e.win.setOpacity(this.captureHidden ? 0 : 1);
     } else if (!want && e.win.isVisible()) e.win.hide();
+  }
+
+  // Does this window's page answer? A page that sat through sleep can be alive as a window and dead as a page, so the reactor "never shows up" while Jarvis speaks.
+  async probe(e) {
+    try {
+      await Promise.race([e.win.webContents.executeJavaScript('document.readyState'), new Promise((_, no) => setTimeout(() => no(new Error('no answer')), this.probeMs))]);
+      return true;
+    } catch { return false; }
+  }
+
+  // If the window's page is not answering, replace the window with a fresh one and give it what it was meant to show. True when it was replaced.
+  async heal(e, why = '') {
+    if (e.healing || e.win.isDestroyed() || this.quitting) return false;
+    e.healing = true;
+    try {
+      if (!e.ready && Date.now() - (e.notReadySince || 0) < this.notReadyMs) return false; // still loading: give it a moment
+      if (e.ready && (await this.probe(e))) return false;
+      if (e.win.isDestroyed()) return false;
+      this.log('overlay-healed', why);
+      const d = e.display, last = e.lastHud, wasHud = this.hudEntry === e, flags = { hud: e.hud, buddy: e.buddy, halo: e.halo };
+      clearTimeout(e.hudTimer); clearTimeout(e.notReadyTimer);
+      if (e.blurWin && !e.blurWin.isDestroyed()) e.blurWin.destroy();
+      e.win.destroy();
+      if (this.wins.get(d.id) === e) this.wins.delete(d.id);
+      const n = this.entry(d);
+      Object.assign(n, flags);
+      if (wasHud) {
+        this.hudEntry = n;
+        clearInterval(this.borderTimer); this.borderTimer = setInterval(() => this.refreshBorder(), 1000); this.borderTimer.unref?.();
+        this.refreshBorder();
+      }
+      if (last && n.hud) this.send(n, last);
+      this.refresh(n);
+      return true;
+    } finally { e.healing = false; }
   }
 
   // Where the window really is. macOS can keep a window below the menu bar even when asked for the top of the display,
@@ -309,6 +349,8 @@ class Overlay {
     this.setHudBlur(this.hudEntry, this.worldView?false:this.getBlur());
     this.send(this.hudEntry, { type: 'hud', state: { ...this.hudState, worldView:!!this.worldView, cameraView:!!this.cameraView, name: this.getName(), visual: 'reactor' /* the orb is switched off for now (hud.js still draws it, nothing asks for it) */, border: this.getBorder() !== false } });
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
+    const he = this.hudEntry; // being summoned: make sure the page can actually draw it (at most every few seconds)
+    if (he && msg.state === 'listening' && Date.now() - (he.probedAt || 0) > 4000) { he.probedAt = Date.now(); this.heal(he, 'when summoned').catch(() => {}); }
   }
 
   refreshBorder() {

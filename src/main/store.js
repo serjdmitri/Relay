@@ -69,7 +69,7 @@ const DEFAULTS = {
     learnWords: true, // after you dictate, notice words you fixed by hand and learn them
     recent: true, // a glass list of recent asks opens when you rest the pointer on the left edge
     buddy: true, // a small helper follows your pointer while Relay works
-    speakReplies: false,
+    spokenOnIt: false, speakReplies: false,
     dictation: true, // off: the Dictate shortcut (right ⌘) does nothing
     saveDictation: true, // off: dictated text is typed but not kept in History
     glass: true, // draw the pill as real see-through glass when this Mac can
