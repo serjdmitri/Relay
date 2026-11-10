@@ -8,6 +8,19 @@ const DISMISS = /^(?:ok|okay|k|kay|alright|all right|thanks|thank you|thanks a l
 
 const parseDismiss = (text) => DISMISS.test(clean(text).replace(/'/g, ' ').replace(/\s+/g, ' ').trim());
 
+// "Goodbye": Relay says goodbye back, stops listening for a follow-up, and puts itself away (until you call it again). Said alone, never as part of a longer request.
+const GOODBYE = /^(?:(?:ok|okay|alright|all right|well|thanks|thank you|cool|great)[, ]+)?(?:good ?bye|bye ?bye|bye|so long|farewell|see (?:you|ya)(?: (?:later|soon|tomorrow|around))?|talk to you (?:later|soon|tomorrow)|catch you later|ttyl|that'?s all|that is all|that will be all|that'?s it|i'?m done|we'?re done|i'?m good|good night|goodnight|night night|have a good (?:one|night|day)|until next time|go to sleep|power down)(?: (?:for now|for today|for tonight|then))?(?: (?:jarvis|relay|sir|buddy|man))?$/;
+const parseGoodbye = (text) => GOODBYE.test(clean(text).replace(/'/g, ' ').replace(/\s+/g, ' ').trim().replace(/ s /g, 's ').replace(/ m /g, 'm ').replace(/ re /g, 're '));
+
+// What is said back, in the same register as what was said.
+function goodbyeReply(text) {
+  const t = String(text || '').toLowerCase();
+  if (/night/.test(t)) return 'Good night, Sir.';
+  if (/see (?:you|ya)|talk to you|catch you|later|ttyl|until next/.test(t)) return 'See you later, Sir.';
+  if (/that.?s all|that is all|that will be all|that.?s it|i.?m (?:done|good)|we.?re done/.test(t)) return 'Very good, Sir. Goodbye.';
+  return 'Goodbye, Sir.';
+}
+
 // Hold it when it was worked out by the model, or is a real sentence or more; not for replies sent to the phone or run on a schedule.
 // noHold: the command itself says its answer must not stay (the face setup window opens in front of it and the reactor would block it).
 function shouldHoldAnswer({ reply = '', status = 'done', model = '', remote = false, unattended = false, busy = false, setting = true, noHold = false } = {}) {
@@ -17,4 +30,4 @@ function shouldHoldAnswer({ reply = '', status = 'done', model = '', remote = fa
   return !!model || r.length >= 50;
 }
 
-module.exports = { parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS: 10 * 60 * 1000 };
+module.exports = { parseGoodbye, goodbyeReply, parseDismiss, shouldHoldAnswer, DISMISS_MAX_MS: 10 * 60 * 1000 };
