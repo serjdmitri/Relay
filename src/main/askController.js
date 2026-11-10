@@ -57,8 +57,9 @@ const safeFetchMod = require('./safeFetch');
 const { Guide } = require('./guide');
 const { learnFrom, describeStep } = require('./learned');
 const { WakeWord, commandAfterWake } = require('./wake');
+const { WakeModelControl } = require('./wakeModel');
 const { BargeIn } = require('./barge');
-const { shouldFollowUp, followUpAnswer, spokenReply, mayCloseAnswer } = require('./conversation');
+const { shouldFollowUp, followUpAnswer, spokenReply, mayCloseAnswer, wakeAllowedIn } = require('./conversation');
 const { Layouts } = require('./layouts');
 const { PhoneNotifier } = require('./notify');
 const { UndoRegistry } = require('./activity');
@@ -79,6 +80,8 @@ const hw = require('./homework');
 const { HomeworkDocs } = require('./homeworkFiles');
 const { Budget, parseBudgetCommand } = require('./budget');
 const ambientMod = require('./ambient');
+const personaMod = require('./personality');
+const sceneMod = require('./scenes');
 const { ListenPause, parseListenCommand } = require('./listenPause');
 const nutritionMod = require('./nutrition');
 const { parseDismiss, parseGoodbye, goodbyeReply, shouldHoldAnswer, DISMISS_MAX_MS } = require('./dismiss');
@@ -250,7 +253,7 @@ class AskController {
     this.frontP = null;
     this.appsP = null;
     this.mcp = new McpHost();
-    this.ensureOllama = () => launcher.ensureOllama({ get: (u) => this.httpGet(u, true), exec: quietExec, fileExists: require('fs').existsSync, spawnDetached: (c, a) => require('child_process').spawn(c, a, { detached: true, stdio: 'ignore' }).unref(), url: this.store.get('settings.model.ollamaUrl') || undefined });
+    this.ensureOllama = () => launcher.ensureOllama({ get: (u) => this.httpGet(u, true), exec: quietExec, fileExists: require('fs').existsSync, spawnDetached: (c, a) => require('child_process').spawn(c, a, { detached: true, stdio: 'ignore', env: { ...process.env, OLLAMA_FLASH_ATTENTION: '1', OLLAMA_KV_CACHE_TYPE: 'q8_0', OLLAMA_KEEP_ALIVE: '30m' } }).unref(), url: this.store.get('settings.model.ollamaUrl') || undefined });
     this.mac = createMac({ calBin: calBin, clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
@@ -277,7 +280,7 @@ class AskController {
     // "Hey Jarvis": listens while Relay is idle, and starts an ask when it hears the phrase.
     this.wake = new WakeWord({
       speech,
-      getConfig: () => ({ mode:this.store.get('settings.wake.mode'), enabled: !!this.store.get('settings.wake.enabled') && !(this.listenPause && this.listenPause.paused()), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
+      getConfig: () => ({ mode:this.store.get('settings.wake.mode'), enabled: !!this.store.get('settings.wake.enabled') && !(this.listenPause && this.listenPause.paused()) && !(this.wakeModel && this.wakeModel.covers), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', apps: this.store.get('settings.wake.apps') || [], requireClaps: !!this.store.get('settings.wake.requireClaps'),clapThreshold:this.store.get('settings.wake.clapThreshold')??.18 }),
       canListen: () => !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking,
       getFront: () => this.wakeFront,
       getDevice: () => this.store.get('settings.speech.input') || 'auto',
@@ -285,6 +288,19 @@ class AskController {
       onWake: text => this.wakeTriggered(text),
       log: console
     });
+    // The dedicated detector (wakeModel.js): a tiny on-device model hears "Hey Jarvis" instead of full speech recognition running all day. While it is listening, the speech-based
+    // wake word above stays off; if it cannot start, or the setting asks for speech (or a custom phrase, claps, ambient answers), the speech-based one does the job as before.
+    this.createWakePage = null; // set by the app: opens the hidden listener page
+    this.wakeModel = new WakeModelControl({
+      createPage: (opts) => { if (!this.createWakePage) throw new Error('no page'); return this.createWakePage(opts); },
+      getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled') && !(this.listenPause && this.listenPause.paused()), mode: this.store.get('settings.wake.mode') || (this.store.get('settings.wake.requireClaps') ? 'claps-voice' : 'voice'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', engine: this.store.get('settings.wake.engine') || 'model', ambient: !!(this.ambient && this.ambient.on) }),
+      canWake: () => this.wakeCanNow(),
+      onWake: () => { this.diag?.log('wake-model', 'heard the phrase'); this.wakeTriggered(''); },
+      onState: () => { this.diag?.log('wake-model-state', this.wakeModel.state); Promise.resolve(this.wake.refresh()).catch(() => {}); },
+      log: console
+    });
+    const speechRefresh = this.wake.refresh.bind(this.wake);
+    this.wake.refresh = async () => { try { await this.wakeModel.refresh(); } catch { /* the speech wake word covers it */ } await speechRefresh(); try { this.overlay.setArmed(this.wake.armed || (this.wakeModel.covers && this.wakeCanNow())); } catch { /* no overlay yet */ } };
     // Meeting notes: listens in short stretches until you say "Jarvis, end the meeting"; then the model writes the Note and the reminders.
     this.meeting = new MeetingRecorder({
       speech, getDevice: () => this.store.get('settings.meeting.input') || this.store.get('settings.speech.input') || 'auto', onStop: (r) => this.meetingEnded(r), log: console,
@@ -296,6 +312,7 @@ class AskController {
     this.ambientWatcher = new assist.QuestionWatcher({ getNames: () => [], getMode: () => 'any', onQuestion: ({ question }) => this.ambientQuestion(question) });
     speech.on('partial', (t) => { if (this.ambient.on && this.wake && this.wake.armed && typeof t === 'string') this.ambientWatcher.push(t); });
     this.syncAmbient();
+    setTimeout(() => { try { const mm = this.store.get('settings.model') || {}; if (mm.provider === 'ollama') this.warmLocal().catch(() => {}); } catch { /* not now */ } }, 8000).unref?.();
     this.assistOn = false;
     this.assistPanel = null; // set by the app: the private window
     this.watcher = new assist.QuestionWatcher({
@@ -1242,7 +1259,9 @@ class AskController {
 
   memoryText() {
     if (this.store.get('settings.memory') === false) return '';
-    const base = mem.memoryContext(this.store.get('memories') || []);
+    const stored = this.store.get('memories') || [], live = mem.purgeExpired(stored);
+    if (live.length !== stored.length) this.store.set('memories', live); // yesterday's "for today" facts are gone
+    const base = mem.memoryContext(live, 2400, { recent: this.store.get('settings.memoryRecent') === false ? [] : mem.recentLines(this.store.get('history')) });
     if (!flagsMod.isOn(this.store.get('settings'), 'memoryV2')) return base;
     // Smarter memory: the few lessons that match this request, and the guesses about you that you approved
     const all = this.store.get('lessons') || [];
@@ -1294,10 +1313,10 @@ class AskController {
     return { lessons: this.store.get('lessons') || [], inferred: this.store.get('inferred') || [] };
   }
 
-  rememberFact(fact, { noExport = false } = {}) {
-    const exporting = !!this.memoryExport && !noExport; // an interview writes one file at its end instead of one per answer
+  rememberFact(fact, { noExport = false, layer = 'durable' } = {}) {
+    const exporting = !!this.memoryExport && !noExport && layer !== 'today'; // a fact for today is not exported for Sentient OS // an interview writes one file at its end instead of one per answer
     if (mem.isSecret(fact)) return { status: 'failed', reply: "I don't keep passwords, card numbers or other secrets." };
-    const { list, added } = mem.addFact(this.store.get('memories') || [], fact, { id: crypto.randomUUID() });
+    const { list, added } = mem.addFact(mem.purgeExpired(this.store.get('memories') || []), fact, { id: crypto.randomUUID(), layer });
     if (added) {
       if (exporting) list[0].exportPending = true;
       this.store.set('memories', list);
@@ -1322,7 +1341,7 @@ class AskController {
         return { status: 'done', reply: 'I made the missing text file in Desktop/memory for Sentient OS import.' };
       }
     }
-    return { status: 'done', reply: added ? "Okay, I'll remember that." : 'I already knew that.' };
+    return { status: 'done', reply: added ? (layer === 'today' ? "Okay, I'll remember that for today." : "Okay, I'll remember that.") : 'I already knew that.' };
   }
 
   forgetFact(query) {
@@ -1337,12 +1356,14 @@ class AskController {
   // A spoken or typed memory command ("remember that...", "forget...", "what do you remember"), handled without the model.
   async runMemory(cmd) {
     const vaultNote = ' Sentient OS and files in Desktop/memory were not changed.';
-    if (cmd.type === 'remember') return { ...this.rememberFact(cmd.fact), actions: 0 };
+    if (cmd.type === 'remember') return { ...this.rememberFact(cmd.fact, { layer: cmd.layer || 'durable' }), actions: 0 };
     if (cmd.type === 'forget') return { ...this.forgetFact(cmd.query), actions: 0 };
     if (cmd.type === 'recall') {
-      const list = this.store.get('memories') || [];
+      const everything = mem.purgeExpired(this.store.get('memories') || []);
+      const todays = everything.filter((f) => mem.layerOf(f) === 'today'), list = everything.filter((f) => mem.layerOf(f) !== 'today');
+      const todayNote = todays.length ? ` For today only: ${todays.map((f) => f.text).join('; ')}.` : '';
       const local = list.length ? `Relay locally remembers ${list.length} thing${list.length === 1 ? '' : 's'}: ${list.slice(0, 5).map((f) => f.text).join('; ')}${list.length > 5 ? '; and more in Settings > Memory' : ''}.` : 'Relay has no local memories yet. Say "remember that…" to tell me something.';
-      return { status: 'done', actions: 0, reply: `${local} This list does not include Sentient OS.` };
+      return { status: 'done', actions: 0, reply: `${local}${todayNote} This list does not include Sentient OS.` };
     }
     if (cmd.type === 'forget-all') {
       if (!(this.store.get('memories') || []).length) return { status: 'done', actions: 0, reply: `There was nothing in Relay’s local memory to forget.${vaultNote}` };
@@ -1580,10 +1601,37 @@ class AskController {
     return{status:'done',reply:summary,actions:1};
   }
 
+  // What is said aloud. You choose the parts (settings.briefing.say; the weather is shown on the card, not read out, unless you turn it on). The first briefing of the day says everything chosen;
+  // a later one the same day says only what is new since then (settings.briefing.onlyNew, on by default). The card always shows everything.
   async briefingText(options = {}) {
     const facts = await this.briefingFacts(options);
     if (!options.signal?.aborted) options.onFacts?.(facts);
-    return buildBriefing(facts);
+    if (typeof this.store?.get !== 'function') return buildBriefing(facts);
+    const cfg = this.store.get('settings.briefing') || {};
+    const say = cfg.say ? { ...cfg.say } : undefined; // the app's defaults keep the weather on the card only; a store without the setting speaks everything, as before
+    const day = `${facts.now.getFullYear()}-${facts.now.getMonth() + 1}-${facts.now.getDate()}`;
+    const seenBefore = this.store.get('briefingSeen');
+    const sameDay = !!seenBefore && seenBefore.day === day && Array.isArray(seenBefore.keys);
+    const known = new Set(sameDay ? seenBefore.keys : []);
+    const eventKey = (e) => `event|${String(e.title).toLowerCase()}|${e.start ? new Date(e.start).getTime() : 'allday'}`;
+    const keys = {
+      events: (facts.events || []).map(eventKey), due: (facts.due || []).map((d) => `due|${String(d.title).toLowerCase()}`),
+      mail: (facts.mail || []).map((m) => `mail|${m.from}|${m.subject}`), school: ((facts.school && facts.school.assignments) || []).map((a) => `school|${a.title}|${a.due || ''}`),
+      unfinished: (facts.unfinished || []).map((h) => `unfinished|${h.text}`)
+    };
+    const later = sameDay && cfg.onlyNew !== false;
+    let spoken = { ...facts, say, later: false };
+    if (later) {
+      const fresh = (list, make) => (list || []).filter((x) => !known.has(make(x)));
+      spoken = {
+        ...facts, say, later: true, includeGreeting: false,
+        events: fresh(facts.events, eventKey), due: fresh(facts.due, (d) => `due|${String(d.title).toLowerCase()}`), mail: fresh(facts.mail, (m) => `mail|${m.from}|${m.subject}`),
+        unfinished: fresh(facts.unfinished, (h) => `unfinished|${h.text}`),
+        school: facts.school && facts.school.assignments ? { ...facts.school, assignments: fresh(facts.school.assignments, (a) => `school|${a.title}|${a.due || ''}`) } : facts.school
+      };
+    }
+    if (!options.signal?.aborted) { try { this.store.set('briefingSeen', { day, keys: [...new Set([...known, ...Object.values(keys).flat()])].slice(-400) }); } catch { /* the briefing still completes */ } }
+    return buildBriefing(spoken);
   }
 
   recordBriefingSources(facts, requestId, report) {
@@ -1715,7 +1763,7 @@ class AskController {
 
   claudeSystem() {
     return buildSystemPrompt({
-      fast: this.fastMode(),
+      fast: this.fastMode(), style: this.styleLine(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'), firefoxConnected: this.bridge.isConnected(),
       screen: (this.disp || screen.getPrimaryDisplay()).size, visionCapable: true, withContext: false
     });
@@ -1869,13 +1917,22 @@ class AskController {
   }
 
   // While a wake-started request is being spoken: end it after a pause, or give up if nothing is said.
+  // Can "Hey Jarvis" start a request right now? (the same test the speech-based wake word uses)
+  wakeCanNow() {
+    const apps = this.store.get('settings.wake.apps') || [];
+    return !this.suspended && !this.meeting?.active && (this.state === 'idle' || this.state === 'done') && !(this.speaker && this.speaker.speaking) && !this.overlay.marking && wakeAllowedIn(apps, apps.length ? this.wakeFront : null);
+  }
+
   checkAutoEnd(level) {
     const a = this.autoEnd;
     if (!a || this.state !== 'listening') return;
     const now = Date.now();
     if (a.floor === null) a.floor = level;
     a.floor = Math.min(a.floor, level) * 0.98 + level * 0.02; // the room's background level
-    const voice = level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
+    // With the voice detector running (the dedicated wake model is on), a voice is told from a fan or a TV by what it sounds like, not by how loud it is; otherwise the loudness check decides.
+    this.wakeModel?.watch();
+    const chance = this.wakeModel ? this.wakeModel.voiceChance() : null;
+    const voice = chance !== null ? chance >= 0.5 : level > a.floor * 3 + 0.015; // quiet rooms read about 0.002 and speech about 0.05 to 0.1
     if (voice) { a.spoke = true; a.lastVoice = now; }
     const pause = Math.max(0.7, Math.min(5, Number(this.store.get('settings.autoSend.silenceSeconds')) || 1.5)) * 1000;
     if (a.spoke && a.recognized && now - a.lastVoice > pause) { this.autoEnd = null; this.finishListening(); }
@@ -1944,7 +2001,7 @@ class AskController {
     this.push({ finishing: true });
     let text = '';
     try {
-      text = await this.speech.finish();
+      text = this.mode === 'ask' ? await this.speech.finishFast(Math.max(200, Math.min(3000, Number(this.store.get('settings.speech.finishGraceMs')) || 600))) : await this.speech.finish(); // a spoken request does not wait seconds for the last word (speech.js)
     } catch (e) {
       this.unduck();
       return this.notice(e.message, 'failed');
@@ -2276,6 +2333,8 @@ class AskController {
           { const am = ambientMod.parseAmbientCommand(effective); if (am) { this.lastRequestText = effective; return this.finish(entry, this.ambientCommand(am)); } }
           { const nu = nutritionMod.parseNutritionCommand(effective, { enabled: !!(this.store.get('settings.nutrition') || {}).enabled }); if (nu) { this.lastRequestText = effective; return this.finish(entry, await this.nutritionCommand(nu)); } }
           { const lp = parseListenCommand(effective); if (lp) { this.lastRequestText = effective; return this.finish(entry, this.listenCommand(lp)); } }
+          { const pc2 = personaMod.parsePersonaCommand(effective); if (pc2) { this.lastRequestText = effective; return this.finish(entry, this.personaCommand(pc2)); } }
+          { const sc2 = sceneMod.parseSceneCommand(effective); if (sc2) { this.lastRequestText = effective; return this.finish(entry, this.sceneCommand(sc2)); } }
           if (this.pageCommand) { const pc = require('./pageWatch').parsePageWatchCommand(effective); if (pc) { this.lastRequestText = effective; return this.finish(entry, await this.pageCommand(pc)); } }
           if (this.nightCommand) { const nc = require('./nightClaude').parseNightCommand(effective); if (nc) { this.lastRequestText = effective; return this.finish(entry, await this.nightCommand(nc)); } }
           { const dg = require('./diag').parseDiagCommand(effective); if (dg && this.diag) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: this.diag.describe(8), actions: 0 }); } }
@@ -2504,6 +2563,7 @@ class AskController {
       }
       if (d.pauseVideo) { try { await this.mac.mediaKey('play'); this.pausedVideoByPresence = true; } catch { /* no media key: leave it */ } }
     }
+    this.runScene('away');
   }
 
   // You are back: start what it paused (not what you paused yourself).
@@ -2512,6 +2572,7 @@ class AskController {
     if (this.pausedByPresence && cfg.resume !== false) await this.quick('play').catch(() => {});
     if (this.pausedVideoByPresence && cfg.resume !== false) await this.mac.mediaKey('play').catch(() => {});
     this.pausedByPresence = false; this.pausedVideoByPresence = false;
+    this.runScene('back');
   }
 
   // "Show it life size": the newest hologram, at the size it really is on your screen (see the page's realSize).
@@ -2842,6 +2903,7 @@ class AskController {
 
   quickContext() {
     return {
+      audibleTabs: async () => { if (!this.bridge?.isConnected?.()) return []; const l = await this.bridge.call('tabs.list', {}); return (Array.isArray(l) ? l : (l && l.tabs) || []).filter((t) => t && t.audible && t.title); },
       displays: () => this.displayAreas(),
       timers: this.timers,
       brightness: { get: () => this.speech.brightness(), set: (v) => this.speech.brightness(v) },
@@ -3286,8 +3348,8 @@ class AskController {
   // ----- the actual agent run -----
   buildProvider() {
     const m = this.store.get('settings.model');
-    if (m.provider === 'ollama') {
-      return { provider: new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }), vision: VISION_RE.test(m.ollamaModel) };
+    if (m.provider === 'ollama' || this.localFallbackFlag) {
+      return { provider: new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama, keepAlive: this.localKeepAlive() }), vision: VISION_RE.test(m.ollamaModel) };
     }
     if (isPreset(m.provider)) return compatProvider(m);
     return { provider: new AnthropicProvider({ apiKey: decryptKey(m.anthropicKeyEnc), model: m.anthropicModel }), vision: true };
@@ -3299,7 +3361,7 @@ class AskController {
     this.push({ label: 'Using Ollama offline' });
     const m = this.store.get('settings.model');
     try {
-      const res = await new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
+      const res = await new OllamaProvider({ url: m.ollamaUrl, model: (await this.fastLocalModel()) || m.ollamaModel, ensure: this.ensureOllama, keepAlive: this.localKeepAlive() }).step({ system: OFFLINE_SYSTEM, messages: [{ role: 'user', content: [{ type: 'text', text }] }], tools: [], signal: AbortSignal.timeout(60000) });
       return { status: 'done', reply: (res.text || '').trim() || 'I have no answer for that offline.', actions: 0 };
     } catch (e) { return { status: 'done', reply: /cloud models cannot be used/.test(e.message) ? e.message : 'I am offline and no local model is running. Start Ollama to chat without the internet.', actions: 0 }; }
   }
@@ -3361,17 +3423,48 @@ class AskController {
     return done('Okay, I stopped listening for Hey Jarvis' + span + '. ' + (c.seconds ? 'I will start again by myself. ' : '') + 'The Option key still works. To start listening again, press it and say "resume listening", or use the menu bar.', 1);
   }
 
+  // Personality by voice (personality.js): a line in the instructions about how to talk. Never changes what Relay may do.
+  styleLine() { return personaMod.styleLine(this.store.get('settings.persona')); }
+
+  personaCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    if (c.type === 'persona-status') return done(personaMod.describe(this.store.get('settings.persona')));
+    const next = c.type === 'persona-reset' ? { key: '', custom: '' } : c.type === 'persona-custom' ? { key: '', custom: c.custom } : { key: c.key, custom: '' };
+    this.store.set('settings.persona', next); this.dropWarm?.(true); this.onChange();
+    if (c.type === 'persona-reset') return done('Back to my usual style.', 1);
+    return done(c.type === 'persona-custom' ? `Okay. From now on I will talk like ${c.custom}. Say "go back to normal" when you have had enough.` : `Okay: ${personaMod.describe(next).toLowerCase()} Say "go back to normal" to undo that.`, 1);
+  }
+
+  // Scenes when you leave or come back (scenes.js). They run only while Relay is idle and not in a meeting.
+  sceneCommand(c) {
+    const done = (reply, actions = 0) => ({ status: 'done', reply, actions });
+    const cur = this.store.get('settings.scenes') || {};
+    if (c.type === 'scene-status') return done(sceneMod.describe(cur));
+    if (c.type === 'scene-clear') { this.store.set('settings.scenes', { ...cur, [c.which]: '' }); this.onChange(); return done('Okay, nothing will happen when you ' + (c.which === 'away' ? 'leave' : 'come back') + '.', 1); }
+    this.store.set('settings.scenes', { ...cur, [c.which]: c.command.slice(0, 200) }); this.onChange();
+    const needs = (this.store.get('settings.presence') || {}).enabled ? '' : ' This needs "Pause music when I leave the desk" turned on in Settings, because that is the camera that notices you leaving.';
+    return done(`Okay. When you ${c.which === 'away' ? 'leave' : 'come back'}, I will: ${c.command}.${needs}`, 1);
+  }
+
+  runScene(which) {
+    const text = String(((this.store.get('settings.scenes') || {})[which]) || '').trim();
+    if (!text || this.meeting?.active || this.runningTask || !['idle', 'done'].includes(this.state)) return false;
+    this.handleText(text).catch(() => {});
+    return true;
+  }
+
   syncAmbient() {
     const cfg = this.store.get('settings.ambient') || {};
     this.ambient.on = !!cfg.enabled;
     this.ambient.limiter.perHour = Math.max(1, Math.min(30, Number(cfg.perHour) || 6));
     if (!this.ambient.on) { this.ambientWatcher.reset(); clearTimeout(this.ambient.hideTimer); }
+    try { this.wake && this.wake.refresh(); } catch { /* retried by the self check */ }
   }
 
   // The model for ambient answers: a local one (Ollama) unless you allowed the one you use for everything else.
-  ambientProvider() {
+  async ambientProvider() {
     const m = this.store.get('settings.model') || {}, cfg = this.store.get('settings.ambient') || {};
-    if (cfg.localOnly !== false) return m.ollamaModel ? new OllamaProvider({ url: m.ollamaUrl, model: m.ollamaModel, ensure: this.ensureOllama }) : null;
+    if (cfg.localOnly !== false) return m.ollamaModel ? new OllamaProvider({ url: m.ollamaUrl, model: (await this.fastLocalModel()) || m.ollamaModel, ensure: this.ensureOllama, keepAlive: this.localKeepAlive() }) : null;
     return this.buildProvider().provider;
   }
 
@@ -3380,7 +3473,7 @@ class AskController {
     if (this.meeting?.active || this.assistOn || !['idle', 'done'].includes(this.state) || this.speaker?.speaking || this.offline) return;
     if (require('./proactive').inQuiet((this.store.get('settings.proactive') || {}).quiet, new Date())) return;
     if (!ambientMod.isLookupQuestion(question) || !this.ambient.limiter.allow(question)) return;
-    const provider = this.ambientProvider();
+    const provider = await this.ambientProvider();
     if (!provider) return;
     const id = ++this.ambient.seq;
     try {
@@ -3409,6 +3502,7 @@ class AskController {
     const r = this.budget.check();
     if (r.state === 'warn') { if (this.budget.shouldWarn(r)) this.notice(r.text, 'done'); return null; }
     if (r.state !== 'over') return null;
+    if (cfg.action === 'local' && (this.store.get('settings.model') || {}).ollamaModel) { const k = 'local:' + r.which; if (!this.budget.warned[k]) { this.budget.warned[k] = true; this.notice(r.text + ' I switched to the local model for the rest of the ' + (r.which === 'daily' ? 'day' : 'month') + '.', 'done'); } return null; } // routed in execute()
     if (cfg.action === 'block') return { status: 'stopped', reply: `${r.text} I have not run this. Say "ignore the limit for today" to carry on, or raise it, for example "set my ${r.which} limit to ${Math.ceil(r.limit * 2)} dollars".`, actions: 0 };
     if (!(await this.askConfirm({ question: `${r.text} Run this anyway?` }))) return { status: 'stopped', reply: 'Okay, I did not run it.', actions: 0 };
     return null;
@@ -3457,9 +3551,11 @@ class AskController {
         this.onChange();
       }
     };
-    if (signedIn) {
-      // Claude is out of usage and Codex is signed in: carry on with Codex and disclose the switch.
-      if (this.failover.active && (await this.codexReady())) return this.executeCodex(text, runningApps, { confirm, signal, onEvent });
+    const toLocal = await this.shouldUseLocal();
+    if (toLocal) this.push({ label: 'Using the local model (' + this.localWhy + ')' });
+    if (signedIn && !toLocal) {
+      // Claude is out of usage and Codex is signed in: carry on with Codex and disclose the switch. If Codex is out too, this same request carries on locally.
+      if (this.failover.active && (await this.codexUsableNow())) { const r = await this.executeCodex(text, runningApps, { confirm, signal, onEvent }); if (!r.codexLimit || !(await this.shouldUseLocal())) return r; return this.execute(text, requestId); }
       // Take the Claude process that was started while you were talking, or start one now.
       let session = this.warm?.alive ? this.warm : null;
       this.warm = null;
@@ -3481,11 +3577,14 @@ class AskController {
         // Stopped by the usage limit: note when it resets and finish this same request with Codex, so nothing has to be asked again.
         if (this.failover.isLimit(result, this.rate && Date.now() - this.rate.ts < 120000 ? this.rate : null)) {
           this.failover.trip({ resetsAt: this.rate?.resetsAt, text: result.reply });
-          if (await this.codexReady()) {
+          if (await this.codexUsableNow()) {
             try { session.close(); } catch { /* already gone */ }
             session = null;
-            return await this.executeCodex(text, runningApps, { confirm, signal, onEvent });
+            const r = await this.executeCodex(text, runningApps, { confirm, signal, onEvent });
+            if (!r.codexLimit || !(await this.shouldUseLocal())) return r; // Codex is out too: with a local model set up, this same request carries on there
+            return await this.execute(text, requestId);
           }
+          if (await this.shouldUseLocal()) { try { session.close(); } catch { /* already gone */ } session = null; return await this.execute(text, requestId); }
         }
         return result;
       } catch (e) {
@@ -3501,7 +3600,7 @@ class AskController {
     const display = screen.getPrimaryDisplay();
     const tools = this.makeTools(vision);
     const system = buildSystemPrompt({
-      frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(),
+      style: this.styleLine(), frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(),
       vocabulary: this.store.get('vocabulary'), routines: this.store.get('routines'),
       firefoxConnected: this.bridge.isConnected(), screen: display.size, visionCapable: vision
     });
@@ -3529,6 +3628,55 @@ class AskController {
     return [buildContext({ frontmost: this.prevApp, runningApps, mark: this.markHint(), files: this.filesHint(), memory: this.memoryText(), holo: this.holoHint(), language: languageInstruction(this.store.get('settings.language.reply')), style: [workStyle(this.store.get('settings.workMode')), this.store.get('settings.workshop.enabled') ? workshop.WORKSHOP_STYLE : ''].filter(Boolean).join(' ') }), fresh ? this.followUpContext() : ''].filter(Boolean).join('\n\n');
   }
 
+  // How long Ollama keeps the local model in memory: 30 minutes, or 5 when unplugged with the battery saver on (or whatever you set).
+  localKeepAlive() {
+    const m = this.store.get('settings.model') || {};
+    if (m.ollamaKeepAlive) return m.ollamaKeepAlive;
+    try { const { powerMonitor } = require('electron'); if (this.store.get('settings.batterySaver') !== false && powerMonitor && powerMonitor.isOnBatteryPower && powerMonitor.isOnBatteryPower()) return '5m'; } catch { /* no power information */ }
+    return '30m';
+  }
+
+  // Codex is there, signed in, and not itself out of usage right now.
+  async codexUsableNow() { return !!(await this.codexReady()) && Date.now() >= (Number(this.store.get('settings.failover.codexUntil')) || 0); }
+
+  // The chain: Claude, then Codex when Claude is out, then the local model (Ollama) when Codex is out or not set up. A spend limit set to "switch to the local model" does the same.
+  // Needs a local model to be set up; without one nothing changes. Sets localFallbackFlag so buildProvider() hands out the local model for this request.
+  async shouldUseLocal() {
+    const m = this.store.get('settings.model') || {};
+    let why = '';
+    if (m.provider === 'claude' && m.ollamaModel) {
+      const cfg = this.store.get('settings.budget') || {};
+      if (cfg.enabled && cfg.action === 'local' && this.budget.check().state === 'over') why = 'your spend limit';
+      else if (this.failover.active && !(await this.codexUsableNow())) why = 'Claude and Codex are out of usage';
+    }
+    this.localFallbackFlag = !!why; this.localWhy = why;
+    if (why && Date.now() - (this.localWarmAt || 0) > 10 * 60000) { this.localWarmAt = Date.now(); this.warmLocal().catch(() => {}); }
+    return !!why;
+  }
+
+  // The small local model for quick, simple things (answers heard nearby, plain conversation offline): a 3B or smaller one if it is installed. Cached for ten minutes.
+  async fastLocalModel() {
+    const m = this.store.get('settings.model') || {};
+    if (m.ollamaFastModel) return m.ollamaFastModel;
+    if (this.localModels && Date.now() - this.localModels.at < 600000) return this.localModels.fast;
+    let fast = null;
+    try {
+      const j = await this.httpGet(String(m.ollamaUrl || 'http://127.0.0.1:11434').replace(/\/$/, '') + '/api/tags', true);
+      fast = ((j && j.models) || []).map((x) => x.name).find((n) => /^(?:qwen2\.5|qwen3|llama3\.2|gemma\d?|phi\d?)[^:]*:(?:0\.5b|1b|1\.5b|2b|3b|4b)\b/i.test(n)) || null;
+    } catch { /* Ollama is not running */ }
+    this.localModels = { at: Date.now(), fast };
+    return fast;
+  }
+
+  // Load the local models into memory ahead of use (Ollama otherwise unloads them after five idle minutes and the next request waits seconds for the load).
+  async warmLocal() {
+    const m = this.store.get('settings.model') || {};
+    if (!m.ollamaModel) return false;
+    const names = new Set([m.ollamaModel, await this.fastLocalModel()].filter(Boolean));
+    for (const model of names) { try { await new OllamaProvider({ url: m.ollamaUrl, model, ensure: this.ensureOllama, keepAlive: this.localKeepAlive() }).warm(); } catch { /* not available now */ } }
+    return true;
+  }
+
   // Is Codex there, and signed in with a ChatGPT plan (not a key)? Checked at most once a minute. Returns its path, or null.
   async codexReady(force = false) {
     if (this.store.get('settings.failover.codex') === false) return null;
@@ -3548,8 +3696,9 @@ class AskController {
     await this.codexHost.start();
     const r = await codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(true, { forModel: true, request: text }), confirm, onEvent, signal, fast: this.fastMode() });
     if (r.status === 'failed' && r.limit) {
+      this.store.set('settings.failover.codexUntil', Date.now() + 30 * 60000); // Codex is out too: the next requests go to the local model for a while
       const when = new Date(this.failover.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      return { ...r, reply: `Claude and Codex are both out of usage right now. Claude should be back around ${when}.` };
+      return { ...r, codexLimit: true, reply: `Claude and Codex are both out of usage right now. Claude should be back around ${when}.` };
     }
     return { ...r, reply: r.status === 'stopped' ? r.reply : `Using Codex because Claude reached its usage limit. ${r.reply || ''}`.trim(), model: 'codex' };
   }

@@ -43,13 +43,15 @@ function buildBriefing(f) {
   const now = f.now || new Date();
   const part = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening';
   const out = f.includeGreeting === false ? [] : [`Good ${part}${f.name ? `, ${f.name}` : ''}.`];
+  // f.say (optional): which parts are spoken, e.g. { weather: false }; a part that is not listed, or true, is spoken. f.later: a repeat briefing the same day, so only new things are said and "all clear" lines are left out.
+  const says = (key) => !f.say || f.say[key] !== false, quiet = f.later === true;
   const w = f.weather;
-  if (w) {
+  if (w && says('weather')) {
     const deg = w.units === 'c' ? '°C' : ' degrees';
     out.push(`It is ${w.tempNow}${deg}${w.word ? ` and ${w.word}` : ''} in ${w.city}, a high of ${w.high} and a low of ${w.low}${w.rain >= 40 ? `, with a ${w.rain} percent chance of rain, so take an umbrella` : ''}.`);
   }
   const ev = (f.events || []).filter((e) => e && e.title);
-  if (ev.length) {
+  if (!says('calendar')) { /* not spoken */ } else if (ev.length) {
     const timed = ev.filter((e) => e.start && !e.allDay).sort((a, b) => a.start - b.start);
     const upcoming = timed.filter((e) => e.start >= new Date(now.getTime() - 15 * 60000));
     const allDay = ev.filter((e) => e.allDay || !e.start);
@@ -58,30 +60,32 @@ function buildBriefing(f) {
     else if (timed.length) bits.push(`${timed.length === 1 ? 'one event was scheduled' : `${timed.length} events were scheduled`} earlier today`);
     if (allDay.length) bits.push(`all day: ${list(allDay.slice(0, 3).map((e) => e.title))}`);
     out.push(bits.length ? `On your calendar, ${bits.join('; ')}.` : 'Your calendar is clear.');
-  } else if(checked('calendar')||(disabled.has('calendar')&&checked('google-calendar'))) out.push(checked('calendar')&&checked('google-calendar')?'Your calendar is clear today.':checked('calendar')?'Your Mac calendar is clear today.':'Your Google calendar is clear today.');
+  } else if(!quiet&&(checked('calendar')||(disabled.has('calendar')&&checked('google-calendar')))) out.push(checked('calendar')&&checked('google-calendar')?'Your calendar is clear today.':checked('calendar')?'Your Mac calendar is clear today.':'Your Google calendar is clear today.');
   const due = [...(f.due || [])].sort((a, b) => Number(!!b.overdue) - Number(!!a.overdue));
-  if (due.length) {
+  if (!says('reminders')) { /* not spoken */ } else if (due.length) {
     const overdue = due.filter((d) => d.overdue);
     out.push(`${due.length === 1 ? 'One reminder is' : `${due.length} reminders are`} due: ${list(due.slice(0, 4).map((d) => d.title))}${due.length > 4 ? ', and more' : ''}${overdue.length ? `, ${overdue.length === due.length ? 'overdue' : `${overdue.length} of them overdue`}` : ''}.`);
-  } else if (checked('reminders')) out.push(f.school !== undefined ? 'No reminders are due.' : 'Nothing is due.');
-  if (f.school === null) out.push('I could not check school assignments. Open your assignment center in signed-in Firefox and check the connection.');
+  } else if (!quiet && checked('reminders')) out.push(f.school !== undefined ? 'No reminders are due.' : 'Nothing is due.');
+  if (!says('school')) { /* not spoken */ } else if (f.school === null) out.push('I could not check school assignments. Open your assignment center in signed-in Firefox and check the connection.');
   else if (f.school?.problem) out.push(f.school.problem);
   else if (f.school) {
     const items = f.school.assignments;
     if (items.length) out.push(`School assignments visible: ${list(items.slice(0, 4).map((a) => `${a.title}${a.due ? `, due ${a.due}` : ''}`))}${items.length > 4 ? ', and more' : ''}. Check the school page for the full list.`);
-    else out.push('I could not identify any incomplete assignments from the visible school page. Check the page for the full list.');
+    else if (!quiet) out.push('I could not identify any incomplete assignments from the visible school page. Check the page for the full list.');
   }
-  if (f.mail && f.mail.length) out.push(`Recent important unread email from the last two days includes: ${list(f.mail.slice(0, 3).map((m) => `${String(m.from).replace(/<.*$/, '').replace(/"/g, '').trim() || 'someone'} about ${String(m.subject || 'no subject').slice(0, 60)}`))}. Check your inbox for the full list.`);
-  else if (f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email was found from the last two days.');
-  if (f.unfinished?.length) out.push(`Recent Relay requests that failed or were stopped and may need attention: ${list(f.unfinished.map((h) => String(h.text).replace(/\s+/g, ' ').slice(0, 100)))}. Check History for their latest status.`);
-  const miss = (f.missing || []).filter((m) => m === 'weather');
+  if (!says('mail')) { /* not spoken */ } else if (f.mail && f.mail.length) out.push(`Recent important unread email from the last two days includes: ${list(f.mail.slice(0, 3).map((m) => `${String(m.from).replace(/<.*$/, '').replace(/"/g, '').trim() || 'someone'} about ${String(m.subject || 'no subject').slice(0, 60)}`))}. Check your inbox for the full list.`);
+  else if (!quiet && f.mail && f.mail.length === 0 && !(f.missing || []).includes('mail') && f.mailChecked) out.push('No important unread email was found from the last two days.');
+  if (says('unfinished') && f.unfinished?.length) out.push(`Recent Relay requests that failed or were stopped and may need attention: ${list(f.unfinished.map((h) => String(h.text).replace(/\s+/g, ' ').slice(0, 100)))}. Check History for their latest status.`);
+  const miss = says('weather') ? (f.missing || []).filter((m) => m === 'weather') : [];
   if (miss.length) out.push('Set your city in Settings and I will add the weather.');
-  const unavailable = (f.missing || []).filter((m) => ['calendar', 'google-calendar', 'reminders', 'mail', 'weather-unavailable'].includes(m));
+  const partOf = { calendar: 'calendar', 'google-calendar': 'calendar', reminders: 'reminders', mail: 'mail', 'weather-unavailable': 'weather' };
+  const unavailable = (f.missing || []).filter((m) => partOf[m] && says(partOf[m]));
   if (unavailable.length) {
     const names = { calendar: 'Mac calendar', 'google-calendar': 'Google calendar', reminders: 'reminders', mail: 'email', 'weather-unavailable': 'weather' };
     out.push(`I could not check ${list(unavailable.map((m) => names[m]))}.`);
   }
-  if(disabled.size)out.push('Briefing sources turned off: '+[...disabled].map(key=>SOURCE_LABELS[key]||key).join(', ')+'.');
+  if(disabled.size&&!f.say)out.push('Briefing sources turned off: '+[...disabled].map(key=>SOURCE_LABELS[key]||key).join(', ')+'.');
+  if (quiet && !out.length) out.push('Nothing new since earlier.');
   return out.join(' ');
 }
 

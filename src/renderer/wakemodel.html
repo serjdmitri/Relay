@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' blob: data:; media-src 'self' blob: mediastream:; style-src 'unsafe-inline'">
+<title>Hey Jarvis listener</title>
+</head>
+<body>
+<!-- Listens for "Hey Jarvis" on this Mac with a small model (wakeengine.js). Sound is turned into numbers in memory and thrown away; it is never saved or sent anywhere. Only a "heard it" signal leaves this page. -->
+<script type="module" src="wakemodel.js"></script>
+</body>
+</html>
