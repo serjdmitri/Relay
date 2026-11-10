@@ -2113,7 +2113,8 @@ class AskController {
     this.win.setFocusable(false);
     this.push({ label: 'Thinking', text: opts.shown || text });
     clearTimeout(this.ackTimer);
-    if (this.voiceAsk && !opts.remote && !opts.scheduled && !opts.shown && this.store.get('settings.speakReplies') && this.speaker) {
+    // "On it, Sir." before the real answer is off unless settings.spokenOnIt is turned on: it made you hear two replies for one question.
+    if (this.store.get('settings.spokenOnIt') === true && this.voiceAsk && !opts.remote && !opts.scheduled && !opts.shown && this.store.get('settings.speakReplies') && this.speaker) {
       const task = this.runningTask;
       this.ackTimer = setTimeout(() => {
         if (this.runningTask === task && this.state === 'working' && !this.speaker.speaking) Promise.resolve(this.speaker.speak('On it, Sir.', { ...profileFor('quiet', this.store.get('settings') || {}), quick: true })).catch(() => {});
