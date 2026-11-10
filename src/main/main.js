@@ -252,6 +252,7 @@ function publicState() {
     speech: { available: speech.available, ...speechInfo },
     dictations: d.dictations.slice(0, 200),
     firefoxConnected: bridge.isConnected(),
+    stopShortcutReady,
     hotkeysRunning: hotkeys.running,
     hotkeysSeen: hotkeys.eventsSeen > 0,
     hotkeysError: hotkeys.error,
@@ -318,7 +319,8 @@ async function handsCommand(cmd) {
   return 'Hand view is on, top right. Hold a hand up to the camera.';
 }
 
-function stopActiveWork() { return require('./stopActivity').stopActivity({ ask, hands, motion: floatingMotion, overlay }); }
+let stopShortcutReady = false;
+function stopActiveWork() { const result = require('./stopActivity').stopActivity({ ask, hands, motion: floatingMotion, overlay }); if (!result.ok) { diag.log('stop-active-failed', result.failed.join(', ')); if (Notification.isSupported()) new Notification({title:'Relay could not stop everything',body:`Check: ${result.failed.join(', ')}`}).show(); } return result; }
 
 function rebuildTray() {
   if (!tray) return;
@@ -1247,7 +1249,8 @@ function startBridge() {
 app.on('child-process-gone', (_e, d) => { if (d && /network/i.test(`${d.name || ''} ${d.serviceName || ''}`)) setTimeout(() => checkMainPainted('after the network helper restarted'), 2500); });
 app.whenReady().then(() => {
   const stopShortcut = 'Control+Alt+Escape';
-  if (globalShortcut.register(stopShortcut, stopActiveWork)) app.once('will-quit', () => globalShortcut.unregister(stopShortcut));
+  try { stopShortcutReady = globalShortcut.register(stopShortcut, stopActiveWork); } catch { stopShortcutReady = false; }
+  if (stopShortcutReady) app.once('will-quit', () => globalShortcut.unregister(stopShortcut));
   store = new Store(app.getPath('userData'), { onError: code => diag.log('settings-save-failed', code) });
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
