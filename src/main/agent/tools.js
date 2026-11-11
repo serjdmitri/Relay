@@ -360,7 +360,7 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
     }
     if (models.design) {
       const shapeProps = {
-        name: str('A short name you can refer to later ("Cube", "Hole", "Roof")'), type: str('box (cube/block/plate) | cylinder | sphere | cone | wedge (roof/ramp) | pyramid | torus (ring) | tube (hollow cylinder)'),
+        name: str('A short name you can refer to later ("Cube", "Hole", "Roof")'), explanation: str('One short sentence describing what this part does, for a guided build'), type: str('box (cube/block/plate) | cylinder | sphere | cone | wedge (roof/ramp) | pyramid | torus (ring) | tube (hollow cylinder)'),
         size: { type: 'array', description: 'Width, height and depth in millimetres, e.g. [40, 40, 40]. A number alone makes it the same all round. A cylinder or sphere: [diameter, height, diameter].', items: { type: 'number' } },
         diameter: { type: 'number', description: 'For a round shape or a hole: how wide' },
         position: { type: 'array', description: 'Where the MIDDLE of the shape is: [x, y, z] in mm, y is up. Leave it out for the first shape (it stands on the floor). Prefer on/through below.', items: { type: 'number' } },
@@ -373,7 +373,7 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
       tools.push({
         name: 'design_3d',
         description: 'DESIGN a new 3D model from simple shapes, like Tinkercad, as a hologram the user can then edit themselves (resize, move, add, remove, make holes) and save as an STL. Use it when the user asks you to MAKE something ("make a cube with a hole going through it and add a cone on top", "design a phone stand", "a keychain with a round hole", "a simple house"), not when they want to SEE a real thing (that is show_3d). Give the shapes in order; later ones can use on/through to sit on or cut through earlier ones by name, so you do not have to work out positions. Solid shapes are added together, holes are subtracted. Dimensions are in millimetres (a cube of 40 is a 4 cm cube). Keep it simple and exact: the user will edit it.',
-        input_schema: obj({ title: str('Name shown under the hologram'), shapes: { type: 'array', description: 'The shapes, in order', items: { type: 'object', properties: shapeProps } }, keep: { type: 'boolean', description: 'true to pin it' } }, ['title', 'shapes']),
+        input_schema: obj({ title: str('Name shown under the hologram'), shapes: { type: 'array', description: 'The shapes, in order', items: { type: 'object', properties: shapeProps } }, guided: { type: 'boolean', description: 'Set true when asked to show how something works or build it step by step. Reveal parts in order with a short explanation for each; disclose approximations.' }, keep: { type: 'boolean', description: 'true to pin it' } }, ['title', 'shapes']),
         describe: (i) => `Designing ${i.title}`,
         run: async (i) => models.design(i)
       });
