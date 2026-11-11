@@ -1698,6 +1698,7 @@ class AskController {
         return { status: 'done', reply, actions: 0 };
       }
       const unit = result.units.toUpperCase();
+      this.lastForecast = { result, at: Date.now() };
       if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'weather', hold: true, ...result });
       const today = result.days[0];
       return { status: 'done', reply: `The forecast for ${result.location} starts with ${today.conditions || 'conditions unavailable'}, a high of ${Math.round(today.high)} and a low of ${Math.round(today.low)} degrees ${unit}.`, actions: 0 };
@@ -2376,7 +2377,15 @@ class AskController {
         }
         if (!opts.shown && /\band\b/i.test(effective) && (effective.match(/\b(?:weather|forecast|calculator|cpu|memory|battery|network|disk)\b/gi) || []).length > 1) return this.runRequest(effective, entry);
         if (!opts.shown && !opts.scheduled) {
-          const query = require('./forecast').parseForecast(effective);
+          const forecast = require('./forecast');
+          const previous = this.store.data.history?.[0];
+          if (forecast.isTomorrowFollowup(effective) && this.lastForecast && Date.now() - this.lastForecast.at < 300000 && (forecast.parseForecast(previous?.text) || forecast.isTomorrowFollowup(previous?.text))) {
+            const result = this.lastForecast.result, day = forecast.tomorrowForecast(result);
+            if (!day) return this.finish(entry, { status: 'failed', reply: `I do not have tomorrow’s forecast for ${result.location}.`, actions: 0 });
+            if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'weather', hold: true, ...result });
+            return this.finish(entry, { status: 'done', reply: `Tomorrow in ${result.location}: ${day.conditions || 'conditions unavailable'}, a high of ${Math.round(day.high)} and a low of ${Math.round(day.low)} degrees ${result.units.toUpperCase()}.`, actions: 0 });
+          }
+          const query = forecast.parseForecast(effective);
           if (query) return this.finish(entry, await this.forecastCommand(query));
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
