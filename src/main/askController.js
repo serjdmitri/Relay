@@ -2405,6 +2405,12 @@ class AskController {
           return this.finish(entry, await this.dailyPlanCommand(true, entry.id));
         }
         if (!opts.shown && !opts.scheduled) {
+          const projects = require('./projectDashboard');
+          if (projects.isProjectDashboard(effective)) {
+            if (!this.cardPanel) return this.finish(entry, { status: 'failed', reply: 'The project dashboard is unavailable.', actions: 0 });
+            try { await this.cardPanel.show(projects.projectCard(this.store.data?.history, this.tasks)); } catch { return this.finish(entry, { status: 'failed', reply: 'I could not open the project dashboard.', actions: 0 }); }
+            return this.finish(entry, { status: 'done', reply: 'Your project dashboard shows recent matching requests and queued work.', actions: 0 });
+          }
           const dc = devices.parseDeviceCommand(effective);
           if (dc) return this.finish(entry, await this.devicesCommand(dc));
           const vc = driveInspect.parseDriveCommand(effective);
