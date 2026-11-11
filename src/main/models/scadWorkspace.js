@@ -27,6 +27,11 @@ class ScadWorkspace {
     while (this.previews.size > 5) this.previews.delete(this.previews.keys().next().value);
     return { id, source, before: previous.trim(), after: next.trim() };
   }
+  sourceForPreview(id) {
+    const p = this.previews.get(id);
+    if (!p || this.now() - p.at > 600000) throw Error('Preview expired. Preview the edit again.');
+    return p.edited;
+  }
   summary(id) {
     const p = this.previews.get(id);
     if (!p || this.now() - p.at > 600000) return null;

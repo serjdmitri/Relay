@@ -75,4 +75,16 @@ function parseRecapCommand(text) {
   return /^(?:(?:give me |show me |do |run |start )?(?:a |my |the |today's |todays )?(?:daily )?recap(?: of)?(?: my| the| this)?(?: day| today)?|recap (?:my |the |this )?(?:day|today)|what (?:did|have) (?:you|relay|jarvis) (?:do|done|did)(?: for me)?(?: today| so far| this (?:morning|afternoon|evening))?|what did i (?:ask|have) (?:you|relay) (?:to )?(?:do )?today|what have i (?:asked|had) (?:you|relay) (?:to )?(?:do )?today|summary of (?:my |the )?(?:day|today)|what happened today)$/.test(n) ? { type: 'recap' } : null;
 }
 
-module.exports = { buildRecap, parseRecapCommand, line, CHANGES };
+function isLastTaskRequest(text) {
+  const n = String(text || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:hey |ok |okay )?(?:relay|jarvis) /, '').replace(/^please /, '').replace(/ please$/, '');
+  return /^(?:show|tell) me what you (?:just )?did$|^(?:show|give) me (?:the |a )?(?:last task|last request|last action) (?:report|details|results)$/.test(n);
+}
+
+function lastTaskCard(history = [], actions = [], excludeId = '') {
+  const last = history.find(h => h.id !== excludeId && ['done', 'failed', 'stopped'].includes(h.status) && !/^Agent:/.test(h.text || '') && !isLastTaskRequest(h.text));
+  if (!last) return null;
+  const steps = actions.filter(a => a.requestId === last.id).slice().reverse();
+  return { kind: 'list', title: 'Last task', subtitle: clip(last.text, 120), summary: clip(last.reply, 400) || 'No result was recorded.', facts: [], links: [], image: null, credit: 'Based on Relay’s recorded activity', items: steps.map(a => ({ title: a.tool === 'run_shell' ? 'Ran a command' : clip(line(a), 100), subtitle: a.ok ? 'Completed' : 'Failed', note: '', image: null, url: '' })) };
+}
+
+module.exports = { buildRecap, parseRecapCommand, isLastTaskRequest, lastTaskCard, line, CHANGES };

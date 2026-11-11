@@ -256,6 +256,7 @@ class AskController {
     this.ensureOllama = () => launcher.ensureOllama({ get: (u) => this.httpGet(u, true), exec: quietExec, fileExists: require('fs').existsSync, spawnDetached: (c, a) => require('child_process').spawn(c, a, { detached: true, stdio: 'ignore', env: { ...process.env, OLLAMA_FLASH_ATTENTION: '1', OLLAMA_KV_CACHE_TYPE: 'q8_0', OLLAMA_KEEP_ALIVE: '30m' } }).unref(), url: this.store.get('settings.model.ollamaUrl') || undefined });
     this.mac = createMac({ calBin: calBin, clipboard: new Proxy(clipboard, { get: (t, k) => (k === 'writeText' ? (text, ...r) => { this.clipHistory?.ignore(text); return t.writeText(text, ...r); } : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }), capture: () => this.capture(), axBin, getView: () => ({ scale: this.scale, origin: this.origin || { x: 0, y: 0 } }) });
     this.scadWorkspace = new (require('./models/scadWorkspace').ScadWorkspace)({ home: os.homedir() });
+    this.stepWorkspace = new (require('./models/stepWorkspace').StepWorkspace)({ home: os.homedir() });
     this.mark = null; // what the user last circled with the mark key: { ts, box, mediaType, data, width, height }
     this.guide = new Guide({ overlay: this.overlay, mac: this.mac, getCursor: () => screen.getCursorScreenPoint() });
     this.overlay.onClear = () => this.guide.deactivate();
@@ -1502,7 +1503,7 @@ class AskController {
   }
 
   baseTools(vision) {
-    return buildTools({ cameraShot: () => this.cameraShot?.(), mac: this.mac, firefox: this.bridge, overlay: this.overlay, forecast: async (place, units) => (await this.forecastCommand({ place, units }, { parentSignal: this.abort?.signal })).reply, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), scad: this.scadWorkspace, read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, notes: this.notesService && flagsMod.isOn(this.store.get('settings'), 'folderQa') && this.notesService.folders().length ? { ask: (q, f) => this.notesService.ask(q, f) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply, recall: (q) => this.recallFacts(q) }, skills: this.store.get('settings.memory') === false ? null : { find: (t) => this.findSkillsFor(t), save: (i) => this.saveSkill(i) }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
+    return buildTools({ cameraShot: () => this.cameraShot?.(), mac: this.mac, firefox: this.bridge, overlay: this.overlay, forecast: async (place, units) => (await this.forecastCommand({ place, units }, { parentSignal: this.abort?.signal })).reply, guides: this.guide, getScale: () => this.scale, getOrigin: () => this.origin || { x: 0, y: 0 }, getMark: () => this.freshMark(), getFiles: () => this.freshFiles()?.paths || [], drive: this.drive || null, study: { start: (i) => this.startQuiz(i) }, homework: this.homeworkDocs(), stickies: this.stickies ? { add: (t) => { const x = this.stickies.add(t); return x ? 'Made the sticky.' : 'There was nothing to put on a sticky.'; } } : null, models: this.holos && this.store.get('settings.models3d') !== false ? { show: (raw) => this.show3d(raw), design: (raw) => this.design3d(raw), edit: (raw) => this.edit3d(raw), scad: this.scadWorkspace, step: this.stepWorkspace, showStep: async id => { const p = this.stepWorkspace.get(id); await this.holos.show({ title: 'STEP preview', items: [{ kind: 'stl', title: 'STEP preview', credit: 'Unsaved whole-model scale', bytes: p.stl }] }); return 'The unsaved STEP preview is on screen.'; }, renderScad: async id => { const bytes = await require('./models/scadRender').renderScad(this.scadWorkspace.sourceForPreview(id)); await this.holos.show({ title: 'OpenSCAD preview', items: [{ kind: 'stl', title: 'OpenSCAD preview', credit: 'Unsaved preview', bytes }] }); return 'The unsaved 3D preview is on screen.'; }, read: (raw) => this.read3d(raw), save: (raw) => this.save3d(raw) } : null, cards: this.cardPanel && this.store.get('settings.cards') !== false ? { show: (raw) => this.showCard(raw) } : null, notes: this.notesService && flagsMod.isOn(this.store.get('settings'), 'folderQa') && this.notesService.folders().length ? { ask: (q, f) => this.notesService.ask(q, f) } : null, panels: this.panelHub && flagsMod.isOn(this.store.get('settings'), 'panels') ? { show: (raw) => this.showPanel(raw), close: () => this.closePanels() } : null, agents: { start: (task) => { const a = this.startAgent(task); return a ? `Started an agent for: ${task}. Its progress shows in the top right.` : 'Three agents are already working.'; } }, schedules: this.scheduler ? { add: (spec) => this.scheduleTask(spec), list: () => this.scheduler.items.map((s) => `${s.text}: ${sched.describe(s)}`).join('\n') || 'Nothing is scheduled.', remove: (q) => { const r = this.scheduler.remove(q); this.onChange(); return r.length ? `Cancelled ${r.length}.` : 'No schedule matches.'; } } : null, memory: this.store.get('settings.memory') === false ? null : { add: (f) => this.rememberFact(f).reply, remove: (q) => this.forgetFact(q).reply, recall: (q) => this.recallFacts(q) }, skills: this.store.get('settings.memory') === false ? null : { find: (t) => this.findSkillsFor(t), save: (i) => this.saveSkill(i) }, getDisplays: () => this.displayAreas(), getFront: () => this.prevApp, visionCapable: vision });
   }
 
   // Tools from the plugins you approved (Settings > Doctor > Plugins), only while that switch is on.
@@ -1697,6 +1698,7 @@ class AskController {
         return { status: 'done', reply, actions: 0 };
       }
       const unit = result.units.toUpperCase();
+      this.lastForecast = { result, at: Date.now() };
       if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'weather', hold: true, ...result });
       const today = result.days[0];
       return { status: 'done', reply: `The forecast for ${result.location} starts with ${today.conditions || 'conditions unavailable'}, a high of ${Math.round(today.high)} and a low of ${Math.round(today.low)} degrees ${unit}.`, actions: 0 };
@@ -2328,7 +2330,7 @@ class AskController {
           // "yes" / "no" / "that's Sam" about a visitor Relay just told you about: only heard for five minutes after it asked, so a bare "yes" is never taken for anything else
           if (this.pendingNaming && this.onNamingAnswer && Date.now() - this.pendingNaming.at < 5 * 60000) { const na = require('./intruderLog').parseNamingAnswer(effective); if (na) { this.lastRequestText = effective; return this.finish(entry, await this.onNamingAnswer(na)); } }
           if (this.cameraAdjust) { const cc = require('./cameraCommands').parseCameraCommand(effective); if (cc) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.cameraAdjust(cc), actions: 0 }); } }
-          { const lc2 = require('./latency').parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } return this.finish(entry, { status: 'done', reply: require('./latency').describe(this.store.get('latencyLog')), actions: 0 }); } }
+          { const latency = require('./latency'), lc2 = latency.parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } const log = this.store.get('latencyLog'); try { await this.cardPanel?.show(latency.reportCard(log)); } catch {} return this.finish(entry, { status: 'done', reply: latency.describe(log), actions: 0 }); } }
           if (this.wakeCommand) { const wc = require('./wakeScheduler').parseWakeCommand(effective); if (wc) { this.lastRequestText = effective; return this.finish(entry, await this.wakeCommand(wc)); } }
           if (this.commandCenter && require('./commandCenter').parseCommandCenter(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.commandCenter()); }
           if (this.signCommand) { const sg = require('./hands/apps').parseSignCommand(effective); if (sg) { this.lastRequestText = effective; return this.finish(entry, await this.signCommand(sg)); } }
@@ -2375,7 +2377,15 @@ class AskController {
         }
         if (!opts.shown && /\band\b/i.test(effective) && (effective.match(/\b(?:weather|forecast|calculator|cpu|memory|battery|network|disk)\b/gi) || []).length > 1) return this.runRequest(effective, entry);
         if (!opts.shown && !opts.scheduled) {
-          const query = require('./forecast').parseForecast(effective);
+          const forecast = require('./forecast');
+          const previous = this.store.data?.history?.[0];
+          if (forecast.isTomorrowFollowup(effective) && this.lastForecast && Date.now() - this.lastForecast.at < 300000 && (forecast.parseForecast(previous?.text) || forecast.isTomorrowFollowup(previous?.text))) {
+            const result = this.lastForecast.result, day = forecast.tomorrowForecast(result);
+            if (!day) return this.finish(entry, { status: 'failed', reply: `I do not have tomorrow’s forecast for ${result.location}.`, actions: 0 });
+            if (this.store.get('settings.cards') !== false) await this.cardPanel?.show({ kind: 'weather', hold: true, ...result });
+            return this.finish(entry, { status: 'done', reply: `Tomorrow in ${result.location}: ${day.conditions || 'conditions unavailable'}, a high of ${Math.round(day.high)} and a low of ${Math.round(day.low)} degrees ${result.units.toUpperCase()}.`, actions: 0 });
+          }
+          const query = forecast.parseForecast(effective);
           if (query) return this.finish(entry, await this.forecastCommand(query));
         }
         if (!opts.shown && /^(?:(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+)?(?:please\s+)?plan (?:my )?today[.!?]*$/i.test(effective.trim())) {
@@ -2389,6 +2399,13 @@ class AskController {
           if (dc) return this.finish(entry, await this.devicesCommand(dc));
           const vc = driveInspect.parseDriveCommand(effective);
           if (vc) return this.finish(entry, await this.driveCommand(vc));
+          if (recap.isLastTaskRequest(effective)) {
+            const card = recap.lastTaskCard(this.store.data?.history, this.store.data?.actions, entry.id);
+            if (!card) return this.finish(entry, { status: 'done', reply: 'I do not have a previous task to show.', actions: 0 });
+            if (!this.cardPanel) return this.finish(entry, { status: 'failed', reply: 'Task cards are unavailable right now.', actions: 0 });
+            try { await this.cardPanel.show(card); } catch { return this.finish(entry, { status: 'failed', reply: 'I could not open the task report.', actions: 0 }); }
+            return this.finish(entry, { status: 'done', reply: card.summary, actions: 0 });
+          }
           if (recap.parseRecapCommand(effective)) return this.finish(entry, this.recapCommand());
           const lc2 = robotics.parseLogCommand(effective);
           if (lc2) return this.finish(entry, await this.logCommand(lc2));
@@ -3813,7 +3830,29 @@ class AskController {
     let cad;
     try { cad = cadModel.normalizeCad({ shapes: raw.shapes }); } catch (e) { return `Could not make that design: ${e.message}`; }
     const title = String(raw.title || 'Design').slice(0, 60);
-    const id = await this.holos.show({ title, items: [{ kind: 'cad', title, credit: 'Designed with Relay · edit it right in the hologram', cad }] });
+    let id;
+    if (raw.guided && cad.shapes.length > 1) {
+      const { revealCad } = require('./models/cadBuild');
+      const description = count => `Step ${count}/${cad.shapes.length}: ${cad.shapes[count - 1].name} · ${String(raw.shapes?.[count - 1]?.explanation || 'Part of this simplified model').slice(0, 160)}`;
+      const result = await revealCad({ cad, initial: description,
+        show: (first, credit) => this.holos.show({ title, items: [{ kind: 'cad', title, credit, highlight: first.shapes.at(-1).id, cad: first }] }),
+        narrate: async count => {
+          const explanation = String(raw.shapes?.[count - 1]?.explanation || '').trim().slice(0, 160);
+          if (explanation && this.voiceAsk && this.store.get('settings.speakReplies') && this.speaker && !this.abort?.signal.aborted) {
+            await this.speaker.speak(`${cad.shapes[count - 1].name}. ${explanation}`, { ...profileFor('reply', this.store.get('settings') || {}), append: true });
+          }
+        },
+        update: (holoId, previous, next, credit) => {
+          const h = this.holos.holos.get(holoId);
+          if (!h || h.win.isDestroyed() || h.items[0]?.cad !== previous || this.abort?.signal.aborted) return false;
+          h.items[0].credit = credit;
+          h.items[0].highlight = next.shapes.at(-1).id;
+          return this.holos.setCad(h, 0, next, { push: true });
+        }
+      });
+      id = result.id;
+      if (!result.completed) return 'The guided build stopped because the hologram was closed, changed, or cancelled.';
+    } else id = await this.holos.show({ title, items: [{ kind: 'cad', title, credit: 'Designed with Relay · edit it right in the hologram', cad }] });
     if (raw.keep) this.holos.pin(id, true);
     return `The design is on screen as a hologram. Shapes now:\n${cadModel.describeCad(cad)}\nTell the user briefly what you made. They can double-click it, press the pencil button to resize, move, add and remove shapes and cut holes themselves, and the download button saves an STL for 3D printing.`;
   }

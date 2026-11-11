@@ -1,6 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseForecast, forecast } = require('../src/main/forecast');
+const { parseForecast, forecast, isTomorrowFollowup, tomorrowForecast } = require('../src/main/forecast');
+
+test('weather follow-up selects tomorrow by the destination local date, not a missing array position', () => {
+  assert.equal(isTomorrowFollowup('Jarvis, what about tomorrow?'), true);
+  assert.equal(isTomorrowFollowup('send this tomorrow'), false);
+  const result = { current: { time: '2026-12-31T20:00' }, days: [{ date: '2026-12-31' }, { date: '2027-01-02' }] };
+  assert.equal(tomorrowForecast(result), null);
+  result.days.splice(1, 0, { date: '2027-01-01', high: 12 });
+  assert.equal(tomorrowForecast(result).high, 12);
+  assert.equal(tomorrowForecast({ current: { time: '2026-99-99T20:00' }, days: [] }), null);
+});
 
 test('weather requests preserve the requested location', () => {
   assert.deepEqual(parseForecast('Hey Jarvis, weather in Paris, France?'), { place: 'Paris, France' });

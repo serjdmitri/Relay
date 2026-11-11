@@ -54,4 +54,13 @@ function describe(log = []) {
   return `Over your last ${recent.length} spoken requests the typical wait from letting go of the key to hearing me was ${f(m.total)}. The 95th-percentile wait was ${f(p95)}. Hearing you took ${f(m.listen)}, thinking up the first words ${f(m.think)}, and making the voice ${f(m.speak)}.${slowest ? ` The slowest part is ${slowest[0]}.` : ''}`;
 }
 
-module.exports = { Latency, parseLatencyCommand, describe, median, percentile95 };
+function reportCard(log = []) {
+  const recent = (Array.isArray(log) ? log : []).slice(0, 20);
+  const items = [['Speech to text', 'listen'], ['Thinking', 'think'], ['Voice preparation', 'speak'], ['Total response', 'total']].map(([title, key]) => {
+    const value = median(recent.map(r => r[key]));
+    return { title, subtitle: value === null ? 'Not measured' : `${value.toFixed(1)} s typical`, note: '', image: null, url: '' };
+  });
+  return { kind: 'list', title: 'Voice response speed', subtitle: `${recent.length} recorded request${recent.length === 1 ? '' : 's'} · stored on this Mac`, summary: describe(recent), facts: [], links: [], image: null, credit: '', items };
+}
+
+module.exports = { Latency, parseLatencyCommand, describe, reportCard, median, percentile95 };

@@ -1,5 +1,12 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { Latency, parseLatencyCommand: p, describe } = require('../src/main/latency');
+const { Latency, parseLatencyCommand: p, describe, reportCard } = require('../src/main/latency');
+
+test('speed card reports missing stages separately from measured values', () => {
+  const card = reportCard([{ listen: 0.4, think: null, speak: 1.2, total: 1.6 }]);
+  assert.equal(card.items[0].subtitle, '0.4 s typical');
+  assert.equal(card.items[1].subtitle, 'Not measured');
+  assert.match(card.subtitle, /1 recorded request ·/);
+});
 
 const mkStore = () => { const d = {}; return { d, get: (k) => d[k], set: (k, v) => { d[k] = v; } }; };
 
