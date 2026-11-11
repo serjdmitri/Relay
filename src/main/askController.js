@@ -3213,6 +3213,7 @@ class AskController {
 
   async quick(text, requestId) {
     let q = parseQuick(text);
+    if (!q && /^(?:(?:hey|ok|okay)\s+)?(?:(?:jarvis|relay)[, ]+)?(?:please\s+)?(?:set up|setup|open|start)\b/i.test(String(text))) q = require('./layouts').parseSavedSetup(text, this.store.get('modes') || [], this.store.get('layouts') || []);
     let foreign = null;
     if (!q) { // an everyday command in another language ("pausa", "baisse le volume")
       for (const lang of new Set([detectLanguage(text)?.lang, this.requestLanguage(text)])) {
