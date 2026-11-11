@@ -27,6 +27,18 @@ function parseLayoutCommand(text) {
   return null;
 }
 
+// The short form only matches a saved name; other "set up" requests stay with the assistant.
+function parseSavedSetup(text, modes = [], layouts = []) {
+  const n = clean(text).replace(/^(?:hey |ok |okay )?(?:relay|jarvis) /, '').replace(/^please /, '');
+  const match = /^(?:set up|setup|open|start) (?:my |the )?(.+)$/.exec(n);
+  if (!match) return null;
+  const name = match[1];
+  const mode = modes.find(x => clean(x.name) === name);
+  if (mode) return { type: 'mode-start', name: mode.name };
+  const layout = layouts.find(x => clean(x.name) === name);
+  return layout ? { type: 'layout-restore', name: layout.name } : null;
+}
+
 // A window frame that is no longer on any screen (an external display was unplugged) is brought onto the nearest one; a window bigger than its
 // screen is shrunk to fit. displays: [{ workArea: { x, y, width, height } }].
 function fitFrame(f, displays) {
@@ -111,4 +123,4 @@ class Layouts {
   }
 }
 
-module.exports = { Layouts, parseLayoutCommand, fitFrame };
+module.exports = { Layouts, parseLayoutCommand, parseSavedSetup, fitFrame };
