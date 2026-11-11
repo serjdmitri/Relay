@@ -7,7 +7,7 @@ function normalize(text) {
     .replace(/[“”"'.,!?;:]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^(hey |ok |okay )?relay[, ]*/, '')
+    .replace(/^(hey |ok |okay )?(?:relay|jarvis)[, ]*/, '')
     .replace(/^please /, '')
     .replace(/ please$/, '')
     .trim();
@@ -33,6 +33,8 @@ function parseCommand(text, routines, state = {}) {
     if (r) return { type: 'routine-delete', routine: r };
   }
 
+  const proposed = String(text || '').trim().match(/^(?:(?:hey |ok |okay )?(?:relay|jarvis)[, ]+)?(?:please )?when i (start [^,]{1,80}),\s*(.+)$/i);
+  if (proposed) return { type: 'routine-propose', name: proposed[1].trim(), steps: splitSteps(proposed[2]) };
   const inline = n.match(/^when i say (.+?),? (?:open|do|run|tell|check|show|turn|set|quit|play|start)\b(.*)$/);
   if (inline) {
     const rest = text.replace(/^.*?when i say [^,]+,?\s*/i, '').trim();
@@ -51,7 +53,7 @@ function parseCommand(text, routines, state = {}) {
 
 function splitSteps(s) {
   return s
-    .split(/\s*(?:,? and then |, then | then |,? and (?=tell|check|open|show|set|play)|;)\s*/i)
+    .split(/\s*(?:,? and then |, then | then |,? and (?=tell|check|open|show|set|play|turn|start|quit|run)\b|;)\s*/i)
     .map((x) => x.replace(/\.$/, '').trim())
     .filter(Boolean);
 }

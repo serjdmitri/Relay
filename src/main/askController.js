@@ -2245,6 +2245,16 @@ class AskController {
       case 'routine-inline':
         this.upsertRoutine(cmd.name, cmd.steps);
         return this.finish(entry, { status: 'done', reply: `Saved routine "${cmd.name}" with ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'}.` });
+      case 'routine-propose': {
+        if (!cmd.steps.length || cmd.steps.length > 10 || cmd.steps.some(s => s.length > 400)) return this.finish(entry, { status: 'failed', reply: 'Give me between one and ten short routine steps.', actions: 0 });
+        if (mem.isSecret([cmd.name, ...cmd.steps].join(' '))) return this.finish(entry, { status: 'failed', reply: 'Please remove passwords or other secrets from the routine.', actions: 0 });
+        if ((routines || []).some(r => r.name.toLowerCase() === cmd.name.toLowerCase())) return this.finish(entry, { status: 'failed', reply: `A routine named "${cmd.name}" already exists. Choose another name so I do not overwrite it.`, actions: 0 });
+        const question = `Save routine "${cmd.name}"? When you say "${cmd.name}", I will run:\n${cmd.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+        if (!(await this.askConfirm({ question }))) return this.finish(entry, { status: 'stopped', reply: 'I did not save the routine.', actions: 0 });
+        if ((this.store.get('routines') || []).some(r => r.name.toLowerCase() === cmd.name.toLowerCase())) return this.finish(entry, { status: 'failed', reply: 'A routine with that name appeared while you were reviewing. I did not overwrite it.', actions: 0 });
+        this.upsertRoutine(cmd.name, cmd.steps);
+        return this.finish(entry, { status: 'done', reply: `Saved "${cmd.name}". Say "${cmd.name}" to run it.`, actions: 1 });
+      }
       case 'routine-delete': {
         const left = this.store.get('routines').filter((r) => r.id !== cmd.routine.id);
         this.store.set('routines', left);
