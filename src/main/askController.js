@@ -3820,6 +3820,11 @@ class AskController {
     this.state = 'done';
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
+    // Leave purpose-built menus alone. Show a report for completed actions when no other card is open.
+    if (!entry.remote && !this.unattended && !this.activeScheduledId && this.cardPanel && !this.cardPanel.visible && this.store.get('settings.cards') !== false && (res.actions > 0 || this.store.data?.actions?.some(a => a.requestId === entry.id && !a.ok))) {
+      const card = recap.lastTaskCard([historyEntry], this.store.data?.actions || []);
+      if (card) { card.title = 'Task report'; Promise.resolve().then(() => this.cardPanel.show(card)).catch(() => {}); }
+    }
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     const askAgain = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false;
     this.followFor = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote && this.store.get('settings.followUp')?.enabled !== false ? entry.id : null;
