@@ -20,7 +20,7 @@ function gated() {
 }
 
 test('the dashboard command opens the window and leaves spoken agent commands alone', () => {
-  for (const t of ['open the agents dashboard', 'Show my agents dashboard', 'agents dashboard', 'jarvis, bring up the agent manager', 'show me my background jobs list', 'open my agents', 'Please open all my agents.']) assert.equal(parseAgentsDashboardCommand(t), true, t);
+  for (const t of ['open the agents dashboard', 'Show my agents dashboard', 'agents dashboard', 'jarvis, bring up the agent manager', 'show me my background jobs list', 'open my agents', 'Please open all my agents.', 'show me the task dashboard']) assert.equal(parseAgentsDashboardCommand(t), true, t);
   for (const t of ['what are my agents doing', 'show my agents', 'stop all agents', 'start an agent to find flights', 'open Notes', 'play jazz in the background', '']) assert.equal(parseAgentsDashboardCommand(t), false, t);
 });
 
@@ -131,4 +131,17 @@ test('the window starts one job per line, refuses credentials and over-long line
   assert.equal(many.ignored, 3); assert.equal(many.results.length, MAX_LINES);
   assert.equal((await call('cancel', 'x')).cancelled, 'queued');
   await call('close'); assert.equal(w.win.closed, true);
+});
+
+test('the dashboard shows and safely stops only the named foreground request', async () => {
+  const { AgentsWindow, handlers } = loadWindow();
+  const agents = { snapshot: () => ({ running: [], queued: [], finished: [] }) };
+  let current = { id: 'request-1', text: 'Open Notes', status: 'Working', queued: 1 };
+  const w = new AgentsWindow({ agents, start: () => {}, foreground: () => current, stopForeground: id => { if (id !== current?.id) return false; current = null; return true; } });
+  const sender = {}; w.win = { webContents: sender };
+  const call = (action, value) => handlers.get('agents:action')({ sender }, action, value);
+  assert.equal((await call('state')).foreground.text, 'Open Notes');
+  assert.equal((await call('stop-foreground', 'old-request')).stopped, false);
+  assert.equal((await call('stop-foreground', 'request-1')).stopped, true);
+  assert.equal((await call('state')).foreground, null);
 });

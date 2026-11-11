@@ -128,7 +128,7 @@ const PREFIX = String.raw`^(?:(?:hey |ok |okay )?(?:relay|jarvis)[, ]+)?(?:pleas
 // "agents dashboard", "open the agent manager": the window with every agent, a queue and cancel buttons. ("what are my agents doing" stays a spoken answer.)
 function parseAgentsDashboardCommand(text) {
   const n = String(text || '').trim().replace(/[“”"]/g, '').replace(/[.!?]+$/, '').replace(/^(?:hey |ok |okay )?(?:relay|jarvis)[, ]+/i, '').replace(/^please /i, '').replace(/\s+/g, ' ').toLowerCase();
-  return /^(?:open|show|bring up|pull up|display)(?: me)?(?: my| the| all my)? (?:background )?(?:agents?|jobs?) (?:dashboard|window|board|manager|panel|list)$/.test(n) || /^(?:agents?|jobs?) (?:dashboard|manager|board)$/.test(n) || /^open (?:all )?(?:my )?agents$/.test(n);
+  return /^(?:open|show|bring up|pull up|display)(?: me)?(?: my| the| all my)? (?:background )?(?:agents?|jobs?|tasks?) (?:dashboard|window|board|manager|panel|list)$/.test(n) || /^(?:agents?|jobs?|tasks?) (?:dashboard|manager|board)$/.test(n) || /^open (?:all )?(?:my )?agents$/.test(n);
 }
 
 // "In the background, research the best headphones and save it in a note", "start an agent to …", "what are my agents doing",
