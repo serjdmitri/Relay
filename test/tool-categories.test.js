@@ -26,6 +26,7 @@ test('rarely used groups are hidden, everything else stays, and the loader tools
 test('a request that clearly asks for a group gets it listed directly', async () => {
   assert.ok((await list(run('read this page in Firefox'))).includes('firefox_open'));
   assert.ok((await list(run('make a 3D model of a gear'))).includes('show_3d'));
+  assert.ok((await list(run('how does an electric motor work?'))).includes('show_3d'));
   assert.ok(!(await list(run('what time is it'))).includes('firefox_open'));
   assert.deepEqual(tc.classify(''), []);
 });
