@@ -32,6 +32,7 @@ test('inline routine definition', () => {
 test('natural routine proposal separates steps and runs by its spoken name', () => {
   const proposal = parseCommand('Hey Jarvis, when I start studying, open my school pages and turn on focus mode.', []);
   assert.deepEqual(proposal, { type: 'routine-propose', name: 'start studying', steps: ['open my school pages', 'turn on focus mode'] });
+  assert.deepEqual(parseCommand('when I start studying open my school pages and turn on focus mode', []), proposal);
   assert.equal(parseCommand('Jarvis, start studying', [{ id: '1', name: 'start studying' }]).type, 'routine-run');
   assert.equal(parseCommand('when I start studying I feel tired', []).type, 'agent');
 });
