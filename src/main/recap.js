@@ -3,6 +3,7 @@
 // Never repeats message text, typed text or clipboard contents: those can hold private things. Pure.
 
 const path = require('path');
+const { isSecret } = require('./memory');
 
 // tool -> [singular, plural, risk]. risk: 0 harmless, 1 worth knowing, 2 worth a look. Tools not listed here and not read-only are counted as "other actions".
 const CHANGES = {
@@ -84,7 +85,14 @@ function lastTaskCard(history = [], actions = [], excludeId = '') {
   const last = history.find(h => h.id !== excludeId && ['done', 'failed', 'stopped'].includes(h.status) && !/^Agent:/.test(h.text || '') && !isLastTaskRequest(h.text));
   if (!last) return null;
   const steps = actions.filter(a => a.requestId === last.id).slice().reverse();
-  return { kind: 'list', title: 'Last task', subtitle: clip(last.text, 120), summary: clip(last.reply, 400) || 'No result was recorded.', facts: [], links: [], image: null, credit: 'Based on Relay’s recorded activity', items: steps.map(a => ({ title: a.tool === 'run_shell' ? 'Ran a command' : clip(line(a), 100), subtitle: a.ok ? 'Completed' : 'Failed', note: '', image: null, url: '' })) };
+  return { kind: 'list', title: 'Last task', subtitle: clip(last.text, 120), summary: clip(last.reply, 400) || 'No result was recorded.', facts: [], links: [], image: null, credit: 'Based on Relay’s recorded activity', items: steps.map(a => {
+    let url = '';
+    const input = a.input || {};
+    if (a.ok && ['open_path', 'reveal_path', 'drive_make'].includes(a.tool) && typeof input.path === 'string' && path.isAbsolute(input.path) && !input.path.includes('\0')) url = `file:${input.path}`;
+    if (a.ok && a.tool === 'open_url' && typeof input.url === 'string') { try { const u = new URL(input.url); if (['http:', 'https:'].includes(u.protocol) && !u.username && !u.password && !u.search && !u.hash) url = u.href; } catch {} }
+    const note = !a.ok && typeof a.result === 'string' && !isSecret(a.result) ? clip(a.result, 120) : '';
+    return { title: a.tool === 'run_shell' ? 'Ran a command' : clip(line(a), 100), subtitle: a.ok ? 'Completed' : 'Failed', note, image: null, url };
+  }) };
 }
 
 module.exports = { buildRecap, parseRecapCommand, isLastTaskRequest, lastTaskCard, line, CHANGES };

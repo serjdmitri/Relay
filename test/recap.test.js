@@ -14,6 +14,19 @@ test('last task report shows only that task’s recorded steps and hides command
   assert.doesNotMatch(JSON.stringify(card), /secret token|Other/);
 });
 
+test('task report links safe destinations and avoids exposing query secrets', () => {
+  const card = lastTaskCard([{ id: 'r', text: 'Open files', status: 'done' }], [
+    { requestId: 'r', tool: 'open_url', input: { url: 'https://example.com/path?token=secret' }, ok: true },
+    { requestId: 'r', tool: 'open_path', input: { path: '/Users/test/Documents/report.txt' }, ok: true },
+    { requestId: 'r', tool: 'open_url', input: { url: 'https://example.com/' }, ok: true },
+    { requestId: 'r', tool: 'open_app', input: { name: 'Notes' }, result: 'Application unavailable', ok: false }
+  ]);
+  assert.equal(card.items.find(x => x.subtitle === 'Failed').note, 'Application unavailable');
+  assert.ok(card.items.some(x => x.url === 'file:/Users/test/Documents/report.txt'));
+  assert.ok(card.items.some(x => x.url === 'https://example.com/'));
+  assert.doesNotMatch(JSON.stringify(card), /token=secret/);
+});
+
 const now = new Date(2026, 9, 28, 20, 30).getTime();
 const at = (h, m = 0) => new Date(2026, 9, 28, h, m).getTime();
 const A = (id, tool, input = {}, extra = {}) => ({ id, requestId: 'r', tool, input, result: 'ok', ok: true, ts: at(10), ...extra });
