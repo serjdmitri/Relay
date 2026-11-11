@@ -9,12 +9,13 @@ const { isSecret } = require('./memory');
 const MAX_LINES = 10, MAX_LEN = 400;
 
 class AgentsWindow {
-  constructor({ agents, start, motion }) {
-    Object.assign(this, { agents, start, motion });
+  constructor({ agents, start, motion, foreground = () => null, stopForeground = () => false }) {
+    Object.assign(this, { agents, start, motion, foreground, stopForeground });
     ipcMain.handle('agents:action', async (e, action, value) => {
       if (!this.win || e.sender !== this.win.webContents) return { error: 'Open the agents dashboard first.' };
       try {
-        if (action === 'state') return this.agents.snapshot();
+        if (action === 'state') return { ...this.agents.snapshot(), foreground: this.foreground() };
+        if (action === 'stop-foreground') return { stopped: !!this.stopForeground(value), state: { ...this.agents.snapshot(), foreground: this.foreground() } };
         if (action === 'start') return this.submit(value);
         if (action === 'cancel') { const kind = this.agents.cancel(String(value || '')); return { cancelled: kind, state: this.agents.snapshot() }; }
         if (action === 'clear') { this.agents.clearFinished(); return { state: this.agents.snapshot() }; }
