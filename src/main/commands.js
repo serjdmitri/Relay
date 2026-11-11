@@ -33,7 +33,7 @@ function parseCommand(text, routines, state = {}) {
     if (r) return { type: 'routine-delete', routine: r };
   }
 
-  const proposed = String(text || '').trim().match(/^(?:(?:hey |ok |okay )?(?:relay|jarvis)[, ]+)?(?:please )?when i (start [^,]{1,80}),\s*(.+)$/i);
+  const proposed = String(text || '').trim().match(/^(?:(?:hey |ok |okay )?(?:relay|jarvis)[, ]+)?(?:please )?when i (start [^,]{1,80}?)(?:,\s*|\s+)(?=(?:open|do|run|tell|check|show|turn|set|quit|play|start)\b)(.+)$/i);
   if (proposed) return { type: 'routine-propose', name: proposed[1].trim(), steps: splitSteps(proposed[2]) };
   const inline = n.match(/^when i say (.+?),? (?:open|do|run|tell|check|show|turn|set|quit|play|start)\b(.*)$/);
   if (inline) {
