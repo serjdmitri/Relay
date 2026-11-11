@@ -1,5 +1,17 @@
 const { weatherWord } = require('./briefing');
 
+function isTomorrowFollowup(text) {
+  return /^(?:(?:hey|ok|okay)\s+)?(?:(?:jarvis|relay)[, ]+)?(?:what about|how about|and) tomorrow[?.!]*$/i.test(String(text || '').trim());
+}
+
+function tomorrowForecast(result) {
+  const date = result?.current?.time?.slice(0, 10) || result?.days?.[0]?.date;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return null;
+  const d = new Date(`${date}T00:00:00Z`); if (!Number.isFinite(d.getTime())) return null; d.setUTCDate(d.getUTCDate() + 1);
+  const wanted = d.toISOString().slice(0, 10);
+  return (result.days || []).find(day => day.date === wanted) || null;
+}
+
 function parseForecast(text) {
   let t = String(text || '').trim().replace(/^(?:(?:hey|okay|ok)\s+)?(?:jarvis|relay)[, ]+/i, '').replace(/[?.!]+$/, '');
   const unit = /\s+in (celsius|centigrade|fahrenheit)$/i.exec(t);
@@ -51,4 +63,4 @@ async function forecast(place, { fetchFn = fetch, units = 'f', signal } = {}) {
   return { location: [...new Set([p.name, p.admin1, p.country].filter(Boolean))].join(', '), units, days, fetchedAt: new Date().toISOString(), current: { temperature: current.temperature_2m, feels: current.apparent_temperature, humidity: current.relative_humidity_2m, wind: current.wind_speed_10m, code: current.weather_code, conditions: weatherWord(current.weather_code), time: current.time, sunrise: d.sunrise?.[0], sunset: d.sunset?.[0], uv: d.uv_index_max?.[0] }, hourly };
 }
 
-module.exports = { parseForecast, forecast };
+module.exports = { parseForecast, forecast, isTomorrowFollowup, tomorrowForecast };
