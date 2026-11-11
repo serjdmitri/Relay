@@ -112,7 +112,7 @@ async function buildItem(it) {
   } else if (it.kind === 'cad') {
     // A designed model: shapes added together, holes cut out (see holo-cad.js). Its shapes can be edited here.
     const view = new CadView({ makeMat });
-    view.update(it.cad, { editing: false, edges: !solid });
+    view.update(it.cad, { editing: false, selected: it.highlight || null, edges: !solid });
     g.add(view.group);
     ud.cadView = view;
     ud.meshes = view.mesh ? [view.mesh] : [];

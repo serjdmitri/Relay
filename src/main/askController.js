@@ -3819,11 +3819,18 @@ class AskController {
       const { revealCad } = require('./models/cadBuild');
       const description = count => `Step ${count}/${cad.shapes.length}: ${cad.shapes[count - 1].name} · ${String(raw.shapes?.[count - 1]?.explanation || 'Part of this simplified model').slice(0, 160)}`;
       const result = await revealCad({ cad, initial: description,
-        show: (first, credit) => this.holos.show({ title, items: [{ kind: 'cad', title, credit, cad: first }] }),
+        show: (first, credit) => this.holos.show({ title, items: [{ kind: 'cad', title, credit, highlight: first.shapes.at(-1).id, cad: first }] }),
+        narrate: async count => {
+          const explanation = String(raw.shapes?.[count - 1]?.explanation || '').trim().slice(0, 160);
+          if (explanation && this.voiceAsk && this.store.get('settings.speakReplies') && this.speaker && !this.abort?.signal.aborted) {
+            await this.speaker.speak(`${cad.shapes[count - 1].name}. ${explanation}`, { ...profileFor('reply', this.store.get('settings') || {}), append: true });
+          }
+        },
         update: (holoId, previous, next, credit) => {
           const h = this.holos.holos.get(holoId);
           if (!h || h.win.isDestroyed() || h.items[0]?.cad !== previous || this.abort?.signal.aborted) return false;
           h.items[0].credit = credit;
+          h.items[0].highlight = next.shapes.at(-1).id;
           return this.holos.setCad(h, 0, next, { push: true });
         }
       });
