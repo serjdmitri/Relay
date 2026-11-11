@@ -31,8 +31,9 @@ class WakeModelControl {
 
   // Open or close the page to match the settings. Safe to call as often as you like.
   async refresh() {
+    if (this.state === 'failed' && this.failedAt && this.now() - this.failedAt > 600000) { this.state = 'off'; this.errors = 0; this.failedAt = 0; } // another chance after ten minutes
     const want = this.wantedByConfig;
-    if (want && !this.page) return this.open();
+    if (want && !this.page && !this.retry) return this.open();
     if (!want && this.page) this.close();
     if (!want && this.state === 'failed' && (this.getConfig() || {}).engine === 'speech') { this.state = 'off'; this.errors = 0; }
   }
@@ -41,7 +42,8 @@ class WakeModelControl {
     const generation = ++this.generation;
     this.state = 'loading';
     try {
-      this.page = this.createPage({ onClosed: () => this.pageClosed(generation) });
+      this.page = this.createPage({ onClosed: () => this.pageClosed(generation) }) || null;
+      if (!this.page) { this.state = 'off'; return; } // the app has not set the page up yet: the next refresh opens it, and this is not counted as a failure
     } catch (e) {
       this.log.error?.('wake model page:', e && e.message);
       this.page = null;
@@ -80,11 +82,12 @@ class WakeModelControl {
     this.errors++;
     this.log.warn?.('wake model:', why, 'attempt', this.errors);
     this.clearTimer(this.retry); this.retry = null;
-    if (this.errors >= this.failLimit) { this.state = 'failed'; this.lastError = why; this.onState(); return; }
+    if (this.errors >= this.failLimit) { this.state = 'failed'; this.failedAt = this.now(); this.lastError = why; this.onState(); return; }
     this.state = 'off';
-    this.onState();
+    // the retry is set first, so the state change below cannot cause an instant second attempt
     this.retry = this.setTimer(() => { this.retry = null; this.refresh().catch(() => {}); }, 2000 * this.errors);
     this.retry && this.retry.unref && this.retry.unref();
+    this.onState();
   }
 
   // The page heard the phrase. Ignored while Relay is busy, speaking, or not meant to wake.

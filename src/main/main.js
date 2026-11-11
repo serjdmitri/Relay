@@ -664,6 +664,7 @@ function registerIpc() {
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
+    if (key === 'settings.wake.threshold') { ask.wakeModel.close(); ask.wake.refresh(); } // the page reads the cutoff when it starts
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase' || key === 'settings.wake.mode' || key === 'settings.wake.engine') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
     if (key === 'settings.firefox.enabled' || key === 'settings.firefox.port') startBridge();
     broadcast();
@@ -1066,7 +1067,9 @@ function registerIpc() {
     win.loadFile(path.join(__dirname, '../renderer/wakemodel.html'));
     return { close: () => { if (!win.isDestroyed()) win.close(); }, send: (channel, payload) => { if (!wc.isDestroyed()) wc.send(channel, payload); } };
   };
+  setTimeout(() => { try { ask.wake.refresh(); } catch { /* the self check retries */ } }, 1500).unref?.(); // the page can open now
   ipcMain.handle('wakemodel:heard', (e, m) => { if (e.sender === wakePageSender) ask.wakeModel.heard(Number(m?.score) || 1); });
+  ipcMain.handle('wakemodel:near', (e, m) => { if (e.sender === wakePageSender) diag.log('wake-near', 'almost woke, score ' + (Number(m?.score) || 0).toFixed(2) + ' (cutoff ' + (Number(store.get('settings.wake.threshold')) || 0.5) + ')'); });
   ipcMain.handle('wakemodel:status', (e, s) => { if (e.sender === wakePageSender) ask.wakeModel.status({ state: String(s?.state || ''), message: s?.message }); });
   ipcMain.handle('wakemodel:voice', (e, v) => { if (e.sender === wakePageSender) ask.wakeModel.voice(v?.p); });
   ipcMain.handle('wakemodel:config', (e) => (e.sender === wakePageSender ? { threshold: Number(store.get('settings.wake.threshold')) || 0.5 } : {}));

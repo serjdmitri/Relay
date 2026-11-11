@@ -293,10 +293,10 @@ class AskController {
     // wake word above stays off; if it cannot start, or the setting asks for speech (or a custom phrase, claps, ambient answers), the speech-based one does the job as before.
     this.createWakePage = null; // set by the app: opens the hidden listener page
     this.wakeModel = new WakeModelControl({
-      createPage: (opts) => { if (!this.createWakePage) throw new Error('no page'); return this.createWakePage(opts); },
+      createPage: (opts) => (this.createWakePage ? this.createWakePage(opts) : null),
       getConfig: () => ({ enabled: !!this.store.get('settings.wake.enabled') && !(this.listenPause && this.listenPause.paused()), mode: this.store.get('settings.wake.mode') || (this.store.get('settings.wake.requireClaps') ? 'claps-voice' : 'voice'), phrase: this.store.get('settings.wake.phrase') || 'hey jarvis', engine: this.store.get('settings.wake.engine') || 'model', ambient: !!(this.ambient && this.ambient.on) }),
       canWake: () => this.wakeCanNow(),
-      onWake: () => { this.diag?.log('wake-model', 'heard the phrase'); this.wakeTriggered(''); },
+      onWake: (_t, score) => { this.diag?.log('wake-model', 'heard the phrase, score ' + (Number(score) || 0).toFixed(2)); this.wakeTriggered(''); },
       onState: () => { this.diag?.log('wake-model-state', this.wakeModel.state); Promise.resolve(this.wake.refresh()).catch(() => {}); },
       log: console
     });

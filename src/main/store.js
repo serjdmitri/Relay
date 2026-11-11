@@ -44,7 +44,7 @@ const DEFAULTS = {
     actEnabled: true, // off: Relay only types what you say into the previous app
     cursor: true,
     look: 'jarvis', // the interface look of the pill, the buddy and guides: 'jarvis' | 'classic'
-    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false, spokenAck: false, engine: 'model' }, // on-device wake phrase; optionally require two claps immediately beforehand
+    wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false, spokenAck: false, engine: 'model', threshold: 0.5 }, // on-device wake phrase; optionally require two claps immediately beforehand
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
     briefing: { city: '', name: '', units: 'f', schoolUrl: '', sources: {}, say: { weather: false }, onlyNew: true }, // say: which parts are read aloud (the card shows everything; the weather is shown, not spoken); onlyNew: a repeat briefing the same day says only what is new
