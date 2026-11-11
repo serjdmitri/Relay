@@ -2378,7 +2378,7 @@ class AskController {
         if (!opts.shown && /\band\b/i.test(effective) && (effective.match(/\b(?:weather|forecast|calculator|cpu|memory|battery|network|disk)\b/gi) || []).length > 1) return this.runRequest(effective, entry);
         if (!opts.shown && !opts.scheduled) {
           const forecast = require('./forecast');
-          const previous = this.store.data.history?.[0];
+          const previous = this.store.data?.history?.[0];
           if (forecast.isTomorrowFollowup(effective) && this.lastForecast && Date.now() - this.lastForecast.at < 300000 && (forecast.parseForecast(previous?.text) || forecast.isTomorrowFollowup(previous?.text))) {
             const result = this.lastForecast.result, day = forecast.tomorrowForecast(result);
             if (!day) return this.finish(entry, { status: 'failed', reply: `I do not have tomorrow’s forecast for ${result.location}.`, actions: 0 });
@@ -2400,7 +2400,7 @@ class AskController {
           const vc = driveInspect.parseDriveCommand(effective);
           if (vc) return this.finish(entry, await this.driveCommand(vc));
           if (recap.isLastTaskRequest(effective)) {
-            const card = recap.lastTaskCard(this.store.data.history, this.store.data.actions, entry.id);
+            const card = recap.lastTaskCard(this.store.data?.history, this.store.data?.actions, entry.id);
             if (!card) return this.finish(entry, { status: 'done', reply: 'I do not have a previous task to show.', actions: 0 });
             if (!this.cardPanel) return this.finish(entry, { status: 'failed', reply: 'Task cards are unavailable right now.', actions: 0 });
             try { await this.cardPanel.show(card); } catch { return this.finish(entry, { status: 'failed', reply: 'I could not open the task report.', actions: 0 }); }
