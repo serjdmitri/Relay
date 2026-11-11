@@ -2390,6 +2390,13 @@ class AskController {
           if (dc) return this.finish(entry, await this.devicesCommand(dc));
           const vc = driveInspect.parseDriveCommand(effective);
           if (vc) return this.finish(entry, await this.driveCommand(vc));
+          if (recap.isLastTaskRequest(effective)) {
+            const card = recap.lastTaskCard(this.store.data.history, this.store.data.actions, entry.id);
+            if (!card) return this.finish(entry, { status: 'done', reply: 'I do not have a previous task to show.', actions: 0 });
+            if (!this.cardPanel) return this.finish(entry, { status: 'failed', reply: 'Task cards are unavailable right now.', actions: 0 });
+            try { await this.cardPanel.show(card); } catch { return this.finish(entry, { status: 'failed', reply: 'I could not open the task report.', actions: 0 }); }
+            return this.finish(entry, { status: 'done', reply: card.summary, actions: 0 });
+          }
           if (recap.parseRecapCommand(effective)) return this.finish(entry, this.recapCommand());
           const lc2 = robotics.parseLogCommand(effective);
           if (lc2) return this.finish(entry, await this.logCommand(lc2));

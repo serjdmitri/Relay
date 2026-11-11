@@ -1,6 +1,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildRecap, parseRecapCommand, line } = require('../src/main/recap');
+const { buildRecap, parseRecapCommand, isLastTaskRequest, lastTaskCard, line } = require('../src/main/recap');
+
+test('last task report shows only that task’s recorded steps and hides command contents', () => {
+  assert.equal(isLastTaskRequest('Jarvis, show me what you did'), true);
+  assert.equal(isLastTaskRequest('what did you do today'), false);
+  const card = lastTaskCard([{ id: 'two', text: 'Show me what you did', status: 'done' }, { id: 'one', text: 'Open Notes', status: 'done', reply: 'Opened Notes.' }], [
+    { requestId: 'other', tool: 'open_app', input: { name: 'Other' }, ok: true },
+    { requestId: 'one', tool: 'run_shell', input: { command: 'secret token' }, ok: false },
+    { requestId: 'one', tool: 'open_app', input: { name: 'Notes' }, ok: true }
+  ]);
+  assert.deepEqual(card.items.map(x => [x.title, x.subtitle]), [['Opened Notes', 'Completed'], ['Ran a command', 'Failed']]);
+  assert.doesNotMatch(JSON.stringify(card), /secret token|Other/);
+});
 
 const now = new Date(2026, 9, 28, 20, 30).getTime();
 const at = (h, m = 0) => new Date(2026, 9, 28, h, m).getTime();
