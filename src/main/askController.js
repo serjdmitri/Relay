@@ -3814,7 +3814,22 @@ class AskController {
     let cad;
     try { cad = cadModel.normalizeCad({ shapes: raw.shapes }); } catch (e) { return `Could not make that design: ${e.message}`; }
     const title = String(raw.title || 'Design').slice(0, 60);
-    const id = await this.holos.show({ title, items: [{ kind: 'cad', title, credit: 'Designed with Relay · edit it right in the hologram', cad }] });
+    let id;
+    if (raw.guided && cad.shapes.length > 1) {
+      const { revealCad } = require('./models/cadBuild');
+      const description = count => `Step ${count}/${cad.shapes.length}: ${cad.shapes[count - 1].name} · ${String(raw.shapes?.[count - 1]?.explanation || 'Part of this simplified model').slice(0, 160)}`;
+      const result = await revealCad({ cad, initial: description,
+        show: (first, credit) => this.holos.show({ title, items: [{ kind: 'cad', title, credit, cad: first }] }),
+        update: (holoId, previous, next, credit) => {
+          const h = this.holos.holos.get(holoId);
+          if (!h || h.win.isDestroyed() || h.items[0]?.cad !== previous || this.abort?.signal.aborted) return false;
+          h.items[0].credit = credit;
+          return this.holos.setCad(h, 0, next, { push: true });
+        }
+      });
+      id = result.id;
+      if (!result.completed) return 'The guided build stopped because the hologram was closed, changed, or cancelled.';
+    } else id = await this.holos.show({ title, items: [{ kind: 'cad', title, credit: 'Designed with Relay · edit it right in the hologram', cad }] });
     if (raw.keep) this.holos.pin(id, true);
     return `The design is on screen as a hologram. Shapes now:\n${cadModel.describeCad(cad)}\nTell the user briefly what you made. They can double-click it, press the pencil button to resize, move, add and remove shapes and cut holes themselves, and the download button saves an STL for 3D printing.`;
   }
