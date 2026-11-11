@@ -113,3 +113,21 @@ test('EndOfSpeech waits for real speech first, and WakeGate holds off after a de
     assert.equal(g.check(0.4), false); assert.equal(g.check(0.8), true); t = 500; assert.equal(g.check(0.9), false); t = 1600; assert.equal(g.check(0.9), true);
   }
 });
+
+test('startup order: a refresh before the page hook exists is not a failure, and a state change cannot cause an instant retry loop', async () => {
+  const cfg = { enabled: true, mode: 'voice', phrase: 'hey jarvis', engine: 'model', ambient: false };
+  const log = { error() {}, warn() {}, info() {} };
+  let hook = null, ctl; const timers = [];
+  ctl = new WakeModelControl({
+    createPage: () => hook && hook(), getConfig: () => cfg, canWake: () => true, onWake() {}, log,
+    onState: () => { ctl.refresh().catch(() => {}); }, // exactly what the app does: every state change re-checks
+    setTimer: (fn) => { timers.push(fn); return { unref() {} }; }, clearTimer() {}
+  });
+  for (let i = 0; i < 6; i++) await ctl.refresh(); // the app asks several times while starting
+  assert.notEqual(ctl.state, 'failed', 'no page hook yet must not use up the tries');
+  let opened = 0; hook = () => { opened++; return { close() {}, send() {} }; };
+  await ctl.refresh(); assert.equal(opened, 1); assert.equal(ctl.state, 'loading');
+  // a real failure still retries on a timer instead of looping at once
+  ctl.status({ state: 'error', message: 'x' });
+  assert.equal(opened, 1, 'no instant reopen'); assert.equal(timers.length, 1);
+});

@@ -24,12 +24,13 @@ async function start() {
   ctx.createMediaStreamSource(stream).connect(node); // not connected to the speakers
   stream.getAudioTracks()[0]?.addEventListener('ended', () => tell('error', 'The microphone stopped.'));
 
-  let watchUntil = 0, busy = false, backlog = [];
+  let watchUntil = 0, busy = false, backlog = [], lastNear = 0;
   relay.onWakeModelWatch(() => { watchUntil = Date.now() + 1500; });
 
   async function handle(block) {
     const score = await engine.push(block);
     if (gate.check(score)) { try { relay.wakeModelHeard({ score }); } catch { /* closing */ } engine.reset(); }
+    else if (score >= Math.max(0.25, gate.threshold - 0.25) && score < gate.threshold && Date.now() - lastNear > 3000) { lastNear = Date.now(); try { relay.wakeModelNear({ score }); } catch { /* closing */ } }
     if (Date.now() < watchUntil) {
       let p = 0;
       for (let i = 0; i + 512 <= BLOCK; i += 512) p = Math.max(p, await vad.push(block.slice(i, i + 512).map((x) => x / 32768)));

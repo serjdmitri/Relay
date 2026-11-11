@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('relay', {
   notifyTest: () => invoke('notify:test'),
   wakeModelHeard: (m) => invoke('wakemodel:heard', m),
   wakeModelStatus: (s) => invoke('wakemodel:status', s),
+  wakeModelNear: (m) => invoke('wakemodel:near', m),
   wakeModelVoice: (v) => invoke('wakemodel:voice', v),
   wakeModelConfig: () => invoke('wakemodel:config'),
   onWakeModelWatch: (cb) => on('wakemodel:watch', cb),
