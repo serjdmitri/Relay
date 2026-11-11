@@ -23,3 +23,13 @@ test('guided model completes and retains all shapes', async () => {
   assert.equal(result.completed, true);
   assert.deepEqual(current.shapes, cad.shapes);
 });
+
+test('narration follows the visible step before advancing', async () => {
+  const events = [];
+  await revealCad({ cad: { shapes: [{}, {}] }, initial: n => String(n), wait: async () => {},
+    show: async () => { events.push('show 1'); return 'one'; },
+    update: () => { events.push('show 2'); return true; },
+    narrate: async n => { events.push(`speak ${n}`); }
+  });
+  assert.deepEqual(events, ['show 1', 'speak 1', 'show 2', 'speak 2']);
+});

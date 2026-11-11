@@ -129,6 +129,12 @@ export class CadView {
       }
       const sel = spec.shapes.find((s) => s.id === selected);
       if (sel) this.outline(sel, spec);
+    } else if (selected) {
+      const s = spec.shapes.find(shape => shape.id === selected);
+      if (s) {
+        const outline = place(new THREE.LineSegments(new THREE.EdgesGeometry(shapeGeometry(s.type, s.size), 20), lineMat(0xffd24a, 1)), s);
+        this.extra.add(outline);
+      }
     }
   }
 
