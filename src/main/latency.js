@@ -36,7 +36,7 @@ const median = (xs) => { const a = xs.filter((x) => Number.isFinite(x) && x>=0).
 
 function parseLatencyCommand(text) {
   const n = String(text || '').trim().replace(/[“”"]/g, '').replace(/^(?:hey |ok |okay )?(?:jarvis|relay)[, ]+/i, '').replace(/^please[, ]+/i, '').replace(/[.!?,]+$/g, '').replace(/\s+/g, ' ').toLowerCase();
-  if (/^(?:how fast|how quick|how responsive) (?:are you|is jarvis|am i)(?: right now)?$|^(?:speed|latency|timing|reaction|response) (?:report|stats|numbers|check)$|^(?:show|give|tell) me (?:your |the )?(?:speed|latency|timing|reaction time|response time)(?: report| stats| numbers)?$|^what(?:'s| is) (?:your|the) (?:reaction|response) time$/.test(n)) return { type: 'latency-report' };
+  if (/^(?:how fast|how quick|how responsive) (?:are you|is jarvis|am i)(?: right now)?$|^(?:speed|latency|timing|reaction|response) (?:report|stats|numbers|check)$|^(?:show|give|tell) me (?:your |the )?(?:speed|latency|timing|reaction time|response time)(?: report| stats| numbers)?$|^what(?:'s| is) (?:your|the) (?:reaction|response) time$|^(?:(?:show|open) (?:me )?(?:the |your )?)?voice (?:status|diagnostics|troubleshooting)(?: panel)?$/.test(n)) return { type: 'latency-report' };
   if (/^(?:clear|reset|forget|delete) (?:the |my |your )?(?:speed|latency|timing)(?: report| stats| numbers| log)?$/.test(n)) return { type: 'latency-clear' };
   return null;
 }
@@ -54,12 +54,18 @@ function describe(log = []) {
   return `Over your last ${recent.length} spoken requests the typical wait from letting go of the key to hearing me was ${f(m.total)}. The 95th-percentile wait was ${f(p95)}. Hearing you took ${f(m.listen)}, thinking up the first words ${f(m.think)}, and making the voice ${f(m.speak)}.${slowest ? ` The slowest part is ${slowest[0]}.` : ''}`;
 }
 
-function reportCard(log = []) {
+function reportCard(log = [], voice = {}) {
   const recent = (Array.isArray(log) ? log : []).slice(0, 20);
   const items = [['Speech to text', 'listen'], ['Thinking', 'think'], ['Voice preparation', 'speak'], ['Total response', 'total']].map(([title, key]) => {
     const value = median(recent.map(r => r[key]));
     return { title, subtitle: value === null ? 'Not measured' : `${value.toFixed(1)} s typical`, note: '', image: null, url: '' };
   });
+  if (voice.enabled !== undefined) {
+    const wake = !voice.enabled ? 'Off in settings' : voice.listening ? 'Listening now' : 'Not listening now (may pause during a request)';
+    items.unshift({ title: 'Wake listener', subtitle: wake, note: '', image: null, url: '' });
+    items.push({ title: 'Last wake detected', subtitle: Number.isFinite(voice.lastWake) && voice.lastWake > 0 ? new Date(voice.lastWake).toLocaleString() : 'No wake detection recorded this session', note: '', image: null, url: '' });
+    items.push({ title: 'Speech started', subtitle: recent.length ? 'A response reached first sound in the timing log' : 'No completed voice timing recorded', note: 'Timing does not prove what was understood.', image: null, url: '' });
+  }
   return { kind: 'list', title: 'Voice response speed', subtitle: `${recent.length} recorded request${recent.length === 1 ? '' : 's'} · stored on this Mac`, summary: describe(recent), facts: [], links: [], image: null, credit: '', items };
 }
 

@@ -8,6 +8,14 @@ test('speed card reports missing stages separately from measured values', () => 
   assert.match(card.subtitle, /1 recorded request ·/);
 });
 
+test('voice status distinguishes a disabled listener and missing wake from measured audio', () => {
+  assert.deepEqual(p('show me the voice diagnostics panel'), { type: 'latency-report' });
+  const card = reportCard([], { enabled: false, listening: false, lastWake: 0 });
+  assert.equal(card.items.find(x => x.title === 'Wake listener').subtitle, 'Off in settings');
+  assert.match(card.items.find(x => x.title === 'Last wake detected').subtitle, /No wake/);
+  assert.match(card.items.find(x => x.title === 'Speech started').subtitle, /No completed/);
+});
+
 const mkStore = () => { const d = {}; return { d, get: (k) => d[k], set: (k, v) => { d[k] = v; } }; };
 
 test('a spoken request is timed in four steps, from letting go of the key to the first sound', () => {
