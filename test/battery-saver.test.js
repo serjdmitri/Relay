@@ -30,10 +30,28 @@ test('unplugged, the local model is kept for 5 minutes instead of 30, unless you
   } finally { Module._load = real; }
 });
 
-test('main.js: unplugged the voice is not pre-loaded and is unloaded after five idle minutes; the goodbyes are made ahead in the Jarvis voice; the setting is on by default with a switch', () => {
+test('main.js: unplugged the voice is not pre-loaded and is unloaded after fifteen idle minutes; the goodbyes are made ahead in the Jarvis voice; the setting is on by default with a switch', () => {
   const main = read('src/main/main.js');
-  assert.match(main, /settings\.tts\.engine'\) === 'omnivoice' && !saveBattery\(\)\) omni\.warm\(\)/); assert.match(main, /saveBattery\(\) && omni\.idleMs\(\) > 5 \* 60000 && omni\.unload\(\)/);
+  assert.match(main, /settings\.tts\.engine'\) === 'omnivoice' && !saveBattery\(\)\) omni\.warm\(\)/); assert.match(main, /saveBattery\(\) && omni\.idleMs\(\) > 15 \* 60000 && omni\.unload\(\)/);
   assert.match(main, /'Goodbye, Sir\.','See you later, Sir\.','Good night, Sir\.','Very good, Sir\. Goodbye\.'/);
   assert.match(read('src/main/store.js'), /batterySaver: true/); assert.match(read('src/renderer/app.js'), /toggleRow\('Save battery when unplugged'/);
   const ask = read('src/main/askController.js'); assert.ok(!/keepAlive: m\.ollamaKeepAlive \|\| '30m'/.test(ask), 'every local provider uses the battery-aware value'); assert.ok((ask.match(/keepAlive: this\.localKeepAlive\(\)/g) || []).length >= 4);
+});
+
+test('the voice model is started the moment you start talking or typing, so the reply is not held up "preparing voice"', async () => {
+  const { Speaker } = require('../src/main/voice');
+  const calls = [];
+  const omni = { installed: () => true, preload: () => { calls.push('load'); return true; } };
+  const mk = (engine) => new Speaker({ getTts: () => ({ engine }), omni });
+  mk('omnivoice').wakeVoice(); assert.deepEqual(calls, ['load']);
+  mk('system').wakeVoice(); assert.deepEqual(calls, ['load'], 'only the on-device voice has a model to start');
+  const broken = new Speaker({ getTts: () => ({ engine: 'omnivoice' }), omni: { installed: () => true, preload: () => { throw new Error('x'); } } });
+  assert.doesNotThrow(() => broken.wakeVoice());
+  const ask = read('src/main/askController.js');
+  assert.match(ask, /async warmUp\(\) \{\n    if \(this\.store\.get\('settings\.speakReplies'\)\) this\.speaker\?\.wakeVoice\?\.\(\)/);
+});
+
+test('main.js starts the voice again when the Mac wakes or unlocks', () => {
+  const main = read('src/main/main.js');
+  assert.match(main, /const voiceBack = \(\) =>/); assert.match(main, /powerMonitor\.on\('unlock-screen', \(\) => setTimeout\(voiceBack/); assert.match(main, /powerMonitor\.on\('resume', \(\) => setTimeout\(voiceBack/);
 });

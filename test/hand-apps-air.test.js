@@ -128,3 +128,11 @@ test('a fast pinch-drag that is let go keeps scrolling and slows to a stop; a sl
   for (let i = 0; i < 20; i++) { clock += 16; t.mock.timers.tick(16); }
   assert.equal(again.r.calls.length, m, 'touching it again stops the glide');
 });
+
+test('hand control starts its camera again after the Mac wakes or unlocks (the lid kills the camera stream)', () => {
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src/main/main.js'), 'utf8');
+  assert.match(main, /const reviveHands = async/);
+  assert.match(main, /powerMonitor\.on\('resume', \(\) => setTimeout\(\(\) => reviveHands\('after wake'\)/);
+  assert.match(main, /reviveHands\('after unlock'\)/);
+  assert.match(main, /hands\.disable\(\);\s*await new Promise\(\(r\) => setTimeout\(r, 1500\)\);\s*const r = await hands\.enable\(\)/);
+});
