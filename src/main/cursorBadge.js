@@ -10,8 +10,9 @@ html,body{margin:0;background:transparent;overflow:hidden;font-family:-apple-sys
 #b.blocked{border-color:#9ca3af;box-shadow:none;opacity:.65;filter:grayscale(1)}
 #b.go{border-color:#86efac;box-shadow:0 0 20px rgba(134,239,172,.85);font-size:28px;transform:scale(1.08)}
 #b.pulse{animation:p 1s ease-in-out infinite}@keyframes p{50%{box-shadow:0 0 22px rgba(110,231,255,.95)}}
+#b.wide{width:auto;min-width:48px;padding:0 16px;box-sizing:border-box;border-radius:24px;font-size:20px;font-weight:600;white-space:nowrap;transform:none}
 </style><div id="b">✌️</div><script>
-function set(cls,txt){const b=document.getElementById('b');b.className=cls;b.textContent=txt}
+function set(cls,txt){const b=document.getElementById('b');b.className=cls+(String(txt).length>2?' wide':'');b.textContent=txt}
 </script>`;
 
 const LOOK = { ready: ['pulse', '✌️'], turn: ['turn', '👉'], blocked: ['blocked', '✌️'], fist: ['pulse', '✊'] };
@@ -26,7 +27,7 @@ class CursorBadge {
   ensure() {
     if (this.win && !this.win.isDestroyed()) return this.win;
     const win = this.win = new this.BrowserWindow({
-      width: 56, height: 56, show: false, frame: false, transparent: true, hasShadow: false, resizable: false, focusable: false, skipTaskbar: true, type: 'panel',
+      width: 150, height: 56, show: false, frame: false, transparent: true, hasShadow: false, resizable: false, focusable: false, skipTaskbar: true, type: 'panel',
       webPreferences: { contextIsolation: true, backgroundThrottling: false }
     });
     win.setIgnoreMouseEvents(true);
