@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.38.18
+
+- **A dedicated "Hey Jarvis" wake-word model.** openWakeWord (with a Silero voice-activity filter) now listens for the wake phrase on this Mac, with a strictness slider, a near-miss log, and the old speech-based wake word as a fallback. Fixed a startup loop that kept the model from ever starting, and it now retries 10 minutes after a failure.
+- **Morning briefing you choose.** Per-part spoken toggles, weather shown but not spoken, the first open of the day says everything and later opens only say what is new.
+- **Two-finger desktop swipe.** Two fingers up, point them at the camera, turn them left or right: one swipe is one desktop. Owner-gated (30 second recognition window, a stranger blocks it), with a cursor badge showing what the camera sees.
+- **Fist starts hand control.** Hold a fist to the camera to turn hand control on with the camera view hidden; it turns itself off after 30 seconds without a hand (5 to 300 s in Settings).
+- **Volume by wrist twist.** Hold a pinch still for about 0.6 seconds, then twist your wrist: right is louder, left is quieter, with a level badge.
+- **"Call me" sign talks to Jarvis in any app.** Thumb and little finger out, held. The peace sign no longer opens the microphone (it stays the number 2 for browser tabs), and the rock sign no longer plays music by itself; both can still run a job you assign.
+- **Pinch clicks land on tabs and buttons.** Tabs, buttons, checkboxes and pop-ups are now pressed through the Accessibility tree, the pointer settles before the click, the click lands where the hand was just before the fingers closed, and the log records `clicked:ax:<role>` or `clicked:mouse`.
+- **Hand messages in the bottom left.** "Hand control is on", paused, resumed, and the auto-off notice appear as a small see-through card in the bottom left of the screen instead of the large Jarvis pill.
+- **Also since 0.38.13:** automatic failover to a local model, layered memory, personas and scenes, and a battery saver.
+
 ## 0.38.13
 
 - **Overnight wake, like Sentient OS's wake helper.** Say "set up the overnight wake": Relay copies one command to your clipboard that you paste into Terminal once (Relay never types your password). It adds a sudoers file allowing exactly four power commands (`pmset schedule wake`, `pmset schedule cancel wake`, `pmset -a disablesleep 0` and `1`), checked with visudo before it is installed. Then say "turn on the overnight wake": Relay schedules a wake at the start of the overnight window (1 AM by default) and re-arms it daily, replacing only its own wake (your 8 AM wake is untouched); when the night's work runs (your night list, Claude's one small improvement) it holds the Mac awake, even with the lid closed, and puts sleep back exactly as it found it (if Vorssaint had it off, it stays off). Safety: a watchdog process outside Relay restores sleep if Relay crashes or stops heartbeating, or after a 3-hour ceiling; Relay also restores sleep on quit and on its next start. Power rules: plugged in by default, battery only if you allow it and above 50%, stopped at 20%, a hot Mac does not start. Also: "turn off the overnight wake", "overnight wake status", "remove the overnight wake" (gives the command that removes the permission). 14 new tests.

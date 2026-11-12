@@ -5,7 +5,7 @@
 <h1 align="center">Relay</h1>
 
 <p align="center"><b>Talk to your Mac. Relay does the rest.</b><br>
-A menu bar assistant that opens apps, writes notes and reminders, reads your calendar, clicks through interfaces, drives Firefox and types what you say into any app.<br>
+A voice-first assistant for macOS that lives in the menu bar: it opens apps, writes notes and reminders, reads your calendar and email, clicks through interfaces, builds 3D holograms, watches your Mac while you are away, and follows your hands through the camera.<br>
 <b>No API key: it runs on the Claude plan you already have.</b></p>
 
 <p align="center">
@@ -13,9 +13,9 @@ A menu bar assistant that opens apps, writes notes and reminders, reads your cal
   <img alt="No API key needed" src="https://img.shields.io/badge/API%20key-not%20needed-30D158">
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-0A84FF?logo=apple&logoColor=white">
   <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/arm64%20%7C%20x64-dmg-FF9F0A">
-  <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-196%20passing-30D158">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-1700%2B%20passing-30D158">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-lightgrey"></a>
 </p>
 
@@ -25,13 +25,28 @@ A menu bar assistant that opens apps, writes notes and reminders, reads your cal
 
 Dictation is built in (Apple's on-device speech recognition), so a separate dictation app is no longer needed. It started as a companion for [Talkify](https://github.com/tornikegomareli/Talkify); you can still use Talkify or any tool that types or pastes text, because the Ask box (`⌥T`) is an ordinary text field.
 
-**[Website](https://serjdmitri.github.io/Relay/)** | **[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Using it](#using-it) | [What is verified](#what-is-verified-and-what-is-not)
+**[Website](https://serjdmitri.github.io/Relay/)** | **[Releases](https://github.com/serjdmitri/Relay/releases)** | [Download](#download) | [Build from source](#install-from-source-on-your-mac) | [Highlights](#highlights) | [Using it](#using-it) | [Hand control](#hand-control) | [What is verified](#what-is-verified-and-what-is-not)
 
-> **Status: early (v0.7.1).** The agent, dictation, interface and tests run on a Mac, but many flows have only been tried by hand. Expect rough edges and please open an issue with what the **History > Actions** tab shows.
+> **Status: v0.38, in active development.** The assistant, voice, hand control, face guard and the test suite (1,700+ tests) run on a Mac every release, but many flows are still tried mostly by hand and by one person. Expect rough edges, and open an issue with what **History > Actions** and **Doctor** show.
 
 > **How it runs.** Relay uses your own [Claude Code](https://claude.ai/code), signed in to your Claude plan (Pro or Max), so you need no API key. Relay never sees your password; it runs the real `claude` program. Relay is an independent project and is not made or endorsed by Anthropic, and Anthropic's rules for third-party apps can change. If they do, an **API key** (Anthropic, OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek or any OpenAI-compatible address) or a local **Ollama** model keeps Relay working: Account > "Use an API key or a local model instead".
 
 Relay is an independent project. It is not affiliated with Anthropic, [Talkify](https://github.com/tornikegomareli/Talkify) or Octaflow. The window, pages and pill follow Octaflow's layout, with original code, name and icon.
+
+## Highlights
+
+| | |
+|---|---|
+| **Talk, type or gesture** | Hold or tap **Right ⌥** to ask, **Right ⌘** to dictate anywhere, or say **"Hey Jarvis"** with nothing pressed. Wave at the camera to start listening. |
+| **"Hey Jarvis" on a real wake-word model** | A dedicated on-device wake-word model (openWakeWord with a voice-activity filter), not a guess from speech recognition. Adjustable strictness, a near-miss log, and the old speech-based wake word as a fallback. |
+| **Hand control** | Fist to start, open hand to move, pinch to click and drag, wrist twist for volume, and a two-finger swipe to switch desktops. See [Hand control](#hand-control). |
+| **Morning briefing you control** | Choose which parts Jarvis says aloud. The first open of the day gives everything; later opens only say what is new. Weather can be shown but not spoken. |
+| **Face guard and presence** | Owner recognition from the Mac's camera, a standby screen, an alarm for strangers, pictures of who was at your Mac, and a diagnostics log. Everything stays on this Mac. |
+| **Holograms and design** | Real 3D models, models made from a photo, shapes you describe, Tinkercad-style editing, cut and measure, and STL export. |
+| **Your own model, or none** | Your Claude plan by default. OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek or any compatible server as an alternative, and a local model (Ollama) for fully offline use, with automatic failover. |
+| **Memory, personas and scenes** | Layered memory you can read and edit, switchable personas, and scenes that set up your Mac for a task in one phrase. |
+| **Phone and navigation** | Relay Remote pairs your phone; "take me to..." gives turn-by-turn navigation with the map floating at the top. |
+| **Built to be checked** | Risky actions ask first, the local tool server is token-protected, and every release is gated by 1,700+ tests plus a launch check that refuses to build a broken app. |
 
 ## Download
 
@@ -113,6 +128,39 @@ First launch walks you through: sign in with Claude, Microphone, Accessibility, 
 | **Esc** | Cancel. Tapping Right ⌥ while Relay works also stops it. |
 
 All three can be changed in Shortcuts. Anything that sends a message, moves things to the Trash, runs a shell command or runs a destructive-looking AppleScript shows an Allow / Cancel card first.
+
+### Hand control
+<p align="center"><sub>Uses the camera on this Mac only. Relay reads where your hands are; no picture is saved or sent.</sub></p>
+
+Turn it on in Settings, from the menu bar, by saying "hands on", or simply **hold a fist up to the camera**. The camera view stays hidden and a small badge shows at the pointer. It switches itself off again after no hand has been in view for 30 seconds (adjustable from 5 seconds, and only when a fist turned it on). Messages from hand control appear as a small card in the bottom left of the screen.
+
+| Gesture | What it does |
+|---|---|
+| **Fist** (held a moment, hands off) | Turns hand control on |
+| **Open hand** | Moves the ring (the pointer) |
+| **Fist** (hands on) | Grabs a hologram or a piece and carries it; release quickly to throw |
+| **Thumb and finger tap** | Click. On a tab or button Relay presses it through the Accessibility tree, so it lands even when the window is in the background |
+| **Pinch held and moved** | Press-and-drag |
+| **Pinch held still, then twist your wrist** | Volume: twist right for louder, left for quieter, with a small level badge (switch off in Settings) |
+| **Two hands pinching** | Resize; turn them like a wheel to roll the model |
+| **Two fists pulled apart or together** | Take a model apart, or put it back |
+| **Fist in one hand, pinch in the other** | Draw a shape in the air |
+| **Wave** the open hand | Talk to Jarvis |
+| **"Call me" sign** (thumb and little finger out), held | Talk to Jarvis, in any app |
+| **Number of fingers** (1 to 5, or two hands up to 9), held | Switch to that browser tab |
+| **Thumb up / thumb down**, held | Keep or close the hologram under your hand |
+| **Two open palms**, held 1.5 seconds | Pause or resume hand control |
+
+You can give the **wave** and **rock** signs a job of your own: "when I show the rock sign, play my focus playlist".
+
+### Two-finger desktop swipe
+A separate camera gesture that does not need hand control. Show two fingers up, point them at the camera, then turn them the way you want to go: your desktop slides one space and the gesture resets, with no extra fidgeting. The angles are tuned for the smaller reach of the right-hand side. It only reacts to the owner (a stranger in view blocks it), and a small badge at the mouse pointer shows what the camera sees: ready, turning, blocked, or an arrow for the desktop it moves to. Turn it on in Settings, where the angles, the badge and the direction can be changed.
+
+### "Hey Jarvis"
+Say **"Hey Jarvis"** and the pill opens and listens. It uses a dedicated on-device wake-word model (openWakeWord) behind a voice-activity detector, so it keeps listening cheaply and rarely fires on other speech. Wake strictness is a slider in Settings, near misses are logged to the diagnostics log so you can tune it, and the previous speech-based wake word remains as a fallback. Nothing is recorded or sent; audio is processed and discarded. The orange microphone dot stays on while it listens.
+
+### Morning briefing
+"Good morning" gives a briefing of your calendar, mail, weather and the things you asked it to watch. In Settings you choose **what Jarvis says out loud**, part by part. The first time you open Relay in the early morning it says everything you chose; open it again later and it only shows the weather and says what is new, without repeating itself. Weather can be shown on screen without being spoken.
 
 ### Show me
 <p align="center">
@@ -258,17 +306,21 @@ Every tool call with its arguments and result. If something does not work, look 
 
 ## What is verified and what is not
 
-Verified on a Mac (`npm test`, 206 tests): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
+Verified on a Mac (`npm test`, more than 1,700 tests, all passing before every release): shortcut tap/hold logic including Right ⌘ and Esc, the agent loop and confirm gate, the wire formats of the Anthropic, Ollama and OpenAI-compatible providers (with fake servers), the local tool server and the Claude runner (with a fake `claude`), the dictation helper's protocol, instant commands, AppleScript builders, settings migration, the Firefox bridge. Also run for real: the dictation helper transcribing generated speech, and the Claude runner driving real tool calls (including an image result and a declined confirmation) through a signed-in `claude`.
 
 Not verified by script: real calls to the OpenAI-compatible services (OpenAI, Gemini, Groq, Mistral, xAI, DeepSeek), live microphone dictation end to end, music control, spoken-command dictation and word fixes with a real voice, the clipboard and selection tools, permission prompts, global shortcut detection, the AppleScript against Notes, Reminders, Calendar, Messages and Finder beyond what you have tried by hand. `scripts/e2e.mjs` and `scripts/screenshots.mjs` predate dictation and the Claude sign-in and have not been updated or re-run. The Actions tab and `Console.app` (filter "Relay") are where errors show up.
 
 ## Layout
 ```
-src/main        Electron main process, agent, tools, speech and Claude runners, Firefox bridge
-src/renderer    Window, onboarding, pill and cursor overlay (plain HTML/CSS/JS)
-native          relay-speech.swift (on-device dictation and brightness), relay-glass.swift (the glass behind the pill)
+src/main            Electron main process: agent, tools, speech, Claude and model runners, hands, presence, wake model, Firefox bridge
+src/main/hands      Hand control: gesture logic, control, click helper bridge, help
+src/renderer        Window, onboarding, pill, cursor overlay, camera and wake-word pages (plain HTML/CSS/JS)
+src/renderer/vendor On-device models (wake word, face, hand landmarks) and ONNX/WASM runtimes
+native              Swift helpers: relay-speech (dictation), relay-glass (the pill), relay-ax (accessibility clicks and drags)
 extension/firefox   WebExtension (MV2)
-test            unit tests         scripts   packaging, icons, screenshots, e2e
+ios                 The phone companion
+docs                Guides, release notes and the website
+test                Unit tests        scripts   Packaging, icons, screenshots, startup check, e2e
 ```
 
 ## Contributing
