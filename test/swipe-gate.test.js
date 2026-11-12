@@ -19,7 +19,7 @@ test('turning to your left shows the desktop on the right, and the other way rou
 test('it lets a swipe through only when you were recognised a moment ago', () => {
   const s = rig();
   assert.equal(s.gate.check({ dir: 'left' }).ok, true);
-  const old = rig({ owner: { seen: 'owner', lastOwnerAt: 80000 } });
+  const old = rig({ owner: { seen: 'owner', lastOwnerAt: 60000 } });
   assert.deepEqual(old.gate.check({ dir: 'left' }), { ok: false, why: 'you were not recognised just now' });
   const other = rig({ owner: { seen: 'stranger', lastOwnerAt: 100400 } });
   assert.equal(other.gate.check({ dir: 'left' }).why, 'someone else is in view');
@@ -48,4 +48,10 @@ test('peek says whether a swipe would be let through, without counting as one', 
   assert.equal(s.gate.check({ dir: 'left' }).ok, true, 'peeking did not use up the swipe');
   assert.equal(s.gate.peek().ok, true, 'peek ignores the short rest after a swipe');
   assert.equal(rig({ owner: { seen: 'stranger', lastOwnerAt: 100400 } }).gate.peek().ok, false);
+});
+
+test('you stay recognised for half a minute, but a stranger seen after that blocks it', () => {
+  assert.equal(rig({ owner: { seen: 'unclear', lastOwnerAt: 80000 } }).gate.check({ dir: 'left' }).ok, true, 'a hand over the face for 20 seconds is fine');
+  assert.equal(rig({ owner: { seen: 'unclear', lastOwnerAt: 80000, lastStrangerAt: 90000 } }).gate.check({ dir: 'left' }).why, 'someone else is in view');
+  assert.equal(rig({ owner: { seen: 'unclear', lastOwnerAt: 90000, lastStrangerAt: 80000 } }).gate.check({ dir: 'left' }).ok, true, 'a stranger before you were recognised again does not');
 });

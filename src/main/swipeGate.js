@@ -11,7 +11,7 @@ function desktopFor(dir, flip = false) {
 
 class SwipeGate {
   // getConfig(): settings.swipe. ownerEnrolled(): is owner recognition set up. owner(): { seen: 'owner' | 'stranger' | …, lastOwnerAt: ms }. faces(): { count, at: ms }. blocked(): '' or a reason to stay quiet.
-  constructor({ getConfig, ownerEnrolled = () => false, owner = () => ({}), faces = () => ({ count: 0, at: 0 }), blocked = () => '', now = Date.now, ownerWindowMs = 8000, faceWindowMs = 3000, cooldownMs = 700 }) {
+  constructor({ getConfig, ownerEnrolled = () => false, owner = () => ({}), faces = () => ({ count: 0, at: 0 }), blocked = () => '', now = Date.now, ownerWindowMs = 30000, faceWindowMs = 3000, cooldownMs = 700 }) {
     Object.assign(this, { getConfig, ownerEnrolled, owner, faces, blocked, now, ownerWindowMs, faceWindowMs, cooldownMs });
     this.last = -Infinity;
   }
@@ -36,7 +36,7 @@ class SwipeGate {
     const f = this.faces();
     if (this.ownerEnrolled()) {
       const o = this.owner() || {};
-      if (o.seen === 'stranger') return { ok: false, why: 'someone else is in view' };
+      if (o.seen === 'stranger' || (o.lastStrangerAt || 0) > (o.lastOwnerAt || 0)) return { ok: false, why: 'someone else is in view' }; // a stranger since you were last recognised blocks it
       if (!(t - (o.lastOwnerAt || 0) <= this.ownerWindowMs)) return { ok: false, why: 'you were not recognised just now' };
       if (f.count > 1 && o.seen !== 'owner') return { ok: false, why: 'more than one face in view' };
     } else if (!(f.count === 1 && t - f.at <= this.faceWindowMs)) return { ok: false, why: f.count > 1 ? 'more than one face in view' : 'no face in view' };
