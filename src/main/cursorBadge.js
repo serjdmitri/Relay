@@ -14,7 +14,7 @@ html,body{margin:0;background:transparent;overflow:hidden;font-family:-apple-sys
 function set(cls,txt){const b=document.getElementById('b');b.className=cls;b.textContent=txt}
 </script>`;
 
-const LOOK = { ready: ['pulse', '✌️'], turn: ['turn', '👉'], blocked: ['blocked', '✌️'] };
+const LOOK = { ready: ['pulse', '✌️'], turn: ['turn', '👉'], blocked: ['blocked', '✌️'], fist: ['pulse', '✊'] };
 
 class CursorBadge {
   // BrowserWindow, screen: from Electron. enabled(): is the hint wanted. The timers are replaceable for tests.
@@ -62,11 +62,14 @@ class CursorBadge {
   }
 
   // The swipe happened: an arrow toward the desktop that is coming, for a moment.
-  flash(name, ms = 650) {
+  flash(name, ms = 650) { this.note(name === 'left' ? '◀' : '▶', ms); }
+
+  // Any short confirmation in the badge (the arrow above, or a raised hand when hand control turns on).
+  note(text, ms = 900) {
     if (!this.enabled()) return;
     const win = this.ensure();
     this.flashing = true; this.state = 'flash';
-    this.paint('go', name === 'left' ? '◀' : '▶');
+    this.paint('go', text);
     this.follow();
     if (!win.isVisible()) win.showInactive();
     if (!this.timer) this.timer = this.setTimer(() => this.follow(), 16);

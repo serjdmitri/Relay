@@ -59,3 +59,11 @@ test('it does nothing when the hint is turned off, and close removes the window'
   const on = rig(); on.badge.show('ready'); on.badge.close();
   assert.equal(on.wins[0].destroyed, true); assert.equal(on.timers[0].cleared, true);
 });
+
+test('a fist badge exists, and note shows any short confirmation (a raised hand) then goes away', () => {
+  const r = rig();
+  r.badge.show('fist'); r.wins[0].loaded(); r.badge.show('fist');
+  assert.ok(r.js.some((c) => c.includes('✊')));
+  r.badge.note('✋', 1000); assert.equal(r.laters[0].ms, 1000); assert.ok(r.js.at(-1).includes('✋'));
+  r.laters[0].fn(); assert.equal(r.wins[0].visible, false);
+});

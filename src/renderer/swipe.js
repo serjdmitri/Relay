@@ -77,3 +77,34 @@ export class TwoFingerSwipe {
   }
 }
 
+
+// A closed fist held toward the camera for a moment, which turns hand control on. It only runs while hand control is off (once it is on, a fist grabs). The hand must be close enough to be a
+// deliberate sign and not one far away, it must be held without a break, and after it has fired the fist has to open before it can fire again.
+export class FistHold {
+  // onStage('holding' | 'idle'): for the badge at the pointer.
+  constructor({ holdMs = 700, showMs = 150, minPalm = 0.1, gapMs = 150, aspect = 4 / 3, onStage = null } = {}) {
+    Object.assign(this, { holdMs, showMs, minPalm, gapMs, aspect, onStage });
+    this._stage = 'idle'; this.since = null; this.lastFist = 0; this.armed = true; this.openSince = null;
+  }
+
+  get stage() { return this._stage; }
+  set stage(v) { if (v !== this._stage) { this._stage = v; try { this.onStage && this.onStage(v); } catch { /* the badge must never stop it */ } } }
+
+  // l: the hand's 21 points (or null), t: ms. Returns { type: 'fist' } once when the fist has been held long enough.
+  push(l, t) {
+    const palm = l && l.length >= 21 ? Math.hypot((l[0].x - l[9].x) * this.aspect, l[0].y - l[9].y) : 0;
+    const fist = !!l && palm >= this.minPalm && poseOf(l) === 'Closed_Fist';
+    if (fist) {
+      this.openSince = null;
+      if (this.since === null) this.since = t;
+      this.lastFist = t;
+      if (!this.armed) return null;
+      if (t - this.since >= this.showMs) this.stage = 'holding';
+      if (t - this.since >= this.holdMs) { this.armed = false; this.stage = 'idle'; this.since = null; return { type: 'fist' }; }
+      return null;
+    }
+    if (this.since !== null && t - this.lastFist > this.gapMs) { this.since = null; this.stage = 'idle'; }
+    if (!this.armed) { if (this.openSince === null) this.openSince = t; if (t - this.openSince >= 600) this.armed = true; }
+    return null;
+  }
+}

@@ -109,3 +109,43 @@ test('each step the detector enters is reported, once, for the badge at the poin
   assert.deepEqual(lost, ['up', 'toward', 'idle'], 'back to idle when the steps do not follow in time');
   assert.doesNotThrow(() => play(new TwoFingerSwipe({ onStage: () => { throw new Error('badge broke'); } }), gesture(70, true)));
 });
+
+// ---- the fist that turns hand control on ----
+import { FistHold } from '../src/renderer/swipe.js';
+function fistHand(scale = 1) {
+  const l = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.8 }));
+  const at = (ang, r) => ({ x: 0.5 + Math.sin(ang) * r * scale, y: 0.8 - Math.cos(ang) * r * scale });
+  const finger = (base, angle) => { l[base] = at(angle, 0.16); l[base + 1] = at(angle, 0.2); l[base + 2] = at(angle, 0.17); l[base + 3] = at(angle, 0.14); };
+  finger(5, -0.25); finger(9, 0); finger(13, 0.22); finger(17, 0.45);
+  for (let i = 1; i <= 4; i++) l[i] = at(-0.9, 0.05 + i * 0.01);
+  return l;
+}
+const holdFor = (det, hand, ms, t0 = 1000) => { const out = []; for (let t = t0; t <= t0 + ms; t += FRAME) { const e = det.push(hand, t); if (e) out.push(e); } return out; };
+
+test('a fist held toward the camera for the hold time gives one "fist", with the badge told when it starts and ends', () => {
+  assert.equal(poseOf(fistHand()), 'Closed_Fist');
+  const stages = []; const det = new FistHold({ onStage: (s) => stages.push(s) });
+  assert.equal(holdFor(det, fistHand(), 1200).length, 1, 'held on for over a second: still one');
+  assert.deepEqual(stages, ['holding', 'idle']);
+});
+
+test('a fist shown too briefly, a far away one, or another sign never turns it on', () => {
+  const brief = new FistHold(); assert.equal(holdFor(brief, fistHand(), 400).length, 0);
+  assert.equal(holdFor(new FistHold(), fistHand(0.3), 1500).length, 0, 'a small, far away hand is not meant for the camera');
+  assert.equal(holdFor(new FistHold(), peace(), 1500).length, 0);
+});
+
+test('the fist has to open before it can fire again, and a tiny break in it does not restart the count', () => {
+  const det = new FistHold();
+  assert.equal(holdFor(det, fistHand(), 900).length, 1);
+  assert.equal(holdFor(det, fistHand(), 900, 3000).length, 0, 'still closed: nothing more');
+  holdFor(det, peace(), 800, 5000); // the hand opens for a while
+  assert.equal(holdFor(det, fistHand(), 900, 7000).length, 1);
+  // one picture where the hand was not found does not break a hold, but a long gap does
+  const a = new FistHold(); const ev = [];
+  for (let t = 1000; t <= 1800; t += FRAME) { const e = a.push(t >= 1300 && t < 1400 ? null : fistHand(), t); if (e) ev.push(e); }
+  assert.equal(ev.length, 1);
+  const b = new FistHold(); const ev2 = [];
+  for (let t = 1000; t <= 2000; t += FRAME) { const e = b.push(t >= 1300 && t < 1700 ? null : fistHand(), t); if (e) ev2.push(e); }
+  assert.equal(ev2.length, 0);
+});
