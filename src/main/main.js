@@ -1375,7 +1375,7 @@ app.whenReady().then(() => {
   // Battery saver (on by default): unplugged, the voice model is not loaded at launch and is unloaded after five idle minutes (it is started again by the next reply).
   const saveBattery = () => { try { return store.get('settings.batterySaver') !== false && !!powerMonitor.isOnBatteryPower?.(); } catch { return false; } };
   setTimeout(() => { if (store.get('settings.tts.engine') === 'omnivoice' && !saveBattery()) omni.warm().catch(() => {}); }, 3000).unref?.();
-  setInterval(() => { try { if (saveBattery() && omni.idleMs() > 5 * 60000 && omni.unload()) diag.log('battery-saver', 'voice model unloaded after 5 idle minutes'); } catch { /* try again next minute */ } }, 60000).unref?.(); // load the voice now, not when the first reply needs it
+  setInterval(() => { try { if (saveBattery() && omni.idleMs() > 15 * 60000 && omni.unload()) diag.log('battery-saver', 'voice model unloaded after 15 idle minutes'); } catch { /* try again next minute */ } }, 60000).unref?.(); // load the voice now, not when the first reply needs it
   speaker = new Speaker({
     kokoro, omni, phraseCacheDir:path.join(app.getPath('userData'),'voices','fixed-phrases'),
     getLocalOnly: () => store.get('settings.model.provider') === 'ollama' || (!!ask?.offline && flagsMod.isOn(store.get('settings'), 'offline')),
@@ -1593,11 +1593,30 @@ app.whenReady().then(() => {
   // Right after the lid opens the camera is often not ready yet: look again a few times, and stop as soon as it is delivering pictures.
   const reviveSoon = (why) => { for (const s of [3, 10, 25, 60]) setTimeout(() => revivePresence(why), s * 1000).unref?.(); };
   powerMonitor.on('resume', () => reviveSoon('after wake'));
+  // The camera that hand control uses dies with the lid just like the one above, and nothing used to start it again: after sleeping or locking, hand control looked on but saw nothing. Start it again after the Mac wakes or unlocks.
+  let handsReviving = false, handsRevivedAt = 0;
+  const reviveHands = async (why) => {
+    try {
+      if (handsReviving || screenLocked || !hands?.enabled || Date.now() - handsRevivedAt < 8000) return;
+      handsReviving = true; handsRevivedAt = Date.now();
+      hands.disable();
+      await new Promise((r) => setTimeout(r, 1500));
+      const r = await hands.enable();
+      diag.log(r.ok ? 'hands-restarted' : 'hands-failed', why + (r.ok ? '' : ': ' + String(r.error || '').slice(0, 80)));
+      if (r.ok) handsAutoOff.seen();
+      broadcast();
+    } catch (e) { diag.log('hands-failed', why + ': ' + String(e.message).slice(0, 80)); } finally { handsReviving = false; }
+  };
+  powerMonitor.on('resume', () => setTimeout(() => reviveHands('after wake'), 4000).unref?.());
+  // You are probably back at the Mac: load the voice now (if the battery saver had unloaded it), so the first thing you ask is not held up "preparing voice".
+  const voiceBack = () => { try { if (store.get('settings.speakReplies')) speaker?.wakeVoice(); } catch { /* the voice loads when you ask */ } };
+  powerMonitor.on('resume', () => setTimeout(voiceBack, 3000).unref?.());
+  powerMonitor.on('unlock-screen', () => setTimeout(voiceBack, 1000).unref?.());
   powerMonitor.on('lock-screen', () => { diag.log('lock-screen'); lockedAt = Date.now(); screenLocked = true; lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     try { overlay?.renewIdle(); } catch { /* the old windows stay */ } // windows that sat hidden through the lock can come back blank: start from fresh ones
     // You have just unlocked the Mac with your password or fingerprint: that is you. A guard screen still up, or an alarm still counting, comes down, and the mouse is handed back.
-    diag.log('unlock-screen'); reviveListening('after unlock'); reviveSoon('after unlock');
+    diag.log('unlock-screen'); reviveListening('after unlock'); reviveSoon('after unlock'); setTimeout(() => reviveHands('after unlock'), 3000).unref?.();
     try { if (ownerGuard?.state === 'alarm') ownerGuard.clear('owner'); intruder?.hide(); overlay?.releaseInput(); } catch { /* the screens stay */ }
     screenLocked = false; setTimeout(() => tellAboutVisits(), 1500).unref?.(); // you have just unlocked it: now is when to say who was at the Mac
     lockWatch.set(false);

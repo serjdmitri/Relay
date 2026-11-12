@@ -1775,6 +1775,7 @@ class AskController {
   // Starts Claude while you are still talking or typing. Its first answer then starts with the request,
   // not with a second of start-up.
   async warmUp() {
+    if (this.store.get('settings.speakReplies')) this.speaker?.wakeVoice?.(); // the voice model may have been unloaded: start it now, not when the reply is ready
     if (this.store.get('settings.model.provider') !== 'claude' || this.warm?.alive || this.warming || this.failover.active) return;
     this.warming = true;
     try {

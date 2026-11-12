@@ -32,6 +32,8 @@ class OmniVoice {
     const died = () => { if (this.child !== child) return; this.child = null; this.ready = false; this.queue=[];this.activeId=null;clearTimeout(this.activeTimer);this.activeTimer=null;for(const file of this.cancelled.values()){try{fs.unlinkSync(file);}catch{}}this.cancelled.clear(); for (const p of this.pending.values()) { p.cleanup(); try { fs.unlinkSync(p.file); } catch {} p.reject(new Error('OmniVoice stopped')); } this.pending.clear(); };
     child.on('error', died); child.on('exit', died);
   }
+  // Starts the worker (and so loads the model) without making it say anything: the quickest way to have it ready. False if it is not installed or already running.
+  preload() { if (!this.installed() || this.child) return false; this.start(); return true; }
   // Loads the model before anyone needs it. Starting the worker costs about 4.5 seconds (importing the libraries and loading the model), and that wait used to land on the first
   // reply after every start and after every interruption, which is the "voice preparing" delay. Called once at launch; one tiny silent-to-the-user sentence makes the first real one fast too.
   async warm() {

@@ -121,6 +121,12 @@ class Speaker {
     return null;
   }
 
+  // Called the moment you start talking or typing: a voice model that was unloaded (the battery saver does that after a while idle) starts loading now. It takes about 5 seconds, and
+  // you speak, and the model writes its answer, for at least that long, so it is ready when the reply has to be spoken instead of making you wait "preparing voice".
+  wakeVoice() {
+    try { if (this.omni && this.engineFor(this.getTts() || {}) === 'omnivoice') this.omni.preload(); } catch { /* the reply is spoken anyway, a little later */ }
+  }
+
   // Warm only an already-installed local voice. Cache short fixed acknowledgements/greetings in memory,
   // never conversations, and never make a paid/cloud request in the background.
   prepare({ rate = 'normal', kokoroVoice, text = 'On it, Sir.' } = {}) {
