@@ -93,6 +93,7 @@ class HandControl {
   }
 
   disable() {
+    this.stopScrollGlide();
     this.enableVersion=(this.enableVersion||0)+1;
     this.enabled = false;
     this.status = 'off'; this.message = '';
@@ -214,16 +215,45 @@ class HandControl {
     for (const h of this.holos.holos.values()) if (!h.win.isDestroyed()) h.win.webContents.send('holo:state', 'hand-mode', on);
   }
 
+  // Scrolling that carries on after the pinch is let go: the speed of the last moments, slowing down smoothly (the same feel as a flicked menu). A new pinch, losing the hand or turning hand control off stops it.
+  startScrollGlide(pt, samples) {
+    this.stopScrollGlide();
+    const list = samples || [], last = list[list.length - 1], t = this.now();
+    if (list.length < 2 || !last || t - last.t > 90) return; // the hand had stopped before it let go
+    const span = Math.max(40, last.t - list[0].t + 33);
+    let vel = list.reduce((sum, x) => sum + x.amount, 0) / span; // pixels per millisecond
+    if (Math.abs(vel) < 0.35) return; // a slow drag is not a flick
+    vel = Math.max(-4, Math.min(4, vel));
+    let prev = t, acc = 0;
+    const step = () => {
+      const n = this.now(), dt = Math.max(1, Math.min(50, n - prev)); prev = n;
+      vel *= Math.pow(0.95, dt / 16);
+      if (Math.abs(vel) < 0.03) { this.scrollGlideTimer = null; return; }
+      acc += vel * dt;
+      const send = Math.trunc(acc);
+      if (send) { acc -= send; this.externalDrag?.scroll(pt, send); }
+      this.scrollGlideTimer = setTimeout(step, 16);
+    };
+    this.scrollGlideTimer = setTimeout(step, 16);
+  }
+
+  stopScrollGlide() { if (this.scrollGlideTimer) { clearTimeout(this.scrollGlideTimer); this.scrollGlideTimer = null; } }
+
   // A pinch held on empty screen and moved: up or down scrolls what is under the hand (like dragging a touch screen), sideways sets the volume
   // (the whole width of the screen is a bit more than the whole volume range). The first clear movement decides which one it is, and it stays that.
   airMove(pt) {
     const a = this.pinchHold;
     const dx = pt.x - a.x0, dy = pt.y - a.y0;
+    const fresh = !a.axis; // the move that decides the direction also jumps over the first few pixels: it says nothing about the speed
     if (!a.axis) { if (Math.max(Math.abs(dx), Math.abs(dy)) < 36) return; a.axis = (Math.abs(dy) >= Math.abs(dx) || this.volumeTwist() !== false) ? 'scroll' : 'volume'; } // with the wrist twist on, a drag only ever scrolls (sideways drift must not change the volume)
     this.ringState('held');
     if (a.axis === 'scroll') {
       const d = pt.y - a.lastY; a.lastY = pt.y;
-      if (Math.abs(d) >= 1) this.externalDrag?.scroll(pt, d * 2);
+      if (Math.abs(d) >= 1) {
+        const amount = d * 2, t = this.now();
+        if (!fresh) { (a.samples || (a.samples = [])).push({ t, amount }); while (a.samples.length && t - a.samples[0].t > 120) a.samples.shift(); }
+        this.externalDrag?.scroll(pt, amount);
+      }
       return;
     }
     const now = this.now();
@@ -306,6 +336,7 @@ class HandControl {
   }
 
   release({ throwAtEdge = false } = {}) {
+    this.stopScrollGlide();
     if (this.externalHeld) { this.externalDrag?.end(this); this.externalHeld = false; }
     this.generation++;
     if (this.claim && this.claims.get(this.claim) === this) this.claims.delete(this.claim);
@@ -406,12 +437,17 @@ class HandControl {
     }
     if (e.type === 'release') { this.ringState('open'); this.release({ throwAtEdge: true }); return; }
     if (e.type === 'pinchdown') {
+      this.stopScrollGlide();
       const h = this.target(pt); this.ringState('pinch');
       if (h && !this.claimedByOther(h)) { this.claim = `holo:${h.id}`; this.claims.set(this.claim, this); this.captured = h; this.send(h, 'mouseMove', pt); this.send(h, 'mouseDown', pt); }
       else if (!h && !this.floatingAt(pt) && this.airScroll()) { this.pinchHold = { x0: pt.x, y0: pt.y, lastY: pt.y, axis: null, vol0: null, volAt: 0 }; if (this.onVolume) Promise.resolve(this.onVolume('get')).then((v) => { if (this.pinchHold && Number.isFinite(v)) this.pinchHold.vol0 = v; }).catch(() => {}); }
       return;
     } // a pinch held on a hologram turns it; held on empty screen it scrolls (up or down) or sets the volume (sideways); drawing needs the other hand to be a fist // a pinch held on a hologram turns it; drawing needs the other hand to be a fist
-    if (e.type === 'pinchup') { this.ringState('open'); this.pinchHold = null; this.release(); return; }
+    if (e.type === 'pinchup') {
+      const a = this.pinchHold; this.ringState('open'); this.pinchHold = null; this.release();
+      if (a && a.axis === 'scroll') this.startScrollGlide(pt, a.samples); // let go while still moving: the content keeps going, slowing down, like a flick on a touch screen
+      return;
+    }
     if (e.type === 'click') {
       this.ringState('click');
       setTimeout(() => this.ringState('open'), 220);
