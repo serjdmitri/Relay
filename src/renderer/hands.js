@@ -21,7 +21,7 @@ export function frameFrom(result, t) {
     const size = dist(l[0], l[9]) || 1e-6;
     const g = result.gestures?.[i]?.[0];
     const own = poseOf(l);
-    hands.push({ x: l[9].x, y: l[9].y, size: +size.toFixed(4), pinch: +pinchOf(l).toFixed(3), count: countOf(l), gesture: own !== 'None' ? own : (g?.categoryName || 'None'), model: g?.categoryName || 'None', score: +(g?.score ?? 1).toFixed(2), handed: result.handedness?.[i]?.[0]?.categoryName || '' });
+    hands.push({ x: l[9].x, y: l[9].y, roll: +Math.atan2((l[9].x - l[0].x) * (4 / 3), -(l[9].y - l[0].y)).toFixed(3), size: +size.toFixed(4), pinch: +pinchOf(l).toFixed(3), count: countOf(l), gesture: own !== 'None' ? own : (g?.categoryName || 'None'), model: g?.categoryName || 'None', score: +(g?.score ?? 1).toFixed(2), handed: result.handedness?.[i]?.[0]?.categoryName || '' });
   });
   return { t, hands };
 }
@@ -72,7 +72,7 @@ let actTimer = 0;
 // The 21 points of a hand are joined like this: the wrist to each finger's base, then up each finger, and across the palm.
 const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
 const TIPS = [4, 8, 12, 16, 20];
-const NAMES = { Closed_Fist: 'Fist', Open_Palm: 'Open hand', Victory: 'Peace sign', Pointing_Up: 'Pointing', Middle_Finger: 'Middle finger', Rock: 'Rock sign', Thumb_Up: 'Thumb up', Thumb_Down: 'Thumb down', ILoveYou: 'Open hand', None: 'Hand' };
+const NAMES = { Closed_Fist: 'Fist', Open_Palm: 'Open hand', Victory: 'Peace sign', Pointing_Up: 'Pointing', Middle_Finger: 'Middle finger', Rock: 'Rock sign', Shaka: 'Call sign', Thumb_Up: 'Thumb up', Thumb_Down: 'Thumb down', ILoveYou: 'Open hand', None: 'Hand' };
 const ACTIONS = { grab: 'Grab', release: 'Let go', pinchdown: 'Pinch', pinchup: 'Let go', click: 'Click', scale: 'Resize', twist: 'Roll', pull: 'Pull apart', mic: 'Listening', thumbup: 'Kept', thumbdown: 'Closed', point: 'Point', lost: 'Hand lost' };
 export const nameOf = (h) => (h.pinch !== undefined && h.pinch < 0.3 ? 'Pinch' : NAMES[h.gesture] || 'Hand');
 

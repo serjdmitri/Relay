@@ -8,8 +8,9 @@
 //   both hands in fists, pulled apart or pushed together         'pull' (take the model apart into pieces / put it back)
 //   a quick sideways swipe of the open hand                      'swipe' (the next or the previous model)
 //   a pointing finger held for a moment                          'point' (pick what it points at)
-//   a peace sign held for a moment                               'mic' (start listening)
 //   a thumb up held / a thumb down held                          'thumbup' (keep it) / 'thumbdown' (close it)
+//   the "call me" sign held (thumb and little finger out)         'call' (talk to Jarvis, in any app)
+//   a pinch held still, then the wrist twisted                   'volstart', 'voldelta' (how far it turned, in radians), 'volend'
 // Positions come out as 0..1 across the screen: the picture is mirrored (your right is the screen's right) and only its middle part is
 // used, so the pointer reaches the screen's edges without stretching the arm. No Electron in here, so it can be tested.
 
@@ -31,6 +32,9 @@ class Smooth {
 
 const CLICK_MS = 380;
 const CLICK_MOVE = 0.035;
+const VOLUME_MS = 600; // a pinch held still this long (and then twisted) sets the volume
+const VOLUME_STILL = 0.03;
+const CLICK_LOOKBACK_MS = 150; // a click lands where the hand was just before the fingers closed, not where it drifted to while they closed
 
 class HandPointer {
   constructor({ onEvent, margin = 0.12 }) {
@@ -48,6 +52,8 @@ class HandPointer {
     this.trail = []; // recent positions of the open hand, for swipes
     this.swipeAt = 0;
     this.last = 0;
+    this.hist = []; // recent positions, for the click point
+    this.volumeTwist = true;
   }
 
   map(h) { return { x: clamp((1 - h.x - this.margin) / (1 - 2 * this.margin)), y: clamp((h.y - this.margin) / (1 - 2 * this.margin)) }; }
@@ -56,6 +62,7 @@ class HandPointer {
     const t = frame.t;
     const dt = Math.max(0.005, Math.min(0.2, (t - (this.last || t - 33)) / 1000));
     this.last = t;
+    this.volumeTwist = frame.volumeTwist !== false;
     const hands = (frame.hands || []).filter((h) => h && h.score !== 0).sort((a, b) => (b.size || 0) - (a.size || 0));
     if (!hands.length) return this.noHand();
     this.lost = 0;
@@ -63,13 +70,14 @@ class HandPointer {
     const p = this.map(h);
     const x = this.sx.filter(p.x, dt), y = this.sy.filter(p.y, dt);
     const isFist = h.gesture === 'Closed_Fist';
+    if (this.state !== 'pinch') { this.hist.push({ t, x, y }); while (this.hist.length && t - this.hist[0].t > 400) this.hist.shift(); }
 
-    // ---- signs held a moment: a peace sign opens the mic, a thumb up keeps, a thumb down closes ----
-    this.hold('Victory', 'mic', h, t, dt, x, y);
+    // ---- signs held a moment: a thumb up keeps, a thumb down closes (a peace sign does nothing here; it is the number 2 for browser tabs) ----
     this.hold('Thumb_Up', 'thumbup', h, t, dt, x, y);
     this.hold('Thumb_Down', 'thumbdown', h, t, dt, x, y);
     this.hold('Pointing_Up', 'point', h, t, dt, x, y);
     this.hold('Rock', 'rock', h, t, dt, x, y);
+    this.hold('Shaka', 'call', h, t, dt, x, y);
     this.stillPalm(h, t, x, y);
     this.wave(h, t, x, y);
 
@@ -139,14 +147,26 @@ class HandPointer {
     else if (far) this.pinchOff++; else this.pinchOff = 0;
     if (this.state !== 'pinch' && this.pinchOn >= 2) {
       this.state = 'pinch'; this.pinchOff = 0;
-      this.pinch = { t0: t, x0: x, y0: y, held: false };
+      const back = this.hist.find((s) => t - s.t <= CLICK_LOOKBACK_MS) || { x, y }; // where the hand was just before the fingers closed
+      this.pinch = { t0: t, x0: back.x, y0: back.y, held: false, vol: false, refRoll: 0 };
     } else if (this.state === 'pinch' && this.pinchOff >= 2) {
       this.endPinch(x, y);
       this.state = 'open';
     }
     if (this.state === 'pinch' && this.pinch) {
       const moved = Math.hypot(x - this.pinch.x0, y - this.pinch.y0);
-      if (!this.pinch.held && (t - this.pinch.t0 > CLICK_MS || moved > CLICK_MOVE)) { this.pinch.held = true; this.emit({ type: 'pinchdown', x: this.pinch.x0, y: this.pinch.y0 }); }
+      // Held still long enough, then twisted: the wrist sets the volume (hand control's pinch-drag does the other things). While that is possible, holding still no longer starts a press by itself;
+      // moving the hand still does, at once.
+      if (this.volumeTwist && !this.pinch.held && !this.pinch.vol && t - this.pinch.t0 >= VOLUME_MS && moved <= VOLUME_STILL && Number.isFinite(h.roll)) { this.pinch.vol = true; this.pinch.refRoll = h.roll; this.emit({ type: 'volstart', x: this.pinch.x0, y: this.pinch.y0 }); }
+      if (this.pinch.vol) {
+        let d = (Number.isFinite(h.roll) ? h.roll : this.pinch.refRoll) - this.pinch.refRoll;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        this.emit({ type: 'voldelta', delta: d, x: this.pinch.x0, y: this.pinch.y0 });
+        this.emit({ type: 'move', x: this.pinch.x0, y: this.pinch.y0, held: false });
+        return;
+      }
+      if (!this.pinch.held && (((!this.volumeTwist || !Number.isFinite(h.roll)) && t - this.pinch.t0 > CLICK_MS) || moved > CLICK_MOVE)) { this.pinch.held = true; this.emit({ type: 'pinchdown', x: this.pinch.x0, y: this.pinch.y0 }); }
       this.emit({ type: 'move', x: this.pinch.held ? x : this.pinch.x0, y: this.pinch.held ? y : this.pinch.y0, held: this.pinch.held });
       return;
     }
@@ -217,6 +237,7 @@ class HandPointer {
     const pz = this.pinch;
     this.pinch = null;
     if (!pz) return;
+    if (pz.vol) { this.emit({ type: 'volend', x, y }); return; }
     if (pz.held) this.emit({ type: 'pinchup', x, y });
     else this.emit({ type: 'click', x: pz.x0, y: pz.y0 });
   }
@@ -224,6 +245,7 @@ class HandPointer {
   releaseAll(x, y) {
     if (this.state === 'fist') this.emit({ type: 'release', x, y });
     if (this.state === 'pinch' && this.pinch?.held) this.emit({ type: 'pinchup', x, y });
+    if (this.state === 'pinch' && this.pinch?.vol) this.emit({ type: 'volend', x, y });
     this.pinch = null;
     this.state = 'none';
   }

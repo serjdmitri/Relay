@@ -59,13 +59,11 @@ test('a pinch clicks where the hand is; held, it presses and drags (turns the mo
   assert.deepEqual(h.win.input.map((e) => e.type), ['mouseMove', 'mouseDown', 'mouseMove', 'mouseUp']);
 });
 
-test('two hands resize the hologram under them; the peace sign opens the mic for it; losing the hand lets go', async () => {
+test('two hands resize the hologram under them; losing the hand lets go', async () => {
   const { hc, h, ev, at, mics } = await rig();
   await ev({ type: 'move', ...at(900, 550) });
   await ev({ type: 'scale', factor: 1.25, ...at(900, 550) });
   assert.deepEqual(h.win.sent.at(-1), ['holo:state', 'hand-scale', 1.25]);
-  await ev({ type: 'mic', ...at(930, 560) });
-  assert.deepEqual(mics, [h.id]);
   await ev({ type: 'grab', ...at(900, 550) });
   assert.ok(hc.captured);
   await ev({ type: 'lost' });
@@ -150,12 +148,10 @@ test('while a hand is in view the controls are drawn bigger, and they go back a 
   assert.deepEqual(h.win.sent.filter((s) => s[1] === 'hand-mode').at(-1), ['holo:state', 'hand-mode', false]);
 });
 
-test('pointing clicks where the finger is (picking a piece), and the peace sign opens the mic', async () => {
+test('pointing clicks where the finger is (picking a piece)', async () => {
   const { h, ev, at, mics } = await rig();
   await ev({ type: 'point', ...at(900, 550) });
   assert.deepEqual(h.win.input.slice(-3).map((e) => e.type), ['mouseMove', 'mouseDown', 'mouseUp']);
-  await ev({ type: 'mic', ...at(900, 550) });
-  assert.deepEqual(mics, [h.id]);
 });
 
 test('a pinch alone never draws (over a hologram it turns the model); a fist and a pinch draw, and a rough circle becomes a shape', async () => {
@@ -363,14 +359,6 @@ test('throwing an item registers the undo callback before closing', async () => 
   await ev({ type: 'move', ...at(1700, 550), held: true });
   await ev({ type: 'release', ...at(1700, 550) });
   assert.equal(closed, true); assert.equal(undo, restore);
-  hc.disable();
-});
-
-test('a configured peace-sign shortcut runs instead of opening the microphone', async () => {
-  const { hc, ev, at, mics } = await rig();
-  const called = []; hc.shortcut = () => 'timer5'; hc.onShortcut = x => called.push(x);
-  await ev({ type: 'mic', ...at(900, 550) });
-  assert.deepEqual(called, ['timer5']); assert.deepEqual(mics, []);
   hc.disable();
 });
 

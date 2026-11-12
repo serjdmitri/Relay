@@ -81,17 +81,10 @@ test('two hands pinching or in fists and moving apart or together resize', () =>
   assert.ok(!r.types().includes('grab'), 'two fists are not a grab');
 });
 
-test('a peace sign held a moment opens the mic once, and again only after it was put down', () => {
+test('a peace sign held however long never opens the mic (it is only the number 2 for browser tabs)', () => {
   const r = rig();
-  r.run(10, [r.hand({ gesture: 'Victory' })]);
-  assert.equal(r.types().filter((t) => t === 'mic').length, 0, 'a quick flash is not enough');
-  r.run(15, [r.hand({ gesture: 'Victory' })]);
-  assert.equal(r.types().filter((t) => t === 'mic').length, 1);
-  r.run(30, [r.hand({ gesture: 'Victory' })]);
-  assert.equal(r.types().filter((t) => t === 'mic').length, 1, 'held on: still once');
-  r.run(40, [r.hand({ gesture: 'Open_Palm' })]);
-  r.run(25, [r.hand({ gesture: 'Victory' })]);
-  assert.equal(r.types().filter((t) => t === 'mic').length, 2);
+  r.run(60, [r.hand({ gesture: 'Victory' })]);
+  assert.equal(r.types().filter((t) => t === 'mic').length, 0);
 });
 
 test('a hand that leaves the picture lets go of what it held, and the pointer hides', () => {
@@ -211,4 +204,60 @@ test('two fists still pull apart and two pinches still resize: neither is a pen'
   gone.run(5, [f, gone.hand({ gesture: 'Open_Palm', pinch: 0.1 })]);
   gone.run(10, []);
   assert.equal(gone.types().filter((t) => t === 'drawend').length, 1, 'losing the hands ends the drawing');
+});
+
+// ---- volume twist, the call sign, and where a click lands ----
+const rigRoll = () => { const r = rig(); const hand = (o = {}) => r.hand({ roll: 0, ...o }); return { ...r, hand }; };
+
+test('a pinch held still, then twisted, is a volume knob: it starts after the hold, follows the twist, and ends without a click', () => {
+  const r = rigRoll();
+  r.run(8, [r.hand()]);
+  r.run(25, [r.hand({ pinch: 0.1 })]); // pinched and held still for about 0.8 s
+  assert.equal(r.types().filter((t) => t === 'volstart').length, 1);
+  assert.ok(!r.types().includes('pinchdown'), 'holding still does not press by itself any more');
+  r.clear();
+  r.run(6, (i) => [r.hand({ pinch: 0.1, roll: -0.05 * (i + 1) })]); // wrist turned toward your right
+  const d = r.events.filter((e) => e.type === 'voldelta');
+  assert.ok(d.length >= 5 && d.at(-1).delta < -0.25, `the turn is followed: ${d.at(-1) && d.at(-1).delta}`);
+  r.clear();
+  r.run(5, [r.hand({ pinch: 0.9 })]); // fingers open
+  assert.ok(r.types().includes('volend')); assert.ok(!r.types().includes('click'));
+});
+
+test('a quick pinch is still a click, and moving a pinch still drags at once, with the twist on', () => {
+  const r = rigRoll();
+  r.run(8, [r.hand()]); r.run(4, [r.hand({ pinch: 0.1 })]); r.run(6, [r.hand()]);
+  assert.ok(r.types().includes('click')); assert.ok(!r.types().includes('volstart'));
+  const m = rigRoll();
+  m.run(8, [m.hand()]); m.run(10, (i) => [m.hand({ pinch: 0.1, x: 0.5 - i * 0.01 })]);
+  assert.ok(m.types().includes('pinchdown'), 'a pinch that moves drags');
+});
+
+test('with the twist turned off, a still pinch presses after the old hold time', () => {
+  const r = rigRoll(); const f = (o) => ({ t: 0, hands: [r.hand(o)], volumeTwist: false });
+  let t = 1000;
+  for (let i = 0; i < 8; i++) { r.hp.update({ ...f({}), t }); t += 33; }
+  for (let i = 0; i < 25; i++) { r.hp.update({ ...f({ pinch: 0.1 }), t }); t += 33; }
+  assert.ok(r.types().includes('pinchdown')); assert.ok(!r.types().includes('volstart'));
+});
+
+test('the click lands where the hand was just before the fingers closed, not where it drifted while they closed', () => {
+  const r = rigRoll();
+  r.run(10, [r.hand({ x: 0.5, y: 0.5 })]);
+  r.run(3, (i) => [r.hand({ x: 0.5 - 0.006 * (i + 1), y: 0.5, pinch: 0.1 })]); // the knuckle shifts a little as the fingers close
+  r.run(6, [r.hand({ x: 0.482, y: 0.5 })]);
+  const click = r.events.find((e) => e.type === 'click');
+  const home = r.events.find((e) => e.type === 'move');
+  assert.ok(click, 'a click');
+  assert.ok(Math.abs(click.x - home.x) < 0.01, `clicked near the starting spot: ${click.x} vs ${home.x}`);
+});
+
+test('the call sign held for a moment fires once, and again only after it was put down', () => {
+  const r = rigRoll();
+  r.run(8, [r.hand({ gesture: 'Open_Palm' })]);
+  r.run(30, [r.hand({ gesture: 'Shaka' })]);
+  assert.equal(r.types().filter((t) => t === 'call').length, 1);
+  r.run(40, [r.hand({ gesture: 'Open_Palm' })]); r.clear();
+  r.run(30, [r.hand({ gesture: 'Shaka' })]);
+  assert.equal(r.types().filter((t) => t === 'call').length, 1);
 });

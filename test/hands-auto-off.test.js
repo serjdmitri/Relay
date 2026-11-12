@@ -36,6 +36,6 @@ test('it stops watching when hand control was turned off by someone else, and ke
   const r = rig(90);
   r.a.started(); r.on = false; r.t += 200000;
   assert.equal(await r.a.tick(), false); assert.equal(r.a.byFist, false);
-  const tiny = rig(1); tiny.a.started(); tiny.t += 10000; assert.equal(await tiny.a.tick(), false, 'never less than 15 seconds');
-  tiny.t += 6000; assert.equal(await tiny.a.tick(), true);
+  const tiny = rig(1); tiny.a.started(); tiny.t += 3000; assert.equal(await tiny.a.tick(), false, 'never less than 5 seconds');
+  tiny.t += 3000; assert.equal(await tiny.a.tick(), true);
 });
