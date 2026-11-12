@@ -130,9 +130,17 @@ First launch walks you through: sign in with Claude, Microphone, Accessibility, 
 All three can be changed in Shortcuts. Anything that sends a message, moves things to the Trash, runs a shell command or runs a destructive-looking AppleScript shows an Allow / Cancel card first.
 
 ### Hand control
+<p align="center">
+  <img src="docs/img/hands-gestures.svg" alt="The hand gestures Relay understands, drawn as a grid of twelve cards" width="900">
+</p>
+
 <p align="center"><sub>Uses the camera on this Mac only. Relay reads where your hands are; no picture is saved or sent.</sub></p>
 
 Turn it on in Settings, from the menu bar, by saying "hands on", or simply **hold a fist up to the camera**. The camera view stays hidden and a small badge shows at the pointer. It switches itself off again after no hand has been in view for 30 seconds (adjustable from 5 seconds, and only when a fist turned it on). Messages from hand control appear as a small card in the bottom left of the screen.
+
+<p align="center">
+  <img src="docs/img/corner-note.svg" alt="A mock screen with the hand control message as a small card in the bottom left and a fist badge at the pointer" width="900">
+</p>
 
 | Gesture | What it does |
 |---|---|
@@ -154,12 +162,24 @@ Turn it on in Settings, from the menu bar, by saying "hands on", or simply **hol
 You can give the **wave** and **rock** signs a job of your own: "when I show the rock sign, play my focus playlist".
 
 ### Two-finger desktop swipe
+<p align="center">
+  <img src="docs/img/swipe.svg" alt="The two-finger swipe in three steps, with the desktops it moves between and the pointer badge states" width="900">
+</p>
+
 A separate camera gesture that does not need hand control. Show two fingers up, point them at the camera, then turn them the way you want to go: your desktop slides one space and the gesture resets, with no extra fidgeting. The angles are tuned for the smaller reach of the right-hand side. It only reacts to the owner (a stranger in view blocks it), and a small badge at the mouse pointer shows what the camera sees: ready, turning, blocked, or an arrow for the desktop it moves to. Turn it on in Settings, where the angles, the badge and the direction can be changed.
 
 ### "Hey Jarvis"
+<p align="center">
+  <img src="docs/img/hey-jarvis.svg" alt="How Hey Jarvis works: microphone, voice activity, wake-word model, then the pill, with the strictness slider and near-miss log" width="900">
+</p>
+
 Say **"Hey Jarvis"** and the pill opens and listens. It uses a dedicated on-device wake-word model (openWakeWord) behind a voice-activity detector, so it keeps listening cheaply and rarely fires on other speech. Wake strictness is a slider in Settings, near misses are logged to the diagnostics log so you can tune it, and the previous speech-based wake word remains as a fallback. Nothing is recorded or sent; audio is processed and discarded. The orange microphone dot stays on while it listens.
 
 ### Morning briefing
+<p align="center">
+  <img src="docs/img/briefing.svg" alt="The first open of the day versus later opens of the morning briefing, with spoken and shown-only parts" width="900">
+</p>
+
 "Good morning" gives a briefing of your calendar, mail, weather and the things you asked it to watch. In Settings you choose **what Jarvis says out loud**, part by part. The first time you open Relay in the early morning it says everything you chose; open it again later and it only shows the weather and says what is new, without repeating itself. Weather can be shown on screen without being spoken.
 
 ### Show me
