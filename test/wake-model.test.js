@@ -76,8 +76,10 @@ test('the wake model hears "Hey Jarvis" and ignores other speech and silence', {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-wake-'));
   const clip = (name, words) => {
     const aiff = path.join(dir, name + '.aiff'), wav = path.join(dir, name + '.wav');
-    assert.equal(spawnSync('say', ['-v', 'Samantha', '-o', aiff, words]).status, 0);
-    assert.equal(spawnSync('afconvert', ['-f', 'WAVE', '-d', 'LEI16@16000', '-c', '1', aiff, wav]).status, 0);
+    const spoken = spawnSync('say', ['-v', 'Samantha', '-o', aiff, words], { timeout: 15000 });
+    assert.equal(spoken.status, 0, spoken.error?.code === 'ETIMEDOUT' ? 'macOS speech synthesis timed out' : 'macOS speech synthesis failed');
+    const converted = spawnSync('afconvert', ['-f', 'WAVE', '-d', 'LEI16@16000', '-c', '1', aiff, wav], { timeout: 15000 });
+    assert.equal(converted.status, 0, converted.error?.code === 'ETIMEDOUT' ? 'audio conversion timed out' : 'audio conversion failed');
     const b = fs.readFileSync(wav); let p = 12, data = null;
     while (p < b.length - 8) { const id = b.toString('ascii', p, p + 4), n = b.readUInt32LE(p + 4); if (id === 'data') { data = b.subarray(p + 8, p + 8 + n); break; } p += 8 + n; }
     const s = new Float32Array(16000 + data.length / 2 + 32000);

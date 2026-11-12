@@ -597,7 +597,7 @@ function registerIpc() {
     cache: { get: () => store.get('schoolCache') || null, set: (v) => { store.set('schoolCache', v); } },
     openSource: () => require('./school').openSchoolPage(bridge, store.get('settings.briefing.schoolUrl'))
   });
-  agentsPanel = new AgentsWindow({ motion: floatingMotion, agents: ask.agents, start: (task) => { const r = ask.agents.submit(task); if (r.started) ask.sound?.('Tink'); return r; } });
+  agentsPanel = new AgentsWindow({ motion: floatingMotion, agents: ask.agents, start: (task) => { const r = ask.agents.submit(task); if (r.started) ask.sound?.('Tink'); return r; }, foreground: () => ask.runningTask ? { id: ask.runningTask.id, text: String(ask.runningTask.text || '').slice(0, 200), status: ask.pendingConfirm ? 'Waiting for your approval' : ask.workView?.label || 'Working', queued: ask.queue.length } : null, stopForeground: id => { if (!ask.runningTask || ask.runningTask.id !== id) return false; ask.stop(); return true; } });
   ask.openAgentsDashboard = () => { agentsPanel.open(); return { status: 'done', reply: 'Your agents dashboard is open, Sir. Type several jobs, one per line, to run them together; you can cancel any of them from there.', actions: 1 }; };
   ask.openAssignments = () => { assignmentsPanel.open(); return { status: 'done', reply: 'Your assignment dashboard is open, Sir. It shows the last school check; press Refresh to read the page again.', actions: 1 }; };
   ask.securityWatchSet = (on) => { store.set('settings.securityWatch.enabled', !!on); return on ? 'Security warnings are on. I will tell you when something new needs attention.' : 'Security warnings are off. You can still ask me for a security audit.'; };
