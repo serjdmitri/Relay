@@ -6,7 +6,14 @@ import { TwoFingerSwipe, FistHold, PalmsHold } from './swipe.js';
 
 export function createSwipeRunner({ video, isFacePresent = () => true }) {
   let recognizer = null, loading = false, failed = false, timer = 0, stopped = false, running = false;
-  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, fist = null, palms = null, mode = { swipe: true, fist: false };
+  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, fist = null, palms = null, mode = { swipe: true, fist: false }, hands = 1;
+
+  // The model is only told how many hands to look for when that number changes: telling it again every second makes it reconfigure itself and drop frames, which cost the swipe its short "pointed at the camera" step.
+  function applyHands() {
+    const want = mode.fist ? 2 : 1;
+    if (!recognizer || want === hands) return;
+    try { recognizer.setOptions({ numHands: want }); hands = want; } catch { /* one hand it is */ }
+  }
 
   async function load() {
     loading = true;
@@ -14,7 +21,7 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
       const fileset = await FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
       const make = (delegate) => GestureRecognizer.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/gesture_recognizer.task', delegate }, runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
       try { recognizer = await make('GPU'); } catch { recognizer = await make('CPU'); }
-      try { recognizer.setOptions({ numHands: mode.fist ? 2 : 1 }); } catch { /* one hand it is */ }
+      applyHands();
     } catch (e) { failed = true; try { relay.presenceSwipe({ error: String((e && e.message) || e).slice(0, 120) }); } catch { /* closing */ } } finally { loading = false; }
   }
 
@@ -49,7 +56,7 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
       if (mode.fist && !fist) fist = new FistHold({ aspect: (video.videoWidth || 4) / (video.videoHeight || 3), onStage: (stage) => { try { relay.presenceSwipe({ type: 'fist-stage', stage }); } catch { /* closing */ } } });
       if (mode.fist && !palms) palms = new PalmsHold({ aspect: (video.videoWidth || 4) / (video.videoHeight || 3) });
       if (!mode.fist) { fist = null; palms = null; }
-      try { recognizer && recognizer.setOptions({ numHands: mode.fist ? 2 : 1 }); } catch { /* one hand it is */ }
+      applyHands();
       running = true;
       if (!recognizer && !loading && !failed) load();
       if (!timer) timer = setTimeout(tick, 125);

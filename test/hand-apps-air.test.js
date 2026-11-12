@@ -94,3 +94,37 @@ test('main.js wires the scroll, volume, app swipes and custom signs, and the hel
   assert.match(read('native/relay-ax.swift'), /case "scroll":/); assert.match(read('src/main/store.js'), /airScroll: true/);
   assert.match(read('src/main/askController.js'), /parseSignCommand\(effective\)/);
 });
+
+test('a fast pinch-drag that is let go keeps scrolling and slows to a stop; a slow one, or a new pinch, does not / stops it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let clock = 5000;
+  const flick = async (stepY, gapMs) => {
+    const r = rig(); await r.hc.enable(); r.hc.now = () => clock;
+    await r.hc.handle({ type: 'pinchdown', ...at(900, 300) });
+    let y = 300;
+    for (let i = 0; i < 6; i++) { y += stepY; clock += gapMs; await r.hc.handle({ type: 'move', held: true, ...at(900, y) }); }
+    return { r, y };
+  };
+  const { r, y } = await flick(40, 33);
+  const during = r.calls.length;
+  await r.hc.handle({ type: 'pinchup', ...at(900, y) });
+  for (let i = 0; i < 30; i++) { clock += 16; t.mock.timers.tick(16); }
+  assert.ok(r.calls.length > during, 'it carried on after the pinch was let go');
+  const sent = r.calls.slice(during).map((c) => c[2]);
+  assert.ok(sent.every((d) => d > 0), 'in the same direction');
+  assert.ok(sent[sent.length - 1] <= sent[0], 'slowing down');
+  for (let i = 0; i < 200; i++) { clock += 16; t.mock.timers.tick(16); }
+  const settled = r.calls.length; for (let i = 0; i < 20; i++) { clock += 16; t.mock.timers.tick(16); }
+  assert.equal(r.calls.length, settled, 'it comes to a stop by itself');
+
+  const slow = await flick(8, 60); const n = slow.r.calls.length;
+  await slow.r.hc.handle({ type: 'pinchup', ...at(900, slow.y) });
+  for (let i = 0; i < 40; i++) { clock += 16; t.mock.timers.tick(16); }
+  assert.equal(slow.r.calls.length, n, 'a slow drag does not glide');
+
+  const again = await flick(40, 33); const m = again.r.calls.length;
+  await again.r.hc.handle({ type: 'pinchup', ...at(900, again.y) });
+  await again.r.hc.handle({ type: 'pinchdown', ...at(900, 500) });
+  for (let i = 0; i < 20; i++) { clock += 16; t.mock.timers.tick(16); }
+  assert.equal(again.r.calls.length, m, 'touching it again stops the glide');
+});
