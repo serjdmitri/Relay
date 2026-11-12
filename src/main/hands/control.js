@@ -219,7 +219,7 @@ class HandControl {
   airMove(pt) {
     const a = this.pinchHold;
     const dx = pt.x - a.x0, dy = pt.y - a.y0;
-    if (!a.axis) { if (Math.max(Math.abs(dx), Math.abs(dy)) < 36) return; a.axis = Math.abs(dy) >= Math.abs(dx) ? 'scroll' : 'volume'; }
+    if (!a.axis) { if (Math.max(Math.abs(dx), Math.abs(dy)) < 36) return; a.axis = (Math.abs(dy) >= Math.abs(dx) || this.volumeTwist() !== false) ? 'scroll' : 'volume'; } // with the wrist twist on, a drag only ever scrolls (sideways drift must not change the volume)
     this.ringState('held');
     if (a.axis === 'scroll') {
       const d = pt.y - a.lastY; a.lastY = pt.y;
@@ -232,7 +232,7 @@ class HandControl {
     const w = Math.max(1, this.display().width);
     const v = Math.max(0, Math.min(100, Math.round(a.vol0 + (dx / w) * 120)));
     try { this.cam?.action?.({ type: 'volume', n: v }); } catch { /* the view is only a hint */ }
-    Promise.resolve(this.onVolume('set', v)).catch(() => {});
+    Promise.resolve(this.onVolume('set', v, pt)).catch(() => {});
   }
 
   // A held number: "go to tab N" in the browser in front. 9 or more means the last tab. Nothing happens if no browser is in front.
@@ -455,7 +455,7 @@ class HandControl {
       if (v === a.lastV) return;
       a.lastV = v;
       try { this.cam?.action?.({ type: 'volume', n: v }); } catch { /* the view is only a hint */ }
-      Promise.resolve(this.onVolume('set', v)).catch(() => {});
+      Promise.resolve(this.onVolume('set', v, pt)).catch(() => {});
       return;
     }
     if (e.type === 'volend') { this.volTwist = null; this.ringState('open'); return; }

@@ -1667,7 +1667,7 @@ app.whenReady().then(() => {
     airScroll: () => store.get('settings.hands.airScroll') !== false,
     volumeTwist: () => store.get('settings.hands.volumeTwist') !== false,
     // volume of the Mac: 'get' -> 0..100, 'set', n
-    onVolume: (op, n) => new Promise((res, rej) => execFile('/usr/bin/osascript', ['-e', op === 'get' ? 'output volume of (get volume settings)' : `set volume output volume ${Math.max(0, Math.min(100, Math.round(Number(n) || 0)))}`], { timeout: 3000 }, (e, out) => (e ? rej(e) : res(op === 'get' ? Number(String(out).trim()) : true)))).then((r) => { if (op === 'set') hintBadge?.note('🔊 ' + Math.max(0, Math.min(100, Math.round(Number(n) || 0))), 700); return r; }),
+    onVolume: (op, n, at) => new Promise((res, rej) => execFile('/usr/bin/osascript', ['-e', op === 'get' ? 'output volume of (get volume settings)' : `set volume output volume ${Math.max(0, Math.min(100, Math.round(Number(n) || 0)))}`], { timeout: 3000 }, (e, out) => (e ? rej(e) : res(op === 'get' ? Number(String(out).trim()) : true)))).then((r) => { if (op === 'set') hintBadge?.note('🔊 ' + Math.max(0, Math.min(100, Math.round(Number(n) || 0))), 700, at); return r; }),
     // a swipe with nothing of Relay's under the hand: the app in front decides (browser: next or previous tab; Music or Spotify: next or previous track; slides: next or previous slide)
     appSwipe: async (dir) => {
       const apps = require('./hands/apps');

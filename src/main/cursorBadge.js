@@ -47,13 +47,14 @@ class CursorBadge {
   follow() {
     const w = this.win;
     if (!w || w.isDestroyed()) return;
-    const p = this.screen.getCursorScreenPoint();
+    const p = this.at || this.screen.getCursorScreenPoint(); // beside the hand's ring when a note is placed there, else beside the mouse pointer
     w.setPosition(Math.round(p.x + this.offset), Math.round(p.y + this.offset), false);
   }
 
   // state: 'ready' | 'turn' | 'blocked'. Ignored while an arrow is being flashed.
   show(state) {
     if (!this.enabled() || !LOOK[state] || this.flashing) return;
+    this.at = null;
     const win = this.ensure();
     this.state = state;
     this.paint(...LOOK[state]);
@@ -66,8 +67,10 @@ class CursorBadge {
   flash(name, ms = 650) { this.note(name === 'left' ? '◀' : '▶', ms); }
 
   // Any short confirmation in the badge (the arrow above, or a raised hand when hand control turns on).
-  note(text, ms = 900) {
+  // at: a screen point {x, y} to put it beside (the hand's ring) instead of the mouse pointer.
+  note(text, ms = 900, at = null) {
     if (!this.enabled()) return;
+    this.at = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? at : null;
     const win = this.ensure();
     this.flashing = true; this.state = 'flash';
     this.paint('go', text);
@@ -75,7 +78,7 @@ class CursorBadge {
     if (!win.isVisible()) win.showInactive();
     if (!this.timer) this.timer = this.setTimer(() => this.follow(), 16);
     this.clearLater(this.later);
-    this.later = this.setLater(() => { this.flashing = false; this.hide(); }, ms);
+    this.later = this.setLater(() => { this.flashing = false; this.at = null; this.hide(); }, ms);
     this.later && this.later.unref && this.later.unref();
   }
 

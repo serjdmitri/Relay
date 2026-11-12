@@ -49,13 +49,22 @@ test('a pinch held on empty screen and dragged up or down scrolls like a touch s
   const n = calls.length; await hc.handle({ type: 'move', held: false, ...at(905, 800) }); assert.equal(calls.length, n, 'after the pinch ends nothing scrolls');
 });
 
-test('dragged sideways it sets the volume from where it was, within 0 to 100', async () => {
-  const { hc, vols } = rig(); await hc.enable();
+test('with the wrist twist on, a pinch that drifts sideways never changes the volume (it only scrolls)', async () => {
+  const { hc, vols, calls } = rig(); await hc.enable();
+  await hc.handle({ type: 'pinchdown', ...at(600, 500) }); await flush();
+  await hc.handle({ type: 'move', held: true, ...at(800, 510) });
+  await hc.handle({ type: 'move', held: true, ...at(1200, 560) });
+  assert.deepEqual(vols, []);
+  assert.ok(calls.length >= 1, 'it scrolls instead');
+});
+
+test('dragged sideways it sets the volume from where it was, within 0 to 100 (when the wrist twist is off)', async () => {
+  const { hc, vols } = rig(); hc.volumeTwist = () => false; await hc.enable();
   await hc.handle({ type: 'pinchdown', ...at(600, 500) }); await flush();
   await hc.handle({ type: 'move', held: true, ...at(700, 505) });
   await hc.handle({ type: 'move', held: true, ...at(1200, 505) });
   assert.ok(vols.length >= 1 && vols.at(-1) > 50 && vols.at(-1) <= 100, `louder: ${vols}`);
-  const quiet = rig(); await quiet.hc.enable();
+  const quiet = rig(); quiet.hc.volumeTwist = () => false; await quiet.hc.enable();
   await quiet.hc.handle({ type: 'pinchdown', ...at(1500, 500) }); await flush();
   await quiet.hc.handle({ type: 'move', held: true, ...at(1400, 500) }); await quiet.hc.handle({ type: 'move', held: true, ...at(200, 500) });
   assert.equal(quiet.vols.at(-1), 0, 'never below 0');
