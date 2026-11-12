@@ -136,3 +136,11 @@ test('hand control starts its camera again after the Mac wakes or unlocks (the l
   assert.match(main, /reviveHands\('after unlock'\)/);
   assert.match(main, /hands\.disable\(\);\s*await new Promise\(\(r\) => setTimeout\(r, 1500\)\);\s*const r = await hands\.enable\(\)/);
 });
+
+test('the welcome-back screen can never stay up: the greeting screen has a hard 90 second limit and the speech a limit of its own', () => {
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src/main/main.js'), 'utf8');
+  assert.match(main, /const limit=\(p,ms\)=>/);
+  assert.match(main, /overlay\.hud\(\{hide:true\}\);\},90000\)/);
+  assert.match(main, /limit\(ask\.speakText\(greeting,\{quick:true\}\),45000\)/);
+  assert.match(main, /await limit\(ask\.speakText\(details\),60000\)/);
+});
