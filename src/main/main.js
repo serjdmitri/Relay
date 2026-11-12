@@ -447,11 +447,13 @@ async function welcomeBack(lockedAt, lastWelcome) {
   const name=cfg.name||'Sir',greeting=welcome.greetingFor(Date.now(),name);
   const requestStamp=(store.get('history')||[])[0]?.id;
   let welcomeToken,heldByCard=false;
+  // The greeting screen stayed up forever when the spoken greeting never finished (the voice was not ready after the lid opened, or the speech process hung): everything waited for the speech. Neither the speech nor the screen may now outlast a limit.
+  const limit=(p,ms)=>p==null?p:Promise.race([Promise.resolve(p).catch(()=>{}),new Promise(r=>{const t=setTimeout(()=>{try{ask.speaker?.stop?.();}catch{}r();},ms);t.unref?.();})]);
   const canDeliver=()=>welcome.canDeliverWelcome({locked:!!ask.lockWatch?.locked,meeting:!!ask.meeting?.active,state:ask.state})&&(store.get('history')||[])[0]?.id===requestStamp&&(!welcomeToken||overlay.hudState?.welcomeToken===welcomeToken);
   return welcome.deliverInStages({canDeliver,
     begin:()=>{
-      if(cfg.show!==false){const shown=welcome.showWelcomeReactor(overlay,greeting,{duration:null});if(shown)welcomeToken=overlay.hudState.welcomeToken;}
-      return cfg.speak!==false&&!ask.speaker?.speaking?ask.speakText(greeting,{quick:true}):undefined;
+      if(cfg.show!==false){const shown=welcome.showWelcomeReactor(overlay,greeting,{duration:null});if(shown){welcomeToken=overlay.hudState.welcomeToken;const token=welcomeToken;setTimeout(()=>{if(overlay.hudState?.welcomeToken===token)overlay.hud({hide:true});},90000).unref?.();}}
+      return cfg.speak!==false&&!ask.speaker?.speaking?limit(ask.speakText(greeting,{quick:true}),45000):undefined;
     },
     collect:async()=>{
       let facts;
@@ -468,7 +470,7 @@ async function welcomeBack(lockedAt, lastWelcome) {
       if(showCard){if(welcomeToken)card.welcomeToken=welcomeToken;try{await cardPanel?.show(card);heldByCard=!!cardPanel;}catch{}}
       const details=[...w.priorities.slice(0,3).map(p=>p.text),briefing].filter(Boolean).join(' ');
       if(cfg.show!==false&&Notification.isSupported())new Notification({title:greeting,body:(card?.sections||[]).flatMap(s=>s.bullets).slice(0,3).join('\n')||'Your briefing is ready.',silent:true}).show();
-      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())await ask.speakText(details);
+      if(cfg.speak!==false&&details&&!ask.speaker?.speaking&&canDeliver())await limit(ask.speakText(details),60000);
     }
   }).finally(()=>{
     if(!welcomeToken)return;
