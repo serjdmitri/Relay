@@ -111,7 +111,7 @@ test('each step the detector enters is reported, once, for the badge at the poin
 });
 
 // ---- the fist that turns hand control on ----
-import { FistHold } from '../src/renderer/swipe.js';
+import { FistHold, PalmsHold } from '../src/renderer/swipe.js';
 function fistHand(scale = 1) {
   const l = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.8 }));
   const at = (ang, r) => ({ x: 0.5 + Math.sin(ang) * r * scale, y: 0.8 - Math.cos(ang) * r * scale });
@@ -148,4 +148,21 @@ test('the fist has to open before it can fire again, and a tiny break in it does
   const b = new FistHold(); const ev2 = [];
   for (let t = 1000; t <= 2000; t += FRAME) { const e = b.push(t >= 1300 && t < 1700 ? null : fistHand(), t); if (e) ev2.push(e); }
   assert.equal(ev2.length, 0);
+});
+
+test('two open palms held up for a moment turn hand control on once, and again only after they were lowered', () => {
+  const palm = () => { const l = peace(); l[16] = { x: 0.62, y: 0.55 }; l[20] = { x: 0.7, y: 0.6 }; return l; };
+  assert.equal(poseOf(palm()), 'Open_Palm');
+  const det = new PalmsHold();
+  const two = [palm(), palm()];
+  const fire = (ls, from, ms) => { const out = []; for (let t = from; t < from + ms; t += FRAME) { const e = det.push(ls, t); if (e) out.push(e); } return out; };
+  assert.equal(fire(two, 0, 600).length, 0, 'a short flash is not enough');
+  assert.equal(fire(two, 600, 1500).length, 1, 'held on: once');
+  assert.equal(fire(two, 2100, 1500).length, 0, 'still held: not again');
+  fire([], 3600, 1000);
+  assert.equal(fire(two, 4600, 1500).length, 1, 'after lowering them, it can fire again');
+  const one = new PalmsHold(); const out = [];
+  for (let t = 0; t < 3000; t += FRAME) { const e = one.push([palm()], t); if (e) out.push(e); }
+  assert.equal(out.length, 0, 'one palm never does');
+  const fists = new PalmsHold(); for (let t = 0; t < 3000; t += FRAME) assert.equal(fists.push([fistHand(), fistHand()], t), null);
 });
