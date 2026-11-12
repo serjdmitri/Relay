@@ -1111,14 +1111,14 @@ function registerIpc() {
     if (e.sender !== presenceSender) return;
     // a fist held toward the camera turns hand control on (only you; the camera view stays hidden, the badge at the pointer is the only sign)
     if (m?.type === 'fist-stage') { if (m.stage === 'holding') swipeBadge.show(fistGate.peek().ok ? 'fist' : 'blocked'); else swipeBadge.hide(); return; }
-    if (m?.type === 'fist') {
+    if (m?.type === 'fist' || m?.type === 'palms') {
       swipeBadge.hide();
       const r = fistGate.check({ dir: 'left' });
       if (!r.ok) { diag.log('hands-fist-ignored', r.why); return; }
       if (hands?.enabled) return;
       setHandsPreview(false);
       const res = await setHands(true, { quiet: true, byFist: true });
-      diag.log('hands-fist', res.ok ? 'hand control turned on by a fist' : 'hand control could not start');
+      diag.log('hands-fist', res.ok ? `hand control turned on by ${m.type === 'palms' ? 'two open palms' : 'a fist'}` : 'hand control could not start');
       if (res.ok) swipeBadge.note('✋', 1000);
       return;
     }
