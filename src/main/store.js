@@ -47,6 +47,7 @@ const DEFAULTS = {
     wake: { enabled: false, phrase: 'hey jarvis', apps: [], requireClaps: false, spokenAck: false, engine: 'model', threshold: 0.5 }, // on-device wake phrase; optionally require two claps immediately beforehand
     workshop: { enabled: false, prevSpeak: false }, // workshop mode: teaching younger students (slower calm voice, simple wording); prevSpeak remembers whether replies were spoken before
     clipboardHistory: { enabled: true, minutes: 1440 }, // "what did I copy earlier": text only, kept in memory (never on disk) for this many minutes; never passwords or keys
+    swipe: { enabled: false, leftDeg: 55, rightDeg: 40, flip: false, cursorHint: true }, // two fingers up, then at the camera, then turned to a side = the next desktop (it needs the camera that Presence uses; leftDeg/rightDeg: how far to turn, less to the right)
     briefing: { city: '', name: '', units: 'f', schoolUrl: '', sources: {}, say: { weather: false }, onlyNew: true }, // say: which parts are read aloud (the card shows everything; the weather is shown, not spoken); onlyNew: a repeat briefing the same day says only what is new
     // an optional signed-in school assignment page
     language: { reply: 'auto', ui: 'en' }, // what language answers come in: auto (the one you asked in) or a code like 'es'

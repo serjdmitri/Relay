@@ -45,6 +45,8 @@ const welcome = require('./welcome');
 const { newTopic } = require('./notify');
 const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
+const { SwipeGate } = require('./swipeGate');
+const { CursorBadge } = require('./cursorBadge');
 const { CaptureLatch } = require('./captureLatch');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
@@ -663,6 +665,7 @@ function registerIpc() {
     if (key === 'settings.hands.appDragging' && hands?.enabled) { if (value === false) { hands.release(); hands.peer?.release(); hands.externalDrag?.close(); } else hands.externalDrag?.start(); }
     if (key === 'settings.meeting.hidden') assistPanel?.protect();
     if (key === 'settings.presence.enabled') setPresence(!!value);
+    if (key === 'settings.swipe.enabled' && value === true && !store.get('settings.presence.enabled')) { store.set('settings.presence.enabled', true); await setPresence(true); } // the swipe uses the same camera
     if (key === 'settings.wake.apps') { ask.watchFront(); ask.wake.refresh(); }
     if (key === 'settings.wake.threshold') { ask.wakeModel.close(); ask.wake.refresh(); } // the page reads the cutoff when it starts
     if (key === 'settings.wake.enabled' || key === 'settings.wake.phrase' || key === 'settings.wake.mode' || key === 'settings.wake.engine') { ask.wake.refresh(); ask.wake.disarm(); ask.wake.refresh(); rebuildTray(); }
@@ -1073,6 +1076,35 @@ function registerIpc() {
   ipcMain.handle('wakemodel:status', (e, s) => { if (e.sender === wakePageSender) ask.wakeModel.status({ state: String(s?.state || ''), message: s?.message }); });
   ipcMain.handle('wakemodel:voice', (e, v) => { if (e.sender === wakePageSender) ask.wakeModel.voice(v?.p); });
   ipcMain.handle('wakemodel:config', (e) => (e.sender === wakePageSender ? { threshold: Number(store.get('settings.wake.threshold')) || 0.5 } : {}));
+  // The two-finger desktop swipe (opt-in, Settings): the camera page that checks it is you also watches for the swipe, and the gate lets it through only when you were recognised a moment ago and nobody else is in view.
+  let swipeFaces = { count: 0, at: 0 }, swipeOwnerAt = 0;
+  const swipeConfig = () => { const c = store.get('settings.swipe') || {}; return c.enabled ? { leftDeg: Number(c.leftDeg) || 55, rightDeg: Number(c.rightDeg) || 40, mirrored: false } : null; };
+  const swipeGate = new SwipeGate({
+    getConfig: () => store.get('settings.swipe'),
+    ownerEnrolled: () => ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0,
+    owner: () => ({ seen: ownerGuard?.seen, lastOwnerAt: swipeOwnerAt }),
+    faces: () => swipeFaces,
+    blocked: () => (screenLocked ? 'the screen is locked' : ask.meeting?.active ? 'a meeting is being recorded' : '')
+  });
+  const swipeBadge = new CursorBadge({ BrowserWindow, screen, enabled: () => (store.get('settings.swipe') || {}).cursorHint !== false });
+  app.on('before-quit', () => swipeBadge.close());
+  ipcMain.handle('presence:swipe', async (e, m) => {
+    if (e.sender !== presenceSender) return;
+    // what the camera sees right now, shown beside the mouse pointer: two fingers up (ready), pointed at the camera (turn now), or seen but not you (grey)
+    if (m?.type === 'stage') {
+      if (m.stage === 'up' || m.stage === 'toward') swipeBadge.show(swipeGate.peek().ok ? (m.stage === 'up' ? 'ready' : 'turn') : 'blocked');
+      else if (m.stage === 'idle') swipeBadge.hide();
+      return;
+    }
+    if (m?.error) { diag.log('swipe-error', String(m.error).slice(0, 120)); ask.notice('The hand swipe could not start: ' + String(m.error).slice(0, 100), 'failed'); return; }
+    if (m?.type === 'miss') { diag.log('swipe-miss', String(m.why || '').slice(0, 120)); return; }
+    if (m?.type !== 'swipe') return;
+    const r = swipeGate.check({ dir: m.dir });
+    if (!r.ok) { diag.log('swipe-ignored', r.why); return; }
+    diag.log('swipe', `${m.dir} (${Number(m.deg) || 0} degrees): desktop to the ${r.key.name}`);
+    swipeBadge.flash(r.key.name);
+    try { await ask.mac.osa(`tell application "System Events" to key code ${r.key.keyCode} using control down`); } catch (err) { diag.log('swipe-error', 'could not press the keys: ' + String((err && err.message) || err).slice(0, 100)); }
+  });
   ipcMain.handle('presence:frame', (e, f) => {
     if (e.sender !== presenceSender) return;
     presence?.frame(f);
@@ -1083,6 +1115,8 @@ function registerIpc() {
     const trusted = trustedFlags({ scores, trustedScores: arr(f?.trustedScores), live, threshold: ownerConfig(store.get('settings.owner')).threshold });
     viewerGuard?.frame({ ...(f || {}), faces: Math.max(0, faces - trusted.filter(Boolean).length) });
     ownerGuard?.frame({ faces, scores, live, trusted, down: f?.down === true });
+    swipeFaces = { count: faces, at: Date.now() };
+    if (ownerGuard?.seen === 'owner') swipeOwnerAt = Date.now();
   });
   ipcMain.handle('presence:status', (e, st) => {
     if(e.sender!==presenceSender) return;
@@ -1092,11 +1126,12 @@ function registerIpc() {
   // Owner recognition: the camera page asks what to do (match faces, or enroll yours) and gets your saved numbers only when they changed. Only the camera page may ask.
   const fromCameraPage = (e) => e.sender === presenceSender && /\/presence\.html$/.test(String(e.senderFrame?.url || '').split(/[?#]/)[0]);
   ipcMain.handle('presence:config', (e, have) => {
-    if (!fromCameraPage(e) || !ownerState) return { faceId: false };
+    if (!fromCameraPage(e) || !ownerState) return { faceId: false, swipe: fromCameraPage(e) ? swipeConfig() : null };
     const enrolling = !!ownerState.enroll && Date.now() < ownerState.enroll.until;
     const faceId = enrolling || (ownerConfig(store.get('settings.owner')).enabled && ownerState.templates.length > 0);
     const out = { faceId, mode: enrolling ? 'enroll' : 'watch', version: ownerState.version, liveness: ownerConfig(store.get('settings.owner')).liveness, pace: faceId && !enrolling ? ownerGuard?.pace?.() || 1000 : 1000 };
     if (faceId && have !== ownerState.version) { out.templates = [...ownerState.templates]; out.trusted = trustedPeople?.templates() || []; } // kept apart: a trusted person is not you
+    out.swipe = swipeConfig();
     return out;
   });
   ipcMain.handle('presence:enroll', (e, s) => {
