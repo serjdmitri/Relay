@@ -165,6 +165,7 @@ contextBridge.exposeInMainWorld('relay', {
   wakeModelVoice: (v) => invoke('wakemodel:voice', v),
   wakeModelConfig: () => invoke('wakemodel:config'),
   onWakeModelWatch: (cb) => on('wakemodel:watch', cb),
+  presenceSwipe: (m) => invoke('presence:swipe', m),
   presenceFrame: (f) => invoke('presence:frame', f),
   presenceStatus: (s) => invoke('presence:status', s),
   presenceConfig: (have) => invoke('presence:config', have),

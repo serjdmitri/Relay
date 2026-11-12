@@ -5,6 +5,7 @@
 // times a second, which also lets the liveness check see blinks.
 import { FaceDetector, FaceLandmarker, FilesetResolver } from './vendor/mediapipe/vision_bundle.mjs';
 import { LivenessTracker, lookingAway } from './liveness.js';
+import { createSwipeRunner } from './swipe-runner.js';
 
 const video = document.getElementById('v');
 const status = (state, extra = {}) => { try { relay.presenceStatus({ state, ...extra }); } catch { /* the page may be closing */ } };
@@ -21,7 +22,8 @@ function isDark() {
   try { const x = probe.getContext('2d', { willReadFrequently: true }); x.drawImage(video, 0, 0, 16, 12); const d = x.getImageData(0, 0, 16, 12).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / 4 * 3) < 5; } catch { return false; }
 }
 let darkTicks = 0;
-let facePresent = true, lmLast = 0; // the landmark finder runs about 8 times a second while someone is in view, and only twice a second when nobody is (it was the biggest CPU cost of the camera)
+let facePresent = true, lmLast = 0;
+const swipe = createSwipeRunner({ video, isFacePresent: () => facePresent }); // the two-finger desktop swipe (opt-in); it shares this camera and stays idle until the app turns it on // the landmark finder runs about 8 times a second while someone is in view, and only twice a second when nobody is (it was the biggest CPU cost of the camera)
 const tracker = new LivenessTracker();
 const MIN_FACE = 0.14; // narrowest face (as a fraction of the picture width) that is judged
 let busy = false, embed = null, embedFailed = false, templates = [], trustedTemplates = [], version = 0;
@@ -118,6 +120,7 @@ async function start() {
         if (c?.templates) { templates = c.templates; trustedTemplates = c.trusted || []; version = c.version; }
         recogOn = !!c?.faceId; livenessOn = recogOn && !!c?.liveness && c.mode !== 'enroll';
         pace = Math.min(1000, Math.max(250, Number(c?.pace) || 1000));
+        swipe.update(c?.swipe || null);
         if (recogOn && !landmarker && !lmFailed && !lmLoading) loadLandmarker();
         // load the face model before the first face appears, not when it does, so the first recognition after starting is not delayed by it
         if (recogOn && !embed && !embedFailed && !embedLoading) loadEmbedder();
@@ -152,5 +155,5 @@ async function start() {
   }
 }
 
-addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); clearInterval(watchdog); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); });
+addEventListener('beforeunload', () => { stopped = true; clearTimeout(timer); clearInterval(lmTimer); clearInterval(watchdog); landmarker?.close?.(); stream?.getTracks().forEach((t) => t.stop()); detector?.close?.(); swipe.close(); });
 start();
