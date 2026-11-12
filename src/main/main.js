@@ -1077,12 +1077,12 @@ function registerIpc() {
   ipcMain.handle('wakemodel:voice', (e, v) => { if (e.sender === wakePageSender) ask.wakeModel.voice(v?.p); });
   ipcMain.handle('wakemodel:config', (e) => (e.sender === wakePageSender ? { threshold: Number(store.get('settings.wake.threshold')) || 0.5 } : {}));
   // The two-finger desktop swipe (opt-in, Settings): the camera page that checks it is you also watches for the swipe, and the gate lets it through only when you were recognised a moment ago and nobody else is in view.
-  let swipeFaces = { count: 0, at: 0 }, swipeOwnerAt = 0;
+  let swipeFaces = { count: 0, at: 0 }, swipeOwnerAt = 0, swipeStrangerAt = 0;
   const swipeConfig = () => { const c = store.get('settings.swipe') || {}; return c.enabled ? { leftDeg: Number(c.leftDeg) || 55, rightDeg: Number(c.rightDeg) || 40, mirrored: false } : null; };
   const swipeGate = new SwipeGate({
     getConfig: () => store.get('settings.swipe'),
     ownerEnrolled: () => ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0,
-    owner: () => ({ seen: ownerGuard?.seen, lastOwnerAt: swipeOwnerAt }),
+    owner: () => ({ seen: ownerGuard?.seen, lastOwnerAt: swipeOwnerAt, lastStrangerAt: swipeStrangerAt }),
     faces: () => swipeFaces,
     blocked: () => (screenLocked ? 'the screen is locked' : ask.meeting?.active ? 'a meeting is being recorded' : '')
   });
@@ -1117,6 +1117,7 @@ function registerIpc() {
     ownerGuard?.frame({ faces, scores, live, trusted, down: f?.down === true });
     swipeFaces = { count: faces, at: Date.now() };
     if (ownerGuard?.seen === 'owner') swipeOwnerAt = Date.now();
+    else if (ownerGuard?.seen === 'stranger') swipeStrangerAt = Date.now();
   });
   ipcMain.handle('presence:status', (e, st) => {
     if(e.sender!==presenceSender) return;
