@@ -2245,6 +2245,16 @@ class AskController {
       case 'routine-inline':
         this.upsertRoutine(cmd.name, cmd.steps);
         return this.finish(entry, { status: 'done', reply: `Saved routine "${cmd.name}" with ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'}.` });
+      case 'routine-propose': {
+        if (!cmd.steps.length || cmd.steps.length > 10 || cmd.steps.some(s => s.length > 400)) return this.finish(entry, { status: 'failed', reply: 'Give me between one and ten short routine steps.', actions: 0 });
+        if (mem.isSecret([cmd.name, ...cmd.steps].join(' '))) return this.finish(entry, { status: 'failed', reply: 'Please remove passwords or other secrets from the routine.', actions: 0 });
+        if ((routines || []).some(r => r.name.toLowerCase() === cmd.name.toLowerCase())) return this.finish(entry, { status: 'failed', reply: `A routine named "${cmd.name}" already exists. Choose another name so I do not overwrite it.`, actions: 0 });
+        const question = `Save routine "${cmd.name}"? When you say "${cmd.name}", I will run:\n${cmd.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+        if (!(await this.askConfirm({ question }))) return this.finish(entry, { status: 'stopped', reply: 'I did not save the routine.', actions: 0 });
+        if ((this.store.get('routines') || []).some(r => r.name.toLowerCase() === cmd.name.toLowerCase())) return this.finish(entry, { status: 'failed', reply: 'A routine with that name appeared while you were reviewing. I did not overwrite it.', actions: 0 });
+        this.upsertRoutine(cmd.name, cmd.steps);
+        return this.finish(entry, { status: 'done', reply: `Saved "${cmd.name}". Say "${cmd.name}" to run it.`, actions: 1 });
+      }
       case 'routine-delete': {
         const left = this.store.get('routines').filter((r) => r.id !== cmd.routine.id);
         this.store.set('routines', left);
@@ -2330,7 +2340,7 @@ class AskController {
           // "yes" / "no" / "that's Sam" about a visitor Relay just told you about: only heard for five minutes after it asked, so a bare "yes" is never taken for anything else
           if (this.pendingNaming && this.onNamingAnswer && Date.now() - this.pendingNaming.at < 5 * 60000) { const na = require('./intruderLog').parseNamingAnswer(effective); if (na) { this.lastRequestText = effective; return this.finish(entry, await this.onNamingAnswer(na)); } }
           if (this.cameraAdjust) { const cc = require('./cameraCommands').parseCameraCommand(effective); if (cc) { this.lastRequestText = effective; return this.finish(entry, { status: 'done', reply: await this.cameraAdjust(cc), actions: 0 }); } }
-          { const latency = require('./latency'), lc2 = latency.parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } const log = this.store.get('latencyLog'); try { await this.cardPanel?.show(latency.reportCard(log)); } catch {} return this.finish(entry, { status: 'done', reply: latency.describe(log), actions: 0 }); } }
+          { const latency = require('./latency'), lc2 = latency.parseLatencyCommand(effective); if (lc2) { this.lastRequestText = effective; if (lc2.type === 'latency-clear') { this.store.set('latencyLog', []); return this.finish(entry, { status: 'done', reply: 'The speed numbers are cleared.', actions: 0 }); } const log = this.store.get('latencyLog'), voice = { enabled: !!this.store.get('settings.wake.enabled'), listening: !!(this.wake?.armed || this.wakeModel?.covers), lastWake: Math.max(this.wake?.lastWake || 0, this.wakeModel?.lastWake || 0) }; try { await this.cardPanel?.show(latency.reportCard(log, voice)); } catch {} return this.finish(entry, { status: 'done', reply: latency.describe(log), actions: 0 }); } }
           if (this.wakeCommand) { const wc = require('./wakeScheduler').parseWakeCommand(effective); if (wc) { this.lastRequestText = effective; return this.finish(entry, await this.wakeCommand(wc)); } }
           if (this.commandCenter && require('./commandCenter').parseCommandCenter(effective)) { this.lastRequestText = effective; return this.finish(entry, await this.commandCenter()); }
           if (this.signCommand) { const sg = require('./hands/apps').parseSignCommand(effective); if (sg) { this.lastRequestText = effective; return this.finish(entry, await this.signCommand(sg)); } }
@@ -2395,6 +2405,12 @@ class AskController {
           return this.finish(entry, await this.dailyPlanCommand(true, entry.id));
         }
         if (!opts.shown && !opts.scheduled) {
+          const projects = require('./projectDashboard');
+          if (projects.isProjectDashboard(effective)) {
+            if (!this.cardPanel) return this.finish(entry, { status: 'failed', reply: 'The project dashboard is unavailable.', actions: 0 });
+            try { await this.cardPanel.show(projects.projectCard(this.store.data?.history, this.tasks)); } catch { return this.finish(entry, { status: 'failed', reply: 'I could not open the project dashboard.', actions: 0 }); }
+            return this.finish(entry, { status: 'done', reply: 'Your project dashboard shows recent matching requests and queued work.', actions: 0 });
+          }
           const dc = devices.parseDeviceCommand(effective);
           if (dc) return this.finish(entry, await this.devicesCommand(dc));
           const vc = driveInspect.parseDriveCommand(effective);
@@ -3197,6 +3213,7 @@ class AskController {
 
   async quick(text, requestId) {
     let q = parseQuick(text);
+    if (!q && /^(?:(?:hey|ok|okay)\s+)?(?:(?:jarvis|relay)[, ]+)?(?:please\s+)?(?:set up|setup|open|start)\b/i.test(String(text))) q = require('./layouts').parseSavedSetup(text, this.store.get('modes') || [], this.store.get('layouts') || []);
     let foreign = null;
     if (!q) { // an everyday command in another language ("pausa", "baisse le volume")
       for (const lang of new Set([detectLanguage(text)?.lang, this.requestLanguage(text)])) {
@@ -3804,6 +3821,11 @@ class AskController {
     this.state = 'done';
     this.push({ reply, status: res.status, usage: this.store.get('settings.showUsage') === false ? '' : usageText, stream: '' });
     this.overlay.endRequest(); // drawings and guides stay if this request made them, otherwise they go
+    // Leave purpose-built menus alone. Show a report for completed actions when no other card is open.
+    if (!entry.remote && !this.unattended && !this.activeScheduledId && this.cardPanel && !this.cardPanel.visible && this.store.get('settings.cards') !== false && (res.actions > 0 || this.store.data?.actions?.some(a => a.requestId === entry.id && !a.ok))) {
+      const card = recap.lastTaskCard([historyEntry], this.store.data?.actions || []);
+      if (card) { card.title = 'Task report'; Promise.resolve().then(() => this.cardPanel.show(card)).catch(() => {}); }
+    }
     this.sound(res.status === 'done' ? 'Pop' : 'Basso');
     const askAgain = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !!this.store.get('settings.speakReplies') && !entry.remote && !this.quiz && !this.checklist && !this.assistOn && this.store.get('settings.followUp')?.enabled !== false;
     this.followFor = !res.noFollowUp && ['done', 'failed'].includes(res.status) && this.voiceAsk && !entry.remote && this.store.get('settings.followUp')?.enabled !== false ? entry.id : null;

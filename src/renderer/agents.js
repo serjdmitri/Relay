@@ -32,6 +32,15 @@ function finishedRow(f) {
 
 function render(s) {
   state = s;
+  const foreground = $('foreground');
+  foreground.replaceChildren();
+  if (s.foreground) {
+    const f = s.foreground, row = el('div', 'job running');
+    row.append(el('div', 'jtask', f.text), el('div', 'jstep', `${f.status}${f.queued ? ` · ${f.queued} request(s) waiting` : ''}`));
+    const stop = el('button', 'cancel', f.queued ? 'Stop request and queue' : 'Stop request');
+    stop.onclick = async () => { stop.disabled = true; try { const r = await call('stop-foreground', f.id); if (!r.stopped) $('status').textContent = 'That request is no longer running.'; } catch (e) { $('status').textContent = e.message; } refresh(); };
+    row.append(stop); foreground.append(row);
+  } else foreground.append(el('p', 'empty', 'No foreground request is running.'));
   $('h-running').textContent = `Running (${s.running.length} of ${s.max})`;
   $('running').replaceChildren(...(s.running.length ? s.running.map(runningRow) : [el('p', 'empty', 'Nothing is running.')]));
   $('h-queued').hidden = !s.queued.length; $('queued').replaceChildren(...s.queued.map(queuedRow));
