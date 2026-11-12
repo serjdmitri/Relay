@@ -108,18 +108,6 @@ test('a number held up goes to that tab, and not while hand control is paused or
   assert.deepEqual(off.calls.filter((c) => c[0] === 'tab'), []);
 });
 
-test('in a browser a held peace sign is tab 2, not the mic; anywhere else it still opens the mic', async () => {
-  const inBrowser = rig({ front: true }); await inBrowser.hc.enable();
-  await inBrowser.hc.handle({ type: 'mic', x: 0.5, y: 0.5 });
-  assert.deepEqual(inBrowser.mics, []);
-  const elsewhere = rig({ front: false }); await elsewhere.hc.enable();
-  await elsewhere.hc.handle({ type: 'mic', x: 0.5, y: 0.5 });
-  assert.equal(elsewhere.mics.length, 1);
-  const off = rig({ front: true, tabNumbers: false }); await off.hc.enable();
-  await off.hc.handle({ type: 'mic', x: 0.5, y: 0.5 });
-  assert.equal(off.mics.length, 1, 'with tab numbers off the peace sign always opens the mic');
-});
-
 test('the native helper only clicks outside Relay, only presses Command+number in a browser, and the settings are on by default', () => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const swift = read('native/relay-ax.swift');

@@ -3,7 +3,7 @@
 
 class HandsAutoOff {
   // isOn(): is hand control on. off(): turn it off. getSeconds(): how long without a hand. note(): tell the user it went off.
-  constructor({ isOn, off, getSeconds = () => 90, note = () => {}, now = Date.now }) {
+  constructor({ isOn, off, getSeconds = () => 30, note = () => {}, now = Date.now }) {
     Object.assign(this, { isOn, off, getSeconds, note, now });
     this.byFist = false; this.lastSeenAt = 0;
   }
@@ -19,7 +19,7 @@ class HandsAutoOff {
   async tick() {
     if (!this.byFist) return false;
     if (!this.isOn()) { this.byFist = false; return false; }
-    const seconds = Math.max(15, Math.min(600, Number(this.getSeconds()) || 90));
+    const seconds = Math.max(5, Math.min(600, Number(this.getSeconds()) || 30));
     if (this.now() - this.lastSeenAt < seconds * 1000) return false;
     this.byFist = false;
     await this.off();

@@ -70,3 +70,11 @@ test('the number of fingers held out is counted, whichever way the hand is turne
   }
   assert.equal(countOf(null), 0);
 });
+
+test('the "call me" sign (thumb and little finger out) is told from a fist, a rock sign and an open hand', () => {
+  assert.equal(poseOf(hand({ thumb: true, pinky: true })), 'Shaka');
+  assert.equal(poseOf(hand({ thumb: true, index: true, pinky: true })), 'Rock');
+  assert.equal(poseOf(hand({ pinky: true })) === 'Shaka', false, 'a little finger alone is not it');
+  assert.notEqual(poseOf(hand({})), 'Shaka');
+  assert.equal(poseOf(hand({ thumb: true, index: true, middle: true, ring: true, pinky: true })), 'Open_Palm');
+});

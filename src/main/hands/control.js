@@ -1,6 +1,6 @@
 // Hand control: the camera finds your hands (in a hidden page, on this Mac), the gesture logic (logic.js) turns that into pointer events,
 // and this puts them on the holograms. A grab (fist) carries a hologram or a piece; a pinch clicks, or turns the model while held; two
-// hands resize; a peace sign opens the mic for the hologram under your hand. A small ring shows where your hand is. Opt-in: the camera is
+// hands resize; A small ring shows where your hand is. Opt-in: the camera is
 // on only while this is on, and no picture is ever kept or sent. The window and the camera are injected, so the mapping is tested.
 
 const { HandPointer } = require('./logic');
@@ -13,7 +13,7 @@ const { CountWatch } = require('./count');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {}, pinchClick = () => true, tabNumbers = () => true, extraGestures = () => true, onGesture = () => false, airScroll = () => true, onVolume = null, appSwipe = null }) {
+  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {}, pinchClick = () => true, tabNumbers = () => true, extraGestures = () => true, onGesture = () => false, airScroll = () => true, onVolume = null, appSwipe = null, volumeTwist = () => true }) {
     Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
     this.motion = motion;
     this.sensitivity = sensitivity;
@@ -30,7 +30,7 @@ class HandControl {
     this.secondary = secondary;
     this.floatingAt = floatingAt;
     this.tracks = new HandTracks(secondary ? 2 : 4);
-    this.pinchClick = pinchClick; this.tabNumbers = tabNumbers; this.extraGestures = extraGestures; this.onGesture = onGesture; this.airScroll = airScroll; this.onVolume = onVolume; this.appSwipe = appSwipe;
+    this.pinchClick = pinchClick; this.tabNumbers = tabNumbers; this.extraGestures = extraGestures; this.onGesture = onGesture; this.airScroll = airScroll; this.onVolume = onVolume; this.appSwipe = appSwipe; this.volumeTwist = volumeTwist;
     this.pinchHold = null; // a pinch held on empty screen: dragged up or down it scrolls, sideways it changes the volume
     // A number held up with the fingers (1 to 9) goes to that tab when a web browser is in front (Command+N, through the helper).
     this.countWatch = new CountWatch({ onNumber: (n) => this.showNumber(n), now: () => this.now() });
@@ -78,13 +78,13 @@ class HandControl {
     this.cam?.setPreview?.(this.preview);
     this.ring = this.createCursor(0);
     if (!this.secondary) {
-      this.peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true, pinchClick: this.pinchClick, tabNumbers: this.tabNumbers, extraGestures: this.extraGestures, onGesture: this.onGesture, airScroll: this.airScroll, onVolume: this.onVolume, appSwipe: this.appSwipe });
+      this.peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true, pinchClick: this.pinchClick, tabNumbers: this.tabNumbers, extraGestures: this.extraGestures, onGesture: this.onGesture, airScroll: this.airScroll, onVolume: this.onVolume, appSwipe: this.appSwipe, volumeTwist: this.volumeTwist });
       this.peer.claims = this.claims;
       this.peer.glides = this.glides;
       this.peer.enabled = true;
       this.peer.ring = this.createCursor(1);
       this.extraPeers = Array.from({ length: this.trackLimit-2 }, (_,index) => {
-        const peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true, pinchClick: this.pinchClick, tabNumbers: this.tabNumbers, extraGestures: this.extraGestures, onGesture: this.onGesture, airScroll: this.airScroll, onVolume: this.onVolume, appSwipe: this.appSwipe });
+        const peer = new HandControl({ motion: this.motion, holos: this.holos, display: this.display, createCursor: this.createCursor, floatingAt: this.floatingAt, sensitivity: this.sensitivity, onThrow: this.onThrow, shortcut: this.shortcut, onShortcut: this.onShortcut, onMic: this.onMic, externalDrag: this.externalDrag, now: this.now, secondary: true, pinchClick: this.pinchClick, tabNumbers: this.tabNumbers, extraGestures: this.extraGestures, onGesture: this.onGesture, airScroll: this.airScroll, onVolume: this.onVolume, appSwipe: this.appSwipe, volumeTwist: this.volumeTwist });
         peer.claims = this.claims; peer.glides = this.glides; peer.enabled = true; peer.ring = this.createCursor(index+2);
         return peer;
       });
@@ -178,6 +178,7 @@ class HandControl {
     if (this.paused) return;
     if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }
     else if (this.handMode && !this.handTimer) this.handTimer = setTimeout(() => { this.handTimer = null; this.setHandMode(false); }, 2500);
+    f = { ...f, volumeTwist: this.volumeTwist() !== false };
     const margin = Number(this.sensitivity());
     const safeMargin = Number.isFinite(margin) ? Math.max(0.04, Math.min(0.35, margin)) : 0.12;
     this.pointer.margin = safeMargin;
@@ -440,14 +441,31 @@ class HandControl {
     if ((e.type === 'thumbup' || e.type === 'thumbdown') && this.extraGestures() && this.onGesture(e.type === 'thumbup' ? 'confirm-yes' : 'confirm-no')) { this.ringState('click'); setTimeout(() => this.ringState('open'), 400); return; }
     if (e.type === 'thumbup') { const h = this.holos.holoNear(pt, 330); if (h) { this.holos.pin(h.id, true); h.win.webContents.send('holo:state', 'pinned', true); this.ringState('click'); setTimeout(() => this.ringState('open'), 500); } return; }
     if (e.type === 'thumbdown') { const panel = this.floatingAt(pt); if (panel) { if (!this.claims.has(panel.key)) { this.stopGlide(panel.key); panel.close(); } return; } const h = this.holos.holoNear(pt, 330); if (h && !this.claimedByOther(h)) this.holos.close(h.id); return; }
-    if (e.type === 'mic') {
-      if (this.tabNumbers() && this.externalDrag && await this.externalDrag.frontIsBrowser()) return; // in a browser a held peace sign is the number 2 (tab 2), not the mic
-      const choice = this.shortcut();
-      if (choice !== 'listen') { this.onShortcut(choice); return; }
+    // A pinch held still, then the wrist twisted: like a volume knob. Twist to your right for louder, to your left for quieter; about 1.2 percent for each degree.
+    if (e.type === 'volstart') {
+      this.volTwist = { v0: null, volAt: 0, lastV: null }; this.ringState('held');
+      if (this.onVolume) Promise.resolve(this.onVolume('get')).then((v) => { if (this.volTwist && Number.isFinite(v)) this.volTwist.v0 = v; }).catch(() => {});
+      return;
+    }
+    if (e.type === 'voldelta') {
+      const a = this.volTwist, now = this.now();
+      if (!a || a.v0 === null || !this.onVolume || now - a.volAt < 80) return;
+      a.volAt = now;
+      const v = Math.max(0, Math.min(100, Math.round(a.v0 + (-e.delta * 180 / Math.PI) * 1.2)));
+      if (v === a.lastV) return;
+      a.lastV = v;
+      try { this.cam?.action?.({ type: 'volume', n: v }); } catch { /* the view is only a hint */ }
+      Promise.resolve(this.onVolume('set', v)).catch(() => {});
+      return;
+    }
+    if (e.type === 'volend') { this.volTwist = null; this.ringState('open'); return; }
+    // The "call me" sign held: talk to Jarvis, in any app (a peace sign is tab 2 in a browser, and no longer starts listening).
+    if (e.type === 'call') {
       const h = this.holos.holoNear(pt, 330) || this.holos.latest();
       this.ringState('mic');
       setTimeout(() => this.ringState('open'), 900);
       this.onMic(h?.id || null);
+      return;
     }
   }
 }

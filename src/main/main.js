@@ -47,6 +47,7 @@ const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { SwipeGate } = require('./swipeGate');
 const { CursorBadge } = require('./cursorBadge');
+const { CornerNote } = require('./cornerNote');
 const { HandsAutoOff } = require('./handsIdle');
 const { CaptureLatch } = require('./captureLatch');
 const { ViewerGuard, config } = require('./viewerGuard');
@@ -275,14 +276,17 @@ function extensionPath() {
 
 // Hand control on or off (the menu bar item and Settings both use this). Turning it on asks macOS for the camera the first time.
 // A fist can turn hand control on (the swipe camera sees it); then it turns itself off after a while with no hand in view. Hand control turned on any other way is left alone.
-const handsAutoOff = new HandsAutoOff({ isOn: () => !!hands?.enabled, off: () => setHands(false), getSeconds: () => store.get('settings.hands.fistIdleSeconds'), note: () => { diag.log('hands-auto-off', 'no hand in view for a while'); ask.notice('Hand control turned itself off: no hand was in view for a while. Hold up a fist to turn it on again.', 'done'); } });
+let hintBadge = null; // the small badge at the mouse pointer (the swipe's and the volume's)
+let cornerNote = null; // short messages from Jarvis in the bottom left corner
+const sayCorner = (text) => { try { if (!cornerNote) { cornerNote = new CornerNote({ BrowserWindow, screen }); app.once('before-quit', () => cornerNote.close()); } cornerNote.show(text); } catch { ask.notice(text, 'done'); } };
+const handsAutoOff = new HandsAutoOff({ isOn: () => !!hands?.enabled, off: () => setHands(false), getSeconds: () => store.get('settings.hands.fistIdleSeconds'), note: () => { diag.log('hands-auto-off', 'no hand in view for a while'); sayCorner('Hand control turned itself off: no hand was in view for a while. Hold up a fist to turn it on again.'); } });
 async function setHands(on, { quiet = false, byFist = false } = {}) {
   if (on) {
     store.set('settings.hands.enabled', true);
     const r = await hands.enable();
     if (!r.ok) { store.set('settings.hands.enabled', false); ask.notice(r.error, 'failed'); }
     else { if (byFist) handsAutoOff.started(); else handsAutoOff.manual(); }
-    if (r.ok && !quiet) ask.notice('Hand control is on. Hold up an open hand: it moves a ring. Fist grabs, thumb and finger tap clicks, peace sign talks.', 'done');
+    if (r.ok && !quiet) sayCorner('Hand control is on. Open hand moves the ring, a fist grabs, a pinch clicks, a wave talks to Jarvis.');
     broadcast();
     return r;
   }
@@ -1101,6 +1105,7 @@ function registerIpc() {
   });
   setInterval(() => { handsAutoOff.tick().catch(() => {}); }, 5000).unref?.();
   const swipeBadge = new CursorBadge({ BrowserWindow, screen, enabled: () => (store.get('settings.swipe') || {}).cursorHint !== false });
+  hintBadge = swipeBadge;
   app.on('before-quit', () => swipeBadge.close());
   ipcMain.handle('presence:swipe', async (e, m) => {
     if (e.sender !== presenceSender) return;
@@ -1660,8 +1665,9 @@ app.whenReady().then(() => {
     pinchClick: () => store.get('settings.hands.pinchClick') !== false,
     extraGestures: () => store.get('settings.hands.extraGestures') !== false,
     airScroll: () => store.get('settings.hands.airScroll') !== false,
+    volumeTwist: () => store.get('settings.hands.volumeTwist') !== false,
     // volume of the Mac: 'get' -> 0..100, 'set', n
-    onVolume: (op, n) => new Promise((res, rej) => execFile('/usr/bin/osascript', ['-e', op === 'get' ? 'output volume of (get volume settings)' : `set volume output volume ${Math.max(0, Math.min(100, Math.round(Number(n) || 0)))}`], { timeout: 3000 }, (e, out) => (e ? rej(e) : res(op === 'get' ? Number(String(out).trim()) : true)))),
+    onVolume: (op, n) => new Promise((res, rej) => execFile('/usr/bin/osascript', ['-e', op === 'get' ? 'output volume of (get volume settings)' : `set volume output volume ${Math.max(0, Math.min(100, Math.round(Number(n) || 0)))}`], { timeout: 3000 }, (e, out) => (e ? rej(e) : res(op === 'get' ? Number(String(out).trim()) : true)))).then((r) => { if (op === 'set') hintBadge?.note('🔊 ' + Math.max(0, Math.min(100, Math.round(Number(n) || 0))), 700); return r; }),
     // a swipe with nothing of Relay's under the hand: the app in front decides (browser: next or previous tab; Music or Spotify: next or previous track; slides: next or previous slide)
     appSwipe: async (dir) => {
       const apps = require('./hands/apps');
@@ -1677,7 +1683,7 @@ app.whenReady().then(() => {
       const custom = store.get(`settings.hands.signCommands.${type}`); // a job of your own for the sign ("when I show the rock sign, ...")
       if (custom && (type === 'wave' || type === 'rock' || type === 'stop')) { if (type === 'stop' && ask.interruptSpeech()) return true; if (!idle) return false; ask.handleText(String(custom)).catch(() => {}); return true; }
       if (type === 'wave') { if (!idle) return false; ask.listenFromHand(null).catch(() => {}); return true; }
-      if (type === 'rock') { if (!idle) return false; ask.handleText('play some music').catch(() => {}); return true; }
+      if (type === 'rock') return false; // the rock sign only does the job you gave it (above); it no longer plays music by itself
       if (type === 'confirm-yes') return ask.remoteConfirm(true);
       if (type === 'confirm-no') return ask.remoteConfirm(false);
       return false;

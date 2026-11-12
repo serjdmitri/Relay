@@ -198,6 +198,22 @@ case "hand-drag":
     var lastClickPoint = CGPoint.zero
     var lastClickCount = 0
     // Two pinch taps close together on the same spot make a double click, three a triple.
+    // Press the tab, button or checkbox under the point through Accessibility: it works when the window is in the background and does not depend on the browser noticing the pointer first.
+    func pressUnder(_ point: CGPoint) -> String? {
+        let sys = AXUIElementCreateSystemWide()
+        var found: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(sys, Float(point.x), Float(point.y), &found) == .success, var cur = found else { return nil }
+        let pressable: Set<String> = ["AXRadioButton", "AXTab", "AXButton", "AXCheckBox", "AXPopUpButton", "AXMenuButton", "AXTabButton"]
+        for _ in 0..<4 {
+            let role = (attr(cur, kAXRoleAttribute as String) as? String) ?? ""
+            if pressable.contains(role) {
+                return AXUIElementPerformAction(cur, kAXPressAction as CFString) == .success ? role : nil
+            }
+            guard let parent = attr(cur, kAXParentAttribute as String) else { return nil }
+            cur = parent as! AXUIElement
+        }
+        return nil
+    }
     func emitClick(_ point: CGPoint) {
         let now = Date()
         let again = now.timeIntervalSince(lastClickAt) < 0.45 && hypot(point.x - lastClickPoint.x, point.y - lastClickPoint.y) < 8
@@ -207,6 +223,7 @@ case "hand-drag":
             guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left) else { continue }
             event.setIntegerValueField(.mouseEventClickState, value: Int64(count))
             event.post(tap: .cghidEventTap)
+            Thread.sleep(forTimeInterval: 0.018) // a real click is not instant: some apps ignore a press and release in the same moment
         }
     }
     print("ready")
@@ -233,7 +250,12 @@ case "hand-drag":
         case "click":
             // A pinch tap: one ordinary click where the hand points, never on Relay's own windows (those get their clicks another way).
             if held || relayOwnsTop(point) { print("click-declined") }
-            else { emit(.mouseMoved, point); emitClick(point); print("clicked") }
+            else {
+                emit(.mouseMoved, point)
+                Thread.sleep(forTimeInterval: 0.035) // let the app see the pointer arrive (browsers use this to know which tab is under it)
+                if let role = pressUnder(point) { print("clicked:ax:\(role)") }
+                else { emitClick(point); print("clicked:mouse") }
+            }
         case "down":
             if !held && eligible(point) { emit(.mouseMoved, point); emit(.leftMouseDown, point); held = true; last = point; print("down") }
             else { print("not-draggable") }

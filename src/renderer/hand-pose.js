@@ -28,6 +28,7 @@ export function poseOf(l) {
   if (f.index && f.middle && !f.ring && !f.pinky) return 'Victory';
   if (f.index && !f.middle && !f.ring && !f.pinky) return 'Pointing_Up';
   if (f.index && f.pinky && !f.middle && !f.ring) return 'Rock'; // the rock sign (the thumb may be out too)
+  if (f.thumb && f.pinky && !f.index && !f.middle && !f.ring) return 'Shaka'; // the "call me" sign: thumb and little finger out
   if (f.middle && !f.index && !f.ring && !f.pinky) return 'Middle_Finger'; // only the middle finger out (the thumb may be anywhere)
   if (n >= 3) return 'Open_Palm';
   return 'None';
