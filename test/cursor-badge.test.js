@@ -67,3 +67,14 @@ test('a fist badge exists, and note shows any short confirmation (a raised hand)
   r.badge.note('✋', 1000); assert.equal(r.laters[0].ms, 1000); assert.ok(r.js.at(-1).includes('✋'));
   r.laters[0].fn(); assert.equal(r.wins[0].visible, false);
 });
+
+test('a note can be placed beside the hand ring instead of the mouse pointer, and falls back to the pointer afterwards', () => {
+  const r = rig();
+  r.badge.note('🔊 40', 700, { x: 900, y: 300 });
+  assert.deepEqual(r.wins[0].pos, [922, 322], 'beside the given point');
+  r.cursor = { x: 10, y: 10 }; r.timers[0].fn();
+  assert.deepEqual(r.wins[0].pos, [922, 322], 'the pointer moving does not pull it away');
+  r.laters[0].fn();
+  r.badge.show('ready'); assert.deepEqual(r.wins[0].pos, [32, 32], 'other badges follow the mouse pointer');
+  r.badge.note('✋', 900, { x: NaN, y: 1 }); assert.deepEqual(r.wins[0].pos, [32, 32], 'a bad point is ignored');
+});
