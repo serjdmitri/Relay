@@ -6,7 +6,7 @@ import { TwoFingerSwipe, FistHold, PalmsHold } from './swipe.js';
 
 export function createSwipeRunner({ video, isFacePresent = () => true }) {
   let recognizer = null, loading = false, failed = false, timer = 0, stopped = false, running = false;
-  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, fist = null, palms = null, mode = { swipe: true, fist: false }, hands = 1;
+  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, faceAt = 0, fist = null, palms = null, mode = { swipe: true, fist: false }, hands = 1;
 
   // The model is only told how many hands to look for when that number changes: telling it again every second makes it reconfigure itself and drop frames, which cost the swipe its short "pointed at the camera" step.
   function applyHands() {
@@ -19,8 +19,9 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
     loading = true;
     try {
       const fileset = await FilesetResolver.forVisionTasks('./vendor/mediapipe/wasm');
-      const make = (delegate) => GestureRecognizer.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/gesture_recognizer.task', delegate }, runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
+      const make = (delegate) => GestureRecognizer.createFromOptions(fileset, { baseOptions: { modelAssetPath: './vendor/mediapipe/gesture_recognizer.task', delegate }, runningMode: 'VIDEO', numHands: mode.fist ? 2 : 1, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
       try { recognizer = await make('GPU'); } catch { recognizer = await make('CPU'); }
+      hands = mode.fist ? 2 : 1; // it was made looking for this many hands; only a later change needs telling
       applyHands();
     } catch (e) { failed = true; try { relay.presenceSwipe({ error: String((e && e.message) || e).slice(0, 120) }); } catch { /* closing */ } } finally { loading = false; }
   }
@@ -30,7 +31,10 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
     if (stopped || !running) return;
     let next = 125; // looking for a hand: 8 a second
     try {
-      if (recognizer && video.readyState >= 2 && isFacePresent()) {
+      const nowMs = Date.now();
+      if (isFacePresent()) faceAt = nowMs;
+      const faceNear = nowMs - faceAt < 3000; // a hand or two raised in front of the face can hide it for a moment: that is not "nobody there"
+      if (recognizer && video.readyState >= 2 && faceNear) {
         const r = recognizer.recognizeForVideo(video, performance.now());
         const l = r.landmarks && r.landmarks[0];
         const both = (r.landmarks && r.landmarks.length) ? r.landmarks : [];
@@ -41,7 +45,7 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
         if (mode.fist && fist) { const e = fist.push(l || null, now); if (e) { try { relay.presenceSwipe(e); } catch { /* closing */ } } }
         if (now - lastHandAt < 1500) next = 33; // a hand is there (or just was): about 30 a second
         else if (!mode.swipe) next = 250; // only waiting for a fist: 4 a second
-      } else if (!isFacePresent()) next = 500; // nobody at the Mac: hardly look
+      } else if (!faceNear) next = 500; // nobody at the Mac: hardly look
     } catch { /* one bad picture */ }
     timer = setTimeout(tick, next);
   }
