@@ -47,6 +47,7 @@ const { shapeToModel } = require('./hands/shape');
 const { PresenceControl } = require('./presence');
 const { SwipeGate } = require('./swipeGate');
 const { CursorBadge } = require('./cursorBadge');
+const { HandsAutoOff } = require('./handsIdle');
 const { CaptureLatch } = require('./captureLatch');
 const { ViewerGuard, config } = require('./viewerGuard');
 const { ProposalWorkspace } = require('./selfImprove');
@@ -273,15 +274,19 @@ function extensionPath() {
 }
 
 // Hand control on or off (the menu bar item and Settings both use this). Turning it on asks macOS for the camera the first time.
-async function setHands(on, { quiet = false } = {}) {
+// A fist can turn hand control on (the swipe camera sees it); then it turns itself off after a while with no hand in view. Hand control turned on any other way is left alone.
+const handsAutoOff = new HandsAutoOff({ isOn: () => !!hands?.enabled, off: () => setHands(false), getSeconds: () => store.get('settings.hands.fistIdleSeconds'), note: () => { diag.log('hands-auto-off', 'no hand in view for a while'); ask.notice('Hand control turned itself off: no hand was in view for a while. Hold up a fist to turn it on again.', 'done'); } });
+async function setHands(on, { quiet = false, byFist = false } = {}) {
   if (on) {
     store.set('settings.hands.enabled', true);
     const r = await hands.enable();
     if (!r.ok) { store.set('settings.hands.enabled', false); ask.notice(r.error, 'failed'); }
-    else if (!quiet) ask.notice('Hand control is on. Hold up an open hand: it moves a ring. Fist grabs, thumb and finger tap clicks, peace sign talks.', 'done');
+    else { if (byFist) handsAutoOff.started(); else handsAutoOff.manual(); }
+    if (r.ok && !quiet) ask.notice('Hand control is on. Hold up an open hand: it moves a ring. Fist grabs, thumb and finger tap clicks, peace sign talks.', 'done');
     broadcast();
     return r;
   }
+  handsAutoOff.manual();
   store.set('settings.hands.enabled', false);
   hands.disable();
   broadcast();
@@ -1078,7 +1083,8 @@ function registerIpc() {
   ipcMain.handle('wakemodel:config', (e) => (e.sender === wakePageSender ? { threshold: Number(store.get('settings.wake.threshold')) || 0.5 } : {}));
   // The two-finger desktop swipe (opt-in, Settings): the camera page that checks it is you also watches for the swipe, and the gate lets it through only when you were recognised a moment ago and nobody else is in view.
   let swipeFaces = { count: 0, at: 0 }, swipeOwnerAt = 0, swipeStrangerAt = 0;
-  const swipeConfig = () => { const c = store.get('settings.swipe') || {}; return c.enabled ? { leftDeg: Number(c.leftDeg) || 55, rightDeg: Number(c.rightDeg) || 40, mirrored: false } : null; };
+  // The camera page looks for the swipe when it is on, and for a held fist (to turn hand control on) while hand control is off. Both use the same hand model and the same camera.
+  const swipeConfig = () => { const c = store.get('settings.swipe') || {}; const fist = store.get('settings.hands.fistStart') !== false && !hands?.enabled; return c.enabled || fist ? { leftDeg: Number(c.leftDeg) || 55, rightDeg: Number(c.rightDeg) || 40, mirrored: false, swipe: !!c.enabled, fist } : null; };
   const swipeGate = new SwipeGate({
     getConfig: () => store.get('settings.swipe'),
     ownerEnrolled: () => ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0,
@@ -1086,10 +1092,31 @@ function registerIpc() {
     faces: () => swipeFaces,
     blocked: () => (screenLocked ? 'the screen is locked' : ask.meeting?.active ? 'a meeting is being recorded' : '')
   });
+  const fistGate = new SwipeGate({
+    getConfig: () => ({ enabled: store.get('settings.hands.fistStart') !== false }),
+    ownerEnrolled: () => ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0,
+    owner: () => ({ seen: ownerGuard?.seen, lastOwnerAt: swipeOwnerAt, lastStrangerAt: swipeStrangerAt }),
+    faces: () => swipeFaces,
+    blocked: () => (screenLocked ? 'the screen is locked' : '')
+  });
+  setInterval(() => { handsAutoOff.tick().catch(() => {}); }, 5000).unref?.();
   const swipeBadge = new CursorBadge({ BrowserWindow, screen, enabled: () => (store.get('settings.swipe') || {}).cursorHint !== false });
   app.on('before-quit', () => swipeBadge.close());
   ipcMain.handle('presence:swipe', async (e, m) => {
     if (e.sender !== presenceSender) return;
+    // a fist held toward the camera turns hand control on (only you; the camera view stays hidden, the badge at the pointer is the only sign)
+    if (m?.type === 'fist-stage') { if (m.stage === 'holding') swipeBadge.show(fistGate.peek().ok ? 'fist' : 'blocked'); else swipeBadge.hide(); return; }
+    if (m?.type === 'fist') {
+      swipeBadge.hide();
+      const r = fistGate.check({ dir: 'left' });
+      if (!r.ok) { diag.log('hands-fist-ignored', r.why); return; }
+      if (hands?.enabled) return;
+      setHandsPreview(false);
+      const res = await setHands(true, { quiet: true, byFist: true });
+      diag.log('hands-fist', res.ok ? 'hand control turned on by a fist' : 'hand control could not start');
+      if (res.ok) swipeBadge.note('✋', 1000);
+      return;
+    }
     // what the camera sees right now, shown beside the mouse pointer: two fingers up (ready), pointed at the camera (turn now), or seen but not you (grey)
     if (m?.type === 'stage') {
       if (m.stage === 'up' || m.stage === 'toward') swipeBadge.show(swipeGate.peek().ok ? (m.stage === 'up' ? 'ready' : 'turn') : 'blocked');
@@ -1170,7 +1197,7 @@ function registerIpc() {
   });
   ipcMain.handle('hands:set', (_e, on) => setHands(!!on));
   ipcMain.handle('hands:preview', (_e, on) => { setHandsPreview(!!on); return { ok: true }; });
-  ipcMain.handle('hands:frame', (_e, f) => { hands?.frame(f); });
+  ipcMain.handle('hands:frame', (_e, f) => { if (f && Array.isArray(f.hands) && f.hands.length) handsAutoOff.seen(); hands?.frame(f); });
   ipcMain.handle('hands:status', (_e, st) => { hands?.setStatus(st); });
   ipcMain.handle('card:close', (e) => cardPanel?.forSender(e.sender)?.hide());
   ipcMain.handle('card:action', (e, action) => cardPanel?.action(e.sender, action));

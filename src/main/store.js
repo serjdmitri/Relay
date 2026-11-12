@@ -106,7 +106,7 @@ const DEFAULTS = {
     ambient: { enabled: false, localOnly: true, perHour: 6 }, // opt-in: a factual question heard near you is answered quietly in the private window, by a local model
     budget: { enabled: false, dailyUsd: 0, monthlyUsd: 0, action: 'ask', warnAt: 0.8 }, // spend limits you set (opt-in): at the limit Relay asks (or stops) before using the model
     eyeBreaks: { enabled: false, everyMin: 20, seconds: 20, speak: true }, // opt-in: every 20 minutes at the screen, the screens blur for 20 seconds and you look far away
-    hands: { enabled: false, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true, airScroll: true }, // Hand control: move holograms in the air through the camera (opt-in)
+    hands: { enabled: false, fistStart: true, fistIdleSeconds: 90, preview: false, margin: 0.22, previewPosition: null, peaceShortcut: 'listen', appDragging: true, pinchClick: true, tabNumbers: true, extraGestures: true, airScroll: true }, // Hand control: move holograms in the air through the camera (opt-in)
     openAtLogin: false,
     showInDock: true,
     shortcuts: {

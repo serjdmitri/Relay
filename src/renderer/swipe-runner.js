@@ -2,11 +2,11 @@
 // Watches for the two-finger swipe on the camera that Presence already runs (no second camera, and the Hands feature stays off). It looks for a hand a few times a second while you are in view,
 // and speeds up to about 30 pictures a second while a hand is there, so the swipe reacts at once. Only the 21 hand points are used (swipe.js); no picture leaves this page.
 import { GestureRecognizer, FilesetResolver } from './vendor/mediapipe/vision_bundle.mjs';
-import { TwoFingerSwipe } from './swipe.js';
+import { TwoFingerSwipe, FistHold } from './swipe.js';
 
 export function createSwipeRunner({ video, isFacePresent = () => true }) {
   let recognizer = null, loading = false, failed = false, timer = 0, stopped = false, running = false;
-  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0;
+  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, fist = null, mode = { swipe: true, fist: false };
 
   async function load() {
     loading = true;
@@ -27,9 +27,10 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
         const l = r.landmarks && r.landmarks[0];
         const now = Date.now();
         if (l) lastHandAt = now;
-        const e = detector.push(l || null, now);
-        if (e) { try { relay.presenceSwipe(e); } catch { /* closing */ } }
+        if (mode.swipe) { const e = detector.push(l || null, now); if (e) { try { relay.presenceSwipe(e); } catch { /* closing */ } } }
+        if (mode.fist && fist) { const e = fist.push(l || null, now); if (e) { try { relay.presenceSwipe(e); } catch { /* closing */ } } }
         if (now - lastHandAt < 1500) next = 33; // a hand is there (or just was): about 30 a second
+        else if (!mode.swipe) next = 250; // only waiting for a fist: 4 a second
       } else if (!isFacePresent()) next = 500; // nobody at the Mac: hardly look
     } catch { /* one bad picture */ }
     timer = setTimeout(tick, next);
@@ -41,6 +42,9 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
       if (!cfg) { this.stop(); return; }
       const key = JSON.stringify(cfg);
       if (key !== cfgKey) { cfgKey = key; detector = new TwoFingerSwipe({ leftDeg: cfg.leftDeg, rightDeg: cfg.rightDeg, mirrored: !!cfg.mirrored, aspect: (video.videoWidth || 4) / (video.videoHeight || 3), onStage: (stage) => { try { relay.presenceSwipe({ type: 'stage', stage }); } catch { /* closing */ } } }); }
+      mode = { swipe: cfg.swipe !== false, fist: !!cfg.fist };
+      if (mode.fist && !fist) fist = new FistHold({ aspect: (video.videoWidth || 4) / (video.videoHeight || 3), onStage: (stage) => { try { relay.presenceSwipe({ type: 'fist-stage', stage }); } catch { /* closing */ } } });
+      if (!mode.fist) fist = null;
       running = true;
       if (!recognizer && !loading && !failed) load();
       if (!timer) timer = setTimeout(tick, 125);
