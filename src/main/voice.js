@@ -124,6 +124,7 @@ class Speaker {
   // Called the moment you start talking or typing: a voice model that was unloaded (the battery saver does that after a while idle) starts loading now. It takes about 5 seconds, and
   // you speak, and the model writes its answer, for at least that long, so it is ready when the reply has to be spoken instead of making you wait "preparing voice".
   wakeVoice() {
+    if (this.light) return; // memory is short: the voice loads when a reply needs it, not before
     try { if (this.omni && this.engineFor(this.getTts() || {}) === 'omnivoice') this.omni.preload(); } catch { /* the reply is spoken anyway, a little later */ }
   }
 

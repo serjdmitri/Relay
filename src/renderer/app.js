@@ -926,6 +926,7 @@ const PAGES = {
         act.onchange = () => relay.set('settings.budget.action', act.value);
         return row;
       })(),
+      toggleRow('Run lighter when memory or battery is low', 'On: when the Mac is swapping heavily or the battery is under 20% and not charging, Relay looks at the camera half as often, lets go of its voice model, draws holograms smaller and turns hand control off sooner, then goes back to normal when things recover. A short message tells you when it changes.', 'settings.lightMode'),
       toggleRow('Save battery when unplugged', 'On: when the Mac is not plugged in, Relay does not pre-load its voice model, unloads it after five idle minutes (it starts again with the next reply, which takes a few seconds) and keeps the local model in memory for 5 minutes instead of 30.', 'settings.batterySaver'),
       toggleRow('Eye breaks', 'Opt-in. After about 20 minutes of work your screens blur for 20 seconds and Relay asks you to look at something far away (the 20-20-20 rule). Time only counts while you are active; nothing is recorded. Say "turn off eye breaks" any time.', 'settings.eyeBreaks.enabled'),
       toggleRow('Evening recap', 'Around 8:30 PM Relay shows a notification with what it did today: what it changed, anything worth a second look (sent, moved to the Trash, ran a command), and what you can undo with one tap in History > Actions. Say “daily recap” or “what did you do today” any time. Only shown on days when something changed.', 'settings.recap.enabled'),

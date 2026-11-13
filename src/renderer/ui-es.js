@@ -49,6 +49,7 @@
     'Click with a pinch': 'Hacer clic con un pellizco',
     'More hand signs': 'Más gestos con las manos',
     'Save battery when unplugged': 'Ahorrar batería sin cargador',
+    'Run lighter when memory or battery is low': 'Funcionar más ligero con poca memoria o batería',
     'Food log by voice': 'Registro de comidas por voz',
     'Answer questions I overhear': 'Responder las preguntas que oigo cerca',
     'Only use a local model for them': 'Usar solo un modelo local para ellas',

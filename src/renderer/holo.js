@@ -34,8 +34,10 @@ const uniforms = { time: { value: 0 }, reveal: { value: -2 }, originY: { value: 
 let solid = false;
 let items = [];
 const touched = () => { lastTouch = performance.now(); };
+let lightOn = false, lightSkip = false; // light mode: smaller picture, every other frame
 function applyUi(u) {
   if (!u) return;
+  if (!!u.light !== lightOn) { lightOn = !!u.light; renderer.setPixelRatio(lightOn ? 1 : Math.min(1.5, window.devicePixelRatio || 1)); resize(); }
   ui = { controls: ['menu', 'side', 'bar'].includes(u.controls) ? u.controls : 'menu', spin: u.spin !== false, spinDelay: Math.max(0, Number(u.spinDelay) || 0), dragFormat: ['stl', '3mf', 'step'].includes(u.dragFormat) ? u.dragFormat : 'stl' };
   pointsPerInch = Math.min(400, Math.max(50, Number(u.pointsPerInch) || 125));
   for (const c of ['menu', 'side', 'bar']) document.body.classList.toggle(`ui-${c}`, ui.controls === c);
@@ -1187,6 +1189,7 @@ for (const b of document.querySelectorAll('#cutax b')) b.onclick = () => { clip.
 let prev = performance.now();
 const qSpin = new THREE.Quaternion();
 function frame(now) {
+  if (lightOn && (lightSkip = !lightSkip)) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
   uniforms.time.value = now / 1000;
   const t = Math.min(1, (now - reveal0) / 1100);

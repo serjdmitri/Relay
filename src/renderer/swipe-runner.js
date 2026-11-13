@@ -6,7 +6,7 @@ import { TwoFingerSwipe, FistHold, PalmsHold } from './swipe.js';
 
 export function createSwipeRunner({ video, isFacePresent = () => true }) {
   let recognizer = null, loading = false, failed = false, timer = 0, stopped = false, running = false;
-  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, faceAt = 0, fist = null, palms = null, mode = { swipe: true, fist: false }, hands = 1;
+  let detector = new TwoFingerSwipe(), cfgKey = '', lastHandAt = 0, faceAt = 0, light = false, fist = null, palms = null, mode = { swipe: true, fist: false }, hands = 1;
 
   // The model is only told how many hands to look for when that number changes: telling it again every second makes it reconfigure itself and drop frames, which cost the swipe its short "pointed at the camera" step.
   function applyHands() {
@@ -47,7 +47,7 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
         else if (!mode.swipe) next = 250; // only waiting for a fist: 4 a second
       } else if (!faceNear) next = 500; // nobody at the Mac: hardly look
     } catch { /* one bad picture */ }
-    timer = setTimeout(tick, next);
+    timer = setTimeout(tick, light ? next * 2 : next); // light mode: half as often
   }
 
   return {
@@ -56,7 +56,7 @@ export function createSwipeRunner({ video, isFacePresent = () => true }) {
       if (!cfg) { this.stop(); return; }
       const key = JSON.stringify(cfg);
       if (key !== cfgKey) { cfgKey = key; detector = new TwoFingerSwipe({ leftDeg: cfg.leftDeg, rightDeg: cfg.rightDeg, mirrored: !!cfg.mirrored, aspect: (video.videoWidth || 4) / (video.videoHeight || 3), onStage: (stage) => { try { relay.presenceSwipe({ type: 'stage', stage }); } catch { /* closing */ } } }); }
-      mode = { swipe: cfg.swipe !== false, fist: !!cfg.fist };
+      mode = { swipe: cfg.swipe !== false, fist: !!cfg.fist }; light = !!cfg.light;
       if (mode.fist && !fist) fist = new FistHold({ aspect: (video.videoWidth || 4) / (video.videoHeight || 3), onStage: (stage) => { try { relay.presenceSwipe({ type: 'fist-stage', stage }); } catch { /* closing */ } } });
       if (mode.fist && !palms) palms = new PalmsHold({ aspect: (video.videoWidth || 4) / (video.videoHeight || 3) });
       if (!mode.fist) { fist = null; palms = null; }
