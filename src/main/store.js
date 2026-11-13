@@ -99,6 +99,7 @@ const DEFAULTS = {
     overnightWake: { enabled: false, battery: false }, // wake the Mac for the overnight window and keep it awake while overnight work runs (wakeScheduler.js; needs a one-time permission you give in Terminal)
     selfImprove: { repo: '', base: 'main' }, // proposals for changes to Relay's own code, in separate git worktrees; off until repo is the absolute path of a source checkout
     presence: { enabled: false, awayAfter: 60, pause: true, resume: true, keepMusic: false, pauseVideo: true, lock: false, guard: { enabled: false, seconds: 10, expected: 1 } }, // opt-in: the camera counts faces once a second; when nobody has been there for a while, pause the music (and lock if asked)
+    lightMode: true, // memory or battery low: do less in the background (lightMode.js)
     batterySaver: true, // unplugged: the voice model is not pre-loaded and is unloaded after 5 idle minutes; the local model is kept for 5 minutes instead of 30
     persona: { key: '', custom: '' }, // how Relay talks ("be concise", "talk like a butler"); empty is its usual style
     scenes: { away: '', back: '' }, // what to run when you leave the desk or come back (needs the presence camera); empty means nothing

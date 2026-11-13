@@ -45,6 +45,9 @@ class Overlay {
     this.markPoll = null;
     this.hudEntry = null; // the window showing the reactor (the display the pointer was on when it appeared)
     this.hudState = {};
+    this.hudGuard = null; this.onStuck = null;
+    // The page of the reactor can be left showing it (after sleep, a restart or a lost message) while this side believes it is gone: say "hidden" again now and then.
+    this.resyncTimer = setInterval(() => this.resyncHud(), 20000); this.resyncTimer.unref?.();
     app.once?.('before-quit', () => { this.quitting = true; });
   }
 
@@ -320,6 +323,7 @@ class Overlay {
     if((this.worldView || this.cameraView) && msg.hide)msg={state:'reactor-idle',idlePosition:'corner'};
     if(this.cameraView && msg.state==='reactor-idle')msg={...msg,idlePosition:'corner'};
     if (msg.hide) {
+      clearTimeout(this.hudGuard); this.hudGuard = null;
       clearInterval(this.borderTimer);
       this.borderTimer = null;
       this.hudState = {};
@@ -334,6 +338,9 @@ class Overlay {
       }
       return;
     }
+    clearTimeout(this.hudGuard); this.hudGuard = null;
+    // A finished answer or the welcome screen is never meant to stay: if nothing has changed it for four minutes, it goes (and whatever is still "speaking" is stopped).
+    if (msg.state === 'done' || msg.welcomeToken) { this.hudGuard = setTimeout(() => this.hudGuardFire(), 240000); this.hudGuard.unref?.(); }
     if ((msg.state && msg.state !== this.hudState.state) || msg.reset) this.hudState = { state: msg.state, mode: msg.mode };
     Object.assign(this.hudState, msg);
     if (this.hudEntry?.win.isDestroyed()) { clearInterval(this.borderTimer); this.borderTimer = null; this.hudEntry = null; }
@@ -351,6 +358,19 @@ class Overlay {
     this.hudInteractive(msg.state === 'input' || msg.state === 'confirm');
     const he = this.hudEntry; // being summoned: make sure the page can actually draw it (at most every few seconds)
     if (he && msg.state === 'listening' && Date.now() - (he.probedAt || 0) > 4000) { he.probedAt = Date.now(); this.heal(he, 'when summoned').catch(() => {}); }
+  }
+
+  hudGuardFire() {
+    this.hudGuard = null;
+    if (!this.hudEntry || !(this.hudState?.state === 'done' || this.hudState?.welcomeToken)) return;
+    try { this.onStuck && this.onStuck(); } catch { /* hiding it is what matters */ }
+    this.hud({ hide: true });
+  }
+
+  // No reactor is meant to be up, so no page should be showing one.
+  resyncHud() {
+    if (this.hudEntry || this.worldView || this.cameraView || this.quitting) return;
+    for (const e of this.wins.values()) if (e && e.win && !e.win.isDestroyed() && e.ready) { try { e.win.webContents.send('overlay:cmd', { type: 'hud', hide: true }); } catch { /* going away */ } }
   }
 
   refreshBorder() {

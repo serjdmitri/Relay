@@ -48,6 +48,7 @@ const { PresenceControl } = require('./presence');
 const { SwipeGate } = require('./swipeGate');
 const { CursorBadge } = require('./cursorBadge');
 const { CornerNote } = require('./cornerNote');
+const { LightMode } = require('./lightMode');
 const { HandsAutoOff } = require('./handsIdle');
 const { CaptureLatch } = require('./captureLatch');
 const { ViewerGuard, config } = require('./viewerGuard');
@@ -277,9 +278,10 @@ function extensionPath() {
 // Hand control on or off (the menu bar item and Settings both use this). Turning it on asks macOS for the camera the first time.
 // A fist can turn hand control on (the swipe camera sees it); then it turns itself off after a while with no hand in view. Hand control turned on any other way is left alone.
 let hintBadge = null; // the small badge at the mouse pointer (the swipe's and the volume's)
+let lightOn = false; // light mode (lightMode.js): memory or battery is low, so Relay does less in the background
 let cornerNote = null; // short messages from Jarvis in the bottom left corner
 const sayCorner = (text) => { try { if (!cornerNote) { cornerNote = new CornerNote({ BrowserWindow, screen }); app.once('before-quit', () => cornerNote.close()); } cornerNote.show(text); } catch { ask.notice(text, 'done'); } };
-const handsAutoOff = new HandsAutoOff({ isOn: () => !!hands?.enabled, off: () => setHands(false), getSeconds: () => store.get('settings.hands.fistIdleSeconds'), note: () => { diag.log('hands-auto-off', 'no hand in view for a while'); sayCorner('Hand control turned itself off: no hand was in view for a while. Hold up a fist to turn it on again.'); } });
+const handsAutoOff = new HandsAutoOff({ isOn: () => !!hands?.enabled, off: () => setHands(false), getSeconds: () => (lightOn ? Math.min(10, Number(store.get('settings.hands.fistIdleSeconds')) || 30) : store.get('settings.hands.fistIdleSeconds')), note: () => { diag.log('hands-auto-off', 'no hand in view for a while'); sayCorner('Hand control turned itself off: no hand was in view for a while. Hold up a fist to turn it on again.'); } });
 async function setHands(on, { quiet = false, byFist = false } = {}) {
   if (on) {
     store.set('settings.hands.enabled', true);
@@ -448,11 +450,11 @@ async function welcomeBack(lockedAt, lastWelcome) {
   const requestStamp=(store.get('history')||[])[0]?.id;
   let welcomeToken,heldByCard=false;
   // The greeting screen stayed up forever when the spoken greeting never finished (the voice was not ready after the lid opened, or the speech process hung): everything waited for the speech. Neither the speech nor the screen may now outlast a limit.
-  const limit=(p,ms)=>p==null?p:Promise.race([Promise.resolve(p).catch(()=>{}),new Promise(r=>{const t=setTimeout(()=>{try{ask.speaker?.stop?.();}catch{}r();},ms);t.unref?.();})]);
+  const limit=(p,ms)=>p==null?p:Promise.race([Promise.resolve(p).catch(()=>{}),new Promise(r=>{const t=setTimeout(()=>{diag.log('welcome','the spoken greeting did not finish in time: stopped');try{ask.speaker?.stop?.();}catch{}r();},ms);t.unref?.();})]);
   const canDeliver=()=>welcome.canDeliverWelcome({locked:!!ask.lockWatch?.locked,meeting:!!ask.meeting?.active,state:ask.state})&&(store.get('history')||[])[0]?.id===requestStamp&&(!welcomeToken||overlay.hudState?.welcomeToken===welcomeToken);
   return welcome.deliverInStages({canDeliver,
     begin:()=>{
-      if(cfg.show!==false){const shown=welcome.showWelcomeReactor(overlay,greeting,{duration:null});if(shown){welcomeToken=overlay.hudState.welcomeToken;const token=welcomeToken;setTimeout(()=>{if(overlay.hudState?.welcomeToken===token)overlay.hud({hide:true});},90000).unref?.();}}
+      if(cfg.show!==false){const shown=welcome.showWelcomeReactor(overlay,greeting,{duration:null});if(shown){diag.log('welcome','greeting screen shown');welcomeToken=overlay.hudState.welcomeToken;const token=welcomeToken;setTimeout(()=>{if(overlay.hudState?.welcomeToken===token)overlay.hud({hide:true});},90000).unref?.();}}
       return cfg.speak!==false&&!ask.speaker?.speaking?limit(ask.speakText(greeting,{quick:true}),45000):undefined;
     },
     collect:async()=>{
@@ -1090,7 +1092,7 @@ function registerIpc() {
   // The two-finger desktop swipe (opt-in, Settings): the camera page that checks it is you also watches for the swipe, and the gate lets it through only when you were recognised a moment ago and nobody else is in view.
   let swipeFaces = { count: 0, at: 0 }, swipeOwnerAt = 0, swipeStrangerAt = 0;
   // The camera page looks for the swipe when it is on, and for a held fist (to turn hand control on) while hand control is off. Both use the same hand model and the same camera.
-  const swipeConfig = () => { const c = store.get('settings.swipe') || {}; const fist = store.get('settings.hands.fistStart') !== false && !hands?.enabled; return c.enabled || fist ? { leftDeg: Number(c.leftDeg) || 55, rightDeg: Number(c.rightDeg) || 40, mirrored: false, swipe: !!c.enabled, fist } : null; };
+  const swipeConfig = () => { const c = store.get('settings.swipe') || {}; const fist = store.get('settings.hands.fistStart') !== false && !hands?.enabled; return c.enabled || fist ? { leftDeg: Number(c.leftDeg) || 55, rightDeg: Number(c.rightDeg) || 40, mirrored: false, swipe: !!c.enabled, fist, light: lightOn } : null; };
   const swipeGate = new SwipeGate({
     getConfig: () => store.get('settings.swipe'),
     ownerEnrolled: () => ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0,
@@ -1344,6 +1346,7 @@ app.whenReady().then(() => {
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));
   overlay = new Overlay({ isEnabled: () => store.get('settings.cursor'), isBuddy: () => store.get('settings.buddy') !== false, getName: () => store.get('settings.assistantName') || 'J.A.R.V.I.S', getVisual: () => store.get('settings.assistantVisual'), getBorder: () => store.get('settings.assistantBorder'), getBlur: () => store.get('settings.assistantBlur'), getBackdrop:()=>({opacity:store.get('settings.assistantBlurStrength')??.7,image:assistantBackdrop?.image||''}), getLook: () => store.get('settings.look') || 'jarvis', getRecentRect: () => recent?.rect, borderBin: axBinPath(), log: (k, m) => diag.log(k, m) });
+  overlay.onStuck = () => { try { ask?.speaker?.stop?.(); } catch { /* the screen is hidden anyway */ } diag.log('hud-stuck', 'the reactor was still up after four minutes: hidden'); };
   overlay.watchDisplays();
   restoreToast = new (require('./restoreToast').RestoreToast)(path.join(__dirname, 'preload.js'));
   trashTarget = new (require('./trashTarget').TrashTarget)(path.join(__dirname, 'preload.js'));
@@ -1375,6 +1378,25 @@ app.whenReady().then(() => {
   const omni = new OmniVoice({ python: path.join(app.getPath('userData'), 'omnivoice', 'venv', 'bin', 'python'), worker: app.isPackaged ? path.join(process.resourcesPath, 'native', 'omni-worker.py') : path.join(__dirname, 'tts', 'omni-worker.py') });
   app.once('before-quit', () => omni.stop());
   // Battery saver (on by default): unplugged, the voice model is not loaded at launch and is unloaded after five idle minutes (it is started again by the next reply).
+  // Light mode: when the Mac is swapping heavily or the battery is low (not charging), do less in the background; back to normal when it recovers.
+  const lightMode = new LightMode({
+    enabled: () => store.get('settings.lightMode') !== false,
+    sample: async () => {
+      const m = process.getSystemMemoryInfo?.() || {};
+      const out = await new Promise((res) => execFile('/usr/bin/pmset', ['-g', 'batt'], { timeout: 1500 }, (e, o) => res(e ? '' : String(o))));
+      const b = require('./panels/sources').parseBattery(out);
+      return { swapUsedMB: (m.swapUsed || 0) / 1024, swapTotalMB: (m.swapTotal || 0) / 1024, onBattery: !!b.present && !!b.onBattery, charging: !!b.charging, percent: b.percent };
+    },
+    onChange: (on, reasons) => {
+      lightOn = on;
+      diag.log('light-mode', on ? 'on (' + reasons.join(', ') + ')' : 'off');
+      try { if (on && omni.idleMs() > 60000) omni.unload(); } catch { /* the voice stays loaded */ }
+      try { speaker.light = on; holos.light = on; holos.refreshUi?.(); } catch { /* nothing to lighten yet */ }
+      sayCorner(on ? (reasons.includes('memory') ? 'The Mac is short of memory, so Relay is running lighter.' : 'Battery is low, so Relay is running lighter.') : 'Back to full power.');
+    }
+  });
+  setTimeout(() => lightMode.check().catch(() => {}), 20000).unref?.();
+  setInterval(() => lightMode.check().catch(() => {}), 30000).unref?.();
   const saveBattery = () => { try { return store.get('settings.batterySaver') !== false && !!powerMonitor.isOnBatteryPower?.(); } catch { return false; } };
   setTimeout(() => { if (store.get('settings.tts.engine') === 'omnivoice' && !saveBattery()) omni.warm().catch(() => {}); }, 3000).unref?.();
   setInterval(() => { try { if (saveBattery() && omni.idleMs() > 15 * 60000 && omni.unload()) diag.log('battery-saver', 'voice model unloaded after 15 idle minutes'); } catch { /* try again next minute */ } }, 60000).unref?.(); // load the voice now, not when the first reply needs it
@@ -1577,7 +1599,7 @@ app.whenReady().then(() => {
   let lockedAt = 0;
   let lastWelcome = 0;
   // After the Mac wakes (the lid was closed) the camera stream is often dead: start the camera again, so recognition and the standby screen see you and not a frozen picture.
-  powerMonitor.on('resume', () => { diag.log('resume', 'the Mac woke'); try { overlay?.renewIdle(); } catch { /* the old windows stay */ } reviveListening('after wake'); });
+  powerMonitor.on('resume', () => { diag.log('resume', 'the Mac woke'); try { overlay?.renewIdle(); } catch { /* the old windows stay */ } try { if (['idle', 'done'].includes(ask?.state)) overlay?.hud({ hide: true }); } catch { /* nothing to hide */ } reviveListening('after wake'); });
   // The camera that watches who is at the Mac. It is started again whenever it is wanted but not delivering pictures: after the lid, after unlocking, when its page gave up, or when it never came back.
   const cameraWanted = () => !!store.get('settings.presence.enabled') || (ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0);
   let reviving = false;

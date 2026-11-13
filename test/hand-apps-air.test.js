@@ -144,3 +144,10 @@ test('the welcome-back screen can never stay up: the greeting screen has a hard 
   assert.match(main, /limit\(ask\.speakText\(greeting,\{quick:true\}\),45000\)/);
   assert.match(main, /await limit\(ask\.speakText\(details\),60000\)/);
 });
+
+test('a reactor left on screen is cleaned up: a four minute guard, a periodic hide for pages that missed it, and a hide when the Mac wakes', () => {
+  const read = (f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', f), 'utf8');
+  const overlay = read('src/main/overlay.js'), main = read('src/main/main.js');
+  assert.match(overlay, /hudGuardFire\(\) \{/); assert.match(overlay, /setTimeout\(\(\) => this\.hudGuardFire\(\), 240000\)/); assert.match(overlay, /resyncHud\(\) \{/); assert.match(overlay, /setInterval\(\(\) => this\.resyncHud\(\), 20000\)/);
+  assert.match(main, /overlay\.onStuck = /); assert.match(main, /overlay\?\.hud\(\{ hide: true \}\)/); assert.match(main, /diag\.log\('welcome','greeting screen shown'\)/);
+});
