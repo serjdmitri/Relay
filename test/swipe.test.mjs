@@ -84,7 +84,7 @@ test('one swipe moves one desktop: holding the turn does nothing more, and the n
 
 test('the steps have to follow each other quickly, or the swipe starts over', () => {
   const det = new TwoFingerSwipe();
-  const slow = play(det, [...rep(peace(), 6), ...rep(null, 60), ...rep(toward(), 3), ...rep(side(80, true), 5)]);
+  const slow = play(det, [...rep(peace(), 6), ...rep(null, 80), ...rep(toward(), 3), ...rep(side(80, true), 5)]);
   assert.equal(slow.events.filter((e) => e.type === 'swipe').length, 0);
 });
 
@@ -105,7 +105,7 @@ test('each step the detector enters is reported, once, for the badge at the poin
   play(det, gesture(70, true));
   assert.deepEqual(seen, ['up', 'toward', 'locked']);
   const lost = []; const d2 = new TwoFingerSwipe({ onStage: (s) => lost.push(s) });
-  play(d2, [...rep(peace(), 6), ...rep(null, 60)]);
+  play(d2, [...rep(peace(), 6), ...rep(null, 80)]);
   assert.deepEqual(lost, ['up', 'toward', 'idle'], 'back to idle when the steps do not follow in time');
   assert.doesNotThrow(() => play(new TwoFingerSwipe({ onStage: () => { throw new Error('badge broke'); } }), gesture(70, true)));
 });
