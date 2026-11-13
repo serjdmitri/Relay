@@ -1599,7 +1599,7 @@ app.whenReady().then(() => {
   let lockedAt = 0;
   let lastWelcome = 0;
   // After the Mac wakes (the lid was closed) the camera stream is often dead: start the camera again, so recognition and the standby screen see you and not a frozen picture.
-  powerMonitor.on('resume', () => { diag.log('resume', 'the Mac woke'); try { overlay?.renewIdle(); } catch { /* the old windows stay */ } try { if (['idle', 'done'].includes(ask?.state)) overlay?.hud({ hide: true }); } catch { /* nothing to hide */ } reviveListening('after wake'); });
+  powerMonitor.on('resume', () => { diag.log('resume', 'the Mac woke'); try { overlay?.renewIdle(); } catch { /* the old windows stay */ } try { hintBadge?.close?.(); } catch { /* the badge window is made again when it is next needed */ } try { if (['idle', 'done'].includes(ask?.state)) overlay?.hud({ hide: true }); } catch { /* nothing to hide */ } reviveListening('after wake'); });
   // The camera that watches who is at the Mac. It is started again whenever it is wanted but not delivering pictures: after the lid, after unlocking, when its page gave up, or when it never came back.
   const cameraWanted = () => !!store.get('settings.presence.enabled') || (ownerConfig(store.get('settings.owner')).enabled && (ownerState?.templates?.length || 0) > 0);
   let reviving = false;
@@ -1639,6 +1639,7 @@ app.whenReady().then(() => {
   powerMonitor.on('lock-screen', () => { diag.log('lock-screen'); lockedAt = Date.now(); screenLocked = true; lockWatch.set(true); prepareGreeting(); });
   powerMonitor.on('unlock-screen', () => {
     try { overlay?.renewIdle(); } catch { /* the old windows stay */ } // windows that sat hidden through the lock can come back blank: start from fresh ones
+    try { hintBadge?.close?.(); } catch { /* the swipe badge too: a fresh window next time */ }
     // You have just unlocked the Mac with your password or fingerprint: that is you. A guard screen still up, or an alarm still counting, comes down, and the mouse is handed back.
     diag.log('unlock-screen'); reviveListening('after unlock'); reviveSoon('after unlock'); setTimeout(() => reviveHands('after unlock'), 3000).unref?.();
     try { if (ownerGuard?.state === 'alarm') ownerGuard.clear('owner'); intruder?.hide(); overlay?.releaseInput(); } catch { /* the screens stay */ }

@@ -19,7 +19,7 @@ export class TwoFingerSwipe {
   // leftDeg / rightDeg: how far (in degrees, from pointing at the camera to pointing sideways) the fingers must turn toward your left / right.
   // The default for the right is smaller because the wrist turns less that way. aspect: picture width / height. mirrored: the picture is already flipped like a mirror.
   // onStage(stage): called whenever the step changes ('idle', 'up', 'toward', 'locked'), for the badge that shows what the camera sees.
-  constructor({ leftDeg = 55, rightDeg = 40, aspect = 4 / 3, mirrored = false, upHoldMs = 100, stepMs = 1500, cooldownMs = 800, confirmFrames = 2, towardRatio = 0.5, onStage = null } = {}) {
+  constructor({ leftDeg = 55, rightDeg = 40, aspect = 4 / 3, mirrored = false, upHoldMs = 100, stepMs = 2000, cooldownMs = 800, confirmFrames = 2, towardRatio = 0.55, onStage = null } = {}) {
     Object.assign(this, { leftDeg, rightDeg, aspect, mirrored, upHoldMs, stepMs, cooldownMs, confirmFrames, towardRatio, onStage });
     this._stage = 'idle';
     this.reset();
@@ -65,12 +65,13 @@ export class TwoFingerSwipe {
     if (t - this.enteredAt > this.stepMs) return miss(this.shortBy ? `turned ${Math.round(this.shortBy.deg)} degrees to the ${this.shortBy.dir}, needs ${this.shortBy.need}` : 'pointed at the camera, but not turned to the side in time');
     if (!f) { this.confirm = 0; return null; }
     const ratio = f.len / this.ref;
-    if (ratio <= this.towardRatio + 0.1) { this.confirm = 0; return null; } // still pointing at the camera
+    if (ratio <= 0.6) { this.confirm = 0; return null; } // still pointing at the camera
     if (Math.abs(f.x) < 0.7 * f.len) { this.confirm = 0; return null; } // turning, but not sideways (up or down)
     let dir = f.x > 0 ? 'left' : 'right'; // the camera sees you from the front: fingers going to the right of the picture are going to your left
     if (this.mirrored) dir = dir === 'left' ? 'right' : 'left';
     const need = dir === 'left' ? this.leftDeg : this.rightDeg, deg = degrees(ratio);
-    if (deg < need) { this.confirm = 0; this.shortBy = { dir, deg, need }; return null; }
+    // two degrees of leeway: the log showed "turned 40 degrees, needs 40" over and over (39.6 is not 40)
+    if (deg < need - 2) { this.confirm = 0; this.shortBy = { dir, deg, need }; return null; }
     if (++this.confirm < this.confirmFrames) return null;
     this.stage = 'locked'; this.lockedAt = t; this.neutralSince = null; this.shortBy = null;
     return { type: 'swipe', dir, deg: Math.round(deg) };

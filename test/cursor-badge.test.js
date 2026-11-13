@@ -78,3 +78,11 @@ test('a note can be placed beside the hand ring instead of the mouse pointer, an
   r.badge.show('ready'); assert.deepEqual(r.wins[0].pos, [32, 32], 'other badges follow the mouse pointer');
   r.badge.note('✋', 900, { x: NaN, y: 1 }); assert.deepEqual(r.wins[0].pos, [32, 32], 'a bad point is ignored');
 });
+
+test('main.js makes the badge window again after the Mac wakes or unlocks (a window that sat hidden through sleep can come back blank)', () => {
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src/main/main.js'), 'utf8');
+  assert.match(main, /the Mac woke'\); try \{ overlay\?\.renewIdle\(\); \} catch \{ \/\* the old windows stay \*\/ \} try \{ hintBadge\?\.close\?\.\(\)/);
+  assert.match(main, /try \{ hintBadge\?\.close\?\.\(\); \} catch \{ \/\* the swipe badge too/);
+  const r = rig(); r.badge.show('ready'); r.badge.close(); r.badge.show('ready');
+  assert.equal(r.wins.length, 2); assert.equal(r.wins[0].destroyed, true); assert.equal(r.wins[1].visible, true);
+});
