@@ -1806,6 +1806,7 @@ app.whenReady().then(() => {
     air: (type, x, y) => overlay.air(type, x, y),
     shape: (r) => { const m = shapeToModel(r); if (m) holos.show({ title: m.title, items: [{ kind: 'shapes', title: m.title, credit: 'Drawn in the air', parts: m.parts }], x: Math.round(r.cx), y: Math.round(r.cy), scale: m.scale }).catch(() => {}); },
     onMic: (id) => ask.listenFromHand(id).catch(() => {}),
+    log: (k, m) => diag.log(k, m),
     notify: (m) => sayCorner(m)
   });
   hands.onChange = () => { rebuildTray(); broadcast(); };
