@@ -117,11 +117,14 @@ export class PalmsHold {
     const palm = (l) => (l && l.length >= 21 ? Math.hypot((l[0].x - l[9].x) * this.aspect, l[0].y - l[9].y) : 0);
     const both = Array.isArray(ls) && ls.length === 2 && ls.every((l) => palm(l) >= this.minPalm && poseOf(l) === 'Open_Palm');
     if (both) {
+      this.lastBoth = t;
       this.downSince = null;
       if (this.since === null) this.since = t;
       if (this.armed && t - this.since >= this.holdMs) { this.armed = false; return { type: 'palms' }; }
       return null;
     }
+    // a flicker of one picture (a hand read as something else for a moment) does not start the hold over; 0.4 seconds of anything else, or lowering the hands, does
+    if (Array.isArray(ls) && ls.length && this.lastBoth !== undefined && t - this.lastBoth <= 400) return null;
     this.since = null;
     if (!this.armed) { if (this.downSince === null) this.downSince = t; if (t - this.downSince >= 800) this.armed = true; }
     return null;

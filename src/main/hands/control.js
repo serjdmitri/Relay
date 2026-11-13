@@ -13,8 +13,8 @@ const { CountWatch } = require('./count');
 class HandControl {
   // holos: the HoloManager; display(): the display bounds the hand's screen is; createCamera(): a window-like object that has loaded the camera
   // page; createCursor(): the small ring window; askAccess(): Promise<boolean>; onMic(holoId); notify(message)
-  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {}, pinchClick = () => true, tabNumbers = () => true, extraGestures = () => true, onGesture = () => false, airScroll = () => true, onVolume = null, appSwipe = null, volumeTwist = () => true }) {
-    Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now });
+  constructor({ holos, display, motion = null, createCamera, createCursor, askAccess, onMic = () => {}, notify = () => {}, air = () => {}, shape = () => {}, preview = false, now = Date.now, secondary = false, floatingAt = () => null, sensitivity = () => 0.12, saveMargin = () => {}, onThrow = () => {}, shortcut = () => 'listen', onShortcut = () => {}, externalDrag = null, maxHands=()=>4, onFinger = () => {}, pinchClick = () => true, tabNumbers = () => true, extraGestures = () => true, onGesture = () => false, airScroll = () => true, onVolume = null, appSwipe = null, volumeTwist = () => true, log = () => {} }) {
+    Object.assign(this, { holos, display, createCamera, createCursor, askAccess, onMic, notify, air, shape, now, log });
     this.motion = motion;
     this.sensitivity = sensitivity;
     this.saveMargin = saveMargin;
@@ -170,11 +170,16 @@ class HandControl {
     }
     if (!this.secondary) { this.fingerWatch.update(f); if (!this.paused && this.tabNumbers()) this.countWatch.update(f); else this.countWatch.reset(); }
     // With more than two hands, another person's open palms must not pause everyone.
-    const palms = f.hands.length === 2 && f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.42).length === 2;
-    if (!palms) { this.pauseHold = null; this.pauseLatched = false; }
-    else if (!this.pauseLatched) {
-      if (this.pauseHold === null) this.pauseHold = f.t;
-      if (f.t - this.pauseHold >= 1500) { this.pauseLatched = true; this.setPaused(!this.paused); }
+    const palms = f.hands.length === 2 && f.hands.filter(h => h && h.score !== 0 && h.gesture === 'Open_Palm' && h.pinch > 0.3).length === 2;
+    if (palms) this.palmsAt = f.t;
+    // One picture in which a hand is read as something else for a moment (a flicker) does not start the hold again; lowering the hands, or 0.4 seconds of anything else, does.
+    if (!palms && (f.hands.length === 0 || this.palmsAt === undefined || f.t - this.palmsAt > 400)) { this.pauseHold = null; this.pauseLatched = false; this.palmsAt = undefined; }
+    else if (palms && !this.pauseLatched) {
+      if (this.pauseHold === null || this.pauseHold === undefined) { this.pauseHold = f.t; this.log('palms', 'two open palms seen'); }
+      if (f.t - this.pauseHold >= 1500) { this.pauseLatched = true; this.log('palms', 'held long enough: hand control ' + (this.paused ? 'resumes' : 'pauses')); this.setPaused(!this.paused); }
+    } else if (!palms && f.hands.length === 2 && (!this.palmsMissAt || f.t - this.palmsMissAt > 3000) && f.hands.some(h => h && h.gesture === 'Open_Palm')) {
+      this.palmsMissAt = f.t; // why two hands, one of them open, did not count (rare line, to tune from real data)
+      this.log('palms-miss', f.hands.map(h => `${h && h.gesture}/${h && h.pinch}`).join(' + '));
     }
     if (this.paused) return;
     if (f.hands.length) { clearTimeout(this.handTimer); this.handTimer = null; this.setHandMode(true); }

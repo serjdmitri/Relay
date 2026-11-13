@@ -349,6 +349,21 @@ test('both palms pause once and can resume after being lowered', async () => {
   hc.disable();
 });
 
+test('two palms still count through a one-picture flicker, a thumb close to the finger, and are logged', async () => {
+  const lines = []; const { hc } = await rig(); hc.log = (k, m) => lines.push(k + ': ' + m);
+  const mk = (x, g, p) => ({ x, y: 0.5, gesture: g, pinch: p, score: 1 });
+  const good = [mk(0.2, 'Open_Palm', 0.35), mk(0.8, 'Open_Palm', 0.5)];
+  hc.frame({ t: 1000, hands: good }); hc.frame({ t: 1450, hands: good });
+  hc.frame({ t: 1480, hands: [mk(0.2, 'Open_Palm', 0.35), mk(0.8, 'None', 0.5)] }); // one hand misread for a moment
+  hc.frame({ t: 1513, hands: good }); hc.frame({ t: 2600, hands: good });
+  assert.equal(hc.paused, true, 'the flicker did not start the hold over');
+  assert.ok(lines.some((l) => /two open palms seen/.test(l)) && lines.some((l) => /pauses/.test(l)));
+  hc.frame({ t: 3000, hands: [mk(0.2, 'None', 0.35), mk(0.8, 'None', 0.5)] }); hc.frame({ t: 3500, hands: [mk(0.2, 'None', 0.35), mk(0.8, 'None', 0.5)] });
+  hc.frame({ t: 3600, hands: good }); hc.frame({ t: 5300, hands: good });
+  assert.equal(hc.paused, false, 'half a second of something else, then a new hold, resumes it');
+  hc.disable();
+});
+
 test('throwing an item registers the undo callback before closing', async () => {
   const { hc, ev, at } = await rig();
   let t = 1000, undo = null, closed = false;
