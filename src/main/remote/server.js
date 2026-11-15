@@ -171,7 +171,7 @@ class RemoteServer {
       const b = await this.body(req, 45 * 1024 * 1024).catch(() => null);
       if (!b || !b.data) return this.json(res, 400, { error: 'Nothing to send, or it was too big (30 MB at most).' });
       const id = crypto.randomUUID();
-      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || ''), flick: b.flick === true, dir: ['left', 'right', 'up', 'down', 'center'].includes(b.dir) ? b.dir : '' }, device, id); return r; };
+      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || ''), flick: b.flick === true, dir: ['left', 'right', 'up', 'down', 'center'].includes(b.dir) ? b.dir : '', how: ['flick', 'swipe', 'button'].includes(b.how) ? b.how : '' }, device, id); return r; };
       if (!(b.wait === true || /^(true|1|yes)$/i.test(String(b.wait ?? '')))) { const r = await start(); return r?.ok ? this.json(res, 200, { id }) : this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
       const answer = this.waitForAnswer(id, device);
       const r = await start();

@@ -28,10 +28,11 @@
 <body class="flick-page">
 <main id="page" hidden>
   <header><a class="back" href="/" aria-label="Back">&#8249;</a><span>Flick to your Mac</span></header>
-  <section id="pile" aria-live="polite"><p id="empty">Choose photos, then flick your phone (or swipe the photos) left, right, up or down. They land on that side of your Mac screen and are saved in Downloads.</p></section>
+  <section id="pile" aria-live="polite"><p id="empty">Choose photos, then flick your phone (or swipe the photos) left or right. They land on that side of your Mac screen and are saved in Downloads. The first time, tap "Teach left and right" so your phone learns your flicks.</p></section>
   <div id="msg"></div>
   <div class="flick-actions">
     <button id="motion" type="button" hidden>Turn on flick (motion)</button>
+    <button id="teach" type="button">Teach left and right (one time)</button>
     <label for="pick">Choose photos<input id="pick" type="file" accept="image/*" multiple></label>
     <button id="go" type="button" class="primary" hidden>Send now</button>
   </div>

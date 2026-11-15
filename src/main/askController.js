@@ -679,7 +679,7 @@ class AskController {
     if (!d.ok) return d;
     const info = inbox.detect(d.bytes);
     if (!info) return { ok: false, error: 'Relay cannot read that kind of file from the phone yet (photos, PDFs, web addresses and text work).' };
-    if (what.flick && info.kind === 'image') return this.flickArrived(d.bytes, info, what.name, what.dir);
+    if (what.flick && info.kind === 'image') return this.flickArrived(d.bytes, info, what.name, what.dir, what.how);
     let file = '';
     if (info.kind !== 'text') {
       const dir = path.join(this.inboxDir || path.join(require('os').tmpdir(), 'relay-inbox'));
@@ -694,10 +694,10 @@ class AskController {
 
   // A photo flicked from the phone: the original goes straight into Downloads and is shown as a card (save, share, crop, change type, rename...) on the side of the screen it was flicked towards.
   // No request is made; it is only delivered. dir: left, right, up, down or center.
-  async flickArrived(bytes, info, name = '', dir = '') {
+  async flickArrived(bytes, info, name = '', dir = '', how = '') {
     const os = require('os'), fs = require('fs');
     const { cleanName, uniquePath } = require('./flickCards');
-    this.diag?.log('flick-arrived', `${info.ext}, ${bytes.length} bytes, side ${dir || 'not sent'}`); // so "it always lands in the middle" can be traced to the phone or the Mac
+    this.diag?.log('flick-arrived', `${info.ext}, ${bytes.length} bytes, side ${dir || 'not sent'}, sent by ${how || 'an older phone page'}`); // so "it always lands in the middle" can be traced to the phone or the Mac
     let saved = '';
     try { // the original, as it was sent, under the name it had on the phone
       const folder = this.flickDir || path.join(os.homedir(), 'Downloads'); fs.mkdirSync(folder, { recursive: true });
