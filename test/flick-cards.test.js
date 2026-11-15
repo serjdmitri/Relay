@@ -38,7 +38,7 @@ function setup(fileName = 'IMG_1.jpg', bytes = JPG) {
   const file = path.join(dir, fileName); fs.writeFileSync(file, bytes);
   const handlers = {}, calls = [], sent = [];
   const win = {
-    webContents: { id: 7, once() {}, send: (c, s) => sent.push([c, s]) }, destroyed: false, bounds: [], shown: false,
+    webContents: { id: 7, once() {}, send: (c, s) => sent.push([c, s]) }, destroyed: false, bounds: [], shown: false, isVisible: () => true, setPosition: (x, y) => calls.push(['pos', x, y]),
     isDestroyed() { return this.destroyed; }, close() { this.destroyed = true; calls.push(['close']); }, on() {}, setAlwaysOnTop() {}, setVisibleOnAllWorkspaces() {},
     setBounds(b, animate) { this.bounds.push([b, !!animate]); }, getBounds() { return { x: 100, y: 120, width: 372, height: 440 }; }, showInactive() { this.shown = true; }, loadFile: async (p) => { calls.push(['load', p]); }
   };
@@ -47,7 +47,9 @@ function setup(fileName = 'IMG_1.jpg', bytes = JPG) {
     BrowserWindow: function () { return win; }, screen: { getCursorScreenPoint: () => ({ x: 0, y: 0 }), getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 25, width: 1440, height: 875 } }) },
     ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, preload: '/p/preload.js', page: '/p/flick-card.html', previewDir: path.join(dir, 'preview'), run,
     shell: { showItemInFolder: (f) => calls.push(['reveal', f]), openPath: async (f) => calls.push(['open', f]), trashItem: async (f) => { calls.push(['trash', f]); fs.rmSync(f); } },
-    clipboard: { writeImage: (i) => calls.push(['copy', i]) }, nativeImage: { createFromPath: (p) => ({ isEmpty: () => !fs.existsSync(p), p }) },
+    clipboard: { write: async (items) => { calls.push(['copy', items[0].types, items[0].blob.size, items[0].blob.type]); } }, ClipboardItem: function (o) { this.types = Object.keys(o); this.blob = o['image/png']; },
+    nativeImage: { createFromPath: (p) => ({ isEmpty: () => !fs.existsSync(p), toPNG: () => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(5, 9)]) }) },
+    motion: { watchWindow: (w, t) => calls.push(['watch', t.key]) },
     dialog: { showSaveDialog: async () => { fs.mkdirSync(path.join(dir, 'Saved')); return { canceled: false, filePath: path.join(dir, 'Saved', 'copy.jpg') }; } },
     ShareMenu: function (item) { calls.push(['share', item.filePaths]); this.popup = (o) => calls.push(['popup', o.x, o.y]); }
   });
@@ -71,6 +73,11 @@ test('a card is created, shown once the page says how big the picture is, and la
   await t.act({ action: 'loaded', w: 4000, h: 3000 });
   assert.equal(t.win.bounds.at(-1)[0].x, 100, 'a second measuring (after a crop) resizes in place');
   assert.equal((await t.act({ action: 'loaded', w: 1, h: 1 }, 99)).ok, false, 'only the card itself can press its buttons');
+  assert.deepEqual(t.calls.find((c) => c[0] === 'watch'), ['watch', `flick:${id}`], 'it moves like the other floating cards (mouse, throw to the trash)');
+  assert.equal(t.cards.handTarget({ x: 5000, y: 5000 }), null, 'a hand away from the card grabs nothing');
+  const grab = t.cards.handTarget({ x: 150, y: 200 });
+  assert.equal(grab.key, `flick:${id}`); assert.deepEqual(grab.position(), { x: 100, y: 120, width: 372, height: 440 });
+  grab.move(300.4, 210.6); assert.deepEqual(t.calls.find((c) => c[0] === 'pos'), ['pos', 300, 211], 'a hand grab moves the card');
   t.cleanup();
 });
 
@@ -115,7 +122,11 @@ test('a HEIC photo is drawn from a JPEG preview; save as, share, copy, Finder an
   assert.equal(fs.readFileSync(path.join(t.dir, 'Saved', 'copy.jpg')).length, 30, 'a copy is saved where chosen');
   await t.act({ action: 'share', x: 40.4, y: 300.6 });
   assert.deepEqual(t.calls.filter((c) => c[0] === 'share' || c[0] === 'popup'), [['share', [t.file]], ['popup', 40, 301]]);
-  assert.equal((await t.act({ action: 'copy' })).ok, true);
+  const PNGB = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  assert.equal((await t.act({ action: 'copy', bytes: PNGB })).ok, true);
+  assert.deepEqual(t.calls.filter((c) => c[0] === 'copy').at(-1), ['copy', ['image/png'], 11, 'image/png'], 'the picture the page drew goes on the clipboard as a PNG');
+  assert.equal((await t.act({ action: 'copy' })).ok, true, 'without it the file is read instead');
+  assert.equal(t.calls.filter((c) => c[0] === 'copy').at(-1)[2], 13);
   await t.act({ action: 'reveal' }); assert.deepEqual(t.calls.find((c) => c[0] === 'reveal'), ['reveal', t.file]);
   assert.equal((await t.act({ action: 'nonsense' })).ok, false);
   await t.act({ action: 'trash' });

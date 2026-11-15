@@ -51,8 +51,8 @@ function fit(w, h, { maxW = 344, maxH = 360, chrome = 182, width = 372 } = {}) {
 const isImageBytes = (b) => b.length > 8 && ((b[0] === 0xff && b[1] === 0xd8) || (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47));
 
 class FlickCards {
-  constructor({ BrowserWindow, screen, ipcMain, shell, clipboard, nativeImage, dialog, ShareMenu, preload, page, previewDir = path.join(os.tmpdir(), 'relay-flick-preview'), run = execFile, fsApi = fs, log = () => {}, margin = 18 }) {
-    Object.assign(this, { BrowserWindow, screen, shell, clipboard, nativeImage, dialog, ShareMenu, preload, page, previewDir, run, fsApi, log, margin });
+  constructor({ BrowserWindow, screen, ipcMain, shell, clipboard, ClipboardItem, nativeImage, dialog, ShareMenu, preload, page, motion = null, previewDir = path.join(os.tmpdir(), 'relay-flick-preview'), run = execFile, fsApi = fs, log = () => {}, margin = 18 }) {
+    Object.assign(this, { BrowserWindow, screen, shell, clipboard, ClipboardItem, nativeImage, dialog, ShareMenu, preload, page, motion, previewDir, run, fsApi, log, margin });
     this.cards = new Map(); // window contents id -> card
     this.opened = 0;
     ipcMain.handle('flickcard:act', (event, req) => this.act(event.sender.id, req));
@@ -80,11 +80,28 @@ class FlickCards {
     const wid = win.webContents.id;
     this.cards.set(wid, card);
     win.on('closed', () => this.cards.delete(wid));
-    win.setAlwaysOnTop(true, 'floating');
+    win.setAlwaysOnTop(true, 'screen-saver', 1);
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.motion?.watchWindow(win, this.target(card)); // dragging with the mouse, flicking it into the corner trash, and hand grabs all go through the shared floating-card motion
     win.webContents.once('did-finish-load', () => this.push(card));
     await win.loadFile(this.page);
     return card.id;
+  }
+
+  // What the shared floating-card motion moves (the key makes it one card's drag).
+  target(card) { return { key: `flick:${card.id}`, close: () => { if (!card.win.isDestroyed()) card.win.close(); } }; }
+
+  // The card under a point on the screen, for a hand grab (a fist or pinch held on it moves it).
+  handTarget(point) {
+    for (const card of [...this.cards.values()].reverse()) {
+      const w = card.win;
+      if (w.isDestroyed() || !w.isVisible()) continue;
+      const b = w.getBounds();
+      if (point.x >= b.x && point.x <= b.x + b.width && point.y >= b.y && point.y <= b.y + b.height) {
+        return { ...this.target(card), alive: () => !w.isDestroyed(), position: () => w.getBounds(), move: (x, y) => { if (!w.isDestroyed()) w.setPosition(Math.round(x), Math.round(y)); } };
+      }
+    }
+    return null;
   }
 
   state(card) {
@@ -129,10 +146,15 @@ class FlickCards {
         case 'close': card.win.close(); return { ok: true };
         case 'reveal': this.shell.showItemInFolder(card.file); return { ok: true };
         case 'open': await this.shell.openPath(card.file); return { ok: true };
-        case 'copy': {
-          const img = this.nativeImage.createFromPath(card.preview || card.file);
-          if (img.isEmpty()) return fail('Could not copy that photo.');
-          this.clipboard.writeImage(img); return { ok: true, message: 'Copied.' };
+        case 'copy': { // the page draws the picture the right way up (it knows the photo's rotation) and sends it as a PNG; without that, the file is read here
+          let png = Buffer.from(req.bytes || []);
+          if (!isImageBytes(png) || png.length > 80 * 1024 * 1024) {
+            const img = this.nativeImage.createFromPath(card.preview || card.file);
+            png = img.isEmpty() ? null : img.toPNG();
+          }
+          if (!png) return fail('Could not copy that photo.');
+          await this.clipboard.write([new this.ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })]);
+          return { ok: true, message: 'Copied.' };
         }
         case 'share': {
           const m = new this.ShareMenu({ filePaths: [card.file] });

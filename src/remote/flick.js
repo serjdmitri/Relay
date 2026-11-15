@@ -5,8 +5,7 @@
 // A push mostly at the Mac or away from it (z) has no side: the photo lands in the middle.
 function directionOf(x, y, z = 0) {
   const ax = Math.abs(Number(x) || 0), ay = Math.abs(Number(y) || 0), az = Math.abs(Number(z) || 0);
-  if (Math.max(ax, ay, az) < 1) return 'center';
-  if (az > ax && az > ay) return 'center';
+  if (Math.hypot(ax, ay) < Math.max(2, 0.3 * az)) return 'center'; // hardly any push sideways or up and down: it was at the Mac or away from it
   if (ax >= ay) return x > 0 ? 'right' : 'left';
   return y > 0 ? 'up' : 'down';
 }
@@ -85,7 +84,9 @@ function startPage() {
     }
     sending = false;
     setTimeout(render, 600);
-    setTimeout(() => say(ok ? (ok === 1 ? 'Sent to your Mac.' : `${ok} photos sent to your Mac.`) + (last ? ' ' + last : '') : (last || 'Nothing was sent.'), !ok), 650);
+    const side = { left: 'the left', right: 'the right', up: 'the top', down: 'the bottom' }[dir];
+    const where = side ? ` It lands on ${side} of your Mac screen.` : '';
+    setTimeout(() => say(ok ? (ok === 1 ? 'Sent to your Mac.' : `${ok} photos sent to your Mac.`) + where + (last ? ' ' + last : '') : (last || 'Nothing was sent.'), !ok), 650);
   }
 
   $('pick').addEventListener('change', () => { files = [...$('pick').files].filter((f) => /^image\//.test(f.type) || /\.(heic|heif|jpe?g|png|gif|webp)$/i.test(f.name)); $('pick').value = ''; render(); });

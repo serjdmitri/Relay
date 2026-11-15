@@ -30,6 +30,8 @@ test('a flick says which side of the Mac screen it is aimed at: left, right, up,
   assert.equal(flick(2, 18, 1), 'up');
   assert.equal(flick(2, -18, 1), 'down');
   assert.equal(flick(2, 3, -18), 'center', 'straight at or away from the Mac has no side');
+  assert.equal(flick(14, 2, -18), 'right', 'a flick towards the Mac with a clear sideways push still has a side');
+  assert.equal(flick(1, -12, -18), 'down');
   const d = new FlickDetector(); d.push(18, 0, 0, 0); d.push(-10, 0, 0, 60); d.push(1, 0, 0, 120);
   assert.equal(d.direction, 'right', 'the stop after the push goes the other way and does not count');
   assert.equal(directionOf(0.2, 0.1, 0.1), 'center');

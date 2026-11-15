@@ -110,6 +110,7 @@
     if (b.dataset.mode) { setMode(b.dataset.mode); return; }
     if (b.dataset.format) { setMode('main'); say('Changing the file type…'); run({ action: 'convert', format: b.dataset.format }); return; }
     if (b.dataset.act === 'share') { const r = b.getBoundingClientRect(); run({ action: 'share', x: r.left, y: r.bottom }); return; }
+    if (b.dataset.act === 'copy') { copyPicture(); return; }
     if (b.dataset.act) { run({ action: b.dataset.act }); return; }
     if (b.id === 'cropcancel' || b.id === 'typeback') { setMode('main'); return; }
     if (b.id === 'keep') keepCrop();
@@ -142,6 +143,18 @@
     drag = null;
     if (rect && rect.w > 12 && rect.h > 12) $('keep').disabled = false; else { rect = null; paint(); }
   });
+
+  // copy: the picture as drawn here (the right way up), at most 4096 pixels on its longest side
+  async function copyPicture() {
+    try {
+      const k = Math.min(1, 4096 / Math.max(pic.naturalWidth, pic.naturalHeight, 1));
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(pic.naturalWidth * k)); c.height = Math.max(1, Math.round(pic.naturalHeight * k));
+      c.getContext('2d').drawImage(pic, 0, 0, c.width, c.height);
+      const blob = await new Promise((resolve) => c.toBlob(resolve, 'image/png'));
+      if (blob) { run({ action: 'copy', bytes: new Uint8Array(await blob.arrayBuffer()) }); return; }
+    } catch { /* the app reads the file instead */ }
+    run({ action: 'copy' });
+  }
 
   async function keepCrop() {
     if (!rect) return;

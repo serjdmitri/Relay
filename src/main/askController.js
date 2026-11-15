@@ -697,6 +697,7 @@ class AskController {
   async flickArrived(bytes, info, name = '', dir = '') {
     const os = require('os'), fs = require('fs');
     const { cleanName, uniquePath } = require('./flickCards');
+    this.diag?.log('flick-arrived', `${info.ext}, ${bytes.length} bytes, side ${dir || 'not sent'}`); // so "it always lands in the middle" can be traced to the phone or the Mac
     let saved = '';
     try { // the original, as it was sent, under the name it had on the phone
       const folder = this.flickDir || path.join(os.homedir(), 'Downloads'); fs.mkdirSync(folder, { recursive: true });

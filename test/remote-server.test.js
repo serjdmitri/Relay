@@ -202,6 +202,19 @@ test('/api/send takes a photo or text from the share sheet (base64), only from a
   s.stop();
 });
 
+test('a flicked photo reaches Relay with its flick mark and the side it was flicked towards (and a made-up side is dropped)', async () => {
+  const { s, post, pairing } = await make();
+  const got = [];
+  s.control.send = async (what) => { got.push(what); return { ok: true }; };
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'Phone' })).json();
+  assert.equal((await post('/api/send', { data: 'aGk=', name: 'a.jpg', flick: true, dir: 'left' }, token)).status, 200);
+  assert.equal((await post('/api/send', { data: 'aGk=', flick: true, dir: 'sideways' }, token)).status, 200);
+  assert.equal((await post('/api/send', { data: 'aGk=', flick: true }, token)).status, 200);
+  assert.deepEqual(got.map((w) => [w.flick, w.dir]), [[true, 'left'], [true, ''], [true, '']]);
+  s.stop();
+});
+
 test('the phone can list, approve and delete what Relay learned, but not edit it, and only when paired', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-remote-'));
   fs.writeFileSync(path.join(root, 'index.html'), '<title>Relay</title>');
