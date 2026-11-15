@@ -209,6 +209,7 @@ class AskController {
     this.agents = new AgentManager({ run: (a, signal) => this.runAgentTask(a, signal), onChange: () => { this.overlay.agents(this.agents.view()); this.onChange(); this.statusChanged(); }, onFinish: (a) => this.agentFinished(a) });
     this.cardPanel = null; // set by the app: the answer card window
     this.holos = null; // set by the app: the holograms
+    this.flickCards = null; // set by the app: the cards for photos flicked from the phone
     this.modelCache = null; // set by the app: models already made from photos
     this.onAgentDone = null; // set by the app: a notification when an agent finishes
     this.onLanguage = null; // set by the app: the microphone's language changed (a locale id)
@@ -678,7 +679,7 @@ class AskController {
     if (!d.ok) return d;
     const info = inbox.detect(d.bytes);
     if (!info) return { ok: false, error: 'Relay cannot read that kind of file from the phone yet (photos, PDFs, web addresses and text work).' };
-    if (what.flick && info.kind === 'image') return this.flickArrived(d.bytes, info, what.name);
+    if (what.flick && info.kind === 'image') return this.flickArrived(d.bytes, info, what.name, what.dir);
     let file = '';
     if (info.kind !== 'text') {
       const dir = path.join(this.inboxDir || path.join(require('os').tmpdir(), 'relay-inbox'));
@@ -691,27 +692,20 @@ class AskController {
     return { ok: true, id };
   }
 
-  // A photo flicked from the phone: it arrives as a hologram (drawn as light first, then it takes its colours), and the original is kept in Downloads. No request is made; it is only delivered.
-  async flickArrived(bytes, info, name = '') {
+  // A photo flicked from the phone: the original goes straight into Downloads and is shown as a card (save, share, crop, change type, rename...) on the side of the screen it was flicked towards.
+  // No request is made; it is only delivered. dir: left, right, up, down or center.
+  async flickArrived(bytes, info, name = '', dir = '') {
     const os = require('os'), fs = require('fs');
+    const { cleanName, uniquePath } = require('./flickCards');
     let saved = '';
-    try { // the original, as it was sent
-      const dir = this.flickDir || path.join(os.homedir(), 'Downloads', 'Relay Flick'); fs.mkdirSync(dir, { recursive: true });
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      saved = path.join(dir, `From phone ${stamp}.${info.ext}`); fs.writeFileSync(saved, bytes, { mode: 0o600 });
-    } catch { /* it is still shown */ }
-    // what is drawn: a picture the page can decode (a HEIC photo is made into a JPEG first)
-    let shown = bytes, mime = info.ext === 'png' ? 'image/png' : info.ext === 'gif' ? 'image/gif' : info.ext === 'webp' ? 'image/webp' : 'image/jpeg';
-    if (info.ext === 'heic') {
-      const inbox = require('./remote/inbox');
-      try {
-        const file = await inbox.keep(path.join(this.inboxDir || path.join(os.tmpdir(), 'relay-inbox')), bytes, info, { convert: (a, b) => new Promise((resolve) => execFile('/usr/bin/sips', ['-s', 'format', 'jpeg', a, '--out', b], { timeout: 20000 }, (err) => resolve(!err))) });
-        shown = fs.readFileSync(file); mime = 'image/jpeg';
-      } catch { return { ok: false, error: 'Could not open that photo.' }; }
-    }
-    if (!this.holos) return { ok: false, error: 'Holograms are not ready.' };
-    const title = String(name || 'From your phone').replace(/\.[a-z0-9]{2,4}$/i, '').slice(0, 60) || 'From your phone';
-    await this.holos.show({ title, items: [{ kind: 'image', title, mime, bytes: shown }] });
+    try { // the original, as it was sent, under the name it had on the phone
+      const folder = this.flickDir || path.join(os.homedir(), 'Downloads'); fs.mkdirSync(folder, { recursive: true });
+      const typed = cleanName(name, 'x').replace(/\.x$/, '');
+      const base = typed && !/^(image|photo|unknown)$/i.test(typed) ? typed : `From phone ${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}`;
+      saved = uniquePath(folder, base, info.ext); fs.writeFileSync(saved, bytes);
+    } catch { return { ok: false, error: 'Could not save that photo to Downloads.' }; }
+    if (!this.flickCards) return { ok: false, error: 'The photo card is not ready, but it is saved in Downloads.', saved };
+    try { await this.flickCards.show({ file: saved, dir }); } catch { return { ok: false, error: 'Could not show that photo, but it is saved in Downloads.', saved }; }
     this.sound('Glass');
     return { ok: true, saved };
   }

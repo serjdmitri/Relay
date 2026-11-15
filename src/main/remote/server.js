@@ -11,7 +11,7 @@ const { isPrivateAddress } = require('./auth');
 const TYPES = { '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
 const MAP_FILES=['maplibre-gl.mjs','maplibre-gl-shared.mjs','maplibre-gl-worker.mjs','maplibre-gl.css','LICENSE.txt'];
-const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css','/navmath.js':'navmath.js','/navvoice.js':'navvoice.js','/wakeword.js':'wakeword.js', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/flick.html': 'flick.html', '/flick.js': 'flick.js', '/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
+const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css','/navmath.js':'navmath.js','/navvoice.js':'navvoice.js','/wakeword.js':'wakeword.js', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/flick.html': 'flick.html', '/flick.js': 'flick.js', '/flickstore.js': 'flickstore.js', '/flickhome.js': 'flickhome.js','/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
@@ -171,7 +171,7 @@ class RemoteServer {
       const b = await this.body(req, 45 * 1024 * 1024).catch(() => null);
       if (!b || !b.data) return this.json(res, 400, { error: 'Nothing to send, or it was too big (30 MB at most).' });
       const id = crypto.randomUUID();
-      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || ''), flick: b.flick === true }, device, id); return r; };
+      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || ''), flick: b.flick === true, dir: ['left', 'right', 'up', 'down', 'center'].includes(b.dir) ? b.dir : '' }, device, id); return r; };
       if (!(b.wait === true || /^(true|1|yes)$/i.test(String(b.wait ?? '')))) { const r = await start(); return r?.ok ? this.json(res, 200, { id }) : this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
       const answer = this.waitForAnswer(id, device);
       const r = await start();

@@ -1655,6 +1655,7 @@ app.whenReady().then(() => {
   lockWatch.refresh();
   setInterval(() => { if (store.get('settings.remote.enabled')) lockWatch.refresh(); }, 8000);
   ask.holos = holos;
+  ask.flickCards = new (require('./flickCards').FlickCards)({ BrowserWindow, screen, ipcMain, shell, clipboard, nativeImage, dialog, ShareMenu: require('electron').ShareMenu, preload: path.join(__dirname, 'flickCardPreload.js'), page: path.join(__dirname, '../renderer/flick-card.html'), log: (k, m) => diag.log(k, m) });
   ask.stickies = new Stickies({ storage: { get: (k) => store.get(k), set: (k, v) => { store.data[k] = v; store.save(); } } });
   stickyPanel = new StickyPanel({ motion: floatingMotion, stickies: ask.stickies, preload: path.join(__dirname, 'preload.js') });
   stickyPanel.sync(); // the stickies you left are still there

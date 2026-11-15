@@ -14,7 +14,9 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 0 0; color:
 header #devtitle { flex: 1; }
 header button { background: none; border: 0; color: var(--dim); font-size: 22px; padding: 4px 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #666; } .dot.on { background: #00d4ff; } .dot.bad { background: var(--warn); }
-#home { position: relative; }
+#home { position: relative; padding-bottom: calc(env(safe-area-inset-bottom) * .4 + 4px); } /* the lock, music and typing buttons sit low, near the bottom edge */
+#flickfab { position: fixed; left: 70px; bottom: calc(env(safe-area-inset-bottom) * .4 + 6px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+#flickfab:active { color: #00141c; background: var(--acc); }
 /* the reactor sits in the exact middle of the screen; everything else is placed around it */
 #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; }
 #reactor { position: relative; pointer-events: auto; width: min(80vw, 40vh); aspect-ratio: 1; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -35,9 +37,9 @@ header, #top, #bottom { position: relative; z-index: 1; }
 #bar input { text-align: left; font-size: 17px; }
 #send { width: 52px; border-radius: 50%; border: 0; background: var(--acc); color: #00141c; font-size: 24px; font-weight: 700; }
 @media (orientation: portrait) { #kb { display: none !important; } } /* upright: the phone's own keyboard */
-#qtog { position: fixed; left: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+#qtog { position: fixed; left: 14px; bottom: calc(env(safe-area-inset-bottom) * .4 + 6px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
 body.noquick #quick, body.noquick #player, body.noquick #vol { display: none; } /* the music and shortcut buttons, hidden with the button at the bottom left */
-#kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
+#kbd { position: fixed; right: 14px; bottom: calc(env(safe-area-inset-bottom) * .4 + 6px); z-index: 3; width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .75); color: var(--dim); display: grid; place-items: center; box-shadow: 0 0 14px rgba(0, 212, 255, .2); }
 #kbd[aria-pressed=true] { color: #00141c; background: var(--acc); }
 /* the big lock: open while the Mac is open, closed when it is locked */
 #lock { width: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: var(--acc); padding: 2px 18px 0; transition: color .25s; }
@@ -66,8 +68,7 @@ body.noquick #quick, body.noquick #player, body.noquick #vol { display: none; } 
 #vbar button { flex: 1; padding: 14px 0; border-radius: 14px; border: 1px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .7); color: var(--ink); font-size: 17px; font-weight: 600; letter-spacing: .08em; }
 #vbar button:active { background: var(--acc); color: #00141c; }
 #vmsg { text-align: center; min-height: 1.4em; padding: 0 20px; font-size: 14px; }
-#flickbtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-left: auto; margin-right: 6px; }
-#holobtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-right: 6px; }
+#holobtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-left: auto; margin-right: 6px; }
 
 #vtools { display: flex; gap: 10px; padding: 6px 20px 0; }
 #vtools button { flex: 1; padding: 10px 0; border-radius: 12px; border: 1px solid rgba(0, 212, 255, .35); background: rgba(0, 30, 50, .55); color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: .06em; }
@@ -204,4 +205,4 @@ body.kbopen main { visibility: hidden; } /* nothing from the page shows through 
 
 /* Compact music controls; touch targets remain usable without shifting the reactor. */
 #player{gap:10px;padding-top:2px}#player button{width:44px;height:44px}#player .big{width:48px;height:48px}#player svg{max-width:24px;max-height:24px}#vol{gap:8px;padding-top:2px}#volume{height:24px}
-@media(orientation:portrait){#bottom{max-height:calc(50dvh - min(40vh,80vw)/2 - 20px);overflow-y:auto;flex-shrink:0;scrollbar-width:thin}#player{flex-shrink:0}#quick{flex-shrink:0}}
+@media(orientation:portrait){#bottom{max-height:calc(50dvh - min(40vh,80vw)/2 - 20px + env(safe-area-inset-bottom) * .6);overflow-y:auto;flex-shrink:0;scrollbar-width:thin}#player{flex-shrink:0}#quick{flex-shrink:0}}

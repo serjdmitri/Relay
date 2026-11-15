@@ -2,6 +2,7 @@
 
 ## 0.38.18
 
+- **Flick photos from your phone to your Mac.** A round Flick button at the bottom of the Relay phone page opens your photos (after the first time you turn on flick motion, it asks for photos straight away). Flick the phone, or swipe the photos, left, right, up or down: the photo is saved in Downloads and lands on that side of your Mac screen as a card with Save as, Share, Crop, Type (JPG, PNG, HEIC, TIFF), Rename, Copy, Finder and Trash. It arrives with the hologram reveal: cyan outlines first, then the colours flood in. Crop and Type keep the original beside the new file. The lock, music and typing buttons on the phone page sit lower.
 - **A dedicated "Hey Jarvis" wake-word model.** openWakeWord (with a Silero voice-activity filter) now listens for the wake phrase on this Mac, with a strictness slider, a near-miss log, and the old speech-based wake word as a fallback. Fixed a startup loop that kept the model from ever starting, and it now retries 10 minutes after a failure.
 - **Morning briefing you choose.** Per-part spoken toggles, weather shown but not spoken, the first open of the day says everything and later opens only say what is new.
 - **Two-finger desktop swipe.** Two fingers up, point them at the camera, turn them left or right: one swipe is one desktop. Owner-gated (30 second recognition window, a stranger blocks it), with a cursor badge showing what the camera sees.
