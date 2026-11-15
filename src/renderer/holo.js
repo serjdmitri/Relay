@@ -69,6 +69,41 @@ function holoMaterial(tint, map, body = 0) {
     fragmentShader: 'uniform float time; uniform float reveal; uniform float originY; uniform vec3 tint; uniform sampler2D map; uniform float hasMap; uniform float mapSrgb; uniform float body; uniform float boost; uniform float clipOn; uniform vec3 clipN; uniform float clipD; varying vec3 vN; varying vec3 vV; varying float vY; varying vec2 vUv; varying vec3 vW; void main() { float ry = vY - originY; if (ry > reveal) discard; float cd = dot(clipN, vW) + clipD; if (clipOn > 0.5 && cd > 0.0) discard; float cutGlow = clipOn > 0.5 ? 1.0 - smoothstep(0.0, 0.05, abs(cd)) : 0.0; float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float scan = 0.72 + 0.28 * sin(vY * 90.0 - time * 3.0); float edge = smoothstep(reveal - 0.18, reveal, ry); vec3 base = tint; if (hasMap > 0.5) { base = texture2D(map, vUv).rgb; if (mapSrgb > 0.5) base = pow(base, vec3(0.4545)); base *= 1.25; } if (body >= 1.0) { float flick1 = 0.97 + 0.03 * sin(time * 37.0); vec3 lit = base * (0.78 + 0.22 * scan) * (0.85 + 0.25 * (1.0 - f)); lit += vec3(0.0, 0.7, 1.0) * f * 0.55 + vec3(edge) + vec3(0.0, 0.35, 0.5) * boost + vec3(0.3, 0.9, 1.0) * cutGlow; gl_FragColor = vec4(lit * flick1, 1.0); return; }  float a = (0.10 + body + f * 0.9) * scan + edge * 0.9 + boost * 0.5 + cutGlow * 0.8; a = min(a, 1.0); float flick = 0.95 + 0.05 * sin(time * 37.0); gl_FragColor = vec4(base * (0.55 + f * 0.8) + vec3(0.0, 0.25, 0.35) * f + vec3(edge) + vec3(0.0, 0.4, 0.6) * boost + vec3(0.3, 0.9, 1.0) * cutGlow, a * flick); }'
   });
 }
+// A photo that arrives as a hologram: first it is only light (its outlines picked out in cyan, scan lines running over it), then its real colours flood in from the bottom.
+// fill goes from 0 (all hologram) to 1.1 (all colour); photoFx moves it with time.
+const photoFx = [];
+function photoMaterial(tex) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, map: { value: tex }, texel: { value: new THREE.Vector2(1 / Math.max(1, tex.image.width), 1 / Math.max(1, tex.image.height)) }, fill: { value: 0 }, srgb: { value: tex.colorSpace === THREE.SRGBColorSpace ? 1 : 0 } },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: 'varying vec2 vUv; varying float vY; void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vY = wp.y; gl_Position = projectionMatrix * viewMatrix * wp; }',
+    fragmentShader: 'uniform float time; uniform float reveal; uniform float originY; uniform sampler2D map; uniform vec2 texel; uniform float fill; uniform float srgb; varying vec2 vUv; varying float vY;' +
+      'float lum(vec2 o) { vec3 s = texture2D(map, vUv + o).rgb; return dot(s, vec3(0.299, 0.587, 0.114)); }' +
+      'void main() { if (vY - originY > reveal) discard;' +
+      ' vec3 col = texture2D(map, vUv).rgb; if (srgb > 0.5) col = pow(col, vec3(0.4545));' +
+      ' float a = lum(vec2(-texel.x, -texel.y)), b = lum(vec2(0.0, -texel.y)), c = lum(vec2(texel.x, -texel.y)), d = lum(vec2(-texel.x, 0.0)), f = lum(vec2(texel.x, 0.0)), g = lum(vec2(-texel.x, texel.y)), h = lum(vec2(0.0, texel.y)), i = lum(vec2(texel.x, texel.y));' +
+      ' float gx = (c + 2.0 * f + i) - (a + 2.0 * d + g), gy = (g + 2.0 * h + i) - (a + 2.0 * b + c);' +
+      ' float edge = smoothstep(0.08, 0.5, length(vec2(gx, gy)) * 2.0);' +
+      ' float l = dot(col, vec3(0.299, 0.587, 0.114)); float scan = 0.7 + 0.3 * sin(vUv.y * 220.0 - time * 4.0);' +
+      ' vec3 holo = vec3(0.05, 0.55, 0.8) * (0.15 + 0.7 * l) * scan + vec3(0.35, 0.95, 1.0) * edge * 1.2;' +
+      ' float holoA = clamp(0.28 + 0.5 * l + edge, 0.0, 0.95);' +
+      ' float k = 1.0 - smoothstep(fill - 0.07, fill, vUv.y);' +
+      ' float line = exp(-abs(vUv.y - fill) * 38.0) * step(0.001, fill) * step(fill, 1.08);' +
+      ' vec3 rgb = mix(holo, col * 1.15, k) + vec3(0.3, 0.9, 1.0) * line * 0.9;' +
+      ' float alpha = min(1.0, mix(holoA, 1.0, k) + line * 0.6);' +
+      ' gl_FragColor = vec4(rgb * (0.97 + 0.03 * sin(time * 37.0)), alpha); }'
+  });
+}
+// The photo's bytes as a texture (the biggest side at most 2048 pixels, flipped so the picture is the right way up on the plane).
+async function photoTexture(bytes, mime) {
+  const blob = new Blob([bytes], { type: mime || 'image/jpeg' });
+  let bm = await createImageBitmap(blob, { imageOrientation: 'flipY' });
+  const k = Math.min(1, 2048 / Math.max(bm.width, bm.height));
+  if (k < 1) { const small = await createImageBitmap(blob, { imageOrientation: 'flipY', resizeWidth: Math.round(bm.width * k), resizeHeight: Math.round(bm.height * k), resizeQuality: 'high' }); bm.close?.(); bm = small; }
+  const tex = new THREE.Texture(bm);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  return tex;
+}
 function solidMaterial(color) { return new THREE.MeshStandardMaterial({ color: color || 0xd7e3ea, roughness: 0.5, metalness: 0.15, side: THREE.DoubleSide, clippingPlanes: clipPlanes }); }
 
 // ---------- building the models ----------
@@ -111,6 +146,14 @@ async function buildItem(it) {
     g.add(gltf.scene);
     ud.meshes = [];
     gltf.scene.traverse((o) => { if (o.isMesh) ud.meshes.push(o); });
+  } else if (it.kind === 'image') {
+    // A photo sent from the phone: a flat picture that appears as a hologram first and then takes its colours.
+    const tex = await photoTexture(it.bytes, it.mime);
+    const w = tex.image.width, h = tex.image.height, big = Math.max(w, h);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry((w / big) * 2, (h / big) * 2), solid ? new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }) : photoMaterial(tex));
+    g.add(mesh);
+    ud.meshes = [mesh];
+    if (!solid) photoFx.push({ u: mesh.material.uniforms.fill, t0: performance.now() });
   } else if (it.kind === 'cad') {
     // A designed model: shapes added together, holes cut out (see holo-cad.js). Its shapes can be edited here.
     const view = new CadView({ makeMat });
@@ -167,6 +210,7 @@ const intros = []; // models flying in to join
 async function rebuild() {
   const mine = ++building;
   animated.length = 0; // the parts that spin and the name tags belong to what is built next
+  photoFx.length = 0;
   labels.length = 0;
   const wraps = await Promise.all(items.map(buildItem));
   if (mine !== building) return; // a newer one was asked for while this loaded
@@ -1196,7 +1240,7 @@ function frame(now) {
   const span = 1.3 * kFit * userScale;
   uniforms.originY.value = anchor.position.y - span;
   uniforms.reveal.value = -0.2 + (1 - Math.pow(1 - t, 3)) * (2 * span + 0.6); // the build sweep, from the bottom up
-  const spinning = ui.spin && !spinPause && !exploded && !carried && !editing && !clip.on && now - lastTouch > ui.spinDelay * 1000;
+  const spinning = ui.spin && !items.every((i) => i.kind === 'image') && !spinPause && !exploded && !carried && !editing && !clip.on && now - lastTouch > ui.spinDelay * 1000;
   spinRate += ((spinning ? 0.35 : 0) - spinRate) * Math.min(1, dt * 2.2); // eases in and out instead of jerking
   if (spinRate > 0.003) { qSpin.setFromAxisAngle(axisY, dt * spinRate); holo.quaternion.premultiply(qSpin).normalize(); orient.copy(holo.quaternion); }
   anchor.position.y = anchorY + Math.sin(now / 900) * 0.03;
@@ -1216,6 +1260,7 @@ function frame(now) {
   if (clip.on) updateClip();
   updateMeasure();
   placeNotes();
+  for (const f of photoFx) { const p = Math.min(1, Math.max(0, (now - f.t0 - 1800) / 2200)); f.u.value = (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2) * 1.12; } // the colours start about two seconds in, then flood up over two more
   for (const a of animated) { a.o.rotation.x += rad(a.spin[0]) * dt; a.o.rotation.y += rad(a.spin[1]) * dt; a.o.rotation.z += rad(a.spin[2]) * dt; }
   renderer.render(scene, camera);
   if (tap) tap();

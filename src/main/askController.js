@@ -678,6 +678,7 @@ class AskController {
     if (!d.ok) return d;
     const info = inbox.detect(d.bytes);
     if (!info) return { ok: false, error: 'Relay cannot read that kind of file from the phone yet (photos, PDFs, web addresses and text work).' };
+    if (what.flick && info.kind === 'image') return this.flickArrived(d.bytes, info, what.name);
     let file = '';
     if (info.kind !== 'text') {
       const dir = path.join(this.inboxDir || path.join(require('os').tmpdir(), 'relay-inbox'));
@@ -688,6 +689,31 @@ class AskController {
     const text = inbox.requestText({ info, instruction: what.text, text: info.kind === 'text' ? d.bytes.toString('utf8') : '', file });
     await this.remoteAsk(text, device, id);
     return { ok: true, id };
+  }
+
+  // A photo flicked from the phone: it arrives as a hologram (drawn as light first, then it takes its colours), and the original is kept in Downloads. No request is made; it is only delivered.
+  async flickArrived(bytes, info, name = '') {
+    const os = require('os'), fs = require('fs');
+    let saved = '';
+    try { // the original, as it was sent
+      const dir = this.flickDir || path.join(os.homedir(), 'Downloads', 'Relay Flick'); fs.mkdirSync(dir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      saved = path.join(dir, `From phone ${stamp}.${info.ext}`); fs.writeFileSync(saved, bytes, { mode: 0o600 });
+    } catch { /* it is still shown */ }
+    // what is drawn: a picture the page can decode (a HEIC photo is made into a JPEG first)
+    let shown = bytes, mime = info.ext === 'png' ? 'image/png' : info.ext === 'gif' ? 'image/gif' : info.ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    if (info.ext === 'heic') {
+      const inbox = require('./remote/inbox');
+      try {
+        const file = await inbox.keep(path.join(this.inboxDir || path.join(os.tmpdir(), 'relay-inbox')), bytes, info, { convert: (a, b) => new Promise((resolve) => execFile('/usr/bin/sips', ['-s', 'format', 'jpeg', a, '--out', b], { timeout: 20000 }, (err) => resolve(!err))) });
+        shown = fs.readFileSync(file); mime = 'image/jpeg';
+      } catch { return { ok: false, error: 'Could not open that photo.' }; }
+    }
+    if (!this.holos) return { ok: false, error: 'Holograms are not ready.' };
+    const title = String(name || 'From your phone').replace(/\.[a-z0-9]{2,4}$/i, '').slice(0, 60) || 'From your phone';
+    await this.holos.show({ title, items: [{ kind: 'image', title, mime, bytes: shown }] });
+    this.sound('Glass');
+    return { ok: true, saved };
   }
 
   // The shapes of a designed hologram, for editing on the phone.

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050d14">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/style.css">
+<title>Flick to your Mac</title>
+<style>
+  .flick-page main { display: flex; flex-direction: column; min-height: 100dvh; padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px); gap: 14px; }
+  .flick-page header { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .flick-page .back { color: inherit; text-decoration: none; font-size: 28px; line-height: 1; }
+  #pile { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 260px; touch-action: none; }
+  #pile .paper { position: absolute; width: min(70vw, 300px); aspect-ratio: 3 / 4; border-radius: 14px; background: #0d2233 center / cover no-repeat; border: 1px solid rgba(110, 231, 255, .55); box-shadow: 0 0 24px rgba(76, 194, 255, .35), 0 12px 30px rgba(0, 0, 0, .5); transition: transform .5s cubic-bezier(.2, .8, .2, 1), opacity .5s; }
+  #pile .paper.gone { transform: translateY(-120vh) scale(.7) rotate(-6deg); opacity: 0; }
+  #empty { text-align: center; opacity: .75; max-width: 260px; line-height: 1.4; }
+  #msg { text-align: center; min-height: 22px; opacity: .85; }
+  #msg.err { color: #ff8a8a; opacity: 1; }
+  .flick-actions { display: flex; flex-direction: column; gap: 10px; }
+  .flick-actions button, .flick-actions label { display: block; text-align: center; padding: 14px; border-radius: 14px; border: 1px solid rgba(110, 231, 255, .5); background: rgba(14, 34, 52, .9); color: #e9f8ff; font: inherit; font-weight: 600; }
+  .flick-actions button.primary { background: #1c8fd6; border-color: #4cc2ff; }
+  .flick-actions button[hidden] { display: none; }
+  .flick-actions input { display: none; }
+</style>
+</head>
+<body class="flick-page">
+<main id="page" hidden>
+  <header><a class="back" href="/" aria-label="Back">&#8249;</a><span>Flick to your Mac</span></header>
+  <section id="pile" aria-live="polite"><p id="empty">Choose photos, then flick your phone forward (or swipe the stack up). They arrive on your Mac as holograms.</p></section>
+  <div id="msg"></div>
+  <div class="flick-actions">
+    <button id="motion" type="button" hidden>Turn on flick (motion)</button>
+    <label for="pick">Choose photos<input id="pick" type="file" accept="image/*" multiple></label>
+    <button id="go" type="button" class="primary" hidden>Send now</button>
+  </div>
+</main>
+<script src="/flick.js"></script>
+</body>
+</html>

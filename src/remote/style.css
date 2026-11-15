@@ -66,7 +66,8 @@ body.noquick #quick, body.noquick #player, body.noquick #vol { display: none; } 
 #vbar button { flex: 1; padding: 14px 0; border-radius: 14px; border: 1px solid rgba(0, 212, 255, .45); background: rgba(0, 30, 50, .7); color: var(--ink); font-size: 17px; font-weight: 600; letter-spacing: .08em; }
 #vbar button:active { background: var(--acc); color: #00141c; }
 #vmsg { text-align: center; min-height: 1.4em; padding: 0 20px; font-size: 14px; }
-#holobtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-left: auto; margin-right: 6px; }
+#flickbtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-left: auto; margin-right: 6px; }
+#holobtn { color: var(--acc); font-size: 22px; text-decoration: none; margin-right: 6px; }
 
 #vtools { display: flex; gap: 10px; padding: 6px 20px 0; }
 #vtools button { flex: 1; padding: 10px 0; border-radius: 12px; border: 1px solid rgba(0, 212, 255, .35); background: rgba(0, 30, 50, .55); color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: .06em; }
