@@ -29,7 +29,7 @@ test('the card lands on the side it was flicked towards, stays on the screen, an
   const mid = landing('center', area, size); assert.equal(mid.x, (1440 - 372) / 2); assert.equal(mid.y, centreY);
   assert.equal(landing('right', area, size, 18, 1).x, landing('right', area, size, 18, 0).x - 26, 'the next card on that side sits a little further in');
   assert.equal(landing('left', { x: 0, y: 0, width: 300, height: 300 }, size).x, 0, 'a card bigger than the screen is kept at its corner');
-  const f = fit(4000, 3000); assert.equal(f.imgW, 344); assert.equal(f.imgH, 258); assert.equal(f.height, 258 + 182);
+  const f = fit(4000, 3000); assert.equal(f.imgW, 344); assert.equal(f.imgH, 258); assert.equal(f.height, 258 + 224);
   assert.ok(fit(3000, 4000).imgH <= 360); assert.equal(fit(0, 0).imgW > 0, true);
 });
 
@@ -132,4 +132,29 @@ test('a HEIC photo is drawn from a JPEG preview; save as, share, copy, Finder an
   await t.act({ action: 'trash' });
   assert.deepEqual(t.calls.find((c) => c[0] === 'trash'), ['trash', t.file]); assert.equal(t.win.destroyed, true, 'the card closes after the photo is in the Trash');
   t.cleanup();
+});
+
+test('erase keeps the cleaned picture beside the original as "<name> cleaned", never touches the original, and refuses what is not a picture', async () => {
+  const t = setup('IMG_5.jpg');
+  await t.cards.show({ file: t.file, dir: 'left' });
+  const before = fs.readFileSync(t.file);
+  const CLEAN = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 7)]);
+  assert.equal((await t.act({ action: 'erase', bytes: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), type: 'jpg' })).ok, false);
+  const ok = await t.act({ action: 'erase', bytes: new Uint8Array(CLEAN), type: 'jpg' });
+  assert.equal(ok.ok, true); assert.match(ok.message, /original is still there/);
+  const out = path.join(t.dir, 'IMG_5 cleaned.jpg');
+  assert.equal(fs.readFileSync(out).equals(CLEAN), true); assert.equal(fs.readFileSync(t.file).equals(before), true, 'the original is untouched');
+  assert.equal(t.sent.at(-1)[1].name, 'IMG_5 cleaned.jpg', 'the card now shows the cleaned picture');
+  const again = await t.act({ action: 'erase', bytes: new Uint8Array(CLEAN), type: 'png' });
+  assert.equal(again.ok, true); assert.equal(fs.existsSync(path.join(t.dir, 'IMG_5 cleaned.png')), true, 'cleaning a cleaned picture does not stack names');
+  assert.equal(fs.statSync(out).mode & 0o111, 0);
+  t.cleanup();
+});
+
+test('the card page has an Erase mode: a brush over the picture, mapped to the real pixels, filled by the shared inpaint code', () => {
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'src/renderer', f), 'utf8');
+  const html = read('flick-card.html'), js = read('flick-card.js');
+  assert.match(html, /<script src="inpaint\.js">/); assert.match(html, /data-mode="erase"/); assert.match(html, /id="remove"/);
+  assert.match(js, /window\.Inpaint\.inpaint/); assert.match(js, /action: 'erase'/); assert.match(js, /drawImage\(pic, 0, 0, W, H\)/, 'drawn from the picture, so its rotation is respected');
+  assert.match(html, /#imgwrap\.erasing \{[^}]*no-drag/, 'brush strokes do not drag the card');
 });

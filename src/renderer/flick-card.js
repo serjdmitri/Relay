@@ -12,7 +12,8 @@
   function setMode(m) {
     mode = m; rect = null; sel.hidden = true; $('keep').disabled = true;
     if (m === 'crop' || m === 'type') say('');
-    $('bar-main').hidden = m !== 'main'; $('bar-crop').hidden = m !== 'crop'; $('bar-type').hidden = m !== 'type';
+    $('bar-main').hidden = m !== 'main'; $('bar-crop').hidden = m !== 'crop'; $('bar-type').hidden = m !== 'type'; $('bar-erase').hidden = m !== 'erase';
+    wrap.classList.toggle('erasing', m === 'erase'); clearBrush(); if (m === 'erase') say('');
     $('name').hidden = m === 'rename'; $('info').hidden = m === 'rename'; $('rename').hidden = m !== 'rename';
     wrap.classList.toggle('cropping', m === 'crop');
     if (m === 'rename') { $('rename').value = st ? st.base : ''; $('rename').focus(); $('rename').select(); }
@@ -169,6 +170,40 @@
     setMode('main'); say('Cropping…');
     await run({ action: 'crop', bytes: new Uint8Array(await blob.arrayBuffer()), type: png ? 'png' : 'jpg' });
   }
+
+  // erase: paint over what to remove (drawn at the size it is shown), then the page cuts the picture and the painted part is filled from around it (inpaint.js)
+  const brush = $('brush'), bctx = brush.getContext('2d');
+  let painted = false, last = null;
+  function clearBrush() { const b = wrap.getBoundingClientRect(); brush.width = Math.max(1, Math.round(b.width)); brush.height = Math.max(1, Math.round(b.height)); bctx.clearRect(0, 0, brush.width, brush.height); painted = false; last = null; $('remove').disabled = true; }
+  const dab = (x, y) => { bctx.fillStyle = bctx.strokeStyle = '#ff3b6b'; bctx.lineCap = bctx.lineJoin = 'round'; bctx.lineWidth = Number($('size').value); bctx.beginPath(); if (last) { bctx.moveTo(last.x, last.y); bctx.lineTo(x, y); bctx.stroke(); } else { bctx.arc(x, y, bctx.lineWidth / 2, 0, 7); bctx.fill(); } last = { x, y }; painted = true; $('remove').disabled = false; };
+  const at = (e) => { const b = brush.getBoundingClientRect(); return { x: (e.clientX - b.left) * brush.width / b.width, y: (e.clientY - b.top) * brush.height / b.height }; };
+  brush.addEventListener('pointerdown', (e) => { if (mode !== 'erase') return; try { brush.setPointerCapture(e.pointerId); } catch { /* still works over the photo */ } last = null; const p = at(e); dab(p.x, p.y); });
+  brush.addEventListener('pointermove', (e) => { if (mode !== 'erase' || !last || !(e.buttons & 1)) return; const p = at(e); dab(p.x, p.y); });
+  brush.addEventListener('pointerup', () => { last = null; });
+  $('eraseundo').addEventListener('click', clearBrush);
+  $('erasecancel').addEventListener('click', () => setMode('main'));
+  $('remove').addEventListener('click', async () => {
+    if (!painted || !window.Inpaint) return;
+    say('Removing…');
+    await new Promise((r) => setTimeout(r, 30)); // let the message show before the work starts
+    try {
+      const k = Math.min(1, 4096 / Math.max(pic.naturalWidth, pic.naturalHeight, 1)), W = Math.max(1, Math.round(pic.naturalWidth * k)), H = Math.max(1, Math.round(pic.naturalHeight * k));
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(pic, 0, 0, W, H); // drawn from the picture itself, so the photo's rotation is respected
+      const m = document.createElement('canvas'); m.width = W; m.height = H; const mctx = m.getContext('2d', { willReadFrequently: true });
+      mctx.drawImage(brush, 0, 0, W, H);
+      const alpha = mctx.getImageData(0, 0, W, H).data, mask = new Uint8Array(W * H);
+      for (let i = 0; i < mask.length; i++) mask[i] = alpha[i * 4 + 3] > 40 ? 1 : 0;
+      const img = ctx.getImageData(0, 0, W, H);
+      const r = window.Inpaint.inpaint({ data: img.data, width: W, height: H, mask: window.Inpaint.grow(mask, W, H, Math.max(2, Math.round(W / 400))), radius: Math.max(5, Math.round(W / 300)) });
+      ctx.putImageData(new ImageData(r.data, W, H), 0, 0);
+      const png = !!st && (st.ext === 'png' || st.ext === 'gif');
+      const blob = await new Promise((resolve) => c.toBlob(resolve, png ? 'image/png' : 'image/jpeg', 0.95));
+      if (!blob) throw new Error('no picture');
+      setMode('main'); say('Saving…');
+      await run({ action: 'erase', bytes: new Uint8Array(await blob.arrayBuffer()), type: png ? 'png' : 'jpg' });
+    } catch { say('Could not clean that up.', true); }
+  });
 
   setMode('main');
 })();
