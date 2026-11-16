@@ -1,4 +1,4 @@
-/* global relay, icon, glyph, ICONS, LOGO, COLORS, h, esc, timeAgo, MOD_CODES, modsFromEvent */
+/* global SETTINGS_INDEX, PAGE_WORDS, relay, icon, glyph, ICONS, LOGO, COLORS, h, esc, timeAgo, MOD_CODES, modsFromEvent */
 let S = null; // latest state from main
 let page = new URLSearchParams(location.search).get('page') || 'home';
 let historyTab = 'requests';
@@ -24,13 +24,82 @@ let doctorData = null;
 let doctorBusy = false;
 const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 
+// Three groups, always on the left. The page ids never change (the main process opens pages by id); only the names and the grouping are new.
 const NAV = [
-  [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory'], ['connectors', 'Connectors'], ['remote', 'Remote'], ['calls', 'Calls']],
-  [['general', 'General'], ['speech', 'Speech'], ['shortcuts', 'Shortcuts'], ['permissions', 'Permissions'], ['doctor', 'Doctor']],
-  [['account', 'Account']]
+  ['Assistant', [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory']]],
+  ['Connections', [['connectors', 'Connectors'], ['calls', 'Phone calls'], ['remote', 'Phone remote']]],
+  ['Settings', [['general', 'General'], ['speech', 'Voice'], ['shortcuts', 'Shortcuts'], ['permissions', 'Privacy & permissions'], ['usage', 'Usage'], ['appearance', 'Appearance'], ['doctor', 'Doctor'], ['account', 'Account']]]
 ];
-const TITLES = Object.fromEntries(NAV.flat());
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', calls: 'calls', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', doctor: 'permissions', account: 'account' };
+const TITLES = Object.fromEntries(NAV.flatMap(([, items]) => items));
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', calls: 'calls', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', usage: 'usage', appearance: 'appearance', doctor: 'permissions', account: 'account' };
+
+// The five looks (Settings > Appearance). looks.css holds what each one does; the swatches only preview it.
+const LOOKS = [
+  { id: 'glass', name: 'Glass', tag: 'Translucent sidebar, flat content, a capsule for the selected item. Apple\'s Liquid Glass.', sw: ['#0d131a', '#1c8fd6', '#4cc2ff'] },
+  { id: 'instrument', name: 'Instrument', tag: 'Dense and precise: hairlines, a small icon dock, blue only for the active item.', sw: ['#0b0f14', '#1f2a35', '#4cc2ff'] },
+  { id: 'studio', name: 'Studio', tag: 'Calm and spacious: big rows, soft cards, easy to find things.', sw: ['#0d131a', '#151d27', '#4cc2ff'] },
+  { id: 'cockpit', name: 'Cockpit Lite', tag: 'Corner ticks and small caps; the Jarvis heritage, kept quiet.', sw: ['#070d13', '#14313f', '#00d4ff'] },
+  { id: 'buddy', name: 'Buddy', tag: 'Rounded, colour-coded sections and a friendly feel.', sw: ['#0e141b', '#ff9f0a', '#30d158'] }
+];
+const LOOK_IDS = LOOKS.map((l) => l.id);
+let gq = ''; // the settings search text
+let pendingFlash = ''; // the row to flash after a search result opens its page
+
+// What the sidebar usage boxes used to say, now the Usage page: each tool's plan limit and its last request.
+function usageText(id) {
+  const data = S?.providerUsage?.[id] || {};
+  const limit = codexLimit(id, data) || (data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${Math.round(data.limit.util * 100)}% used (reported ${timeAgo(data.limit.ts)})` : (id === 'claude' ? 'Appears after your next Claude request (Claude reports its limit while a request runs)' : 'Account limit unavailable (sign in to Codex with ChatGPT, then use it once)'));
+  const last = data.last ? `${data.last.in} in · ${data.last.out} out (${timeAgo(data.last.ts)})` : 'No request usage recorded';
+  return { limit, last, data };
+}
+
+// Search: the setting names collected from the pages (settings-index.js) plus every page name and its plain words. All the words you type must appear.
+function searchHits(q) {
+  const toks = String(q).toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return [];
+  const all = Object.keys(TITLES).map((p) => ({ page: p, label: TITLES[p], page_: true, words: `${TITLES[p]} ${PAGE_WORDS[p] || ''}` }))
+    .concat(SETTINGS_INDEX.filter(([p]) => TITLES[p]).map(([p, label]) => ({ page: p, label, words: `${label} ${TITLES[p]}` })));
+  const hit = (e) => toks.every((t) => e.words.toLowerCase().includes(t));
+  const starts = (e) => e.label.toLowerCase().startsWith(toks[0]) ? 0 : 1;
+  return all.filter(hit).sort((a, b) => (b.page_ ? 1 : 0) - (a.page_ ? 1 : 0) || starts(a) - starts(b)).slice(0, 30);
+}
+function paintSearch() {
+  const res = $('#gres'), body = $('#pagebody');
+  if (!res || !body) return;
+  const q = gq.trim();
+  if (!q) { res.hidden = true; res.innerHTML = ''; body.hidden = false; return; }
+  body.hidden = true; res.hidden = false;
+  const hits = searchHits(q), by = new Map();
+  for (const e of hits) { const k = TITLES[e.page]; if (!by.has(k)) by.set(k, []); by.get(k).push(e); }
+  res.innerHTML = hits.length ? [...by].map(([g, list]) => `<div class="grp"><div class="section-title">${esc(g)}</div><div class="card">${list.map((e) => `<div class="hit" data-page="${e.page}" data-label="${e.page_ ? '' : esc(e.label)}" role="button" tabindex="0"><span>${esc(e.label)}</span><small>${e.page_ ? 'Open' : esc(g)}</small></div>`).join('')}</div></div>`).join('')
+    : `<div class="empty">Nothing matches "${esc(q)}". Try a plain word such as mic, night or limit.</div>`;
+  res.querySelectorAll('.hit').forEach((el) => {
+    const open = () => { gq = ''; pendingFlash = el.dataset.label || ''; go(el.dataset.page); };
+    el.onclick = open; el.onkeydown = (e) => { if (e.key === 'Enter') open(); };
+  });
+}
+function searchBox() {
+  const box = h(`<div><label class="gsearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input id="gsearch" type="text" placeholder="Search settings" autocomplete="off" spellcheck="false" aria-label="Search settings"><span class="kbd small">⌘K</span></label><div class="gres" id="gres" hidden></div></div>`);
+  const input = $('input', box);
+  input.value = gq;
+  input.oninput = () => { gq = input.value; paintSearch(); };
+  input.onkeydown = (e) => { if (e.key === 'Escape') { gq = ''; input.value = ''; paintSearch(); } };
+  return box;
+}
+function flashRow(label) {
+  if (!label) return;
+  const want = label.toLowerCase();
+  const el = [...document.querySelectorAll('#pagebody .row .t, #pagebody .row .ttl, #pagebody .section-title, #pagebody .title-flat')].find((n) => n.textContent.trim().toLowerCase() === want);
+  const target = el && (el.closest('.row') || el);
+  if (!target) return;
+  target.scrollIntoView({ block: 'center' });
+  target.classList.add('flash');
+  setTimeout(() => target.classList.remove('flash'), 1700);
+}
+document.addEventListener('keydown', (e) => {
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable;
+  if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !inField && !e.metaKey && !e.ctrlKey)) { const i = $('#gsearch'); if (i) { e.preventDefault(); i.focus(); i.select(); } }
+});
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const usageOpen = { claude: false, codex: false };
@@ -70,10 +139,11 @@ function renderSidebar() {
   const scrollTop = $('.sidebar-nav', sb)?.scrollTop || 0;
   sb.innerHTML = '';
   const navigation = h('<div class="sidebar-nav"></div>');
-  for (const group of NAV) {
+  for (const [groupName, items] of NAV) {
     const nav = h('<nav class="nav"></nav>');
-    for (const [id, name] of group) {
-      const item = h(`<div class="nav-item ${page === id ? 'active' : ''}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span>${name}</div>`);
+    nav.append(h(`<div class="nav-group">${groupName}</div>`));
+    for (const [id, name] of items) {
+      const item = h(`<div class="nav-item ${page === id ? 'active' : ''}" title="${esc(name)}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span><span class="nav-label">${name}</span></div>`);
       item.onclick = () => go(id);
       nav.append(item);
     }
@@ -81,15 +151,6 @@ function renderSidebar() {
   }
   sb.append(navigation);
   navigation.scrollTop = scrollTop;
-  for (const [id, label] of [['claude', 'Claude'], ['codex', 'Codex']]) {
-    const data = S?.providerUsage?.[id] || {};
-    const limit = data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${Math.round(data.limit.util * 100)}% used (reported ${timeAgo(data.limit.ts)})` : 'Account limit unavailable';
-    const last = data.last ? `Last request: ${data.last.in} in · ${data.last.out} out (${timeAgo(data.last.ts)})` : 'No request usage recorded';
-    const box = h(`<details class="usage-menu"><summary>${label} usage</summary><div>${esc(codexLimit(id, data) || limit)}</div><div>${esc(last)}</div></details>`);
-    box.open = usageOpen[id];
-    box.addEventListener('toggle', () => { usageOpen[id] = box.open; });
-    sb.append(box);
-  }
   sb.append(h(`<div class="status-card"><div class="status-line"><span class="dot ${r.ok ? '' : 'off'}"></span>${r.text}</div>
     <div class="status-hint"><span class="kbd small">${esc(S?.labels.ask || '')}</span>to ask</div></div>`));
 }
@@ -120,6 +181,17 @@ function applyTheme() {
   const [a, b] = THEME[page] || THEME.home;
   document.documentElement.style.setProperty('--pc', a);
   document.documentElement.style.setProperty('--pc2', b);
+  applyLook();
+}
+
+// The look and the dock from Settings > Appearance. Instrument and Cockpit start with the small icon dock until a dock choice is made.
+function applyLook() {
+  const st = (S && S.settings) || {};
+  const look = LOOK_IDS.includes(st.look) ? st.look : 'glass';
+  document.documentElement.dataset.look = look;
+  const dock = ['labels', 'icons', 'auto'].includes(st.dock) ? st.dock : (look === 'instrument' || look === 'cockpit' ? 'icons' : 'labels');
+  const app = $('.app');
+  if (app) { app.classList.remove('dock-icons', 'dock-auto'); if (dock !== 'labels') app.classList.add(`dock-${dock}`); }
 }
 
 // Menus and settings in Spanish when chosen (Settings > Speech > Menus and settings in): exact text is swapped after each draw.
@@ -144,9 +216,14 @@ function render() {
   const c = $('#content');
   const top = c.scrollTop;
   c.innerHTML = '';
-  PAGES[page](c);
+  c.append(searchBox());
+  const body = h('<div id="pagebody"></div>');
+  c.append(body);
+  PAGES[page](body);
+  paintSearch();
   c.scrollTop = top;
   localize();
+  if (pendingFlash) { const w = pendingFlash; pendingFlash = ''; setTimeout(() => flashRow(w), 60); }
 }
 
 const KOKORO_VOICES = [['af_heart', 'Heart (US, warm)'], ['af_bella', 'Bella (US)'], ['af_nicole', 'Nicole (US, calm)'], ['af_sarah', 'Sarah (US)'], ['af_sky', 'Sky (US)'], ['af_nova', 'Nova (US)'], ['am_michael', 'Michael (US)'], ['am_adam', 'Adam (US)'], ['am_eric', 'Eric (US)'], ['bf_emma', 'Emma (UK)'], ['bf_isabella', 'Isabella (UK)'], ['bm_george', 'George (UK)']];
@@ -218,6 +295,40 @@ const allowed = '<span class="allowed" style="display:inline-flex;align-items:ce
 
 /* ---------- pages ---------- */
 const PAGES = {
+  usage(c) {
+    c.append(h('<div class="lead">Plan limits as each tool last reported them. Codex\'s come from its own logs on this Mac; nothing is sent anywhere.</div>'));
+    for (const [id, label] of [['claude', 'Claude'], ['codex', 'Codex']]) {
+      const u = usageText(id), l = id === 'codex' && u.data.limits;
+      const bar = (name, w) => (w ? `<div class="row"><div class="grow"><div class="t">${name}</div><div class="progress" style="width:100%"><i style="width:${Math.round(w.util * 100)}%"></i></div></div><div class="note">${w.reset ? 'window reset' : `${Math.round(w.util * 100)}% used`}</div></div>` : '');
+      c.append(h(`<div class="section-title">${label}</div>`));
+      c.append(h(`<div class="card">${bar('5-hour window', l && l.five)}${bar('Weekly', l && l.week)}<div class="row"><div class="grow"><div class="t">Plan limit</div><div class="d">${esc(u.limit)}</div></div></div><div class="row"><div class="grow"><div class="t">Last request</div><div class="d">${esc(u.last)}</div></div></div></div>`));
+    }
+  },
+  appearance(c) {
+    const st = S.settings || {}, look = LOOK_IDS.includes(st.look) ? st.look : 'glass';
+    const dock = ['labels', 'icons', 'auto'].includes(st.dock) ? st.dock : (look === 'instrument' || look === 'cockpit' ? 'icons' : 'labels');
+    const mode = ['dark', 'light'].includes(st.mode) ? st.mode : 'system';
+    c.append(h('<div class="lead">Pick how Relay looks. Your phone page follows the look and the light or dark choice too.</div>'));
+    c.append(h('<div class="section-title">Look</div>'));
+    const grid = h('<div class="looks"></div>');
+    for (const l of LOOKS) {
+      const b = h(`<button class="lookcard ${l.id === look ? 'on' : ''}" data-look="${l.id}"><div class="sw">${l.sw.map((x) => `<i style="background:${x}"></i>`).join('')}</div><b>${l.name}</b><span>${esc(l.tag)}</span></button>`);
+      b.onclick = () => relay.set('settings.look', l.id);
+      grid.append(b);
+    }
+    c.append(grid);
+    const segRow = (title, desc, key, opts, cur) => {
+      const row = h(`<div class="row"><div class="grow"><div class="t">${title}</div><div class="d">${desc}</div></div><div class="seg">${opts.map(([v, t]) => `<button data-v="${v}" class="${v === cur ? 'on' : ''}">${t}</button>`).join('')}</div></div>`);
+      row.querySelector('.seg').onclick = (e) => { const v = e.target.dataset?.v; if (v) relay.set(key, v); };
+      return row;
+    };
+    c.append(h('<div class="section-title">Light or dark</div>'));
+    const card = h('<div class="card"></div>');
+    card.append(segRow('Appearance', 'Follow your Mac, or always dark or light.', 'settings.mode', [['system', 'System'], ['dark', 'Dark'], ['light', 'Light']], mode));
+    card.append(segRow('Dock', 'The menu stays on the left. Icons only shows each name when you point at it; Auto switches to icons when the window is narrow.', 'settings.dock', [['labels', 'Labels'], ['icons', 'Icons only'], ['auto', 'Auto']], dock));
+    c.append(card);
+    c.append(h('<div class="note" style="margin-top:14px">The reactor and its blue stay the same in every look.</div>'));
+  },
   home(c) {
     const r = ready();
     const st = statsFor(range);

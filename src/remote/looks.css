@@ -1,0 +1,88 @@
+/* The five looks of the phone page, loaded after style.css. Glass is the default and follows Apple's Liquid Glass rules: controls float above the content as translucent glass with a
+   bright top edge and a soft shadow; the content itself stays flat. The reactor is untouched in every look. Dark by default; light follows the iPhone (or the Mac's choice, data-mode).
+   The old stylesheet colours everything through --bg --ink --dim --acc --card --warn, so changing those recolours the whole page; the rest of this file restyles the controls. */
+
+html[data-look] { --edge: rgba(255, 255, 255, .38); --r-btn: 50%; --shadow: 0 8px 24px rgba(0, 0, 0, .28); }
+html[data-look] body { color: var(--ink); background: var(--wall, var(--bg)); background-attachment: fixed; }
+
+/* ---- colours: dark ---- */
+html[data-look="glass"] { --bg: #050d14; --ink: #eaf8ff; --dim: #8ebfcd; --acc: #00d4ff; --card: rgba(255, 255, 255, .07); --line: rgba(255, 255, 255, .15); --fill: rgba(255, 255, 255, .09);
+  --wall: radial-gradient(90% 55% at 15% 0%, rgba(0, 150, 210, .38), transparent 62%), radial-gradient(80% 55% at 95% 100%, rgba(70, 90, 230, .26), transparent 62%), #050d14; }
+html[data-look="instrument"] { --bg: #04090e; --ink: #e3f6fb; --dim: #6a8f9c; --acc: #00d4ff; --card: #0b131a; --line: #162631; --fill: #0b131a; --r-btn: 10px; --shadow: none; --edge: transparent; }
+html[data-look="studio"] { --bg: #060f17; --ink: #e9fbff; --dim: #7cc3d6; --acc: #00d4ff; --card: #0f1b26; --line: #1a2d3b; --fill: #0f1b26; --shadow: 0 2px 8px rgba(0, 0, 0, .35); --edge: rgba(255, 255, 255, .08); }
+html[data-look="cockpit"] { --bg: #050d14; --ink: #e6fbff; --dim: #6fbfd4; --acc: #00d4ff; --card: #08141d; --line: rgba(0, 212, 255, .32); --fill: #08141d; --r-btn: 3px; --shadow: none; --edge: transparent; }
+html[data-look="buddy"] { --bg: #08121b; --ink: #f0fbff; --dim: #86c4d6; --acc: #2fd6ff; --card: #14212d; --line: #1f3342; --fill: #14212d; --shadow: 0 3px 10px rgba(0, 0, 0, .3); --edge: rgba(255, 255, 255, .12); }
+/* ---- colours: light (the iPhone is in light mode, or the Mac chose light) ---- */
+html[data-look="glass"][data-mode="light"] { --bg: #eef6fa; --ink: #0b2230; --dim: #4d7488; --acc: #0090b8; --warn: #a87800; --card: rgba(255, 255, 255, .7); --line: rgba(0, 0, 0, .1); --fill: rgba(255, 255, 255, .55); --edge: rgba(255, 255, 255, .95); --shadow: 0 8px 24px rgba(30, 60, 90, .16);
+  --wall: radial-gradient(90% 55% at 15% 0%, rgba(120, 200, 240, .55), transparent 62%), radial-gradient(80% 55% at 95% 100%, rgba(170, 180, 250, .45), transparent 62%), #eef6fa; }
+html[data-look="instrument"][data-mode="light"] { --bg: #f6fafc; --ink: #0a1c26; --dim: #55717e; --acc: #007fa3; --warn: #a87800; --card: #ffffff; --line: #dbe6ec; --fill: #ffffff; }
+html[data-look="studio"][data-mode="light"] { --bg: #f1f6fa; --ink: #0e2230; --dim: #54768a; --acc: #0089b0; --warn: #a87800; --card: #ffffff; --line: #d8e5ee; --fill: #ffffff; --shadow: 0 2px 8px rgba(30, 60, 90, .12); }
+html[data-look="cockpit"][data-mode="light"] { --bg: #e8f1f5; --ink: #08202c; --dim: #3e6577; --acc: #0086b0; --warn: #a87800; --card: #f6fbfd; --line: rgba(0, 134, 176, .35); --fill: #f6fbfd; }
+html[data-look="buddy"][data-mode="light"] { --bg: #eef7fc; --ink: #0f2433; --dim: #55798c; --acc: #0a95c4; --warn: #c27a00; --card: #ffffff; --line: #d5e6ef; --fill: #ffffff; --shadow: 0 3px 10px rgba(30, 60, 90, .12); }
+@media (prefers-color-scheme: light) {
+  html[data-look="glass"]:not([data-mode]) { --bg: #eef6fa; --ink: #0b2230; --dim: #4d7488; --acc: #0090b8; --warn: #a87800; --card: rgba(255, 255, 255, .7); --line: rgba(0, 0, 0, .1); --fill: rgba(255, 255, 255, .55); --edge: rgba(255, 255, 255, .95); --shadow: 0 8px 24px rgba(30, 60, 90, .16);
+    --wall: radial-gradient(90% 55% at 15% 0%, rgba(120, 200, 240, .55), transparent 62%), radial-gradient(80% 55% at 95% 100%, rgba(170, 180, 250, .45), transparent 62%), #eef6fa; }
+  html[data-look="instrument"]:not([data-mode]) { --bg: #f6fafc; --ink: #0a1c26; --dim: #55717e; --acc: #007fa3; --warn: #a87800; --card: #ffffff; --line: #dbe6ec; --fill: #ffffff; }
+  html[data-look="studio"]:not([data-mode]) { --bg: #f1f6fa; --ink: #0e2230; --dim: #54768a; --acc: #0089b0; --warn: #a87800; --card: #ffffff; --line: #d8e5ee; --fill: #ffffff; --shadow: 0 2px 8px rgba(30, 60, 90, .12); }
+  html[data-look="cockpit"]:not([data-mode]) { --bg: #e8f1f5; --ink: #08202c; --dim: #3e6577; --acc: #0086b0; --warn: #a87800; --card: #f6fbfd; --line: rgba(0, 134, 176, .35); --fill: #f6fbfd; }
+  html[data-look="buddy"]:not([data-mode]) { --bg: #eef7fc; --ink: #0f2433; --dim: #55798c; --acc: #0a95c4; --warn: #c27a00; --card: #ffffff; --line: #d5e6ef; --fill: #ffffff; --shadow: 0 3px 10px rgba(30, 60, 90, .12); }
+}
+
+/* ---- the controls, in every look: the old neon-cyan outlines become the look's own line and fill ---- */
+html[data-look] :is(#qtog, #kbd, #flickfab, #holofab) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); border-radius: var(--r-btn); box-shadow: var(--shadow); }
+html[data-look] :is(#qtog, #kbd, #flickfab, #holofab):active, html[data-look] #kbd[aria-pressed=true] { background: var(--acc); color: var(--bg); }
+html[data-look] #lock svg { background: var(--fill); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--r-btn); }
+html[data-look] #lock.locked svg { background: var(--fill); border-color: var(--warn); }
+html[data-look] :is(#quick button, #sleep, #asked, #menu button, #vbar button, #vtools button, #pcut button, #cadact button, #addrow button, #chips button, #tell button, #ask button) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); text-shadow: none; box-shadow: none; }
+html[data-look] :is(#quick button, #vbar button, #vtools button, #chips button, #cadact button, #pcut button):active, html[data-look] :is(#vtools button.on, #chips button.on, #cadact button.on, #pcut button.on) { background: var(--acc); color: var(--bg); }
+html[data-look] #askyes, html[data-look] #tell button { background: var(--acc); color: var(--bg); border-color: transparent; }
+html[data-look] :is(.panel, #agents .ag, #tiles li, #menu) { background: var(--card); border: 1px solid var(--line); box-shadow: none; }
+html[data-look] #menu { box-shadow: var(--shadow); background: var(--bg); }
+html[data-look] :is(input[type=text], #code, #devname, #bar input, #tell input, #fields input) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); }
+html[data-look] #send { background: var(--acc); color: var(--bg); }
+html[data-look] #pairgo { background: var(--acc); color: var(--bg); }
+html[data-look] #asked { color: var(--ink); }
+html[data-look] :is(#player button, #vol button) { color: var(--ink); }
+html[data-look] #player .big { background: var(--ink); color: var(--bg); box-shadow: var(--shadow); }
+html[data-look] :is(.bar2) { background: var(--line); }
+html[data-look] #volume::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--ink) var(--v, 50%), var(--line) var(--v, 50%)); }
+html[data-look] #volume::-webkit-slider-thumb { background: var(--ink); box-shadow: none; }
+html[data-look] #status { font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+html[data-look] #status.busy { color: var(--warn); }
+html[data-look] #line, html[data-look] #reply { color: var(--ink); }
+html[data-look] #line.dim { color: var(--dim); }
+html[data-look] header { color: var(--dim); }
+
+/* ================= Glass: translucent controls over the glow behind them ================= */
+html[data-look="glass"] :is(#qtog, #kbd, #flickfab, #holofab, #quick button, #sleep, #asked, .panel, #tiles li, #vbar button, #vtools button, #lock svg, #chips button, #cadact button, #pcut button, #tell button, #ask button, #agents .ag) {
+  -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow: inset 0 1px 0 var(--edge), inset 0 -1px 0 rgba(0, 0, 0, .1), var(--shadow); }
+html[data-look="glass"] :is(#qtog, #kbd, #flickfab, #holofab, #lock svg) { background-image: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, 0) 55%); }
+html[data-look="glass"] :is(#menu) { background: var(--card); -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8); box-shadow: inset 0 1px 0 var(--edge), var(--shadow); }
+html[data-look="glass"] :is(#bar input, #tell input, #fields input, input[type=text]) { -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+html[data-look="glass"] :is(#quick button, #sleep, #asked, #chips button, #cadact button, #pcut button, #tell button, #ask button) { border-radius: 999px; }
+html[data-look] #quick button { box-shadow: inset 0 1px 0 var(--edge); } /* the row scrolls sideways, which would clip an outer shadow into a square */
+html[data-look="glass"] #lock.locked svg { box-shadow: inset 0 1px 0 var(--edge), 0 0 0 1px var(--warn), var(--shadow); }
+
+/* ================= Instrument: hairlines, no shadow, mono status ================= */
+html[data-look="instrument"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 8px; }
+html[data-look="instrument"] #status { font-family: ui-monospace, Menlo, monospace; letter-spacing: .12em; }
+html[data-look="instrument"] :is(#qtog, #kbd, #flickfab, #holofab) { color: var(--dim); }
+
+/* ================= Studio: solid cards with a soft shadow ================= */
+html[data-look="studio"] :is(#quick button, #sleep, #asked) { border-radius: 14px; box-shadow: var(--shadow); }
+
+/* ================= Cockpit Lite: outlined, mono caps, the only glow is the reactor and the active control ================= */
+html[data-look="cockpit"] #status { font-family: ui-monospace, Menlo, monospace; letter-spacing: .18em; }
+html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab) { color: var(--acc); }
+html[data-look="cockpit"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 3px; border-color: var(--line); }
+html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab):active { box-shadow: 0 0 14px var(--acc); }
+
+/* ================= Buddy: a colour for each button ================= */
+html[data-look="buddy"] #kbd { color: #4cc2ff; background: color-mix(in srgb, #4cc2ff 22%, var(--fill)); }
+html[data-look="buddy"] #qtog { color: #30d158; background: color-mix(in srgb, #30d158 22%, var(--fill)); }
+html[data-look="buddy"] #flickfab { color: #bf5af2; background: color-mix(in srgb, #bf5af2 22%, var(--fill)); }
+html[data-look="buddy"] #holofab { color: #ff9f0a; background: color-mix(in srgb, #ff9f0a 22%, var(--fill)); }
+html[data-look="buddy"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 999px; box-shadow: var(--shadow); }
+html[data-look="buddy"] :is(.panel, #tiles li, #agents .ag) { border-radius: 20px; }
+@media (prefers-reduced-transparency: reduce) { html[data-look="glass"] * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; } html[data-look="glass"] { --fill: var(--card); } }

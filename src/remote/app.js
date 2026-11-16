@@ -104,6 +104,7 @@
   function line(text, dim) { $('line').textContent = text || ''; $('line').classList.toggle('dim', !!dim); }
 
   function applyStatus(s) {
+    if (s.look && window.RelayLook) window.RelayLook.apply(s.look, s.mode); // the look chosen on the Mac (Settings > Appearance)
     if (s.volume && typeof applyVolume === 'function') applyVolume(s.volume);
     if ('locked' in s) setLocked(!!s.locked);
     serverState = s.state || 'idle';

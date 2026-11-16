@@ -376,6 +376,13 @@ function rebuildTray() {
   ], store.get('settings.language.ui'))));
 }
 
+// Settings > Appearance: the five looks, and dark or light for the whole app (the theme source makes every window and the phone follow it).
+const APPEARANCE = { looks: ['glass', 'instrument', 'studio', 'cockpit', 'buddy'], modes: ['system', 'dark', 'light'], docks: ['labels', 'icons', 'auto'] };
+function applyAppearance() {
+  const mode = store.get('settings.mode');
+  nativeTheme.themeSource = mode === 'dark' || mode === 'light' ? mode : 'system';
+}
+
 function applyDockAndLogin() {
   const s = store.get('settings');
   if (process.platform === 'darwin') {
@@ -666,7 +673,12 @@ function registerIpc() {
     if (key === 'settings.calls' || key.startsWith('settings.calls.')) throw Error('Use Calls settings to change calling permissions.');
     if (key === 'settings.driveRoots' || key.startsWith('settings.driveRoots.')) throw new Error('Use the folder chooser for file access.');
     if (!key.startsWith('settings.')) throw new Error('Only settings can be set this way.');
+    if (key === 'settings.look' && !APPEARANCE.looks.includes(value)) throw new Error('Unknown look.');
+    if (key === 'settings.mode' && !APPEARANCE.modes.includes(value)) throw new Error('Choose system, dark or light.');
+    if (key === 'settings.dock' && !APPEARANCE.docks.includes(value)) throw new Error('Choose labels, icons or auto.');
     store.set(key, value);
+    if (key === 'settings.mode') applyAppearance();
+    if (key === 'settings.look' || key === 'settings.mode') ask.statusChanged?.(); // the phone page follows the look
     applyDockAndLogin();
     if (key === 'settings.buddy' || key === 'settings.cursor') { overlay.applyMode(); rebuildTray(); }
     if (key === 'settings.assistantBlur' || key === 'settings.assistantBlurStrength') overlay.refreshHudBlur();
@@ -2486,6 +2498,7 @@ app.whenReady().then(() => {
   if (process.env.RELAY_E2E) global.__relay = { store, ask, bridge, hotkeys, openMain, openOnboarding };
   registerIpc();
   startBridge();
+  applyAppearance();
   applyDockAndLogin();
   rebuildTray();
   startHotkeysWhenTrusted();

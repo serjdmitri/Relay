@@ -765,7 +765,8 @@ class AskController {
 
   remoteSnapshot() {
     this.refreshVolume();
-    return { volume: this.volumeNow || null, state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view(), locked: !!this.lockWatch?.locked };
+    const look = this.store?.get?.('settings.look'), mode = this.store?.get?.('settings.mode');
+    return { look: ['glass', 'instrument', 'studio', 'cockpit', 'buddy'].includes(look) ? look : 'glass', mode: mode === 'dark' || mode === 'light' ? mode : 'system', volume: this.volumeNow || null, state: this.state, label: this.workView?.label || '', question: this.state === 'confirm' ? this.confirmQuestion || '' : '', tasks: this.taskList(), agents: this.agents.view(), locked: !!this.lockWatch?.locked };
   }
 
   remoteRecent(n = 8) {

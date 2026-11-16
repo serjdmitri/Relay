@@ -1,0 +1,127 @@
+/* The five looks of the main window (Settings > Appearance). <html data-look="glass|instrument|studio|cockpit|buddy">, dark or light by the system (or by Settings > Appearance, which
+   sets the app's theme source so prefers-color-scheme follows it). Glass is the default and is the stock theme with Apple's Liquid Glass rules: a translucent sidebar, flat content,
+   a capsule for the selected item. Colours come from the same variables styles.css uses, so every page changes at once. */
+
+/* ---- shared structure: every look sets these four sizes ---- */
+html { --r-nav: 9px; --nav-h: 38px; --r-card: 14px; --row-min: 44px; --sbw: 220px; }
+.sidebar { width: var(--sbw); }
+.app.collapsed .sidebar { margin-left: calc(-1 * var(--sbw) - 1px); }
+.nav-item { height: var(--nav-h); border-radius: var(--r-nav); }
+.card { border-radius: var(--r-card); }
+.row { min-height: var(--row-min); }
+.nav-group { font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--dim); padding: 10px 8px 4px; white-space: nowrap; overflow: hidden; }
+.nav-group:first-child { padding-top: 0; }
+.nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- the search box on every page ---- */
+.gsearch { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; margin: 0 0 18px; background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-nav); color: var(--muted); }
+.gsearch svg { width: 15px; height: 15px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+.gsearch input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--text); font-size: var(--fs-row); user-select: text; }
+.gsearch input::placeholder { color: var(--dim); }
+.gsearch .kbd { height: 20px; line-height: 20px; padding: 0 6px; font-size: 11px; }
+.gsearch:focus-within { border-color: var(--accent); }
+.gres .grp { margin-bottom: 18px; }
+.gres .grp > .section-title { margin: 0 0 8px; }
+.gres .hit { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; cursor: default; }
+.gres .hit + .hit { border-top: 1px solid var(--hair); }
+.gres .hit:hover { background: rgba(var(--w), .06); }
+.gres .hit small { color: var(--dim); font-size: 12px; }
+.row.flash, .card.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0%, 40% { background: color-mix(in srgb, var(--accent) 28%, transparent); } 100% { background: transparent; } }
+
+/* ---- the dock: labels, icons only, or auto (icons when the window is narrow) ---- */
+.app.dock-icons { --sbw: 64px; }
+.app.dock-icons .sidebar { padding-left: 8px; padding-right: 8px; }
+.app.dock-icons .nav-label, .app.dock-icons .nav-group, .app.dock-icons .usage-menu { display: none; }
+.app.dock-icons .nav-item { justify-content: center; padding: 0; }
+.app.dock-icons .nav + .nav { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.app.dock-icons .status-card { padding: 8px 0; height: auto; display: grid; place-items: center; }
+.app.dock-icons .status-line { font-size: 0; gap: 0; }
+.app.dock-icons .status-hint { display: none; }
+@media (max-width: 760px) {
+  .app.dock-auto { --sbw: 64px; }
+  .app.dock-auto .nav-label, .app.dock-auto .nav-group, .app.dock-auto .usage-menu, .app.dock-auto .status-hint { display: none; }
+  .app.dock-auto .nav-item { justify-content: center; padding: 0; }
+}
+.sidebar, .nav-item { transition: width .22s ease, margin-left .22s ease, background .15s ease; }
+
+/* ---- Appearance page ---- */
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.lookcard { text-align: left; padding: 10px; border-radius: var(--r-card); border: 1px solid var(--card-border); background: var(--card); display: flex; flex-direction: column; gap: 8px; }
+.lookcard.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.lookcard .sw { height: 56px; border-radius: calc(var(--r-card) - 6px); display: flex; overflow: hidden; border: 1px solid var(--hair); }
+.lookcard .sw i { flex: 1; }
+.lookcard b { font-size: var(--fs-row); } .lookcard span { color: var(--muted); font-size: 12px; line-height: 15px; }
+
+/* ================= Glass ================= */
+html[data-look="glass"] .nav-item.active { border-radius: 999px; }
+html[data-look="glass"] .gsearch { border-radius: 999px; }
+html[data-look="glass"] .card { box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset; }
+
+/* ================= Instrument ================= */
+html[data-look="instrument"] { --r-nav: 5px; --nav-h: 30px; --r-card: 8px; --row-min: 36px; --fs-nav: 13px; --fs-title: 14px; --fs-body: 12px; --fs-row: 13px; --fs-section: 14px; --fs-small: 11px;
+  --pc: #4cc2ff; --accent: #1c8fd6; --link: #7fd0ff; }
+html[data-look="instrument"] .nav-item.active { position: relative; background: rgba(var(--w), .08); }
+html[data-look="instrument"] .nav-item.active::before { content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--accent); }
+html[data-look="instrument"] .icon-box { width: 20px; height: 20px; border-radius: 5px; }
+html[data-look="instrument"] .icon-box svg { width: 13px; height: 13px; }
+html[data-look="instrument"] .card { box-shadow: none; }
+html[data-look="instrument"] .row .t, html[data-look="instrument"] .stats .n { font-variant-numeric: tabular-nums; }
+html[data-look="instrument"] .gsearch { height: 30px; }
+html[data-look="instrument"] .gsearch .kbd { font-family: ui-monospace, Menlo, monospace; }
+html[data-look="instrument"] .content { padding: 18px 20px 24px; }
+
+/* ================= Studio ================= */
+html[data-look="studio"] { --r-nav: 12px; --nav-h: 42px; --r-card: 16px; --row-min: 54px; --fs-nav: 15px; --fs-title: 17px; --fs-body: 14px; --fs-row: 15px; --fs-section: 17px; }
+html[data-look="studio"] .card { box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+html[data-look="studio"] .nav-item.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+html[data-look="studio"] .gsearch { height: 40px; border-radius: 14px; }
+html[data-look="studio"] .row { padding-top: 14px; padding-bottom: 14px; }
+html[data-look="studio"] .content { padding: 28px 28px 32px; }
+html[data-look="studio"] .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+
+/* ================= Cockpit Lite ================= */
+html[data-look="cockpit"] { --r-nav: 2px; --nav-h: 34px; --r-card: 2px; --row-min: 40px; --pc: #00d4ff; --accent: #00b7e6; --link: #5fdcff; }
+html[data-look="cockpit"] .card { position: relative; box-shadow: none; }
+html[data-look="cockpit"] .card::before, html[data-look="cockpit"] .card::after { content: ""; position: absolute; width: 9px; height: 9px; border: 1.5px solid var(--accent); pointer-events: none; }
+html[data-look="cockpit"] .card::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+html[data-look="cockpit"] .card::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+html[data-look="cockpit"] .nav-item.active { position: relative; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+html[data-look="cockpit"] .nav-item.active::before { content: ""; position: absolute; left: -8px; top: 5px; bottom: 5px; width: 2px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+html[data-look="cockpit"] .nav-group, html[data-look="cockpit"] .section-title { font-family: ui-monospace, Menlo, monospace; text-transform: uppercase; letter-spacing: .14em; font-size: 11px; }
+html[data-look="cockpit"] .gsearch { border-radius: 2px; border-width: 0 0 1px; background: transparent; }
+html[data-look="cockpit"] .gsearch::before { content: ">"; font-family: ui-monospace, Menlo, monospace; color: var(--accent); }
+html[data-look="cockpit"] .row .d, html[data-look="cockpit"] .stats .n { font-family: ui-monospace, Menlo, monospace; }
+html[data-look="cockpit"] .icon-box { border-radius: 3px; }
+
+/* ================= Buddy ================= */
+html[data-look="buddy"] { --r-nav: 14px; --nav-h: 40px; --r-card: 20px; --row-min: 50px; --fs-title: 17px; --fs-row: 15px;
+  font-family: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+html[data-look="buddy"] .icon-box { width: 28px; height: 28px; border-radius: 9px; box-shadow: none; }
+html[data-look="buddy"] .icon-box svg { width: 17px; height: 17px; }
+html[data-look="buddy"] .nav-item .icon-box { background: #4cc2ff; }
+html[data-look="buddy"] .nav-item:nth-child(8n+2) .icon-box { background: #ff9f0a; }
+html[data-look="buddy"] .nav-item:nth-child(8n+3) .icon-box { background: #30d158; }
+html[data-look="buddy"] .nav-item:nth-child(8n+4) .icon-box { background: #bf5af2; }
+html[data-look="buddy"] .nav-item:nth-child(8n+5) .icon-box { background: #ff6b6b; }
+html[data-look="buddy"] .nav-item:nth-child(8n+6) .icon-box { background: #e0b400; }
+html[data-look="buddy"] .nav-item:nth-child(8n+7) .icon-box { background: #3aa7ff; }
+html[data-look="buddy"] .nav-item:nth-child(8n+8) .icon-box { background: #ff6bb0; }
+html[data-look="buddy"] .nav-item.active { background: var(--card); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+html[data-look="buddy"] .card { box-shadow: 0 2px 10px rgba(0, 0, 0, .14); }
+html[data-look="buddy"] .gsearch { height: 42px; border-radius: 16px; }
+html[data-look="buddy"] .btn { border-radius: 10px; }
+
+@media (prefers-reduced-motion: reduce) { .sidebar, .nav-item, .toggle, .toggle::after { transition: none; } .row.flash, .card.flash { animation: none; } }
+
+/* ---- colours: dark first, then light ---- */
+html[data-look="instrument"] { --bg: #0b0f14; --sidebar: rgba(14, 19, 25, .42); --card: #11171e; --card-border: #1f2a35; --hair: #1f2a35; --text: #e8edf2; --muted: #8794a3; --dim: #6b7885; }
+html[data-look="studio"] { --bg: #0d131a; --sidebar: rgba(16, 23, 32, .35); --card: #151d27; --card-border: #222d3a; --hair: #222d3a; --text: #f3f6f9; --muted: #9fb0bf; --dim: #7f91a1; }
+html[data-look="cockpit"] { --bg: #070d13; --sidebar: rgba(9, 17, 26, .45); --card: #0b141c; --card-border: #14313f; --hair: #14313f; --text: #dff6ff; --muted: #6fa5b8; --dim: #4f8195; }
+html[data-look="buddy"] { --bg: #0e141b; --sidebar: rgba(18, 26, 35, .4); --card: #18212c; --card-border: #26323f; --hair: #26323f; --text: #f5f8fb; --muted: #a3b3c2; --dim: #8294a5; }
+@media (prefers-color-scheme: light) {
+  html[data-look="instrument"] { --bg: #fafbfc; --sidebar: rgba(241, 244, 247, .5); --card: #ffffff; --card-border: #dfe5ea; --hair: #dfe5ea; --text: #10161c; --muted: #5b6875; --dim: #7a8794; --accent: #0a7bc4; --link: #0a6fb2; }
+  html[data-look="studio"] { --bg: #f2f5f8; --sidebar: rgba(233, 238, 243, .5); --card: #ffffff; --card-border: #dbe3ea; --hair: #dbe3ea; --text: #12202c; --muted: #5d7080; --dim: #7c8d9b; --accent: #0a84d0; }
+  html[data-look="cockpit"] { --bg: #eaf1f5; --sidebar: rgba(221, 232, 238, .5); --card: #f7fbfd; --card-border: #bcd2dc; --hair: #bcd2dc; --text: #08202c; --muted: #3e6577; --dim: #5f8090; --accent: #0086b0; --link: #006f94; }
+  html[data-look="buddy"] { --bg: #f3f7fb; --sidebar: rgba(232, 240, 247, .5); --card: #ffffff; --card-border: #dce6ee; --hair: #dce6ee; --text: #132230; --muted: #5f7487; --dim: #7f93a4; --accent: #1a8fd9; }
+}

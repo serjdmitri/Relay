@@ -56,6 +56,6 @@ test('the panel shows a Claude limit only for Claude and a Codex limit only from
   const src = fs.readFileSync(path.join(__dirname, '../src/main/codexUsage.js'), 'utf8');
   assert.doesNotMatch(src, /writeFile|appendFile|unlinkSync|rmSync|renameSync/);
   const app = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
-  assert.match(app, /esc\(codexLimit\(id, data\) \|\| limit\)/);
+  assert.match(app, /const limit = codexLimit\(id, data\) \|\|/, 'the Usage page uses the Codex log limits first');
   assert.match(fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8'), /u\.codex\.limits = publicState\.codexLimits\.v/);
 });
