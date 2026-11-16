@@ -147,7 +147,11 @@ body.noquick #quick, body.noquick #player, body.noquick #vol { display: none; } 
   #lock { position: fixed; right: max(env(safe-area-inset-right), 20px); top: 50%; transform: translateY(-50%); padding: 0; }
   #lock svg { width: 66px; height: 66px; padding: 12px; }
   #kbd { width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  /* the four round buttons sit in one row at the bottom right, each in its own slot (44 px wide, 10 px apart), clear of the shortcut column on the left */
+  #kbd { right: max(env(safe-area-inset-right), 14px); }
   #qtog { left: auto; right: calc(max(env(safe-area-inset-right), 14px) + 54px); width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  #flickfab { left: auto; right: calc(max(env(safe-area-inset-right), 14px) + 108px); width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
+  #holofab { right: calc(max(env(safe-area-inset-right), 14px) + 162px); width: 44px; height: 44px; bottom: calc(env(safe-area-inset-bottom) + 10px); }
   #kb { gap: 4px; padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: calc(env(safe-area-inset-bottom) + 6px); }
   .kbtext { font-size: 19px; min-height: 2.6em; max-height: 22vh; padding: 3px 4px; }
   .kbboard { flex: 1; height: auto; margin-top: 0; min-height: 0; transform: perspective(900px) rotateX(4deg); gap: 5px; }

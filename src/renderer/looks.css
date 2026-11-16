@@ -3,7 +3,10 @@
    a capsule for the selected item. Colours come from the same variables styles.css uses, so every page changes at once. */
 
 /* ---- shared structure: every look sets these four sizes ---- */
-html { --r-nav: 9px; --nav-h: 38px; --r-card: 14px; --row-min: 44px; --sbw: 220px; }
+html { --r-nav: 9px; --nav-h: 34px; --r-card: 14px; --row-min: 44px; --sbw: 220px; }
+/* sixteen menu items do not always fit a short window: the list scrolls and fades out at the bottom instead of cutting an icon in half under the status card */
+.sidebar-nav { padding-bottom: 14px; -webkit-mask-image: linear-gradient(#000 calc(100% - 16px), transparent); mask-image: linear-gradient(#000 calc(100% - 16px), transparent); }
+.status-card { margin-top: 6px; }
 .sidebar { width: var(--sbw); }
 .app.collapsed .sidebar { margin-left: calc(-1 * var(--sbw) - 1px); }
 .nav-item { height: var(--nav-h); border-radius: var(--r-nav); }
@@ -34,7 +37,10 @@ html { --r-nav: 9px; --nav-h: 38px; --r-card: 14px; --row-min: 44px; --sbw: 220p
 .app.dock-icons .sidebar { padding-left: 8px; padding-right: 8px; }
 .app.dock-icons .nav-label, .app.dock-icons .nav-group, .app.dock-icons .usage-menu { display: none; }
 .app.dock-icons .nav-item { justify-content: center; padding: 0; }
-.app.dock-icons .nav + .nav { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.app.dock-icons .sidebar { padding-top: 48px; }
+.app.dock-icons .nav { gap: 1px; }
+.app.dock-icons .nav-item { height: 30px; }
+.app.dock-icons .nav + .nav { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hair); }
 .app.dock-icons .status-card { padding: 8px 0; height: auto; display: grid; place-items: center; }
 .app.dock-icons .status-line { font-size: 0; gap: 0; }
 .app.dock-icons .status-hint { display: none; }
@@ -95,8 +101,10 @@ html[data-look="cockpit"] .row .d, html[data-look="cockpit"] .stats .n { font-fa
 html[data-look="cockpit"] .icon-box { border-radius: 3px; }
 
 /* ================= Buddy ================= */
+@font-face { font-family: "Quicksand"; src: url("fonts/Quicksand-Regular.woff2") format("woff2"); font-weight: 300 500; font-display: swap; }
+@font-face { font-family: "Quicksand"; src: url("fonts/Quicksand-Bold.woff2") format("woff2"); font-weight: 600 800; font-display: swap; }
 html[data-look="buddy"] { --r-nav: 14px; --nav-h: 40px; --r-card: 20px; --row-min: 50px; --fs-title: 17px; --fs-row: 15px;
-  font-family: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  font-family: "Quicksand", ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
 html[data-look="buddy"] .icon-box { width: 28px; height: 28px; border-radius: 9px; box-shadow: none; }
 html[data-look="buddy"] .icon-box svg { width: 17px; height: 17px; }
 html[data-look="buddy"] .nav-item .icon-box { background: #4cc2ff; }

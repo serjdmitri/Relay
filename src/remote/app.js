@@ -299,6 +299,7 @@
   let holding = false;
   let startedAt = 0;
   let lastErr = '';
+  let lastEnd = 0; // when the last hold-to-talk session ended: the phone's microphone needs a moment to be free again
   // What the browser's error code means for the person holding the phone. 'no-speech' and 'aborted' are ordinary (nothing said, or stopped).
   const SPEECH_ERRORS = {
     network: 'The speech service could not be reached. Check the phone has internet, and that Siri & Dictation is on.',
@@ -316,18 +317,27 @@
     lastErr = '';
     holding = true;
     startedAt = 0;
+    // A session still winding down from the last try, or the "Hey Jarvis" loop, must let go of the microphone first: the iPhone allows one recognition at a time,
+    // and a second one started too soon says "Listening" and hears nothing.
+    let busy = false;
+    if (rec) { const old = rec; rec = null; old.onend = null; old.onresult = null; old.onerror = null; try { old.abort(); } catch { /* already over */ } busy = true; }
+    const wait = Math.max(wasTalking ? 600 : 0, busy ? 500 : 0, 500 - (Date.now() - lastEnd));
+    let gotAudio = false, retries = 0;
     const r = new SR();
     rec = r;
     r.lang = navigator.language || 'en-US';
     r.interimResults = true;
     r.continuous = true;
     r.onresult = (ev) => { heard = Array.from(ev.results).map((x) => x[0].transcript).join(' '); line(heard, true); level = 0.6; };
-    r.onaudiostart = () => { level = 0.4; };
+    r.onaudiostart = () => { gotAudio = true; level = 0.4; };
     r.onerror = (ev) => {
       lastErr = ev.error || '';
       if (['not-allowed', 'service-not-allowed'].includes(ev.error)) { blocked = true; line(window.isSecureContext ? 'Allow the microphone and Siri & Dictation for Safari, then try again.' : 'The microphone is blocked on this address. Use the Tailscale https link, or type.', true); }
     };
     r.onend = () => {
+      // Ended before the microphone ever started while the button is still held: try once more instead of leaving "Listening" up with nothing happening.
+      if (!heard.trim() && !gotAudio && holding && !blocked && !lastErr && retries < 1 && rec === r) { retries++; setTimeout(() => go(), 600); return; }
+      lastEnd = Date.now();
       if (rec === r) rec = null;
       setMode('idle'); level = 0;
       const t = heard.trim(); heard = '';
@@ -342,7 +352,7 @@
       startedAt = Date.now();
       try { r.start(); } catch { if (rec === r) rec = null; setMode('idle'); line('Could not start the microphone. Try again.', true); }
     };
-    if (wasTalking) setTimeout(go, 300); else go();
+    if (wait > 0) setTimeout(go, wait); else go();
   }
   // Letting go straight away would stop it before it heard anything, so it always listens for at least 0.7 seconds.
   function endTalk() {
@@ -385,7 +395,7 @@
             else if (st === 'error') { $('hey').checked = false; save(HEY, '0'); $('hint').textContent = baseHint; line(why === 'language-not-supported' ? 'This phone has no speech recognition for its language.' : '“Hey Jarvis” stopped: the speech service keeps failing. Check the internet, then turn it on again.', true); heyKeepAwake(false); }
           }
         });
-        setInterval(() => heyLoop.setPaused(holding || !!speechSynthesis?.speaking || document.visibilityState !== 'visible'), 400); // it must not hear itself, or you holding the reactor
+        setInterval(() => heyLoop.setPaused(holding || !!rec || Date.now() - lastEnd < 1500 || !!speechSynthesis?.speaking || document.visibilityState !== 'visible'), 400); // it must not hear itself, or you holding the reactor, and it waits for the hold-to-talk session to let go of the microphone
       }
       heyLoop.start(); heyKeepAwake(true);
     } catch { $('hey').checked = false; line('Could not start “Hey Jarvis”.', true); }

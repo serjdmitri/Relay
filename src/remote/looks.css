@@ -78,7 +78,10 @@ html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab) { color: var(--a
 html[data-look="cockpit"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 3px; border-color: var(--line); }
 html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab):active { box-shadow: 0 0 14px var(--acc); }
 
-/* ================= Buddy: a colour for each button ================= */
+/* ================= Buddy: a colour for each button, and a rounded face ================= */
+@font-face { font-family: "Quicksand"; src: url("/fonts/Quicksand-Regular.woff2") format("woff2"); font-weight: 300 500; font-display: swap; }
+@font-face { font-family: "Quicksand"; src: url("/fonts/Quicksand-Bold.woff2") format("woff2"); font-weight: 600 800; font-display: swap; }
+html[data-look="buddy"] body, html[data-look="buddy"] :is(button, input) { font-family: "Quicksand", ui-rounded, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
 html[data-look="buddy"] #kbd { color: #4cc2ff; background: color-mix(in srgb, #4cc2ff 22%, var(--fill)); }
 html[data-look="buddy"] #qtog { color: #30d158; background: color-mix(in srgb, #30d158 22%, var(--fill)); }
 html[data-look="buddy"] #flickfab { color: #bf5af2; background: color-mix(in srgb, #bf5af2 22%, var(--fill)); }

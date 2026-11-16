@@ -28,9 +28,10 @@ const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 const NAV = [
   ['Assistant', [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory']]],
   ['Connections', [['connectors', 'Connectors'], ['calls', 'Phone calls'], ['remote', 'Phone remote']]],
-  ['Settings', [['general', 'General'], ['speech', 'Voice'], ['shortcuts', 'Shortcuts'], ['permissions', 'Privacy & permissions'], ['usage', 'Usage'], ['appearance', 'Appearance'], ['doctor', 'Doctor'], ['account', 'Account']]]
+  ['Settings', [['general', 'General'], ['speech', 'Voice'], ['shortcuts', 'Shortcuts'], ['permissions', 'Privacy & permissions'], ['usage', 'Usage'], ['appearance', 'Appearance'], ['account', 'Account & health']]]
 ];
 const TITLES = Object.fromEntries(NAV.flatMap(([, items]) => items));
+const navId = () => (page === 'doctor' ? 'account' : page); // Doctor lives on the Account & health page
 const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', calls: 'calls', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', usage: 'usage', appearance: 'appearance', doctor: 'permissions', account: 'account' };
 
 // The five looks (Settings > Appearance). looks.css holds what each one does; the swatches only preview it.
@@ -143,7 +144,7 @@ function renderSidebar() {
     const nav = h('<nav class="nav"></nav>');
     nav.append(h(`<div class="nav-group">${groupName}</div>`));
     for (const [id, name] of items) {
-      const item = h(`<div class="nav-item ${page === id ? 'active' : ''}" title="${esc(name)}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span><span class="nav-label">${name}</span></div>`);
+      const item = h(`<div class="nav-item ${navId() === id ? 'active' : ''}" title="${esc(name)}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span><span class="nav-label">${name}</span></div>`);
       item.onclick = () => go(id);
       nav.append(item);
     }
@@ -189,6 +190,7 @@ function applyLook() {
   const st = (S && S.settings) || {};
   const look = LOOK_IDS.includes(st.look) ? st.look : 'glass';
   document.documentElement.dataset.look = look;
+  try { localStorage.setItem('relay-look', look); } catch { /* the floating windows keep the last one */ }
   const dock = ['labels', 'icons', 'auto'].includes(st.dock) ? st.dock : (look === 'instrument' || look === 'cockpit' ? 'icons' : 'labels');
   const app = $('.app');
   if (app) { app.classList.remove('dock-icons', 'dock-auto'); if (dock !== 'labels') app.classList.add(`dock-${dock}`); }
@@ -211,7 +213,7 @@ function render() {
   }
   applyTheme();
   renderSidebar();
-  $('#title').textContent = TITLES[page];
+  $('#title').textContent = TITLES[navId()];
   $('#device').innerHTML = deviceLabel();
   const c = $('#content');
   const top = c.scrollTop;
@@ -1288,12 +1290,20 @@ const PAGES = {
     $('#reset', c).onclick = () => relay.resetShortcuts();
   },
 
-  doctor(c) {
-    if (!doctorData && !doctorBusy) { doctorBusy = true; relay.doctorRun().then((d) => { doctorData = d; doctorBusy = false; if (page === 'doctor') render(); }); }
+  // Account & health is one page: who you are signed in as, then Relay Doctor. Opened by "run doctor" (page id 'doctor') it runs the checks at once; opened as Account it waits for the button.
+  account(c) { PAGES.accountBody(c); c.append(h('<div style="height:24px"></div>')); PAGES.doctorBody(c, false); },
+  doctor(c) { PAGES.accountBody(c); c.append(h('<div style="height:24px"></div>')); PAGES.doctorBody(c, true); },
+  doctorBody(c, auto) {
+    if (auto && !doctorData && !doctorBusy) { doctorBusy = true; relay.doctorRun().then((d) => { doctorData = d; doctorBusy = false; if (page === 'doctor' || page === 'account') render(); }); }
     const d = doctorData;
-    c.append(h('<div class="section-title" style="margin-top:0">Relay Doctor</div>'));
+    c.append(h('<div class="section-title">Relay Doctor</div>'));
     const card = h('<div class="card"></div>');
-    if (!d) card.append(h('<div class="row"><div class="grow"><div class="t">Checking…</div></div></div>'));
+    if (!d && (auto || doctorBusy)) card.append(h('<div class="row"><div class="grow"><div class="t">Checking…</div></div></div>'));
+    else if (!d) {
+      const run = h('<div class="row"><div class="grow"><div class="t">Check that Relay is healthy</div><div class="d">Looks at permissions, connections and background services. Nothing is changed.</div></div><div class="btn primary">Run check</div></div>');
+      run.querySelector('.btn').onclick = () => { doctorBusy = true; relay.doctorRun().then((x) => { doctorData = x; doctorBusy = false; if (page === 'doctor' || page === 'account') render(); }); render(); };
+      card.append(run);
+    }
     for (const r of d?.results || []) {
       const colour = { ok: '#30d158', warn: '#ff9f0a', fail: '#ff453a' }[r.status];
       const word = { ok: 'OK', warn: 'Look', fail: 'Broken' }[r.status];
@@ -1609,7 +1619,7 @@ const PAGES = {
     c.append(h('<div class="note" style="margin:12px 4px;line-height:1.45">Show Me opens the extension folder and Firefox\'s about:debugging page. Choose “Load Temporary Add-on…”, then pick manifest.json. Firefox forgets temporary add-ons when it quits, so repeat after a restart or use Firefox Developer Edition.</div>'));
   },
 
-  account(c) {
+  accountBody(c) {
     const cl = S.claude || {};
     const m = S.settings.model;
     c.append(h('<div class="section-title" style="margin-top:0">Account</div>'));

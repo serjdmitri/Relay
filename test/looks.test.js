@@ -91,6 +91,69 @@ test('the phone look script applies the look and mode and survives having no sto
   assert.doesNotThrow(() => vm.runInNewContext(read('src/remote/look.js'), mk({ getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } })));
 });
 
+test('Doctor and Account are one page, Account & health; opening Doctor by id still works and runs the checks, opening Account waits for the button', () => {
+  const app = read('src/renderer/app.js');
+  assert.match(app, /\['account', 'Account & health'\]/);
+  assert.doesNotMatch(app, /\['doctor', 'Doctor'\]/, 'no separate Doctor menu item');
+  assert.match(app, /doctor\(c\) \{ PAGES\.accountBody\(c\);[^\n]*PAGES\.doctorBody\(c, true\); \}/);
+  assert.match(app, /account\(c\) \{ PAGES\.accountBody\(c\);[^\n]*PAGES\.doctorBody\(c, false\); \}/);
+  assert.match(app, /if \(auto && !doctorData && !doctorBusy\)/, 'only the Doctor route runs the checks by itself');
+  assert.match(app, /const navId = \(\) => \(page === 'doctor' \? 'account' : page\)/);
+  assert.match(read('src/renderer/ui-es.js'), /'Account & health': 'Cuenta y salud'/);
+  assert.match(read('src/main/main.js'), /openMain\('doctor'\)/, 'the voice route that opens the doctor page is unchanged');
+});
+
+test('Buddy has a real rounded face on the Mac and the phone, bundled with its licence note', () => {
+  for (const dir of ['src/renderer/fonts', 'src/remote/fonts']) {
+    for (const f of ['Quicksand-Regular.woff2', 'Quicksand-Bold.woff2']) assert.ok(fs.statSync(path.join(__dirname, '..', dir, f)).size > 10000, `${dir}/${f}`);
+    assert.match(read(`${dir}/README.txt`), /SIL Open Font License/);
+  }
+  assert.match(read('src/renderer/looks.css'), /url\("fonts\/Quicksand-Bold\.woff2"\)[\s\S]*"Quicksand", ui-rounded/);
+  assert.match(read('src/remote/looks.css'), /url\("\/fonts\/Quicksand-Regular\.woff2"\)[\s\S]*html\[data-look="buddy"\] body/);
+  const server = read('src/main/remote/server.js');
+  assert.match(server, /'\/fonts\/Quicksand-Regular\.woff2': 'fonts\/Quicksand-Regular\.woff2', '\/fonts\/Quicksand-Bold\.woff2': 'fonts\/Quicksand-Bold\.woff2'/);
+  assert.match(server, /'\.woff2': 'font\/woff2'/);
+});
+
+test('the small floating windows follow the look: every window that uses the shared surface loads look-window.js, and each look has its own surface variables', () => {
+  const dir = path.join(__dirname, '../src/renderer');
+  const users = fs.readdirSync(dir).filter((f) => f.endsWith('.html') && read('src/renderer/' + f).includes('jarvis-surface.css'));
+  assert.ok(users.length >= 15);
+  for (const f of users) assert.match(read('src/renderer/' + f), /<script src="look-window\.js"><\/script>/, `${f} follows the look`);
+  const css = read('src/renderer/jarvis-surface.css');
+  for (const l of ['glass', 'instrument', 'studio', 'buddy']) assert.match(css, new RegExp(`html\\[data-look="${l}"\\] \\{ --menu-radius`), l);
+  assert.match(css, /box-shadow: var\(--menu-shadow\) !important/);
+  assert.match(css, /:root \{ --menu-shadow: 0 0 18px #00c9ff35/, 'Cockpit Lite keeps the original glow');
+  assert.match(read('src/renderer/app.js'), /localStorage\.setItem\('relay-look', look\)/);
+  const attrs = {}, listeners = {};
+  const ctx = { document: { documentElement: { setAttribute: (k, v) => { attrs[k] = v; } } }, window: { addEventListener: (n, f) => { listeners[n] = f; } }, localStorage: { getItem: () => 'buddy' } };
+  vm.runInNewContext(read('src/renderer/look-window.js'), ctx);
+  assert.equal(attrs['data-look'], 'buddy');
+  ctx.localStorage.getItem = () => 'cockpit'; listeners.storage({ key: 'relay-look' });
+  assert.equal(attrs['data-look'], 'cockpit', 'a window that is open follows a change');
+});
+
+test('turned sideways, the phone\'s four round buttons each have their own slot at the bottom right, and the dock does not hide the last menu icons', () => {
+  const css = read('src/remote/style.css');
+  const land = css.slice(css.indexOf('@media (orientation: landscape)'));
+  const offsets = ['#kbd', '#qtog', '#flickfab', '#holofab'].map((id) => { const m = new RegExp(`${id.replace('#', '\\#')} \\{[^}]*right: ([^;]+);`).exec(land); assert.ok(m, `${id} is placed in landscape`); return m[1]; });
+  assert.equal(new Set(offsets).size, 4, 'four different slots');
+  assert.match(land, /#flickfab \{ left: auto;/, 'Flick leaves the bottom-left corner, where the shortcut buttons are');
+  const mac = read('src/renderer/looks.css');
+  assert.match(mac, /\.sidebar-nav \{[^}]*mask-image: linear-gradient/);
+  assert.match(mac, /\.app\.dock-icons \.nav-item \{ height: 30px; \}/);
+});
+
+test('hold to talk on the phone lets the microphone go between tries: the wake loop waits, a new try waits for the last, and a start that never heard audio is retried once', () => {
+  const app = read('src/remote/app.js');
+  assert.match(app, /let lastEnd = 0;/);
+  assert.match(app, /const wait = Math\.max\(wasTalking \? 600 : 0, busy \? 500 : 0, 500 - \(Date\.now\(\) - lastEnd\)\);/);
+  assert.match(app, /if \(wait > 0\) setTimeout\(go, wait\); else go\(\);/);
+  assert.match(app, /lastEnd = Date\.now\(\);/);
+  assert.match(app, /heyLoop\.setPaused\(holding \|\| !!rec \|\| Date\.now\(\) - lastEnd < 1500/);
+  assert.match(app, /!gotAudio && holding && !blocked && !lastErr && retries < 1 && rec === r\) \{ retries\+\+; setTimeout\(\(\) => go\(\), 600\); return; \}/);
+});
+
 test('the phone snapshot carries the look and mode, and falls back to Glass and the system setting for anything unknown', () => {
   const { AskController } = require('../src/main/askController');
   const settings = { 'settings.look': 'cockpit', 'settings.mode': 'dark' };
