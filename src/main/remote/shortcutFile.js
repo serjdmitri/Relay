@@ -48,24 +48,25 @@ function buildShortcut({ url, token, uuid = () => crypto.randomUUID().toUpperCas
   };
 }
 
-// "Send to Relay" in the iPhone share sheet: for a photo, PDF, web page or text, asks what to do with it, sends it (base64) with the answer, speaks the reply.
+// "Send to Relay" in the iPhone share sheet: for any file, photo, PDF, web page or text, asks what to do with it, sends it (base64) with its name and the answer, speaks the reply.
 function buildShareShortcut({ url, token, uuid = () => crypto.randomUUID().toUpperCase() }) {
-  const ask = uuid(), enc = uuid(), fetchId = uuid(), valueId = uuid();
+  const ask = uuid(), enc = uuid(), nameId = uuid(), fetchId = uuid(), valueId = uuid();
   return {
     WFWorkflowClientVersion: '2900', WFWorkflowMinimumClientVersion: 900, WFWorkflowMinimumClientVersionString: '900',
     WFWorkflowIcon: { WFWorkflowIconStartColor: 431817727, WFWorkflowIconGlyphNumber: 59511 },
     WFWorkflowImportQuestions: [],
-    WFWorkflowInputContentItemClasses: ['WFImageContentItem', 'WFPDFContentItem', 'WFURLContentItem', 'WFSafariWebPageContentItem', 'WFStringContentItem', 'WFGenericFileContentItem'],
+    WFWorkflowInputContentItemClasses: ['WFImageContentItem', 'WFPDFContentItem', 'WFURLContentItem', 'WFSafariWebPageContentItem', 'WFStringContentItem', 'WFGenericFileContentItem', 'WFAVAssetContentItem', 'WFRichTextContentItem'],
     WFWorkflowTypes: ['ActionExtension'],
     WFWorkflowActions: [
       { WFWorkflowActionIdentifier: 'is.workflow.actions.ask', WFWorkflowActionParameters: { UUID: ask, WFAskActionPrompt: 'What should Relay do with this? (empty: tell me what it is)', WFInputType: 'Text' } },
       { WFWorkflowActionIdentifier: 'is.workflow.actions.base64encode', WFWorkflowActionParameters: { UUID: enc, WFInput: { Value: { Type: 'ExtensionInput' }, WFSerializationType: 'WFTextTokenAttachment' }, WFEncodeMode: 'Encode' } },
+      { WFWorkflowActionIdentifier: 'is.workflow.actions.getitemname', WFWorkflowActionParameters: { UUID: nameId, WFInput: { Value: { Type: 'ExtensionInput' }, WFSerializationType: 'WFTextTokenAttachment' } } }, // the file's own name, so Relay can keep it under that name
       {
         WFWorkflowActionIdentifier: 'is.workflow.actions.downloadurl',
         WFWorkflowActionParameters: {
           UUID: fetchId, WFURL: url, WFHTTPMethod: 'POST', WFHTTPBodyType: 'JSON', ShowHeaders: true,
           WFHTTPHeaders: dict([item('Authorization', text(`Bearer ${token}`)), item('X-Relay-Remote', text('1'))]),
-          WFJSONValues: dict([item('data', fromAction(enc, 'Base64 Encoded')), item('text', fromAction(ask, 'Provided Input')), item('wait', text('true'))])
+          WFJSONValues: dict([item('data', fromAction(enc, 'Base64 Encoded')), item('text', fromAction(ask, 'Provided Input')), item('name', fromAction(nameId, 'Name')), item('wait', text('true'))])
         }
       },
       { WFWorkflowActionIdentifier: 'is.workflow.actions.getvalueforkey', WFWorkflowActionParameters: { UUID: valueId, WFDictionaryKey: 'reply' } },

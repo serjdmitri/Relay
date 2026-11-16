@@ -674,25 +674,43 @@ class AskController {
     return [...(this.holos?.holos.values() || [])].map((h) => ({ id: h.id, title: h.title, pinned: !!h.pinned, designed: h.items.some((i) => i.kind === 'cad') }));
   }
 
-  // Something shared from the phone ("Send to Relay" in the share sheet): a photo or PDF is kept in an inbox folder (and counts as a dropped file for this
-  // request); a web address or text goes in the request, marked as content. Then it is asked like any other request from the phone.
+  // Something shared from the phone ("Send to Relay" in the share sheet). A photo or PDF is kept in an inbox folder for a day (and counts as a dropped file for this
+  // request); a web address or some text goes in the request, marked as content; any other file (or text that has a file name) is saved as it was sent in
+  // <inbox>/Received, never opened or run, and the Mac says what arrived. Then it is asked like any other request from the phone.
   async remoteSend(what, device, id) {
     const inbox = require('./remote/inbox');
     const d = inbox.decode(what.data);
     if (!d.ok) return d;
     const info = inbox.detect(d.bytes);
-    if (!info) return { ok: false, error: 'Relay cannot read that kind of file from the phone yet (photos, PDFs, web addresses and text work).' };
-    if (what.flick && info.kind === 'image') return this.flickArrived(d.bytes, info, what.name, what.dir, what.how);
+    if (what.flick && info?.kind === 'image') return this.flickArrived(d.bytes, info, what.name, what.dir, what.how);
+    const root = this.inboxDir || path.join(require('os').tmpdir(), 'relay-inbox');
+    if (!info || (info.kind === 'text' && (inbox.isNamedFile(what.name, d.bytes) || d.bytes.length > inbox.TEXT_INLINE_MAX))) return this.remoteReceiveFile(what, d.bytes, info, path.join(root, 'Received'), device, id);
     let file = '';
     if (info.kind !== 'text') {
-      const dir = path.join(this.inboxDir || path.join(require('os').tmpdir(), 'relay-inbox'));
       const convert = (a, b) => new Promise((resolve) => execFile('/usr/bin/sips', ['-s', 'format', 'jpeg', a, '--out', b], { timeout: 20000 }, (err) => resolve(!err)));
-      file = await inbox.keep(dir, d.bytes, info, { convert });
+      file = await inbox.keep(root, d.bytes, info, { convert });
       this.files = { ts: Date.now(), paths: [file] };
     }
     const text = inbox.requestText({ info, instruction: what.text, text: info.kind === 'text' ? d.bytes.toString('utf8') : '', file });
     await this.remoteAsk(text, device, id);
     return { ok: true, id };
+  }
+
+  // A file from the phone's share sheet that is neither a photo nor a PDF: kept as sent (cleaned name, no permission to run), and what arrived is said on the Mac and on the phone.
+  // With words from you ("what is this?") Relay is asked about it; without, nothing is asked: it is only received.
+  async remoteReceiveFile(what, bytes, info, dir, device, id) {
+    const inbox = require('./remote/inbox');
+    const kept = inbox.keepReceived(dir, bytes, { name: what.name, ext: info?.ext });
+    if (!kept.ok) return kept;
+    const label = `${path.basename(kept.file)} (${inbox.sizeWords(bytes.length)})`;
+    this.files = { ts: Date.now(), paths: [kept.file] };
+    this.diag?.log('phone-file', `${bytes.length} bytes, ${kept.renamed ? 'renamed so it cannot run, ' : ''}from ${device?.name || 'a phone'}`);
+    const asked = String(what.text || '').trim();
+    if (asked) { await this.remoteAsk(inbox.requestText({ info: { kind: 'file' }, instruction: asked, file: kept.file, name: path.basename(kept.file) }), device, id); return { ok: true, id, saved: kept.file }; }
+    const reply = `Got ${label} from ${device?.name || 'your phone'}. It is saved in Relay's inbox on the Mac${kept.renamed ? ', renamed so it cannot open a program by mistake' : ''}.`;
+    if (!this.runningTask && ['idle', 'done'].includes(this.state)) this.notice(reply.replace(/^Got /, 'Received '), 'done'); // never over a request that is working
+    this.emitResult({ id, reply, status: 'done' });
+    return { ok: true, id, saved: kept.file };
   }
 
   // A photo flicked from the phone: the original goes straight into Downloads and is shown as a card (save, share, crop, change type, rename...) on the side of the screen it was flicked towards.

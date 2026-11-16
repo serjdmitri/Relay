@@ -202,6 +202,20 @@ test('/api/send takes a photo or text from the share sheet (base64), only from a
   s.stop();
 });
 
+test('/api/send passes the file name on, cuts a very long one, and still needs the key', async () => {
+  const { s, post, pairing } = await make();
+  const got = [];
+  s.control.send = async (what) => { got.push(what); return { ok: true }; };
+  pairing.start();
+  const { token } = await (await post('/api/pair', { code: '424242', name: 'Share' })).json();
+  assert.equal((await post('/api/send', { data: 'aGk=', name: 'Plan.docx' }, token)).status, 200);
+  assert.equal((await post('/api/send', { data: 'aGk=', name: 'n'.repeat(400) }, token)).status, 200);
+  assert.deepEqual(got.map((w) => w.name.length), [9, 255]);
+  assert.equal((await post('/api/send', { data: 'aGk=', name: 'x.zip' })).status, 401, 'no key, no file');
+  assert.equal(got.length, 2);
+  s.stop();
+});
+
 test('a flicked photo reaches Relay with its flick mark and the side it was flicked towards (and a made-up side is dropped)', async () => {
   const { s, post, pairing } = await make();
   const got = [];

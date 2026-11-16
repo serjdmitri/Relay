@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src file: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self';">
 <title>Photo from your phone</title>
 <script src="look-window.js"></script>
+<script src="inpaint.js"></script>
 <style>
   /* A photo flicked from the phone: black glass like the answer card, the picture, and a few buttons. */
   :root { --ink: #f4f7fa; --dim: rgba(240, 246, 252, .62); --acc: #6fd3ff; --line: rgba(111, 211, 255, .38); }
@@ -28,7 +29,11 @@
   #rename { flex: 1; min-width: 0; padding: 5px 9px; border-radius: 9px; border: 1px solid var(--line); background: #0b1218; outline: 0; }
   #msg { width: 100%; min-height: 18px; font-size: 12px; color: var(--dim); text-align: center; }
   #msg.bad { color: #fca5a5; }
-  .bar { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  #imgwrap.erasing { cursor: crosshair; -webkit-app-region: no-drag; }
+  #brush { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+  #imgwrap.erasing #brush { pointer-events: auto; touch-action: none; }
+  #size { width: 100%; accent-color: var(--acc); -webkit-app-region: no-drag; }
+  .bar { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .bar.wide { grid-template-columns: repeat(3, 1fr); }
   .bar button { height: 36px; border-radius: 11px; border: 1px solid var(--line); background: rgba(14, 30, 44, .85); font-size: 12.5px; font-weight: 600; }
   .bar button:hover { background: rgba(40, 80, 110, .85); }
@@ -56,7 +61,7 @@
 <body>
 <div id="card">
   <button id="x" type="button" aria-label="Close">&#10005;</button>
-  <div id="imgwrap"><img id="pic" alt=""><canvas id="holo" hidden></canvas><div id="sel" hidden></div></div>
+  <div id="imgwrap"><img id="pic" alt=""><canvas id="holo" hidden></canvas><canvas id="brush"></canvas><div id="sel" hidden></div></div>
   <div id="meta">
     <span id="name"><span id="base"></span></span><span id="ext"></span><span id="info"></span>
     <input id="rename" type="text" maxlength="120" spellcheck="false" hidden>
@@ -66,6 +71,7 @@
     <button type="button" data-act="save">Save as</button>
     <button type="button" data-act="share" id="share">Share</button>
     <button type="button" data-mode="crop">Crop</button>
+    <button type="button" data-mode="erase">Erase</button>
     <button type="button" data-mode="type">Type</button>
     <button type="button" data-mode="rename">Rename</button>
     <button type="button" data-act="copy">Copy</button>
@@ -75,6 +81,11 @@
   <div id="bar-crop" hidden style="width:100%">
     <div class="hint">Drag over the photo to choose the part to keep.</div>
     <div class="bar wide" style="margin-top:6px"><button type="button" id="cropcancel">Cancel</button><span></span><button type="button" id="keep" class="go" disabled>Keep this part</button></div>
+  </div>
+  <div id="bar-erase" hidden style="width:100%">
+    <div class="hint">Paint over what to remove, then press Remove. Works best on small things over a plain background.</div>
+    <input id="size" type="range" min="6" max="60" value="22" aria-label="Brush size" style="margin-top:6px">
+    <div class="bar" style="margin-top:6px"><button type="button" id="erasecancel">Cancel</button><button type="button" id="eraseundo">Clear</button><button type="button" id="remove" class="go" disabled>Remove</button></div>
   </div>
   <div id="bar-type" hidden style="width:100%">
     <div class="hint">Change the file type (the original stays).</div>

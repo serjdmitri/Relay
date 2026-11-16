@@ -7,6 +7,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { isPrivateAddress } = require('./auth');
+const inbox = require('./inbox');
 
 const TYPES = { '.woff2': 'font/woff2', '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
@@ -166,12 +167,12 @@ class RemoteServer {
       const result = await answer;
       return result.status === 'revoked' || !this.deviceActive(device) ? this.json(res, 401, { error: 'Not paired.' }) : this.json(res, 200, result);
     }
-    // Something shared from the phone's share sheet (a photo, a PDF, a web address, some text) with what to do with it: base64 in "data".
+    // Something shared from the phone's share sheet (a photo, a PDF, a web address, some text or any other file) with what to do with it: base64 in "data", its file name in "name".
     if (p === '/api/send' && req.method === 'POST') {
-      const b = await this.body(req, 45 * 1024 * 1024).catch(() => null);
-      if (!b || !b.data) return this.json(res, 400, { error: 'Nothing to send, or it was too big (30 MB at most).' });
+      const b = await this.body(req, inbox.MAX_REQUEST).catch(() => null);
+      if (!b || !b.data) return this.json(res, 400, { error: `Nothing to send, or it was too big (${inbox.MAX_BYTES / 1048576} MB at most).` });
       const id = crypto.randomUUID();
-      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || ''), flick: b.flick === true, dir: ['left', 'right', 'up', 'down', 'center'].includes(b.dir) ? b.dir : '', how: ['flick', 'swipe', 'button'].includes(b.how) ? b.how : '' }, device, id); return r; };
+      const start = async () => { const r = await this.control.send?.({ data: String(b.data), text: String(b.text || ''), name: String(b.name || '').slice(0, 255), flick: b.flick === true, dir: ['left', 'right', 'up', 'down', 'center'].includes(b.dir) ? b.dir : '', how: ['flick', 'swipe', 'button'].includes(b.how) ? b.how : '' }, device, id); return r; };
       if (!(b.wait === true || /^(true|1|yes)$/i.test(String(b.wait ?? '')))) { const r = await start(); return r?.ok ? this.json(res, 200, { id }) : this.json(res, 400, { error: r?.error || 'Could not take that.' }); }
       const answer = this.waitForAnswer(id, device);
       const r = await start();

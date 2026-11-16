@@ -26,7 +26,7 @@ test('base64 with the line breaks a Shortcut adds is understood; nothing, or too
 test('a picture is kept in the inbox (a HEIC one converted), old things there are tidied away', async () => {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'inbox-')), 'in');
   fs.mkdirSync(dir);
-  const old = path.join(dir, 'old.jpg');
+  const old = path.join(dir, 'From phone old.jpg');
   fs.writeFileSync(old, 'x');
   fs.utimesSync(old, new Date(Date.now() - 3 * 864e5), new Date(Date.now() - 3 * 864e5));
   const f = await keep(dir, Buffer.from([0xff, 0xd8, 0xff, 0xe0]), { kind: 'image', ext: 'jpg' });
