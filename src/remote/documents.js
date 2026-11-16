@@ -139,10 +139,14 @@ if (typeof document !== 'undefined') (function () {
   function startDrag(e, li, handle) {
     if (!sorting) return;
     e.preventDefault();
-    handle.setPointerCapture(e.pointerId);
+    try { handle.setPointerCapture(e.pointerId); } catch { /* the window listeners below carry the drag anyway */ }
     li.classList.add('dragging');
     const list = $('dpages');
+    const lastY = { y: e.clientY };
+    // The card is moved in the list while it is dragged, which takes its handle out of the page for a moment and ends its pointer capture; so the drag
+    // is followed on the window, which sees every move and the release wherever the finger is.
     const onMove = (ev) => {
+      lastY.y = ev.clientY;
       const others = [...list.children].filter((x) => x !== li);
       const mids = others.map((x) => { const b = x.getBoundingClientRect(); return b.top + b.height / 2; });
       const at = dropIndex(mids, ev.clientY);
@@ -151,12 +155,13 @@ if (typeof document !== 'undefined') (function () {
       if (ev.clientY < 90) window.scrollBy(0, -14); else if (ev.clientY > innerHeight - 90) window.scrollBy(0, 14);
     };
     const end = () => {
-      handle.removeEventListener('pointermove', onMove); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end);
+      for (const t of ['pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) window.removeEventListener(t, t === 'pointermove' ? onMove : end, true);
       li.classList.remove('dragging');
       const order = [...list.children].map((x) => Number(x.dataset.index));
       if (order.some((v, i) => v !== i)) commit(order);
     };
-    handle.addEventListener('pointermove', onMove); handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
+    window.addEventListener('pointermove', onMove, true);
+    for (const t of ['pointerup', 'pointercancel']) window.addEventListener(t, end, true);
   }
 
   $('dsort').onclick = () => { sorting = !sorting; draw(); };

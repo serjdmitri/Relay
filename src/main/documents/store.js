@@ -248,7 +248,9 @@ class DocumentStore {
       const file = path.join(doc.folder, '.relay', 'pages', `${key}.png`);
       if (this.fs.existsSync(file)) return { bytes: this.fs.readFileSync(file), title: doc.title, key };
       if (!this.render) throw new Error('Pages cannot be drawn right now.');
-      const r = await this.render(pages[i]);
+      // A window that never answers must not hold up every later change to the documents (they share this queue).
+      let timer;
+      const r = await Promise.race([this.render(pages[i]), new Promise((_, no) => { timer = setTimeout(() => no(new Error('Drawing that page took too long. Try again in a moment.')), this.renderMs ?? 20000); timer.unref?.(); })]).finally(() => clearTimeout(timer));
       this.fs.mkdirSync(path.dirname(file), { recursive: true });
       this.fs.writeFileSync(file, r.png);
       this.writeJson(path.join(doc.folder, '.relay', 'pages', `${key}.json`), { overflow: !!r.overflow });

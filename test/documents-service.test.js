@@ -128,6 +128,30 @@ test('a page that cannot be drawn is an error, and the window is not trusted aga
   assert.ok(made[0].d, 'the first window was closed');
 });
 
+test('a page that never gets drawn does not hold up the next change to the documents', async () => {
+  const r = rig();
+  await r.tools.create({ title: 'Report', pages: ['A', 'B'] });
+  await r.svc.warm(r.store.all()[0].id); // both pages are drawn
+  r.store.renderMs = 30;
+  r.store.render = () => new Promise(() => {}); // from now on a window that never answers
+  await r.tools.edit({ doc: 'report', changes: [{ op: 'add_page', text: 'C is a page that has not been drawn' }] });
+  await assert.rejects(() => r.store.pageImage('report', 2), /took too long/);
+  const e = await r.tools.edit({ doc: 'report', changes: [{ op: 'add_page', text: 'D' }] });
+  assert.match(e, /Changed "Report"/, 'the queue moved on');
+});
+
+test('a hung page window is closed after its time, and the next page gets a fresh window', async () => {
+  const made = [];
+  class Win { constructor() { made.push(this); this.webContents = { setWindowOpenHandler() {}, executeJavaScript: async () => 1056, capturePage: async () => new Promise(() => {}) }; } async loadURL() {} setContentSize() {} isDestroyed() { return !!this.d; } destroy() { this.d = true; } }
+  const render = createPageRenderer({ BrowserWindow: Win, wait: async () => {}, timeoutMs: 20, idleMs: 1000 });
+  render('x').catch(() => {});
+  await new Promise((r) => setTimeout(r, 60));
+  assert.ok(made[0].d, 'the hung window was closed');
+  render('y').catch(() => {});
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(made.length, 2);
+});
+
 // ---- the voice tools ----
 const fakeMac = { openApp: async () => '', uiLocate: async () => null };
 test('the document tools exist only when the app supplies documents, and all are in one hidden group', () => {

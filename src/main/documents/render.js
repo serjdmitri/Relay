@@ -16,7 +16,7 @@ function pageHtml(md) {
 
 // BrowserWindow is passed in (Electron's), so this file loads anywhere. Returns render(markdown) -> { png: Buffer, overflow: boolean }.
 // One hidden window is kept for a while and reused for every page (the store draws one page at a time), then closed when it has been idle.
-function createPageRenderer({ BrowserWindow, wait = (ms) => new Promise((r) => setTimeout(r, ms)), idleMs = 30000 }) {
+function createPageRenderer({ BrowserWindow, wait = (ms) => new Promise((r) => setTimeout(r, ms)), idleMs = 30000, timeoutMs = 15000 }) {
   let win = null, idle = null;
   const open = () => {
     if (win && !win.isDestroyed()) return win;
@@ -28,6 +28,8 @@ function createPageRenderer({ BrowserWindow, wait = (ms) => new Promise((r) => s
   return async function render(md) {
     clearTimeout(idle);
     const w = open();
+    const killer = setTimeout(close, timeoutMs); // a window that hangs is closed, so the next page gets a fresh one
+    killer.unref?.();
     try {
       await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(pageHtml(md))}`);
       const full = Math.ceil(Number(await w.webContents.executeJavaScript('document.getElementById("sheet").scrollHeight')) || H);
@@ -39,7 +41,7 @@ function createPageRenderer({ BrowserWindow, wait = (ms) => new Promise((r) => s
       if (img.getSize().width > MAX_W) img = img.resize({ width: MAX_W });
       return { png: img.toPNG(), overflow: full > H + 2 };
     } catch (e) { close(); throw e; } // a window that failed once is not trusted again
-    finally { if (win) { idle = setTimeout(close, idleMs); idle.unref?.(); } }
+    finally { clearTimeout(killer); if (win) { idle = setTimeout(close, idleMs); idle.unref?.(); } }
   };
 }
 
