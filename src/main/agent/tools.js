@@ -14,7 +14,7 @@ const obj = (properties, required = []) => ({ type: 'object', properties, requir
 // overlay.point(x, y, label) shows the Relay cursor at global screen points; overlay.draw(shapes) and overlay.guide(card, target)
 // leave marks on screen. getScale() maps screenshot pixels to screen points for the last screenshot taken, and
 // getOrigin() says where that screenshot's display starts (a second screen does not start at 0,0).
-function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, skills = null, homework = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
+function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, getMark = () => null, getDisplays = () => [], getFront = () => null, getFiles = () => [], memory = null, schedules = null, agents = null, cards = null, panels = null, notes = null, models = null, drive = null, stickies = null, study = null, skills = null, homework = null, documents = null, forecast = null, getScale, getOrigin = () => ({ x: 0, y: 0 }), visionCapable = true }) {
   const toPoints = (x, y) => toGlobal(x, y, { scale: getScale(), origin: getOrigin() });
   const locate = (app, name) => (mac.locate ? mac.locate(app, name) : mac.uiLocate(app, name));
   const OFF = 'Marks on screen are turned off in Relay settings (General > Relay cursor). Describe it in words instead.';
@@ -481,6 +481,56 @@ function buildTools({ cameraShot = null, mac, firefox, overlay, guides = null, g
         input_schema: obj({ folder: str('The project folder name'), files: { type: 'array', description: 'The files', items: { type: 'object', properties: { name: str('File name or relative path'), content: str('The file content') }, required: ['name', 'content'] } } }, ['folder', 'files']),
         describe: (i) => `Saving ${String(i.folder || 'the project').slice(0, 40)}`,
         run: async (i) => { const r = await homework.saveFiles({ folder: i.folder, files: i.files }); return `Saved ${r.files.length} file${r.files.length === 1 ? '' : 's'} (${r.files.slice(0, 6).join(', ')}) in Documents/Relay Homework/${r.path.split('/').pop()} and showed it in Finder.`; }
+      }
+    );
+  }
+
+  // Documents: real Word files Relay writes and edits in Documents/Relay Documents, one folder each, with versions. They show on the phone as page pictures.
+  if (documents) {
+    const doc = str('The document: its title (or words of it, like "cover letter"), or its id. Leave out for the latest one.');
+    const change = { type: 'object', description: 'One change', properties: { op: str('replace_paragraph | insert_paragraph | delete_paragraph | replace_page | add_page | delete_page'), page: num('Page number, from 1'), paragraph: num('Paragraph number on that page, from 1 (replace_paragraph, delete_paragraph)'), after: num('insert_paragraph: put it after this paragraph (0 = at the top). add_page: put the page after this page (0 = first; leave out for the end)'), text: str('The new markdown (not for the delete operations)') }, required: ['op'] };
+    tools.push(
+      {
+        name: 'doc_create',
+        description: 'Write a real document (a letter, report, essay, CV, memo, proposal) as a Word file in Documents/Relay Documents, with its own folder. Use this, not make_document, for any document the user asks you to write or make. Do not ask the user anything first: pick a sensible title and write it. It also appears on their phone under Documents, one picture per page. Write the whole text yourself, in markdown (# title, ## headings, - lists, **bold**). pages has one string per page: about 300 to 400 words fit on a page, so "a one-page cover letter" is ONE string and a longer report is several. Do not put page markers in the text.',
+        input_schema: obj({ title: str('A short title, used as the folder and file name'), pages: { type: 'array', description: 'The pages, each the markdown of that page', items: { type: 'string' } } }, ['title', 'pages']),
+        describe: (i) => `Writing ${String(i.title || 'the document').slice(0, 40)}`,
+        run: (i) => documents.create(i)
+      },
+      {
+        name: 'doc_list',
+        description: 'List the documents Relay has written (title, pages, version, and whether a change is waiting for the user to approve).',
+        input_schema: obj({}),
+        describe: () => 'Looking at the documents',
+        run: () => documents.list()
+      },
+      {
+        name: 'doc_read',
+        description: 'Read a document by number: every page with its numbered paragraphs (a heading and a list each count as one). Call this before doc_edit so the numbers are right, and when the user asks what a document says.',
+        input_schema: obj({ doc }),
+        describe: () => 'Reading the document',
+        run: (i) => documents.read(i)
+      },
+      {
+        name: 'doc_edit',
+        description: 'Change a document by voice ("change the second paragraph to…", "add a page about…", "remove the last paragraph"). Give the changes with page and paragraph numbers from doc_read (they are applied in order, so later numbers see the earlier changes). The result is a NEW version that is live at once but waits on the user\'s phone for Approve or Reject; the old version is kept and Reject puts it back. Never claim it is final. Do not ask first: make the change.',
+        input_schema: obj({ doc, changes: { type: 'array', description: 'The changes, in order', items: change } }, ['changes']),
+        describe: () => 'Changing the document',
+        run: (i) => documents.edit(i)
+      },
+      {
+        name: 'doc_review',
+        description: 'Approve or reject the change that is waiting on a document, when the user says so ("approve it", "undo that change", "go back to the old one"). Reject puts the earlier pages back.',
+        input_schema: obj({ doc, action: str('approve | reject') }, ['action']),
+        describe: (i) => (i.action === 'reject' ? 'Putting the old version back' : 'Keeping the change'),
+        run: (i) => documents.review(i)
+      },
+      {
+        name: 'doc_hologram',
+        description: 'Show one page of a document as a hologram on the Mac (and the phone can look at it in 3D under Holograms).',
+        input_schema: obj({ doc, page: num('Page number, from 1 (the first page if left out)') }),
+        describe: () => 'Making the page a hologram',
+        run: (i) => documents.hologram(i)
       }
     );
   }
