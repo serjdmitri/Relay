@@ -215,8 +215,20 @@
     speechSynthesis.speak(u);
   }
 
+  // Something your Mac sent with a lid flick: a note to open it (lid.html has Save and Open).
+  let lidTimer;
+  function showLidNote(e) {
+    const a = $('lidnote');
+    if (!a) return;
+    a.textContent = `${e.name || 'Something'} from your Mac. Tap to open.`;
+    a.hidden = false;
+    clearTimeout(lidTimer);
+    lidTimer = setTimeout(() => { a.hidden = true; }, 30000);
+  }
+
   function onEvent(e) {
     if (e.type === 'status') applyStatus(e);
+    else if (e.type === 'lid') showLidNote(e);
     else if (e.type === 'result') {
       const mine = waiting && e.id === waiting;
       if (mine) waiting = null;

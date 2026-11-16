@@ -100,8 +100,8 @@ const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 // What changed between two versions, paragraph by paragraph: [{ type: 'changed'|'added'|'removed', page, before, after }]. page is where it is in the newer one
 // (for a removal, where it was in the older one). A paragraph that only moved to another page counts as a removal and an addition.
-function changes(oldPages, newPages) {
-  const flat = (pages) => pages.flatMap((p, i) => blocks(p).map((text) => ({ page: i + 1, text })));
+function changes(oldPages, newPages, units = blocks) {
+  const flat = (pages) => pages.flatMap((p, i) => units(p).map((text) => ({ page: i + 1, text })));
   const A = flat(oldPages), B = flat(newPages);
   if (A.length * B.length > 4_000_000) return A.length === B.length && A.every((a, i) => a.text === B[i].text) ? [] : [{ type: 'changed', page: 1, before: '(the whole document)', after: '(the whole document)' }];
   const n = A.length, m = B.length;

@@ -8,11 +8,12 @@ const fs = require('fs');
 const path = require('path');
 const { isPrivateAddress } = require('./auth');
 const inbox = require('./inbox');
+const { LidStore } = require('./lidStore');
 
 const TYPES = { '.woff2': 'font/woff2', '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
 const MAP_FILES=['maplibre-gl.mjs','maplibre-gl-shared.mjs','maplibre-gl-worker.mjs','maplibre-gl.css','LICENSE.txt'];
-const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css','/navmath.js':'navmath.js','/navvoice.js':'navvoice.js','/wakeword.js':'wakeword.js', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/documents.html': 'documents.html', '/documents.js': 'documents.js', '/flick.html': 'flick.html', '/flick.js': 'flick.js', '/flickstore.js': 'flickstore.js', '/flickhome.js': 'flickhome.js', '/look.js': 'look.js', '/looks.css': 'looks.css', '/fonts/Quicksand-Regular.woff2': 'fonts/Quicksand-Regular.woff2', '/fonts/Quicksand-Bold.woff2': 'fonts/Quicksand-Bold.woff2','/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/icons/glass.png': 'icons/glass.png', '/manifests/glass.webmanifest': 'manifests/glass.webmanifest', '/icons/instrument.png': 'icons/instrument.png', '/manifests/instrument.webmanifest': 'manifests/instrument.webmanifest', '/icons/studio.png': 'icons/studio.png', '/manifests/studio.webmanifest': 'manifests/studio.webmanifest', '/icons/cockpit.png': 'icons/cockpit.png', '/manifests/cockpit.webmanifest': 'manifests/cockpit.webmanifest', '/icons/buddy.png': 'icons/buddy.png', '/manifests/buddy.webmanifest': 'manifests/buddy.webmanifest', '/favicon.ico': 'apple-touch-icon.png' };
+const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css','/navmath.js':'navmath.js','/navvoice.js':'navvoice.js','/wakeword.js':'wakeword.js', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/documents.html': 'documents.html', '/documents.js': 'documents.js', '/flick.html': 'flick.html', '/flick.js': 'flick.js', '/flickstore.js': 'flickstore.js', '/flickhome.js': 'flickhome.js', '/look.js': 'look.js', '/looks.css': 'looks.css', '/lid.html': 'lid.html', '/lid.js': 'lid.js', '/fonts/Quicksand-Regular.woff2': 'fonts/Quicksand-Regular.woff2', '/fonts/Quicksand-Bold.woff2': 'fonts/Quicksand-Bold.woff2','/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/icons/glass.png': 'icons/glass.png', '/manifests/glass.webmanifest': 'manifests/glass.webmanifest', '/icons/instrument.png': 'icons/instrument.png', '/manifests/instrument.webmanifest': 'manifests/instrument.webmanifest', '/icons/studio.png': 'icons/studio.png', '/manifests/studio.webmanifest': 'manifests/studio.webmanifest', '/icons/cockpit.png': 'icons/cockpit.png', '/manifests/cockpit.webmanifest': 'manifests/cockpit.webmanifest', '/icons/buddy.png': 'icons/buddy.png', '/manifests/buddy.webmanifest': 'manifests/buddy.webmanifest', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
@@ -27,6 +28,7 @@ class RemoteServer {
     this.host = host;
     this.port = port;
     this.clients = new Set();
+    this.lid = new LidStore(); // what a lid flick on the Mac sent to the phones (fetched by id)
     this.rates = new Map();
     this.waiters = new Map(); // requests that asked to wait for the answer (iPhone Shortcuts): id -> resolve
     this.server = null;
@@ -76,6 +78,18 @@ class RemoteServer {
     if (event.type === 'result' && event.id && this.waiters.has(event.id)) { this.waiters.get(event.id)({ id: event.id, reply: event.reply, status: event.status }); this.waiters.delete(event.id); } // the waiter's own timer is cleared by it
     const line = `data: ${JSON.stringify(event)}\n\n`;
     for (const c of this.clients) c.res.write(line);
+  }
+
+  // How many phones are paired, and how many are listening right now (a lid flick needs both).
+  lidStatus() { return { paired: this.devices.list().length, connected: this.clients.size }; }
+
+  // A lid flick on the Mac: keep the item for the phones to fetch and tell them over the event stream. { ok, id } or { ok: false, reason }.
+  deliverLid(item) {
+    if (!this.clients.size) return { ok: false, reason: 'phone-offline' };
+    const r = this.lid.add(item);
+    if (!r.ok) return r;
+    this.broadcast({ type: 'lid', ...r.meta });
+    return { ok: true, id: r.meta.id };
   }
 
   json(res, code, obj) {
@@ -154,6 +168,15 @@ class RemoteServer {
       return this.json(res,404,{error:'Unknown navigation action.'});
     }
     if (p === '/api/state' && req.method === 'GET') return this.json(res, 200, { ...this.control.snapshot(), recent: this.control.recent(8), device: device.name });
+    // What the Mac sent with a lid flick: the list, and one thing's bytes (as a download; the page decides how to show it from x-relay-mime).
+    if (p === '/api/lid' && req.method === 'GET') return this.json(res, 200, { items: this.lid.list() });
+    const lm = p.match(/^\/api\/lid\/([\w-]{8,64})$/);
+    if (lm && req.method === 'GET') {
+      const item = this.lid.get(lm[1]);
+      if (!item) return this.json(res, 404, { error: 'That is gone. Flick again on your Mac.' });
+      res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': item.bytes.length, 'content-disposition': 'attachment', 'cache-control': 'no-store', 'x-relay-mime': item.mime, 'x-relay-name': encodeURIComponent(item.name) });
+      return res.end(item.bytes);
+    }
     if (p === '/api/ask' && req.method === 'POST') {
       const b = await this.body(req).catch(() => null);
       const text = String(b?.text || '').trim().slice(0, 2000);

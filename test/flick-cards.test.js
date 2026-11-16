@@ -29,7 +29,7 @@ test('the card lands on the side it was flicked towards, stays on the screen, an
   const mid = landing('center', area, size); assert.equal(mid.x, (1440 - 372) / 2); assert.equal(mid.y, centreY);
   assert.equal(landing('right', area, size, 18, 1).x, landing('right', area, size, 18, 0).x - 26, 'the next card on that side sits a little further in');
   assert.equal(landing('left', { x: 0, y: 0, width: 300, height: 300 }, size).x, 0, 'a card bigger than the screen is kept at its corner');
-  const f = fit(4000, 3000); assert.equal(f.imgW, 344); assert.equal(f.imgH, 258); assert.equal(f.height, 258 + 224);
+  const f = fit(4000, 3000); assert.equal(f.imgW, 344); assert.equal(f.imgH, 258); assert.equal(f.height, 258 + 182);
   assert.ok(fit(3000, 4000).imgH <= 360); assert.equal(fit(0, 0).imgW > 0, true);
 });
 
@@ -157,4 +157,17 @@ test('the card page has an Erase mode: a brush over the picture, mapped to the r
   assert.match(html, /<script src="inpaint\.js">/); assert.match(html, /data-mode="erase"/); assert.match(html, /id="remove"/);
   assert.match(js, /window\.Inpaint\.inpaint/); assert.match(js, /action: 'erase'/); assert.match(js, /drawImage\(pic, 0, 0, W, H\)/, 'drawn from the picture, so its rotation is respected');
   assert.match(html, /#imgwrap\.erasing \{[^}]*no-drag/, 'brush strokes do not drag the card');
+});
+
+test('extend keeps the grown picture beside the original as "<name> extended", and the page has an Extend mode that says what it really does', async () => {
+  const t = setup('IMG_6.jpg');
+  await t.cards.show({ file: t.file, dir: 'up' });
+  const BIG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(60, 3)]);
+  const ok = await t.act({ action: 'extend', bytes: new Uint8Array(BIG), type: 'jpg' });
+  assert.equal(ok.ok, true); assert.match(ok.message, /^Extended/);
+  assert.equal(fs.readFileSync(path.join(t.dir, 'IMG_6 extended.jpg')).equals(BIG), true); assert.equal(fs.readFileSync(t.file).equals(JPG), true);
+  assert.equal((await t.act({ action: 'extend', bytes: new Uint8Array([9, 9, 9, 9, 9, 9, 9, 9, 9]), type: 'jpg' })).ok, false);
+  t.cleanup();
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', 'src/renderer', f), 'utf8');
+  assert.match(read('flick-card.html'), /data-mode="extend"/); assert.match(read('flick-card.html'), /adds no new objects/); assert.match(read('flick-card.js'), /window\.Inpaint\.extend/);
 });

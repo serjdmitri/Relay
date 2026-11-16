@@ -15,6 +15,8 @@ const crypto = require('crypto');
 const { markdownToHtml } = require('../homework');
 const { safeName } = require('../homeworkFiles');
 const model = require('./model');
+const kinds = require('./kinds');
+const office = require('./office');
 
 const BREAK = 'RELAYPAGEBREAKMARKER';
 const sha = (x) => crypto.createHash('sha1').update(x).digest('hex');
@@ -100,27 +102,40 @@ class DocumentStore {
 
   docxPath(doc) { return path.join(doc.folder, doc.docxName); }
 
-  // The Word file for these pages, written into the document's folder (what was there is kept first, if it is not what Relay wrote).
+  // The Office file for these pages (a Word, Excel or PowerPoint file by the document's kind), written into the document's folder
+  // (what was there is kept first, if it is not what Relay wrote).
   async writeDocx(doc, pages) {
-    const html = documentHtml(doc.title, pages);
+    const kind = kinds.kindOk(doc.kind);
     const stamp = `${process.pid}-${this.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const work = path.join(this.tmp, `relay-doc-${stamp}`);
     this.fs.mkdirSync(path.join(work, 'word'), { recursive: true });
     try {
-      const src = path.join(work, 'doc.html'), out = path.join(work, 'doc.docx');
-      this.fs.writeFileSync(src, html);
-      await this.exec('/usr/bin/textutil', ['-convert', 'docx', '-output', out, src], { cwd: work });
-      if (!this.fs.existsSync(out)) throw new Error('no Word file was made');
-      if (pages.length > 1) {
-        const xml = await this.exec('/usr/bin/unzip', ['-p', out, 'word/document.xml'], { cwd: work });
-        if (!String(xml).includes('<w:body>')) throw new Error('the Word file could not be read back');
-        this.fs.writeFileSync(path.join(work, 'word', 'document.xml'), withPageBreaks(xml));
-        await this.exec('/usr/bin/zip', ['-q', out, 'word/document.xml'], { cwd: work });
+      const out = path.join(work, `doc.${office.EXT[kind]}`);
+      if (kind === 'doc') {
+        const src = path.join(work, 'doc.html');
+        this.fs.writeFileSync(src, documentHtml(doc.title, pages));
+        await this.exec('/usr/bin/textutil', ['-convert', 'docx', '-output', out, src], { cwd: work });
+        if (!this.fs.existsSync(out)) throw new Error('no Word file was made');
+        if (pages.length > 1) {
+          const xml = await this.exec('/usr/bin/unzip', ['-p', out, 'word/document.xml'], { cwd: work });
+          if (!String(xml).includes('<w:body>')) throw new Error('the Word file could not be read back');
+          this.fs.writeFileSync(path.join(work, 'word', 'document.xml'), withPageBreaks(xml));
+          await this.exec('/usr/bin/zip', ['-q', out, 'word/document.xml'], { cwd: work });
+        }
+      } else { // a spreadsheet or slides: the XML files of an Office package, zipped
+        const pack = path.join(work, 'pack');
+        for (const [rel, xml] of Object.entries(kind === 'sheet' ? office.xlsxFiles(pages) : office.pptxFiles(pages))) {
+          const f = path.join(pack, rel);
+          this.fs.mkdirSync(path.dirname(f), { recursive: true });
+          this.fs.writeFileSync(f, xml);
+        }
+        await this.exec('/usr/bin/zip', ['-X', '-q', '-r', out, '.'], { cwd: pack });
+        if (!this.fs.existsSync(out)) throw new Error(`no ${kinds.NOUN[kind]} was made`);
       }
       const bytes = this.fs.readFileSync(out);
       const target = this.docxPath(doc);
-      if (this.fs.existsSync(target) && doc.docxSha && sha(this.fs.readFileSync(target)) !== doc.docxSha) { // changed by hand in Word: keep it
-        const keep = path.join(doc.folder, '.relay', 'backup', `${this.now()}.docx`);
+      if (this.fs.existsSync(target) && doc.docxSha && sha(this.fs.readFileSync(target)) !== doc.docxSha) { // changed by hand in Word, Excel or PowerPoint: keep it
+        const keep = path.join(doc.folder, '.relay', 'backup', `${this.now()}.${office.EXT[kind]}`);
         this.fs.mkdirSync(path.dirname(keep), { recursive: true });
         this.fs.copyFileSync(target, keep);
       }
@@ -136,7 +151,7 @@ class DocumentStore {
     const n = (doc.versions.at(-1)?.n || 0) + 1;
     const bytes = await this.writeDocx(doc, pages);
     this.writeJson(this.versionFile(doc, n), { pages });
-    this.fs.writeFileSync(this.versionFile(doc, n, 'docx'), bytes);
+    this.fs.writeFileSync(this.versionFile(doc, n, office.EXT[kinds.kindOk(doc.kind)]), bytes);
     doc.versions.push({ n, at: this.now(), kind, note, status });
     doc.current = n;
     doc.updatedAt = this.now();
@@ -150,20 +165,22 @@ class DocumentStore {
   }
 
   summary(doc) {
-    return { id: doc.id, title: doc.title, folder: doc.folder, docx: this.docxPath(doc), version: doc.current, pages: this.pagesOf(doc).length, pending: !!doc.pending, updatedAt: doc.updatedAt };
+    const kind = kinds.kindOk(doc.kind);
+    return { id: doc.id, title: doc.title, kind, unit: kinds.UNIT[kind], folder: doc.folder, docx: this.docxPath(doc), version: doc.current, pages: this.pagesOf(doc).length, pending: !!doc.pending, updatedAt: doc.updatedAt };
   }
 
-  // A new document. pages: markdown, one string per page.
-  create({ title, pages }) {
+  // A new document, spreadsheet or slide deck (kind: doc | sheet | slides). pages: one string per page, sheet or slide (see office.js for the formats).
+  create({ title, pages, kind = 'doc' }) {
     return this.serial(async () => {
-      const clean = model.cleanPages(pages);
+      kind = kinds.kindOk(kind);
+      const clean = kinds.cleanPages(kind, pages);
       const name = safeName(title, 'Document');
       this.fs.mkdirSync(this.dir, { recursive: true });
       let folder = path.join(this.dir, name), k = 1;
       while (this.fs.existsSync(folder)) folder = path.join(this.dir, `${name} (${++k})`);
       this.fs.mkdirSync(path.join(folder, '.relay'), { recursive: true });
-      const doc = { id: this.newId(), title: String(title || '').trim().slice(0, 120) || name, createdAt: this.now(), updatedAt: this.now(), current: 0, pending: null, versions: [], docxName: `${path.basename(folder)}.docx`, docxSha: '', folder };
-      await this.commit(doc, clean, { kind: 'create', note: `Written with ${clean.length} page${clean.length === 1 ? '' : 's'}`, status: 'approved' });
+      const doc = { id: this.newId(), title: String(title || '').trim().slice(0, 120) || name, createdAt: this.now(), updatedAt: this.now(), current: 0, pending: null, versions: [], kind, docxName: `${path.basename(folder)}.${office.EXT[kind]}`, docxSha: '', folder };
+      await this.commit(doc, clean, { kind: 'create', note: `Written with ${clean.length} ${kinds.UNIT[kind]}${clean.length === 1 ? '' : 's'}`, status: 'approved' });
       try { await this.reveal?.(this.docxPath(doc)); } catch { /* it is saved even if Finder did not open */ }
       return this.summary(doc);
     });
@@ -174,11 +191,12 @@ class DocumentStore {
     return this.serial(async () => {
       const doc = this.find(query);
       const before = this.pagesOf(doc);
-      const { pages, note } = model.applyOps(before, ops);
+      const kind = kinds.kindOk(doc.kind);
+      const { pages, note } = kinds.applyOps(kind, before, ops);
       if (model.same(pages, before)) throw new Error('That would not change anything.');
       if (!doc.pending) doc.pending = { base: doc.current };
       await this.commit(doc, pages, { kind: 'edit', note: note[0].toUpperCase() + note.slice(1), status: 'pending' });
-      return { ...this.summary(doc), note, changes: model.changes(this.pagesOf(doc, doc.pending.base), pages) };
+      return { ...this.summary(doc), note, changes: kinds.changes(kind, this.pagesOf(doc, doc.pending.base), pages) };
     });
   }
 
@@ -211,7 +229,7 @@ class DocumentStore {
       if (doc.pending) throw new Error('Approve or reject the waiting change before moving pages.');
       const pages = model.reorder(this.pagesOf(doc), order);
       if (model.same(pages, this.pagesOf(doc))) return this.summary(doc);
-      await this.commit(doc, pages, { kind: 'reorder', note: 'Pages moved', status: 'approved' });
+      await this.commit(doc, pages, { kind: 'reorder', note: `${kinds.UNIT[kinds.kindOk(doc.kind)][0].toUpperCase()}${kinds.UNIT[kinds.kindOk(doc.kind)].slice(1)}s moved`, status: 'approved' });
       return this.summary(doc);
     });
   }
@@ -220,12 +238,13 @@ class DocumentStore {
   detail(id) {
     const doc = this.find(id);
     const pages = this.pagesOf(doc);
+    const kind = kinds.kindOk(doc.kind);
     const side = (md) => this.readJson(path.join(doc.folder, '.relay', 'pages', `${sha(md)}.json`)) || {};
     return {
       ...this.summary(doc),
       folderName: path.basename(doc.folder),
-      pageList: pages.map((md, i) => ({ index: i, excerpt: model.excerpt(md), overflow: !!side(md).overflow, key: sha(md).slice(0, 12) })),
-      changes: doc.pending ? model.changes(this.pagesOf(doc, doc.pending.base), pages) : [],
+      pageList: pages.map((md, i) => ({ index: i, excerpt: kinds.excerpt(kind, md), overflow: !!side(md).overflow, key: sha(md).slice(0, 12) })),
+      changes: doc.pending ? kinds.changes(kind, this.pagesOf(doc, doc.pending.base), pages) : [],
       pendingNote: doc.pending ? doc.versions.filter((v) => v.status === 'pending').map((v) => v.note).join('; ') : '',
       versions: doc.versions.slice(-12).map((v) => ({ n: v.n, at: v.at, kind: v.kind, note: v.note, status: v.status }))
     };
@@ -234,7 +253,7 @@ class DocumentStore {
   // The text of one version (for "read me the letter" or before editing): numbered pages and paragraphs.
   read(query) {
     const doc = this.find(query);
-    return { ...this.summary(doc), text: model.numbered(this.pagesOf(doc)) };
+    return { ...this.summary(doc), text: kinds.numbered(kinds.kindOk(doc.kind), this.pagesOf(doc)) };
   }
 
   // The picture of one page of the current version (drawn once, then kept).
@@ -250,7 +269,7 @@ class DocumentStore {
       if (!this.render) throw new Error('Pages cannot be drawn right now.');
       // A window that never answers must not hold up every later change to the documents (they share this queue).
       let timer;
-      const r = await Promise.race([this.render(pages[i]), new Promise((_, no) => { timer = setTimeout(() => no(new Error('Drawing that page took too long. Try again in a moment.')), this.renderMs ?? 20000); timer.unref?.(); })]).finally(() => clearTimeout(timer));
+      const r = await Promise.race([this.render(pages[i], kinds.kindOk(doc.kind)), new Promise((_, no) => { timer = setTimeout(() => no(new Error('Drawing that page took too long. Try again in a moment.')), this.renderMs ?? 20000); timer.unref?.(); })]).finally(() => clearTimeout(timer));
       this.fs.mkdirSync(path.dirname(file), { recursive: true });
       this.fs.writeFileSync(file, r.png);
       this.writeJson(path.join(doc.folder, '.relay', 'pages', `${key}.json`), { overflow: !!r.overflow });

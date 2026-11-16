@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { inpaint, maskBounds, grow } = require('../src/renderer/inpaint');
+const { inpaint, maskBounds, grow, extend } = require('../src/renderer/inpaint');
 
 function image(w, h, f) { const d = new Uint8ClampedArray(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const [r, g, b] = f(x, y); d.set([r, g, b, 255], (y * w + x) * 4); } return d; }
 const square = (w, h, x0, y0, s) => { const m = new Uint8Array(w * h); for (let y = y0; y < y0 + s; y++) for (let x = x0; x < x0 + s; x++) m[y * w + x] = 1; return m; };
@@ -39,4 +39,18 @@ test('a hole at the edge, a hole that is the whole picture, and the box that is 
   const big = 1200, d = image(big, big, (x, y) => [x % 256, y % 256, 90]), t0 = Date.now();
   inpaint({ data: d, width: big, height: big, mask: grow(square(big, big, 500, 500, 60), big, big, 2) });
   assert.ok(Date.now() - t0 < 5000, 'a small hole in a big picture is quick');
+});
+
+test('extend grows the canvas on every side, keeps the original pixels byte for byte, and continues a smooth sky without a visible step', () => {
+  const W = 50, H = 40, sky = (x, y) => [100 + Math.round(x / 2), 150 + Math.round(y / 2), 230];
+  const data = image(W, H, sky), pad = 10;
+  const r = extend({ data, width: W, height: H, pad });
+  assert.equal(r.width, W + 20); assert.equal(r.height, H + 20); assert.equal(r.data.length, r.width * r.height * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (let c = 0; c < 3; c++) assert.equal(r.data[((y + pad) * r.width + x + pad) * 4 + c], data[(y * W + x) * 4 + c]);
+  for (let i = 3; i < r.data.length; i += 4) assert.equal(r.data[i], 255);
+  const at = (x, y) => r.data[(y * r.width + x) * 4]; // the red channel across the left seam (row in the middle)
+  assert.ok(Math.abs(at(pad - 1, 30) - at(pad, 30)) <= 3, 'no jump where the real picture ends');
+  assert.ok(at(0, 30) >= 98 && at(0, 30) <= 125, 'the far edge is still sky-coloured');
+  const one = extend({ data: image(3, 3, () => [9, 9, 9]), width: 3, height: 3, pad: 8 });
+  assert.equal(one.width, 19, 'a pad bigger than the picture still works (it mirrors more than once)');
 });

@@ -15,6 +15,9 @@ echo "Built native/build/relay-glass"
 # Fast accessibility lookups and on-screen text finding, for pointing and guides.
 swiftc -O -swift-version 5 relay-ax.swift -o build/relay-ax
 echo "Built native/build/relay-ax"
+# The lid angle sensor (Apple silicon MacBooks), for "lid flick". It needs no permission; on a Mac without the sensor it just says so.
+swiftc -O -swift-version 5 relay-lid.swift -o build/relay-lid
+echo "Built native/build/relay-lid"
 # Calendar and Reminders straight from the Mac (EventKit), so those apps never have to be open.
 swiftc -O -swift-version 5 relay-cal.swift -o build/relay-cal -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker cal-Info.plist
 echo "Built native/build/relay-cal"

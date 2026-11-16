@@ -29,6 +29,7 @@ echo "Signing the build with: $([ "$SIGN" = "-" ] && echo "an ad-hoc signature (
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-speech"
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-glass"
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-ax"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-lid"
 codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-cal"
 # Ad-hoc is the fallback. It is required to launch on Apple Silicon but is not a Developer ID signature,
 # so downloaded copies need right-click > Open the first time (see README).

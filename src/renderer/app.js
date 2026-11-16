@@ -597,6 +597,15 @@ const PAGES = {
     $('#rlan', sw).onclick = () => relay.setRemote({ lan: !R.lan });
     c.append(sw);
 
+    // Lid flick: a quick small flick of the MacBook lid sends something to this paired phone.
+    const L = S.lidFlick || { enabled: false, action: 'finder', state: 'off' };
+    const lidState = { 'no-sensor': 'This Mac has no lid angle sensor, so lid flick cannot work here.', failed: 'The lid sensor helper could not start.', starting: 'Starting…', on: 'On. Flick the lid: open or close it a little, quickly, and back.' }[L.state] || 'Off. Nothing reads the lid.';
+    const lid = h(`<div class="card flat" style="margin-bottom:14px"><div class="row"><div class="grow"><div class="t">Lid flick</div><div class="d">${esc(L.enabled ? lidState : 'Off. Nothing reads the lid.')} Needs Relay Remote on and your phone paired with the phone page open. Nothing is sent while the Mac is locked.</div></div><div class="toggle ${L.enabled ? 'on' : ''}" id="ltog"></div></div><div class="row"><div class="grow"><div class="t">What a flick sends</div><div class="d">The file selected in Finder (the first one), what is on the clipboard (avoid this if you copy passwords), or a picture of Relay's own window.</div></div><div class="select">${{ finder: 'Selected Finder file', clipboard: 'Clipboard', screenshot: "Relay's window" }[L.action] || 'Selected Finder file'}<svg viewBox="0 0 12 16"><path d="M2 6l4-4 4 4M2 10l4 4 4-4"/></svg><select id="lact"><option value="finder">Selected Finder file</option><option value="clipboard">Clipboard</option><option value="screenshot">Relay's window</option></select></div></div></div>`);
+    $('#ltog', lid).onclick = () => relay.setLidFlick({ enabled: !L.enabled });
+    $('#lact', lid).value = L.action || 'finder';
+    $('#lact', lid).onchange = (e) => relay.setLidFlick({ action: e.target.value });
+    c.append(lid);
+
     const navConfig=S.settings.remote?.navigation||{};
     const nav=h('<details class="card" style="padding:14px;margin-bottom:14px"><summary>Phone map providers</summary><p class="d">Online preview uses OpenStreetMap data via OpenFreeMap, Photon search and Valhalla routing. Free public services are for light use and may be unavailable. No model receives routes. You can switch to your own compatible providers here without updating Relay. HTTPS only, or HTTP on localhost. Do not put API keys in these URLs.</p><label class="d">Map style URL<input class="field" data-nav="style" placeholder="https://tiles.openfreemap.org/styles/dark"></label><label class="d">Photon search URL<input class="field" data-nav="search" placeholder="https://photon.komoot.io/api/"></label><label class="d">Valhalla route URL<input class="field" data-nav="route" placeholder="https://valhalla1.openstreetmap.de/route"></label><button class="btn" data-nav-save>Save map providers</button><p class="d" data-nav-status role="status"></p></details>');
     for(const field of nav.querySelectorAll('[data-nav]'))field.value=navConfig[field.dataset.nav]||'';

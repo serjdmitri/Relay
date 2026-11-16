@@ -90,6 +90,19 @@ html[data-look="buddy"] :is(#quick button, #sleep, #asked, #chips button, #tell 
 html[data-look="buddy"] :is(.panel, #tiles li, #agents .ag) { border-radius: 20px; }
 @media (prefers-reduced-transparency: reduce) { html[data-look="glass"] * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; } html[data-look="glass"] { --fill: var(--card); } }
 
+/* ---- lid flick: the note on the main page, and the page that shows what the Mac sent ---- */
+#lidnote { position: fixed; left: 16px; right: 16px; top: calc(env(safe-area-inset-top) + 8px); z-index: 20; padding: 12px 16px; text-align: center; text-decoration: none; font-weight: 600; }
+#lidnote[hidden] { display: none; }
+html[data-look] :is(#lidnote, .lid-card, .lid-btn) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); box-shadow: var(--shadow); border-radius: 14px; }
+html[data-look] .lid-card { background: var(--card); box-shadow: none; border-radius: 18px; }
+html[data-look] .lid-btn.primary { background: var(--acc); color: var(--bg); border-color: transparent; }
+html[data-look="glass"] :is(#lidnote, .lid-card, .lid-btn) { -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8); box-shadow: inset 0 1px 0 var(--edge), var(--shadow); }
+html[data-look="glass"] :is(#lidnote, .lid-btn), html[data-look="buddy"] :is(#lidnote, .lid-btn) { border-radius: 999px; }
+html[data-look="buddy"] .lid-card { border-radius: 20px; }
+html[data-look="cockpit"] :is(#lidnote, .lid-btn, .lid-card) { border-radius: 3px; border-color: var(--line); }
+html[data-look="instrument"] :is(#lidnote, .lid-btn) { border-radius: 8px; }
+html[data-look="studio"] :is(#lidnote, .lid-btn) { border-radius: 14px; }
+
 /* ---- the phone check follows the look; text follows the iPhone's text size (Settings > Display & Brightness > Text Size) where Safari supports it ---- */
 html[data-look] .chkrow { background: var(--card); border: 1px solid var(--line); }
 @supports (font: -apple-system-body) {

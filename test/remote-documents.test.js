@@ -73,7 +73,7 @@ test('phase 1: a document made by voice is listed on the phone, opens as page pi
   assert.equal(Buffer.from(await img.arrayBuffer()).toString(), 'PNG:Page two text.');
   assert.equal((await get('/api/documents/doc-22222221/page/9.png')).status, 400);
   const h = await post('/api/documents/doc-22222221/hologram', { page: 3 });
-  assert.deepEqual(await h.json(), { holoId: 'holo-0000-0001', title: 'Cover letter · page 3', page: 3, pages: 3 });
+  assert.deepEqual(await h.json(), { holoId: 'holo-0000-0001', title: 'Cover letter · page 3', page: 3, pages: 3, unit: 'page' });
   assert.equal(holoShown[0].items[0].kind, 'image');
   assert.equal((await post('/api/documents/doc-22222221/hologram', { page: 8 })).status, 400);
   s.stop();

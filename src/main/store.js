@@ -87,6 +87,7 @@ const DEFAULTS = {
     },
     notify: { enabled: false, channel: 'ntfy', ntfyTopic: '', ntfyServer: 'https://ntfy.sh', imessageTo: '', minSeconds: 30, includeText: false }, // tell the phone when a long job finishes (see notify.js)
     remote: { enabled: false, lan: true, port: 47900, tailscaleServing: false }, // Relay Remote: talk to Relay from your phone
+    lidFlick: { enabled: false, action: 'finder' }, // a quick flick of the MacBook lid sends something to your paired phone: finder (the selected file) | clipboard | screenshot (Relay's own window); see lidFlick.js
     connectors: { // Notion (a token you paste) and Google (your own OAuth app, several accounts): secrets are encrypted
       notion: { tokenEnc: '', name: '' },
       google: { clientId: '', clientSecretEnc: '', accounts: [] }, // accounts: { email, refreshEnc }

@@ -12,7 +12,7 @@
   function setMode(m) {
     mode = m; rect = null; sel.hidden = true; $('keep').disabled = true;
     if (m === 'crop' || m === 'type') say('');
-    $('bar-main').hidden = m !== 'main'; $('bar-crop').hidden = m !== 'crop'; $('bar-type').hidden = m !== 'type'; $('bar-erase').hidden = m !== 'erase';
+    $('bar-main').hidden = m !== 'main'; $('bar-crop').hidden = m !== 'crop'; $('bar-type').hidden = m !== 'type'; $('bar-erase').hidden = m !== 'erase'; $('bar-extend').hidden = m !== 'extend';
     wrap.classList.toggle('erasing', m === 'erase'); clearBrush(); if (m === 'erase') say('');
     $('name').hidden = m === 'rename'; $('info').hidden = m === 'rename'; $('rename').hidden = m !== 'rename';
     wrap.classList.toggle('cropping', m === 'crop');
@@ -180,6 +180,24 @@
   brush.addEventListener('pointerdown', (e) => { if (mode !== 'erase') return; try { brush.setPointerCapture(e.pointerId); } catch { /* still works over the photo */ } last = null; const p = at(e); dab(p.x, p.y); });
   brush.addEventListener('pointermove', (e) => { if (mode !== 'erase' || !last || !(e.buttons & 1)) return; const p = at(e); dab(p.x, p.y); });
   brush.addEventListener('pointerup', () => { last = null; });
+  $('extendback').addEventListener('click', () => setMode('main'));
+  document.querySelectorAll('[data-extend]').forEach((b) => b.addEventListener('click', async () => {
+    if (!window.Inpaint) return;
+    const pct = Number(b.dataset.extend); setMode('main'); say('Extending…');
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const k = Math.min(1, 3000 / (Math.max(pic.naturalWidth, pic.naturalHeight, 1) * (1 + 2 * pct))), W = Math.max(1, Math.round(pic.naturalWidth * k)), H = Math.max(1, Math.round(pic.naturalHeight * k));
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(pic, 0, 0, W, H); // drawn from the picture itself, so the photo's rotation is respected
+      const r = window.Inpaint.extend({ data: ctx.getImageData(0, 0, W, H).data, width: W, height: H, pad: Math.round(Math.max(W, H) * pct) });
+      const out = document.createElement('canvas'); out.width = r.width; out.height = r.height;
+      out.getContext('2d').putImageData(new ImageData(r.data, r.width, r.height), 0, 0);
+      const png = !!st && (st.ext === 'png' || st.ext === 'gif');
+      const blob = await new Promise((resolve) => out.toBlob(resolve, png ? 'image/png' : 'image/jpeg', 0.95));
+      if (!blob) throw new Error('no picture');
+      await run({ action: 'extend', bytes: new Uint8Array(await blob.arrayBuffer()), type: png ? 'png' : 'jpg' });
+    } catch { say('Could not extend that.', true); }
+  }));
   $('eraseundo').addEventListener('click', clearBrush);
   $('erasecancel').addEventListener('click', () => setMode('main'));
   $('remove').addEventListener('click', async () => {

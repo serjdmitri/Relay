@@ -60,6 +60,10 @@ class RemoteService {
     this.ask.onResult = null;
   }
 
+  // For lid flick: how many phones are paired and listening, and sending to them (the server only runs while Relay Remote is on).
+  lidStatus() { return this.server ? this.server.lidStatus() : { paired: this.devices.list().length, connected: 0 }; }
+  deliverLid(item) { return this.server ? this.server.deliverLid(item) : { ok: false, reason: 'remote-off' }; }
+
   urls() {
     const s = this.settings;
     const list = this.settings.lan === false ? [] : lanAddresses().map((ip) => `http://${ip}:${s.port}`);

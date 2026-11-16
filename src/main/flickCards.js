@@ -41,7 +41,7 @@ function landing(dir, area, { width, height }, margin = 18, step = 0) {
 }
 
 // The size the picture is drawn at inside the card (never larger than the box), and the card around it.
-function fit(w, h, { maxW = 344, maxH = 360, chrome = 224, width = 372 } = {}) {
+function fit(w, h, { maxW = 344, maxH = 360, chrome = 182, width = 372 } = {}) {
   if (!(w > 0) || !(h > 0)) { w = 4; h = 3; }
   const s = Math.min(maxW / w, maxH / h);
   const imgW = Math.max(40, Math.round(w * s)), imgH = Math.max(40, Math.round(h * s));
@@ -189,16 +189,16 @@ class FlickCards {
           card.file = out; card.preview = await this.preview(out); this.push(card);
           return { ok: true, message: `Now a ${format.toUpperCase()} (the original is still there).` };
         }
-        case 'crop': case 'erase': { // the page cut the picture out (crop) or painted objects out of it (erase); this keeps the result beside the original, which is never touched
-          const erase = req.action === 'erase';
+        case 'crop': case 'erase': case 'extend': { // the page cut the picture out (crop), painted objects out of it (erase) or grew its edges (extend); this keeps the result beside the original, which is never touched
+          const erase = req.action === 'erase', extend = req.action === 'extend', word = extend ? 'extended' : erase ? 'cleaned' : 'cropped';
           const bytes = Buffer.from(req.bytes || []);
-          if (!isImageBytes(bytes) || bytes.length > 60 * 1024 * 1024) return fail(erase ? 'Could not clean that up.' : 'Could not crop that.');
+          if (!isImageBytes(bytes) || bytes.length > 60 * 1024 * 1024) return fail(extend ? 'Could not extend that.' : erase ? 'Could not clean that up.' : 'Could not crop that.');
           const ext = req.type === 'png' ? 'png' : 'jpg';
-          const base = path.basename(card.file, path.extname(card.file)).replace(/ (cropped|cleaned)( \d+)?$/, '');
-          const out = uniquePath(path.dirname(card.file), `${base} ${erase ? 'cleaned' : 'cropped'}`, ext, (p) => this.fsApi.existsSync(p));
+          const base = path.basename(card.file, path.extname(card.file)).replace(/ (cropped|cleaned|extended)( \d+)?$/, '');
+          const out = uniquePath(path.dirname(card.file), `${base} ${word}`, ext, (p) => this.fsApi.existsSync(p));
           this.fsApi.writeFileSync(out, bytes, { mode: 0o600, flag: 'wx' });
           card.file = out; card.preview = out; this.push(card);
-          return { ok: true, message: erase ? 'Cleaned up (the original is still there).' : 'Cropped (the original is still there).' };
+          return { ok: true, message: `${extend ? 'Extended' : erase ? 'Cleaned up' : 'Cropped'} (the original is still there).` };
         }
         case 'trash': await this.shell.trashItem(card.file); card.win.close(); return { ok: true };
         default: return fail('Unknown button.');

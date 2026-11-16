@@ -63,6 +63,10 @@
         "to": "native/relay-ax"
       },
       {
+        "from": "native/build/relay-lid",
+        "to": "native/relay-lid"
+      },
+      {
         "from": "native/build/relay-cal",
         "to": "native/relay-cal"
       },

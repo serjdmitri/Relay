@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050d14">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script src="/look.js"></script>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/looks.css">
+<title>From your Mac</title>
+<style>
+  .lid-page main { display: flex; flex-direction: column; min-height: 100dvh; padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 16px); gap: 14px; }
+  .lid-page header { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .lid-page .back { color: inherit; text-decoration: none; font-size: 28px; line-height: 1; }
+  #items { display: flex; flex-direction: column; gap: 14px; }
+  .lid-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .lid-name { font-weight: 600; word-break: break-word; }
+  .lid-meta { opacity: .7; font-size: .8rem; }
+  .lid-preview img { display: block; max-width: 100%; max-height: 50vh; margin: 0 auto; border-radius: 12px; }
+  .lid-preview pre { white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow: auto; margin: 0; font: 13px/1.4 ui-monospace, Menlo, monospace; }
+  .lid-actions { display: flex; gap: 10px; }
+  .lid-btn { flex: 1; padding: 14px; font: inherit; font-weight: 600; text-align: center; }
+  .lid-btn[disabled] { opacity: .5; }
+  #empty { text-align: center; opacity: .75; line-height: 1.4; margin: 40px auto; max-width: 280px; }
+  #empty[hidden] { display: none; }
+  #msg { text-align: center; min-height: 22px; opacity: .85; }
+  #msg.err { color: #ff8a8a; opacity: 1; }
+</style>
+</head>
+<body class="lid-page">
+<main id="page" hidden>
+  <header><a class="back" href="/" aria-label="Back">&#8249;</a><span>From your Mac</span><span id="conn" class="dot" style="margin-left:auto"></span></header>
+  <p id="empty">Nothing yet. On your Mac, turn on Lid flick in Relay's Phone remote settings, then flick the lid (open or close it a little, quickly). What you chose to send appears here.</p>
+  <section id="items" aria-live="polite"></section>
+  <div id="msg"></div>
+</main>
+<script src="/lid.js"></script>
+</body>
+</html>

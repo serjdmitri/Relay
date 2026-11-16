@@ -370,7 +370,7 @@ src/main            Electron main process: agent, tools, speech, Claude and mode
 src/main/hands      Hand control: gesture logic, control, click helper bridge, help
 src/renderer        Window, onboarding, pill, cursor overlay, camera and wake-word pages (plain HTML/CSS/JS)
 src/renderer/vendor On-device models (wake word, face, hand landmarks) and ONNX/WASM runtimes
-native              Swift helpers: relay-speech (dictation), relay-glass (the pill), relay-ax (accessibility clicks and drags)
+native              Swift helpers: relay-speech (dictation), relay-glass (the pill), relay-ax (accessibility clicks and drags), relay-lid (the lid angle, for lid flick)
 extension/firefox   WebExtension (MV2)
 ios                 The phone companion
 docs                Guides, release notes and the website

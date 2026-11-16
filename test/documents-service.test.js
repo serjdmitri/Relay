@@ -108,7 +108,7 @@ test('the page renderer reuses one hidden window, takes a picture of its own con
   height = 1700;
   const b = await render('long');
   assert.equal(b.overflow, true);
-  assert.deepEqual(log.filter((l) => l[0] === 'size').map((l) => l.slice(1)), [[816, 1056], [816, 1700]]);
+  assert.deepEqual(log.filter((l) => l[0] === 'size').map((l) => l.slice(1)), [[816, 1056], [816, 1056], [816, 1056], [816, 1700]], 'the window is set to the sheet size, then to what the page measured');
   assert.equal(made.length, 1, 'the same window drew both');
   assert.equal(made[0].show, false);
   assert.equal(made[0].webPreferences.sandbox, true);

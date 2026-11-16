@@ -79,6 +79,8 @@ const holoWin = require('./holo/windows');
 const { downloadStl } = require('./models/lookup');
 const { ModelCache } = require('./models/cache');
 const { RemoteService } = require('./remote/service');
+const { LidFlick, LidSensor } = require('./lidFlick');
+const { makeLidItems } = require('./lidItems');
 const { registerNotionConnection } = require('./connectors/notionOAuth');
 const { registerSchoolConnection } = require('./connectors/schoolConnection');
 const { McpRemote } = require('./connectors/mcp');
@@ -117,6 +119,7 @@ process.on('unhandledRejection', (r) => { noteBootError('rejection', r); console
 process.on('uncaughtExceptionMonitor', (e) => noteBootError('exception', e));
 let mainWin = null;
 let lastVoiceNotice = { key: '', at: 0 };
+let lidFlick = null; // a flick of the MacBook lid sends something to the phone (lidFlick.js)
 const { activateMainWindow, restoreDockPreference } = require('./mainWindowFocus');
 let onboardWin = null;
 let quitting = false;
@@ -233,6 +236,7 @@ function publicState() {
     trustedPeople: trustedPeople?.list() || [],
     nightlyMaintenance: store.get('nightlyMaintenance') || null,
     remote: remote ? remote.info() : null,
+    lidFlick: lidFlick ? lidFlick.info() : null,
     schedules: (d.schedules || []).map((s) => ({ ...s, when: describeSchedule(s) })),
     hasKey,
     hasKeys,
@@ -405,6 +409,10 @@ function startHotkeysWhenTrusted() {
 async function refreshClaude() {
   const claudePath = await claudeCli.findClaude();
   claudeState = { ...(await claudeCli.authStatus(claudePath)), path: claudePath || '', checked: true };
+}
+
+function lidBinPath() {
+  return app.isPackaged ? path.join(process.resourcesPath, 'native', 'relay-lid') : path.join(__dirname, '../../native/build/relay-lid');
 }
 
 function glassBinPath() {
@@ -1079,6 +1087,13 @@ function registerIpc() {
   ask.sessionNotes = require('./sessionNotes').registerSessionNotes({ ipcMain, store, getWindow: () => mainWin, onChange: broadcast, exportDir: () => path.join(app.getPath('desktop'), 'memory'), confirmDelete: async () => (await dialog.showMessageBox(mainWin, { type: 'warning', message: 'Delete these local session notes?', detail: 'Existing History entries, export files and Sentient OS notes are separate and will remain.', buttons: ['Delete session', 'Cancel'], defaultId: 1, cancelId: 1 })).response === 0, openMemory: () => openMain('memory'), showMatches: (sessions, query) => cardPanel.show({ kind: 'list', hold: true, title: 'Session notes: ' + query, summary: 'Local conversation notes; requests and replies are not independently verified facts.', items: sessions.map(s => ({ title: s.title, subtitle: new Date(s.created).toLocaleString(), note: s.entries.filter(e => (e.request + ' ' + e.reply).toLowerCase().includes(query.toLowerCase())).slice(0, 2).map(e => e.request + ': ' + e.reply).join('\n').slice(0, 1500) })), facts: [], links: [] }) });
 
   // Relay Remote: the phone page, served by Relay on this Mac.
+  // Lid flick: on or off, and what a flick sends (the selected Finder file, the clipboard, or Relay's own window).
+  ipcMain.handle('lidflick:set', (_e, patch) => {
+    if (patch && typeof patch.enabled === 'boolean') store.set('settings.lidFlick.enabled', patch.enabled);
+    if (patch && ['finder', 'clipboard', 'screenshot'].includes(patch.action)) store.set('settings.lidFlick.action', patch.action);
+    lidFlick?.sync();
+    broadcast();
+  });
   ipcMain.handle('remote:set', async (_e, patch) => {
     for (const [k, v] of Object.entries(patch || {})) if (['enabled', 'lan'].includes(k)) store.set(`settings.remote.${k}`, !!v);
     await remote.sync();
@@ -2180,6 +2195,18 @@ app.whenReady().then(() => {
   holos.restore().catch(() => {}); // pinned holograms come back where they were (after the controller and the model cache exist)
   remote = new RemoteService({ store, ask, broadcast });
   remote.sync().then(broadcast);
+  // A quick flick of the MacBook lid sends the chosen item to the paired phone, only while Relay Remote is on, the Mac is unlocked and the phone is listening.
+  lidFlick = new LidFlick({
+    sensor: new LidSensor({ binPath: lidBinPath(), log: (m) => diag.log('lid-flick', m) }),
+    getSettings: () => store.get('settings.lidFlick'),
+    isLocked: () => !!ask.lockWatch?.locked || screenLocked,
+    phone: { status: () => remote.lidStatus(), deliver: (item) => remote.deliverLid(item) },
+    items: makeLidItems({ exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(String(out))))), clipboard, getWindow: () => mainWin }),
+    notify: (text) => sayCorner(text),
+    log: (m) => diag.log('lid-flick', m)
+  });
+  lidFlick.onState = () => broadcast();
+  lidFlick.sync();
   inbound = new InboundService({ store, ask, hub: ask.hub, exec: (file, args) => new Promise((res, rej) => execFile(file, args, { timeout: 8000, maxBuffer: 8e6 }, (e, out, err) => (e ? rej(new Error(String(err || e.message))) : res(out)))), send: (to, text) => ask.mac.messagesSend(to, text), flagOn: (n = 'imessage') => flagsMod.isOn(store.get('settings'), n), powerMonitor });
   ask.inbound = inbound;
   pluginMgr = new PluginManager({ store, root: path.join(app.getPath('home'), 'Relay', 'plugins'), onUse: () => { ask.tainted = true; }, onEvent: (name, e) => ask.onProactive?.({ type: 'plugin', title: `${name}: ${e.title}`, importance: e.importance }), sandbox: process.platform==='darwin' && require('fs').existsSync('/usr/bin/sandbox-exec') });
@@ -2544,6 +2571,7 @@ app.on('before-quit', () => {
   mapPanel?.close();
   recent?.stop();
   remote?.stop();
+  lidFlick?.stop();
   holos?.persist?.();
   hotkeys?.stop();
   bridge?.stop();

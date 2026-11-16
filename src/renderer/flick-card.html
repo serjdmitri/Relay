@@ -33,7 +33,9 @@
   #brush { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
   #imgwrap.erasing #brush { pointer-events: auto; touch-action: none; }
   #size { width: 100%; accent-color: var(--acc); -webkit-app-region: no-drag; }
-  .bar { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .bar { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  #bar-main { grid-template-columns: repeat(5, 1fr); }
+  #bar-main button { font-size: 11.5px; padding: 0 2px; }
   .bar.wide { grid-template-columns: repeat(3, 1fr); }
   .bar button { height: 36px; border-radius: 11px; border: 1px solid var(--line); background: rgba(14, 30, 44, .85); font-size: 12.5px; font-weight: 600; }
   .bar button:hover { background: rgba(40, 80, 110, .85); }
@@ -72,6 +74,7 @@
     <button type="button" data-act="share" id="share">Share</button>
     <button type="button" data-mode="crop">Crop</button>
     <button type="button" data-mode="erase">Erase</button>
+    <button type="button" data-mode="extend">Extend</button>
     <button type="button" data-mode="type">Type</button>
     <button type="button" data-mode="rename">Rename</button>
     <button type="button" data-act="copy">Copy</button>
@@ -85,7 +88,11 @@
   <div id="bar-erase" hidden style="width:100%">
     <div class="hint">Paint over what to remove, then press Remove. Works best on small things over a plain background.</div>
     <input id="size" type="range" min="6" max="60" value="22" aria-label="Brush size" style="margin-top:6px">
-    <div class="bar" style="margin-top:6px"><button type="button" id="erasecancel">Cancel</button><button type="button" id="eraseundo">Clear</button><button type="button" id="remove" class="go" disabled>Remove</button></div>
+    <div class="bar wide" style="margin-top:6px"><button type="button" id="erasecancel">Cancel</button><button type="button" id="eraseundo">Clear</button><button type="button" id="remove" class="go" disabled>Remove</button></div>
+  </div>
+  <div id="bar-extend" hidden style="width:100%">
+    <div class="hint">Grows the picture's edges by mirroring and softening them. It adds no new objects, so it suits sky, walls, water and plain backgrounds.</div>
+    <div class="bar wide" style="margin-top:6px"><button type="button" id="extendback">Back</button><button type="button" data-extend="0.1" class="go">Grow 10%</button><button type="button" data-extend="0.25" class="go">Grow 25%</button></div>
   </div>
   <div id="bar-type" hidden style="width:100%">
     <div class="hint">Change the file type (the original stays).</div>

@@ -77,6 +77,28 @@
     return { data: out, changed, box };
   }
 
-  const api = { inpaint, maskBounds, grow };
+  // Extend: a bigger canvas (pad pixels more on every side) whose new border is the picture mirrored outwards and then softened more and more the further it is from the
+  // real picture. This is NOT new content: nothing is invented, so it suits skies, walls, water, grass and bokeh backgrounds, and shows a mirror on anything with detail.
+  // The original pixels are copied unchanged. Returns { data, width, height }.
+  function extend({ data, width, height, pad }) {
+    const p = Math.max(1, Math.round(pad)), W = width + 2 * p, H = height + 2 * p;
+    const refl = (v, n) => { const m = 2 * n; v = ((v % m) + m) % m; return v < n ? v : m - 1 - v; };
+    const mir = new Float32Array(W * H * 3);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const s = (refl(y - p, height) * width + refl(x - p, width)) * 4, i = (y * W + x) * 3; mir[i] = data[s]; mir[i + 1] = data[s + 1]; mir[i + 2] = data[s + 2]; }
+    // a box blur (running sums, horizontal then vertical) of the mirrored canvas
+    const r = Math.max(2, Math.round(p / 5)), tmp = new Float32Array(W * H * 3), blur = new Float32Array(W * H * 3);
+    for (let y = 0; y < H; y++) for (let c = 0; c < 3; c++) { let sum = 0; for (let x = -r; x <= r; x++) sum += mir[(y * W + Math.min(W - 1, Math.max(0, x))) * 3 + c]; for (let x = 0; x < W; x++) { tmp[(y * W + x) * 3 + c] = sum / (2 * r + 1); sum += mir[(y * W + Math.min(W - 1, x + r + 1)) * 3 + c] - mir[(y * W + Math.max(0, x - r)) * 3 + c]; } }
+    for (let x = 0; x < W; x++) for (let c = 0; c < 3; c++) { let sum = 0; for (let y = -r; y <= r; y++) sum += tmp[(Math.min(H - 1, Math.max(0, y)) * W + x) * 3 + c]; for (let y = 0; y < H; y++) { blur[(y * W + x) * 3 + c] = sum / (2 * r + 1); sum += tmp[(Math.min(H - 1, y + r + 1) * W + x) * 3 + c] - tmp[(Math.max(0, y - r) * W + x) * 3 + c]; } }
+    const out = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const o = (y * W + x) * 4, i = (y * W + x) * 3, inside = x >= p && x < p + width && y >= p && y < p + height;
+      if (inside) { const s = ((y - p) * width + (x - p)) * 4; out[o] = data[s]; out[o + 1] = data[s + 1]; out[o + 2] = data[s + 2]; out[o + 3] = 255; continue; }
+      const d = Math.max(p - x, x - (p + width - 1), p - y, y - (p + height - 1), 0), t = Math.min(1, d / (p * 0.6)), k = t * t * (3 - 2 * t); // sharp at the seam, soft further out
+      out[o] = mir[i] + (blur[i] - mir[i]) * k; out[o + 1] = mir[i + 1] + (blur[i + 1] - mir[i + 1]) * k; out[o + 2] = mir[i + 2] + (blur[i + 2] - mir[i + 2]) * k; out[o + 3] = 255;
+    }
+    return { data: out, width: W, height: H };
+  }
+
+  const api = { inpaint, maskBounds, grow, extend };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Inpaint = api;
 })(typeof window !== 'undefined' ? window : globalThis);

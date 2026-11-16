@@ -34,7 +34,8 @@ if (typeof document !== 'undefined') (function () {
     $('dtiles').replaceChildren(...documents.map((d) => {
       const li = el('li');
       const t = el('span', '', d.title);
-      const s = el('small', '', `${d.pages} page${d.pages === 1 ? '' : 's'}${d.pending ? ' · change waiting' : ''}`);
+      const u = d.unit || 'page';
+      const s = el('small', '', `${d.kind === 'sheet' ? 'Spreadsheet · ' : d.kind === 'slides' ? 'Slides · ' : ''}${d.pages} ${u}${d.pages === 1 ? '' : 's'}${d.pending ? ' · change waiting' : ''}`);
       if (d.pending) s.className = 'warn';
       li.append(t, s);
       li.onclick = () => { location.href = `/documents.html?id=${encodeURIComponent(d.id)}`; };
@@ -65,14 +66,15 @@ if (typeof document !== 'undefined') (function () {
     const d = detail;
     $('dview').hidden = false;
     $('dtitle').textContent = d.title;
-    $('dwhere').textContent = `${d.pages} page${d.pages === 1 ? '' : 's'} · version ${d.version} · saved in Documents/Relay Documents/${d.folderName}`;
+    const U = d.unit || 'page', Ucap = U[0].toUpperCase() + U.slice(1);
+    $('dwhere').textContent = `${d.pages} ${U}${d.pages === 1 ? '' : 's'} · version ${d.version} · saved in Documents/Relay Documents/${d.folderName}`;
     const pend = $('dpending');
     pend.hidden = !d.pending;
     if (d.pending) {
       $('dpnote').textContent = d.pendingNote;
       $('dchanges').replaceChildren(...d.changes.map((c) => {
         const li = el('li', `chg ${c.type}`);
-        li.append(el('div', 'chgh', `${c.type === 'changed' ? 'Changed' : c.type === 'added' ? 'Added' : 'Removed'} on page ${c.page}`));
+        li.append(el('div', 'chgh', `${c.type === 'changed' ? 'Changed' : c.type === 'added' ? 'Added' : 'Removed'} on ${U} ${c.page}`));
         if (c.before) li.append(el('div', 'was', c.before));
         if (c.after) li.append(el('div', 'now', c.after));
         return li;
@@ -84,12 +86,12 @@ if (typeof document !== 'undefined') (function () {
       const li = el('li', 'dpage');
       li.dataset.index = String(p.index);
       const top = el('div', 'dptop');
-      const handle = el('button', 'dhandle', '⠿'); handle.type = 'button'; handle.setAttribute('aria-label', `Drag page ${p.index + 1}`);
+      const handle = el('button', 'dhandle', '⠿'); handle.type = 'button'; handle.setAttribute('aria-label', `Drag ${U} ${p.index + 1}`);
       const up = el('button', 'dmove', '▲'); up.type = 'button'; up.setAttribute('aria-label', 'Move up');
       const down = el('button', 'dmove', '▼'); down.type = 'button'; down.setAttribute('aria-label', 'Move down');
       const holo = el('button', 'dholo', 'Hologram'); holo.type = 'button';
-      top.append(handle, el('span', 'dnum', `Page ${p.index + 1}`), el('span', 'dwarn', p.overflow ? 'runs past the sheet' : ''), up, down, holo);
-      const img = el('img'); img.alt = `Page ${p.index + 1}: ${p.excerpt}`; img.loading = 'lazy';
+      top.append(handle, el('span', 'dnum', `${Ucap} ${p.index + 1}`), el('span', 'dwarn', p.overflow ? (d.kind === 'slides' ? 'runs past the slide' : 'runs past the sheet') : ''), up, down, holo);
+      const img = el('img'); img.alt = `${Ucap} ${p.index + 1}: ${p.excerpt}`; img.loading = 'lazy';
       picture(p.index, p.key).then((u) => { img.src = u; }).catch(() => { img.replaceWith(el('div', 'dim', 'Could not draw this page.')); });
       li.append(top, img);
       up.onclick = () => commit(movedBy(p.index, -1));
@@ -101,7 +103,7 @@ if (typeof document !== 'undefined') (function () {
     $('dvers').replaceChildren(...d.versions.slice().reverse().map((v) => el('li', v.status, `v${v.n} · ${when(v.at)} · ${v.note}${v.status === 'pending' ? ' (waiting)' : v.status === 'rejected' ? ' (rejected)' : ''}`)));
     document.body.classList.toggle('sorting', sorting);
     $('dsort').setAttribute('aria-pressed', String(sorting));
-    $('dsort').textContent = sorting ? 'Done' : 'Reorder pages';
+    $('dsort').textContent = sorting ? 'Done' : `Reorder ${U}s`;
     $('dsorthint').hidden = !sorting;
   }
 
