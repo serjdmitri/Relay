@@ -242,7 +242,7 @@ function publicState() {
     hasHfToken,
     activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
     providerUsage: (() => { // Codex's plan limits come from its own session logs on this Mac (read, never written), looked at at most every 20 s
-      const u = require('./usage').providerSummaries(d.history, ask?.rate);
+      const u = require('./usage').providerSummaries(d.history, ask?.rate || d.claudeRate);
       try { const now = Date.now(); if (!publicState.codexLimits || now - publicState.codexLimits.at > 20000) publicState.codexLimits = { at: now, v: require('./codexUsage').readCodexLimits() }; u.codex.limits = publicState.codexLimits.v; } catch { /* the panel just says unavailable */ }
       return u;
     })(),
@@ -538,7 +538,15 @@ function registerIpc() {
     try {
       if (!command.background) openMain('calls');
       if (command.type === 'open') return { status: 'done', reply: 'Phone Calls is open, Sir.' };
-      if (command.type === 'schedule') { callService.addSchedule(command.spec); return { status: 'done', reply: 'The check-in review is scheduled, Sir. At that time it will await approval of the exact number and purpose; it will not dial automatically.' }; }
+      if (command.type === 'schedule') {
+        // Saying "call me every day at 8" is the owner's own instruction, so it authorizes that exact number, purpose and length: the call goes out by itself at the time, inside quiet hours
+        // and the daily call and minute limits. When calls are not ready it is only saved, and at that time it waits for approval instead.
+        const st = callService.state(), auto = !!(st.config.enabled && st.ready && !st.privateMode);
+        callService.addSchedule({ ...command.spec, automatic: auto });
+        return { status: 'done', reply: auto
+          ? 'Your call is scheduled, Sir. At that time I will ring you myself, within your quiet hours and daily call limits. It is listed in Phone calls, where you can remove it.'
+          : 'The check-in is scheduled, Sir, but phone calls are not ready yet (turn them on and connect a provider in Phone calls), so at that time it will wait for your approval instead of dialing.' };
+      }
       if (command.type === 'provider') {
         const st = callService.configure({ provider: command.provider });
         const missing = [];
@@ -555,6 +563,12 @@ function registerIpc() {
     } catch (err) { return { status: 'failed', reply: err.message }; }
   };
   setInterval(() => callService.tick().catch(() => {}), 10000);
+  // Voice coding: "code me ..." edits the project the front editor has open, with your own Claude or Codex.
+  {
+    const { CodeAgent, realDeps } = require('./codeAgent');
+    const codeAgent = new CodeAgent({ ...realDeps({ claudeCli, codexCli: require('./agent/codexCli') }), isLimit: require('./failover').isLimitText, confirm: (q) => ask.askConfirm(q), push: (l) => ask.push(l) });
+    ask.onCodeCommand = async (cmd) => { try { return await codeAgent.code(cmd.task); } catch (err) { return { status: 'failed', reply: `I could not start that: ${err.message}` }; } };
+  }
   const access = new DriveAccess({ store, home: os.homedir() });
   const workspace = new FileWorkspace({ access, store, move: (from, to) => ask.drive.move(from, to) });
   // Folder clutter: every few hours, look (names, sizes and dates only) at the folders you chose. A messy one where organization is on gets a quiet notification that

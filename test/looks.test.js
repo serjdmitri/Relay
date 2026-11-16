@@ -150,8 +150,51 @@ test('hold to talk on the phone lets the microphone go between tries: the wake l
   assert.match(app, /const wait = Math\.max\(wasTalking \? 600 : 0, busy \? 500 : 0, 500 - \(Date\.now\(\) - lastEnd\)\);/);
   assert.match(app, /if \(wait > 0\) setTimeout\(go, wait\); else go\(\);/);
   assert.match(app, /lastEnd = Date\.now\(\);/);
-  assert.match(app, /heyLoop\.setPaused\(holding \|\| !!rec \|\| Date\.now\(\) - lastEnd < 1500/);
+  assert.match(app, /heyLoop\.setPaused\(holding \|\| micTest \|\| !!rec \|\| Date\.now\(\) - lastEnd < 1500/);
   assert.match(app, /!gotAudio && holding && !blocked && !lastErr && retries < 1 && rec === r\) \{ retries\+\+; setTimeout\(\(\) => go\(\), 600\); return; \}/);
+});
+
+test('the phone has a "Check my phone" panel, says when the Mac cannot be reached, follows the text size, and taps under the finger where it can', () => {
+  const html = read('src/remote/index.html'), app = read('src/remote/app.js'), looks = read('src/remote/looks.css');
+  assert.match(html, /id="chk"/); assert.match(html, /id="chkbox"/);
+  assert.match(app, /async function phoneCheck\(\)/); assert.match(app, /navigator\.permissions\.query\(\{ name: 'microphone' \}\)/);
+  assert.match(app, /aA button in Safari, then Website Settings, then Microphone, then Allow/, 'the fix for the question on every reload is spelled out');
+  assert.match(app, /Connection to your Mac/); assert.match(app, /function runMicTest\(\)/);
+  assert.match(app, /if \(micTest\) return;/, 'a hold does not fight the microphone test');
+  assert.match(app, /Can’t reach your Mac\. Check it is awake with Relay open[\s\S]*?setTimeout\(start, 8000\)/, 'offline: say so and keep trying');
+  assert.match(app, /<input type="checkbox" switch/, 'haptic tap');
+  assert.match(looks, /@supports \(font: -apple-system-body\)/);
+});
+
+test('the window says what is happening when it is slow to start, and the build keeps one identity so Always Allow sticks', () => {
+  const app = read('src/renderer/app.js');
+  assert.match(app, /Relay is still starting…/); assert.match(app, /Always Allow/); assert.match(app, /\}, 5000\);/);
+  assert.match(read('src/renderer/looks.css'), /\.boot \{/);
+});
+
+test('Glass has the Liquid Glass touches; the Appearance page previews a look on hover; ⌘1 to ⌘0 open pages; the Flick card follows the look', () => {
+  const css = read('src/renderer/looks.css');
+  for (const rule of ['html[data-look="glass"] .btn {', 'html[data-look="glass"] .seg button.on', 'html[data-look="glass"] .toggle {', 'html[data-look="glass"] .topbar {', 'html[data-look="glass"] .nav-item.active {']) assert.ok(css.includes(rule), rule);
+  assert.match(css, /backdrop-filter: blur\(22px\) saturate\(1\.7\)/); assert.match(css, /inset 0 1px 0 var\(--hl\)/);
+  const app = read('src/renderer/app.js');
+  assert.match(app, /for \(const ev of \['mouseenter', 'focus'\]\) b\.addEventListener\(ev, \(\) => \{ document\.documentElement\.dataset\.look = l\.id; \}\);/);
+  assert.match(app, /for \(const ev of \['mouseleave', 'blur'\]\) b\.addEventListener\(ev, \(\) => applyLook\(\)\);/);
+  assert.match(app, /const SHORTCUT_IDS = NAV\.flatMap/); assert.match(app, /SHORTCUT_IDS\[\(Number\(e\.key\) \+ 9\) % 10\]/);
+  const card = read('src/renderer/flick-card.html');
+  assert.match(card, /<script src="look-window\.js"><\/script>/);
+  for (const l of ['glass', 'instrument', 'studio', 'buddy']) assert.match(card, new RegExp(`html\\[data-look="${l}"\\] #card`));
+});
+
+test('Keys & accounts explains each account and its cost without ever showing a key, and the setup script chains the existing steps', () => {
+  const app = read('src/renderer/app.js');
+  assert.match(app, /\['keys', 'Keys & accounts'\]/); assert.match(app, /\n  keys\(c\) \{/);
+  const page = app.slice(app.indexOf('\n  keys(c) {'), app.indexOf('\n  usage(c) {'));
+  for (const w of ['Claude', 'Codex', 'Groq', 'Bland', 'Twilio', 'ElevenLabs', 'Keychain']) assert.match(page, new RegExp(w));
+  assert.doesNotMatch(page, /keyEnc|decryptKey/, 'only whether a key is set, never the key');
+  assert.match(read('src/renderer/ui-es.js'), /'Keys & accounts': 'Claves y cuentas'/);
+  const setup = read('scripts/setup.sh');
+  for (const step of ['npm install', 'bash scripts/setup-signing.sh', 'npm run pack', 'bash scripts/install-local.sh']) assert.ok(setup.includes(step), step);
+  assert.match(read('README.md'), /bash scripts\/setup\.sh/);
 });
 
 test('the phone snapshot carries the look and mode, and falls back to Glass and the system setting for anything unknown', () => {

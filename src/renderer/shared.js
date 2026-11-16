@@ -39,6 +39,7 @@ const GLYPHS = {
   screen: '<rect x="3.2" y="5" width="17.6" height="11.6" rx="2" fill="none" stroke="#fff" stroke-width="1.8" stroke-dasharray="3 2"/><circle cx="12" cy="10.8" r="2.4" fill="#fff"/><path d="M8 20h8" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
   input: '<rect x="2.8" y="6" width="18.4" height="12" rx="2.4" fill="#fff"/><path d="M6.4 10h.01M9.4 10h.01M12.4 10h.01M15.4 10h.01M18 10h.01M8.5 14h7" stroke="var(--bc)" stroke-width="1.8" stroke-linecap="round"/>',
   account: '<circle cx="12" cy="12" r="9.2" fill="#fff"/><circle cx="12" cy="9.6" r="3.1" fill="var(--bc)"/><path d="M5.8 18.2c1.2-2.6 3.4-3.8 6.2-3.8s5 1.2 6.2 3.8A9 9 0 0112 21.2a9 9 0 01-6.2-3z" fill="var(--bc)"/>',
+  keys: '<circle cx="8.5" cy="15.5" r="3.6" fill="#fff"/><path d="M11.2 12.8L19 5M16 8l2.4 2.4M13.6 10.4l2 2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
   usage: '<path d="M4.6 17.2a8 8 0 1114.8 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M12 15.4l3.6-4.6" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="15.6" r="1.8" fill="#fff"/>',
   appearance: '<path fill="#fff" d="M12 2.8a9.2 9.2 0 100 18.4c1.5 0 2.2-1 1.7-2.1-.5-1.2.1-2.2 1.5-2.2h2a3.2 3.2 0 003.2-3.2C20.4 7 16.7 2.8 12 2.8z"/><circle cx="8" cy="11" r="1.3" fill="var(--bc)"/><circle cx="11.6" cy="7.2" r="1.3" fill="var(--bc)"/><circle cx="16" cy="9.4" r="1.3" fill="var(--bc)"/>'
 };
@@ -52,7 +53,7 @@ const LOGO = `<svg viewBox="0 0 100 100"><defs><linearGradient id="rl-bg" x1="7"
 // Every page has its own colour pair: it tints the tile, the selected item, buttons, toggles and the glow behind the page.
 const THEME = {
   home: ['#1c8fd6', '#4cc2ff'], history: ['#2a9ee0', '#5fb4ff'], routines: ['#1f86cf', '#3fb6e8'], vocab: ['#2aa5d8', '#58cdf0'], memory: ['#2490d4', '#58cdf0'], connectors: ['#2a9ee0', '#4cc2ff'], remote: ['#2490d4', '#4cc2ff'], calls: ['#2490d4', '#4cc2ff'],
-  general: ['#2490d4', '#4cc2ff'], doctor: ['#2490d4', '#4cc2ff'], speech: ['#2aa5d8', '#4cc2ff'], shortcuts: ['#1f86cf', '#4cc2ff'], permissions: ['#2a9ee0', '#4cc2ff'], account: ['#1c8fd6', '#5fb4ff'], usage: ['#2490d4', '#58cdf0'], appearance: ['#2a9ee0', '#5fb4ff']
+  general: ['#2490d4', '#4cc2ff'], doctor: ['#2490d4', '#4cc2ff'], speech: ['#2aa5d8', '#4cc2ff'], shortcuts: ['#1f86cf', '#4cc2ff'], permissions: ['#2a9ee0', '#4cc2ff'], account: ['#1c8fd6', '#5fb4ff'], usage: ['#2490d4', '#58cdf0'], keys: ['#2a9ee0', '#5fb4ff'], appearance: ['#2a9ee0', '#5fb4ff']
 };
 const COLORS = Object.fromEntries(Object.entries(THEME).map(([id, [a]]) => [id, a]));
 const GRAD = Object.fromEntries(Object.entries(THEME).map(([id, [a, b]]) => [id, `linear-gradient(135deg, ${a}, ${b})`]));

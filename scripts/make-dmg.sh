@@ -20,13 +20,19 @@ npx electron-builder --mac --dir "$EB"
 
 APP="$DIR/Relay.app"
 xattr -cr "$APP"
-codesign --force --sign - "$APP/Contents/Resources/native/relay-speech"
-codesign --force --sign - "$APP/Contents/Resources/native/relay-glass"
-codesign --force --sign - "$APP/Contents/Resources/native/relay-ax"
-codesign --force --sign - "$APP/Contents/Resources/native/relay-cal"
-# Ad-hoc signature. Required to launch on Apple Silicon. It is not a Developer ID signature,
+# Which identity signs the build. With your local "Relay Local Signing" certificate (scripts/setup-signing.sh) every build has the SAME identity as the installed app, so the
+# Keychain's "Always Allow" for "Relay Safe Storage" keeps applying and the startup check below does not ask for it again. An ad-hoc signature ("-") is a new identity on every
+# build: macOS asked again each time, and "Always Allow" could only ever cover that one build. RELAY_ADHOC=1 forces ad-hoc (a copy made for other people).
+SIGN="-"
+if [ "${RELAY_ADHOC:-0}" != 1 ] && security find-identity -p codesigning 2>/dev/null | grep -q '"Relay Local Signing"'; then SIGN="Relay Local Signing"; fi
+echo "Signing the build with: $([ "$SIGN" = "-" ] && echo "an ad-hoc signature (run scripts/setup-signing.sh once so Always Allow can stick)" || echo "$SIGN")"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-speech"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-glass"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-ax"
+codesign --force --sign "$SIGN" "$APP/Contents/Resources/native/relay-cal"
+# Ad-hoc is the fallback. It is required to launch on Apple Silicon but is not a Developer ID signature,
 # so downloaded copies need right-click > Open the first time (see README).
-codesign --force --deep --sign - "$APP"
+codesign --force --deep --sign "$SIGN" "$APP"
 codesign --verify --deep --strict "$APP"
 
 # Prove the built app really STARTS before a .dmg is made from it (it launches a copy with a throwaway profile; see scripts/startup-check.js).

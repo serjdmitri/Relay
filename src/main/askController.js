@@ -12,7 +12,7 @@ const { parseCommand } = require('./commands');
 const { runAgent } = require('./agent/loop');
 const { buildTools } = require('./agent/tools');
 const { buildSystemPrompt, buildContext } = require('./agent/system-prompt');
-const { routeModel } = require('./agent/router');
+const { routeModel, routeCodex } = require('./agent/router');
 const { AnthropicProvider } = require('./agent/providers/anthropic');
 const { OllamaProvider } = require('./agent/providers/ollama');
 const { OpenAICompatProvider } = require('./agent/providers/openai');
@@ -2333,6 +2333,11 @@ class AskController {
           const cc = require('./calls/service').parseCallCommand(effective);
           if (cc) return this.finish(entry, await this.onCallCommand({ ...cc, background: !!opts.scheduled }));
         }
+        // "code me a login form" while VS Code or Cursor is in front: your Claude (or Codex) edits that project (see codeAgent.js)
+        if (!opts.shown && !opts.scheduled && this.onCodeCommand) {
+          const cd = require('./codeAgent').parseCodeCommand(effective);
+          if (cd) { this.lastRequestText = effective; return this.finish(entry, await this.onCodeCommand(cd)); }
+        }
         if (!opts.shown && !opts.scheduled && this.store.get('settings.memory') !== false) {
           // "interview me": one question at a time; each answer is remembered like "remember that..."
           const iv = require('./interview');
@@ -3632,7 +3637,7 @@ class AskController {
         }
         const route = this.forceTier ? { model: this.forceTier, escalate: false } : routeModel(text, model.claudeModel);
         this.forceTier = null;
-        session.onRate = (r) => { this.rate = r; };
+        session.onRate = (r) => { this.rate = r; try { this.store.set('claudeRate', { type: r.type, util: r.util, status: r.status, ts: r.ts }); } catch { /* a missed save only means the Usage page shows an older report */ } };
         const fresh = session.turns === 0;
         const context = this.requestContext(runningApps, fresh);
         result = await runSmart({ session, text, context, model: route.model, escalate: route.escalate, confirm, onEvent, signal, onCost: (c) => this.costArrived(requestId, c) });
@@ -3756,7 +3761,11 @@ class AskController {
     this.push({ label: 'Using Codex (Claude usage limit)' });
     if (!this.codexHost) this.codexHost = new McpHost();
     await this.codexHost.start();
-    const r = await codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(true, { forModel: true, request: text }), confirm, onEvent, signal, fast: this.fastMode() });
+    // Same idea as Haiku then Sonnet: a simple request runs on low effort and moves up to high if it fails; a harder one starts higher (the Claude model choice governs both).
+    const route = routeCodex(text, this.store.get('settings.model.claudeModel'));
+    const run = (effort) => codexCli.runCodex({ codexPath, host: this.codexHost, system: this.claudeSystem(), text: `${this.requestContext(runningApps, true)}\n\nRequest: ${text}`.trim(), tools: this.makeTools(true, { forModel: true, request: text }), confirm, onEvent, signal, fast: this.fastMode(), effort });
+    let r = await run(route.effort);
+    if (route.escalate && r.status === 'failed' && !r.limit && !signal?.aborted) { this.push({ label: 'Thinking harder' }); r = await run('high'); }
     if (r.status === 'failed' && r.limit) {
       this.store.set('settings.failover.codexUntil', Date.now() + 30 * 60000); // Codex is out too: the next requests go to the local model for a while
       const when = new Date(this.failover.until).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });

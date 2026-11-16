@@ -101,6 +101,8 @@ The charts are drawn from the repository itself by `npm run charts` (tests are c
 
 ## Install from source (on your Mac)
 
+**One command:** `git clone https://github.com/serjdmitri/Relay.git && cd Relay && bash scripts/setup.sh`. It checks what is needed, installs the packages, creates the local signing certificate, builds the app, installs it into Applications and opens it. The steps it runs are listed below if you would rather do them by hand.
+
 Needs Node 20+ (`brew install node`), Xcode or the command line tools (`xcode-select --install`, for the dictation helper), macOS 26 or later, and [Claude Code](https://claude.ai/code) signed in to your Claude account (Relay can do the sign-in for you).
 
 ```bash
@@ -117,6 +119,28 @@ open /Applications/Relay.app
 Run `npm run signing` once. It creates a local certificate, "Relay Local Signing", in your login keychain, and every build is then signed with it. That gives Relay a stable identity, so macOS keeps Accessibility, Input Monitoring, Microphone and Screen Recording across rebuilds. Without it the build is signed ad-hoc and macOS asks for all of them again after every rebuild.
 
 First launch walks you through: sign in with Claude, Microphone, Accessibility, Screen Recording, Input Monitoring, optional Firefox extension, a dictation check, then a first request.
+
+## Looks
+
+Settings > Appearance has five looks, each in dark and light, and the reactor is the same in all of them. Point at a look to preview the whole window, click to keep it. The phone page and the small floating windows follow it.
+
+| Look | Feel |
+|---|---|
+| **Glass** (default) | Apple's Liquid Glass: translucent sidebar, flat content, glass for the things you touch |
+| **Instrument** | Dense and precise: hairlines, a small icon dock |
+| **Studio** | Calm and spacious: big rows, soft cards |
+| **Cockpit Lite** | The original Jarvis feel, kept quiet: corner ticks, small caps |
+| **Buddy** | Rounded and friendly: a coloured tile for each section |
+
+The menu is always on the left, with labels or icons only (names show when you point at it). ⌘1 to ⌘0 open the first ten pages, and ⌘K or `/` searches every setting.
+
+## Code by voice
+
+Open a project in VS Code or Cursor, bring it to the front and say "code me a login form" (or "add a dark mode toggle to my project"). Relay finds the folder the editor has open, hands the request to your own Claude (Codex takes over if Claude is out of usage), and opens the first changed file. It edits only inside that folder, runs no shell except reading git, and asks first if the folder is not under git, since that could not be undone.
+
+## Keys and accounts
+
+Nothing needs a key to start: Relay uses the Claude plan you already have. Settings > Keys & accounts lists every optional account (Codex, quick answers, voices, phone calls), what it is for, what it costs, and whether it is set. Keys are encrypted with the macOS Keychain and never go into files, Git or logs.
 
 ## Using it
 

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { PRESETS } = require('./agent/providers/presets');
 
-const SCHEMA = 3;
+const SCHEMA = 4;
 
 const DEFAULTS = {
   schema: SCHEMA,
@@ -181,6 +181,9 @@ class Store {
     }
     if (from < 3 && this.data.settings.model.claudeModel === 'sonnet') {
       this.data.settings.model.claudeModel = 'auto'; // Sonnet was only the old default
+    }
+    if (from < 4 && this.data.settings.model.claudeModel === 'haiku') {
+      this.data.settings.model.claudeModel = 'auto'; // "Haiku only" never hands a hard request to a stronger model; Auto starts on Haiku and moves up when it has to
     }
     this.data.schema = SCHEMA;
     this._timer = null;

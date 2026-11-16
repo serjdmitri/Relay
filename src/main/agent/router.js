@@ -28,4 +28,15 @@ function routeModel(text, setting = 'auto') {
   return { model: simple ? 'haiku' : 'sonnet', escalate: simple };
 }
 
-module.exports = { routeModel, complexity, SIMPLE_BELOW };
+// The same idea for Codex, which has no "Haiku": the size of the step is how much it reasons before it acts. Simple requests run on low effort and may move up to high if they fail;
+// harder ones start on medium; the hardest start on high. setting: the Claude choice (auto | haiku | sonnet | opus) maps onto it so one switch governs both.
+const EFFORT_FOR = { haiku: 'low', sonnet: 'medium', opus: 'high' };
+const HARD_ABOVE = 6;
+function routeCodex(text, setting = 'auto') {
+  if (EFFORT_FOR[setting]) return { effort: EFFORT_FOR[setting], escalate: false };
+  const c = complexity(text);
+  if (c < SIMPLE_BELOW) return { effort: 'low', escalate: true };
+  return { effort: c >= HARD_ABOVE ? 'high' : 'medium', escalate: false };
+}
+
+module.exports = { routeModel, routeCodex, complexity, SIMPLE_BELOW, HARD_ABOVE };

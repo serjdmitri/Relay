@@ -40,6 +40,11 @@ test('separate usage summaries never invent Codex limits or use stale Claude rep
   assert.equal(summary.claude.limit.util, .4);
   assert.deepEqual(summary.codex.last, { in: 12, out: 3, ts: now - 1000 });
   assert.equal(summary.codex.limit, null);
-  assert.equal(providerSummaries(history, { util: .4, ts: now - 7 * 3600e3 }, now).claude.limit, null);
+  // an old report stays visible and says so; a window that has certainly ended says it reset; nothing is invented from a very old or broken one
+  const old = providerSummaries(history, { type: 'seven_day', util: .4, ts: now - 7 * 3600e3 }, now).claude.limit;
+  assert.equal(old.util, .4); assert.equal(old.stale, true);
+  const ended = providerSummaries(history, { type: 'five_hour', util: .9, ts: now - 7 * 3600e3 }, now).claude.limit;
+  assert.equal(ended.util, 0); assert.equal(ended.reset, true);
+  assert.equal(providerSummaries(history, { type: 'seven_day', util: .4, ts: now - 9 * 86400e3 }, now).claude.limit, null);
   assert.equal(providerSummaries(history, { util: 2, ts: now }, now).claude.limit, null);
 });

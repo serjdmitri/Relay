@@ -48,7 +48,12 @@ function providerSummaries(history = [], claudeRate = null, now = Date.now()) {
   const last = (predicate) => rows.find((h) => h.usage && predicate(String(h.usage.model || ''))) || null;
   const claude = last((m) => !!limitForModel(m, true));
   const codex = last((m) => /^codex$/i.test(m));
-  const rate = claudeRate && Number.isFinite(claudeRate.util) && claudeRate.util >= 0 && claudeRate.util <= 1 && Number.isFinite(claudeRate.ts) && claudeRate.ts <= now && now - claudeRate.ts < 6 * 3600e3 ? { type: claudeRate.type, util: claudeRate.util, ts: claudeRate.ts } : null;
+  // The last report stays visible (Claude only reports while a request runs): after 6 hours it is marked stale, and once its window has certainly ended (5 hours, a week) it says the window reset.
+  const SPAN = { five_hour: 5 * 3600e3, seven_day: 7 * 86400e3 };
+  const age = claudeRate ? now - claudeRate.ts : Infinity;
+  const valid = claudeRate && Number.isFinite(claudeRate.util) && claudeRate.util >= 0 && claudeRate.util <= 1 && Number.isFinite(claudeRate.ts) && claudeRate.ts <= now && age < 8 * 86400e3;
+  const ended = valid && SPAN[claudeRate.type] && age > SPAN[claudeRate.type];
+  const rate = valid ? { type: claudeRate.type, util: ended ? 0 : claudeRate.util, ts: claudeRate.ts, ...(ended ? { reset: true } : age > 6 * 3600e3 ? { stale: true } : {}) } : null;
   const view = (h) => h ? { in: h.usage.in || 0, out: h.usage.out || 0, ts: h.finishedAt || h.ts } : null;
   return { claude: { last: view(claude), limit: rate }, codex: { last: view(codex), limit: null } };
 }

@@ -300,6 +300,10 @@
   let startedAt = 0;
   let lastErr = '';
   let lastEnd = 0; // when the last hold-to-talk session ended: the phone's microphone needs a moment to be free again
+  let micTest = false; // the "Test the microphone" button in the menu is listening: nothing else may take the microphone meanwhile
+  // A small tap under the finger on iPhones that allow it (iOS 18 Safari: a switch checkbox clicked from a touch gives a haptic). Silent where it is not supported.
+  const hapticEl = (() => { const l = document.createElement('label'); l.style.cssText = 'position:fixed;left:-99px;top:-99px;opacity:0;pointer-events:none'; l.innerHTML = '<input type="checkbox" switch tabindex="-1">'; document.body.append(l); return l; })();
+  function tick() { try { hapticEl.click(); } catch { /* no haptics here */ } }
   // What the browser's error code means for the person holding the phone. 'no-speech' and 'aborted' are ordinary (nothing said, or stopped).
   const SPEECH_ERRORS = {
     network: 'The speech service could not be reached. Check the phone has internet, and that Siri & Dictation is on.',
@@ -308,6 +312,8 @@
   };
   function startTalk() {
     if (!canTalk) { showTyping(true); return; }
+    if (micTest) return; // the microphone test in the menu has it
+    tick();
     // iOS keeps the audio session in "playing" mode for a moment after the phone speaks, and the microphone hears nothing until it is
     // released: so when it was talking, give the session a beat before recognition starts (read before the silent unlock word below).
     const wasTalking = !!speechSynthesis?.speaking;
@@ -395,7 +401,7 @@
             else if (st === 'error') { $('hey').checked = false; save(HEY, '0'); $('hint').textContent = baseHint; line(why === 'language-not-supported' ? 'This phone has no speech recognition for its language.' : '“Hey Jarvis” stopped: the speech service keeps failing. Check the internet, then turn it on again.', true); heyKeepAwake(false); }
           }
         });
-        setInterval(() => heyLoop.setPaused(holding || !!rec || Date.now() - lastEnd < 1500 || !!speechSynthesis?.speaking || document.visibilityState !== 'visible'), 400); // it must not hear itself, or you holding the reactor, and it waits for the hold-to-talk session to let go of the microphone
+        setInterval(() => heyLoop.setPaused(holding || micTest || !!rec || Date.now() - lastEnd < 1500 || !!speechSynthesis?.speaking || document.visibilityState !== 'visible'), 400); // it must not hear itself, or you holding the reactor, and it waits for the hold-to-talk session to let go of the microphone
       }
       heyLoop.start(); heyKeepAwake(true);
     } catch { $('hey').checked = false; line('Could not start “Hey Jarvis”.', true); }
@@ -442,6 +448,48 @@
   $('speak').onchange = () => { speakOn = $('speak').checked; save('relay-remote-speak', speakOn ? '1' : '0'); if (!speakOn) window.speechSynthesis?.cancel?.(); };
   $('stop').onclick = () => { api('/api/stop', {}).catch(() => {}); waiting = null; setMode('idle'); line('Stopped', true); $('menu').hidden = true; };
   $('unpair').onclick = () => { if (confirm('Unpair this phone?')) unpair(); };
+
+  // ---------- Check my phone ----------
+  // What this page can find out about the phone, in plain words, with the fix next to anything that is wrong. A web page cannot change Safari's microphone setting itself:
+  // "Allow" for this site (aA > Website Settings > Microphone) is what stops the question on every reload, so the panel shows which state it is in and how to set it.
+  const chkRow = (ok, name, text, fix) => `<div class="chkrow ${ok === true ? 'ok' : ok === false ? 'bad' : ''}"><b>${name}</b><span>${text}</span>${fix ? `<small>${fix}</small>` : ''}</div>`;
+  async function phoneCheck() {
+    const box = $('chkbox');
+    box.hidden = false;
+    box.innerHTML = '<div class="chkrow"><b>Checking…</b></div>';
+    const rows = [];
+    rows.push(chkRow(canTalk, 'Speech recognition', canTalk ? 'Available' : 'Not in this browser', canTalk ? '' : 'Open Relay in Safari, not inside another app.'));
+    rows.push(chkRow(window.isSecureContext ? true : null, 'Address', window.isSecureContext ? 'Secure (https)' : 'Not https', window.isSecureContext ? '' : 'Safari may ask for the microphone again each time. The Tailscale https link avoids that.'));
+    let mic = 'unknown';
+    try { mic = (await navigator.permissions.query({ name: 'microphone' })).state; } catch { /* this Safari cannot say */ }
+    rows.push(chkRow(mic === 'granted' ? true : mic === 'unknown' ? null : false, 'Microphone', { granted: 'Allowed for this page', prompt: 'Asks each time', denied: 'Blocked', unknown: 'Cannot be read from this page' }[mic] || mic,
+      mic === 'granted' ? '' : 'To stop it asking: tap the aA button in Safari, then Website Settings, then Microphone, then Allow. (Settings > Apps > Safari > Microphone shows the same list.)'));
+    const needsTap = typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
+    rows.push(chkRow(needsTap ? (saved('relay-flick-motion') === '1' ? true : null) : true, 'Motion sensors (Flick)', needsTap ? (saved('relay-flick-motion') === '1' ? 'Turned on' : 'Not turned on yet') : 'Available', needsTap && saved('relay-flick-motion') !== '1' ? 'Open Flick and tap "Turn on flick (motion)" once.' : ''));
+    const t0 = performance.now();
+    try { await api('/api/state'); rows.push(chkRow(true, 'Connection to your Mac', `Connected (${Math.round(performance.now() - t0)} ms)`)); }
+    catch { rows.push(chkRow(false, 'Connection to your Mac', 'Cannot reach it', 'Check the Mac is awake with Relay open, and that this phone is on the same Wi-Fi or Tailscale.')); }
+    rows.push(chkRow(null, 'Look', document.documentElement.getAttribute('data-look') || 'glass'));
+    box.innerHTML = rows.join('') + '<button id="mictest" type="button">Test the microphone</button><div id="micres" class="chkrow"></div>';
+    $('mictest').onclick = runMicTest;
+  }
+  function runMicTest() {
+    const out = $('micres');
+    if (!SR) { out.textContent = 'This browser has no speech recognition.'; return; }
+    if (rec || holding) { out.textContent = 'Let go of the reactor first.'; return; }
+    out.textContent = 'Say something now…';
+    const r = new SR();
+    r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false;
+    let said = '', audio = false, failed = '';
+    micTest = true;
+    r.onaudiostart = () => { audio = true; out.textContent = 'Listening… say something.'; };
+    r.onresult = (ev) => { said = Array.from(ev.results).map((x) => x[0].transcript).join(' '); out.textContent = `Heard: “${said}”`; };
+    r.onerror = (ev) => { failed = ev.error || 'unknown'; out.textContent = `The test failed: ${failed}. ${SPEECH_ERRORS[failed] || ''}`.trim(); };
+    r.onend = () => { micTest = false; lastEnd = Date.now(); if (!said && !failed) out.textContent = audio ? 'The microphone started but heard nothing. Try again and speak right away.' : 'The microphone never started. See the Microphone row above.'; };
+    try { r.start(); } catch { micTest = false; out.textContent = 'Could not start the microphone.'; return; }
+    setTimeout(() => { try { r.stop(); } catch { /* already ended */ } }, 6000);
+  }
+  $('chk').onclick = () => { if ($('chkbox').hidden) phoneCheck(); else $('chkbox').hidden = true; };
   $('support').textContent = canTalk ? (window.isSecureContext ? 'Hold the reactor to talk.' : 'Hold the reactor to talk. If it says the microphone is blocked, this address is not secure enough: use the Tailscale https link, or type.') : 'This browser has no speech recognition. Open Relay in Safari to hold and talk, or type and use the keyboard microphone.';
   $('hint').textContent = canTalk ? 'Hold to talk' : 'Open in Safari to talk · or tap the keyboard button';
   baseHint = $('hint').textContent;
@@ -459,7 +507,11 @@
       const last = (s.recent || [])[0];
       if (last) showReply(last.reply);
       applyStatus(s);
-    } catch { return; }
+    } catch {
+      // Not paired: the pairing page is already up. Otherwise the Mac cannot be reached: say so in words and keep trying, instead of a silent empty page.
+      if (token) { line('Can’t reach your Mac. Check it is awake with Relay open, and that this phone is on the same Wi-Fi or Tailscale. Trying again…', true); setTimeout(start, 8000); }
+      return;
+    }
     connect();
     // /?say=lock%20my%20mac (a bookmark, or a Shortcut's Open URL) sends that phrase as soon as the page is up, then forgets it
     const say = new URLSearchParams(location.search).get('say');

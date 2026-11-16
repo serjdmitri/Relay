@@ -1,5 +1,11 @@
 /* global SETTINGS_INDEX, PAGE_WORDS, relay, icon, glyph, ICONS, LOGO, COLORS, h, esc, timeAgo, MOD_CODES, modsFromEvent */
 let S = null; // latest state from main
+// While Relay is still starting (it waits for macOS's Keychain question, or the Mac is busy) say so in words instead of showing a blank window.
+setTimeout(() => {
+  if (S) return;
+  const c = document.getElementById('content');
+  if (c && !c.childElementCount) c.innerHTML = '<div class="boot"><h2>Relay is still starting…</h2><p>If macOS is asking for access to “Relay Safe Storage”, enter your Mac password and click <b>Always Allow</b>. This window fills in as soon as you answer.</p><p class="note">If nothing is asking, wait a few more seconds; a busy Mac can be slow to start.</p></div>';
+}, 5000);
 let page = new URLSearchParams(location.search).get('page') || 'home';
 let historyTab = 'requests';
 let cxBusy = false;
@@ -28,11 +34,12 @@ const automation = JSON.parse(localStorage.getItem('automation') || '{}');
 const NAV = [
   ['Assistant', [['home', 'Home'], ['history', 'History'], ['routines', 'Routines'], ['vocab', 'Vocabulary'], ['memory', 'Memory']]],
   ['Connections', [['connectors', 'Connectors'], ['calls', 'Phone calls'], ['remote', 'Phone remote']]],
-  ['Settings', [['general', 'General'], ['speech', 'Voice'], ['shortcuts', 'Shortcuts'], ['permissions', 'Privacy & permissions'], ['usage', 'Usage'], ['appearance', 'Appearance'], ['account', 'Account & health']]]
+  ['Settings', [['general', 'General'], ['speech', 'Voice'], ['shortcuts', 'Shortcuts'], ['permissions', 'Privacy & permissions'], ['keys', 'Keys & accounts'], ['usage', 'Usage'], ['appearance', 'Appearance'], ['account', 'Account & health']]]
 ];
 const TITLES = Object.fromEntries(NAV.flatMap(([, items]) => items));
 const navId = () => (page === 'doctor' ? 'account' : page); // Doctor lives on the Account & health page
-const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', calls: 'calls', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', usage: 'usage', appearance: 'appearance', doctor: 'permissions', account: 'account' };
+const SHORTCUT_IDS = NAV.flatMap(([, items]) => items.map(([id]) => id)).slice(0, 10); // ⌘1 to ⌘9 and ⌘0 open the first ten pages
+const NAV_GLYPH = { home: 'home', history: 'history', routines: 'routines', vocab: 'vocab', memory: 'memory', connectors: 'connectors', remote: 'remote', calls: 'calls', general: 'general', speech: 'speech', shortcuts: 'shortcuts', permissions: 'permissions', usage: 'usage', keys: 'keys', appearance: 'appearance', doctor: 'permissions', account: 'account' };
 
 // The five looks (Settings > Appearance). looks.css holds what each one does; the swatches only preview it.
 const LOOKS = [
@@ -49,10 +56,16 @@ let pendingFlash = ''; // the row to flash after a search result opens its page
 // What the sidebar usage boxes used to say, now the Usage page: each tool's plan limit and its last request.
 function usageText(id) {
   const data = S?.providerUsage?.[id] || {};
-  const limit = codexLimit(id, data) || (data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${Math.round(data.limit.util * 100)}% used (reported ${timeAgo(data.limit.ts)})` : (id === 'claude' ? 'Appears after your next Claude request (Claude reports its limit while a request runs)' : 'Account limit unavailable (sign in to Codex with ChatGPT, then use it once)'));
+  const limit = codexLimit(id, data) || (data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${data.limit.reset ? 'window has reset since the last report' : `${Math.round(data.limit.util * 100)}% used`} (reported ${timeAgo(data.limit.ts)}${data.limit.stale ? ', may be out of date' : ''})` : (id === 'claude' ? 'Appears after your next Claude request (Claude reports its limit while a request runs)' : 'Account limit unavailable (sign in to Codex with ChatGPT, then use it once)'));
   const last = data.last ? `${data.last.in} in · ${data.last.out} out (${timeAgo(data.last.ts)})` : 'No request usage recorded';
   return { limit, last, data };
 }
+
+document.addEventListener('keydown', (e) => {
+  if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || !/^[0-9]$/.test(e.key)) return;
+  const id = SHORTCUT_IDS[(Number(e.key) + 9) % 10];
+  if (id && S) { e.preventDefault(); go(id); }
+});
 
 // Search: the setting names collected from the pages (settings-index.js) plus every page name and its plain words. All the words you type must appear.
 function searchHits(q) {
@@ -144,7 +157,7 @@ function renderSidebar() {
     const nav = h('<nav class="nav"></nav>');
     nav.append(h(`<div class="nav-group">${groupName}</div>`));
     for (const [id, name] of items) {
-      const item = h(`<div class="nav-item ${navId() === id ? 'active' : ''}" title="${esc(name)}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span><span class="nav-label">${name}</span></div>`);
+      const item = h(`<div class="nav-item ${navId() === id ? 'active' : ''}" title="${esc(name)}${SHORTCUT_IDS.indexOf(id) >= 0 ? ` (⌘${(SHORTCUT_IDS.indexOf(id) + 1) % 10})` : ''}" style="--tc:${THEME[id][0]};--tc2:${THEME[id][1]}"><span class="icon-box">${glyph(NAV_GLYPH[id])}</span><span class="nav-label">${name}</span></div>`);
       item.onclick = () => go(id);
       nav.append(item);
     }
@@ -297,6 +310,29 @@ const allowed = '<span class="allowed" style="display:inline-flex;align-items:ce
 
 /* ---------- pages ---------- */
 const PAGES = {
+  // Bring your own keys: what each account or key is for, what it costs, whether it is set (never the key itself), and a button that finds where to enter it.
+  keys(c) {
+    const on = (v) => (v ? '<span class="ok">Set</span>' : '<span class="note">Not set</span>');
+    const q = S.quick || {}, calls = S.calls || {}, tts = S.hasTtsKeys || {};
+    const rows = [
+      ['Claude', 'Thinks, plans and acts. Sign in with your Claude account in Account & health: no key, and it uses your plan\u2019s limits. An API key is optional and pays per use.', on(S.hasKey) + ' <span class="note">API key</span>', 'claude'],
+      ['Codex', 'Takes over when Claude runs out of usage and can code for you. Sign in once in the Codex program with ChatGPT; Relay never sees that login.', '', 'codex'],
+      ['Quick answers (Groq)', 'Plain facts like \u201Ccapital of Australia\u201D answered at once. The free tier is enough.', on(q.hasKey), 'groq'],
+      ['Voices (OpenAI, ElevenLabs, Gemini)', 'Optional nicer voices. Without them Relay speaks with on-device voices, which cost nothing.', 'OpenAI ' + on(tts.openai) + ' · ElevenLabs ' + on(tts.elevenlabs) + ' · Gemini ' + on(tts.gemini), 'voice'],
+      ['Phone calls (Bland or Twilio)', 'Lets Jarvis phone you. Bland holds a conversation (about $0.14 a minute); Twilio\u2019s trial reads a message.', 'Bland ' + on(calls.hasKey) + ' · Twilio ' + on(calls.hasTwilio), 'bland'],
+      ['Hugging Face token', 'Only for downloading some optional models.', on(S.hasHfToken), 'hugging'],
+      ['Google, Notion and other accounts', 'Mail, calendar, files and notes. Sign in under Connectors.', '', 'connectors']
+    ];
+    c.append(h('<div class="lead">Relay runs on accounts you already have. Each line says what it is for and what it costs; nothing here is needed to start.</div>'));
+    const card = h('<div class="card"></div>');
+    for (const [name, why, status, term] of rows) {
+      const row = h(`<div class="row"><div class="grow"><div class="t">${name}</div><div class="d">${why}</div>${status ? `<div class="d">${status}</div>` : ''}</div><div class="btn">Find setting</div></div>`);
+      row.querySelector('.btn').onclick = () => { gq = term; render(); const i = $('#gsearch'); if (i) { i.focus(); paintSearch(); } };
+      card.append(row);
+    }
+    c.append(card);
+    c.append(h('<div class="note" style="margin-top:14px">Keys are encrypted with the macOS Keychain (\u201CRelay Safe Storage\u201D). They never go into files, Git or logs, and Relay does not show a key again after you save it.</div>'));
+  },
   usage(c) {
     c.append(h('<div class="lead">Plan limits as each tool last reported them. Codex\'s come from its own logs on this Mac; nothing is sent anywhere.</div>'));
     for (const [id, label] of [['claude', 'Claude'], ['codex', 'Codex']]) {
@@ -310,12 +346,15 @@ const PAGES = {
     const st = S.settings || {}, look = LOOK_IDS.includes(st.look) ? st.look : 'glass';
     const dock = ['labels', 'icons', 'auto'].includes(st.dock) ? st.dock : (look === 'instrument' || look === 'cockpit' ? 'icons' : 'labels');
     const mode = ['dark', 'light'].includes(st.mode) ? st.mode : 'system';
-    c.append(h('<div class="lead">Pick how Relay looks. Your phone page follows the look and the light or dark choice too.</div>'));
+    c.append(h('<div class="lead">Pick how Relay looks: point at a look to preview it, click to keep it. Your phone page and the floating windows follow it, and so does light or dark.</div>'));
     c.append(h('<div class="section-title">Look</div>'));
     const grid = h('<div class="looks"></div>');
     for (const l of LOOKS) {
       const b = h(`<button class="lookcard ${l.id === look ? 'on' : ''}" data-look="${l.id}"><div class="sw">${l.sw.map((x) => `<i style="background:${x}"></i>`).join('')}</div><b>${l.name}</b><span>${esc(l.tag)}</span></button>`);
       b.onclick = () => relay.set('settings.look', l.id);
+      // point at a look (or tab to it) to see the whole window in it; moving away puts the chosen one back, clicking keeps it
+      for (const ev of ['mouseenter', 'focus']) b.addEventListener(ev, () => { document.documentElement.dataset.look = l.id; });
+      for (const ev of ['mouseleave', 'blur']) b.addEventListener(ev, () => applyLook());
       grid.append(b);
     }
     c.append(grid);

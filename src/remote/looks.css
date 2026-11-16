@@ -89,3 +89,11 @@ html[data-look="buddy"] #holofab { color: #ff9f0a; background: color-mix(in srgb
 html[data-look="buddy"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 999px; box-shadow: var(--shadow); }
 html[data-look="buddy"] :is(.panel, #tiles li, #agents .ag) { border-radius: 20px; }
 @media (prefers-reduced-transparency: reduce) { html[data-look="glass"] * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; } html[data-look="glass"] { --fill: var(--card); } }
+
+/* ---- the phone check follows the look; text follows the iPhone's text size (Settings > Display & Brightness > Text Size) where Safari supports it ---- */
+html[data-look] .chkrow { background: var(--card); border: 1px solid var(--line); }
+@supports (font: -apple-system-body) {
+  html { font: -apple-system-body; }
+  body { font-size: 1rem; line-height: 1.4; }
+  #line { font-size: 1.12rem; } #reply { font-size: .95rem; } #asked { font-size: .9rem; } #quick button { font-size: .85rem; } #menu button, #menu label { font-size: 1rem; } .chkrow { font-size: .8rem; }
+}

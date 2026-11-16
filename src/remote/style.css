@@ -211,3 +211,10 @@ body.kbopen main { visibility: hidden; } /* nothing from the page shows through 
 /* Compact music controls; touch targets remain usable without shifting the reactor. */
 #player{gap:10px;padding-top:2px}#player button{width:44px;height:44px}#player .big{width:48px;height:48px}#player svg{max-width:24px;max-height:24px}#vol{gap:8px;padding-top:2px}#volume{height:24px}
 @media(orientation:portrait){#bottom{max-height:calc(50dvh - min(40vh,80vw)/2 - 20px + env(safe-area-inset-bottom) * .6);overflow-y:auto;flex-shrink:0;scrollbar-width:thin}#player{flex-shrink:0}#quick{flex-shrink:0}}
+
+/* Check my phone (menu): one row per thing the page can find out, with the fix under anything that is wrong */
+#chkbox { display: flex; flex-direction: column; gap: 6px; }
+.chkrow { padding: 8px 10px; border-radius: 12px; background: var(--card); border: 1px solid rgba(0, 212, 255, .25); display: grid; gap: 2px; font-size: 13px; }
+.chkrow b { font-weight: 600; } .chkrow span { color: var(--dim); } .chkrow.ok span { color: #30d158; } .chkrow.bad span { color: var(--warn); }
+.chkrow small { color: var(--dim); font-size: 12px; line-height: 1.35; }
+#micres:empty { display: none; }
