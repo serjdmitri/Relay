@@ -79,13 +79,14 @@ test('the phone page loads the look before it paints and follows the Mac; Glass 
 
 test('the phone look script applies the look and mode and survives having no storage', () => {
   const attrs = {}, store = {};
-  const doc = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } }, querySelector: () => ({ setAttribute: (k, v) => { attrs.theme = v; } }) };
+  const doc = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } }, querySelector: (sel) => ({ setAttribute: (k, v) => { attrs[/theme-color/.test(sel) ? 'theme' : /manifest/.test(sel) ? 'manifest' : 'icon'] = v; } }) };
   const mk = (ls) => ({ document: doc, window: { matchMedia: () => ({ matches: false }) }, localStorage: ls });
   vm.runInNewContext(read('src/remote/look.js'), mk({ getItem: () => null, setItem: (k, v) => { store[k] = v; } }));
   assert.equal(attrs['data-look'], 'glass'); assert.equal(attrs['data-mode'], undefined);
   const ctx = mk({ getItem: (k) => ({ 'relay-look': 'buddy', 'relay-mode': 'light' })[k], setItem: (k, v) => { store[k] = v; } });
   vm.runInNewContext(read('src/remote/look.js'), ctx);
   assert.equal(attrs['data-look'], 'buddy'); assert.equal(attrs['data-mode'], 'light'); assert.equal(attrs.theme, '#eef6fa');
+  assert.equal(attrs.icon, '/icons/buddy.png', 'the home-screen icon follows the look'); assert.equal(attrs.manifest, '/manifests/buddy.webmanifest', 'and so does the splash colour manifest');
   ctx.window.RelayLook.apply('nonsense', 'system');
   assert.equal(attrs['data-look'], 'glass'); assert.equal(attrs['data-mode'], undefined);
   assert.doesNotThrow(() => vm.runInNewContext(read('src/remote/look.js'), mk({ getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } })));
@@ -209,4 +210,16 @@ test('the phone snapshot carries the look and mode, and falls back to Glass and 
     const again = AskController.prototype.remoteSnapshot.call(self);
     assert.equal(again.look, 'glass'); assert.equal(again.mode, 'system');
   } else assert.match(read('src/main/askController.js'), /look: \['glass', 'instrument', 'studio', 'cockpit', 'buddy'\]\.includes\(look\) \? look : 'glass', mode: mode === 'dark' \|\| mode === 'light' \? mode : 'system'/);
+});
+
+test('every look has a phone home-screen icon and a manifest with its own splash colour, both served and packaged', () => {
+  const server = read('src/main/remote/server.js');
+  for (const l of LOOKS) {
+    const png = fs.readFileSync(path.join(__dirname, '..', `src/remote/icons/${l}.png`));
+    assert.equal(png.readUInt32BE(16), 180); assert.equal(png.readUInt32BE(20), 180, `${l} icon is 180x180`);
+    const m = JSON.parse(read(`src/remote/manifests/${l}.webmanifest`));
+    assert.match(m.background_color, /^#[0-9a-f]{6}$/i); assert.equal(m.icons[0].src, `/icons/${l}.png`); assert.equal(m.display, 'standalone');
+    assert.ok(server.includes(`'/icons/${l}.png': 'icons/${l}.png'`) && server.includes(`'/manifests/${l}.webmanifest': 'manifests/${l}.webmanifest'`), `${l} is served`);
+  }
+  assert.equal(new Set(LOOKS.map((l) => fs.readFileSync(path.join(__dirname, '..', `src/remote/icons/${l}.png`)).toString('base64'))).size, 5, 'the five icons are different pictures');
 });

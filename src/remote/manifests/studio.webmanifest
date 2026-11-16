@@ -1,0 +1,17 @@
+{
+  "name": "Relay Remote",
+  "short_name": "Relay",
+  "description": "Talk to Relay on your Mac from your phone.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#060f17",
+  "theme_color": "#060f17",
+  "icons": [
+    {
+      "src": "/icons/studio.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

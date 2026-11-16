@@ -134,6 +134,16 @@ Settings > Appearance has five looks, each in dark and light, and the reactor is
 
 The menu is always on the left, with labels or icons only (names show when you point at it). ⌘1 to ⌘0 open the first ten pages, and ⌘K or `/` searches every setting.
 
+<p align="center">
+  <img src="docs/img/look-glass.png" alt="Glass look: translucent sidebar and glass cards" width="440">
+  <img src="docs/img/look-instrument.png" alt="Instrument look: hairlines and a dense layout" width="440"><br>
+  <img src="docs/img/look-studio.png" alt="Studio look: spacious rows and soft cards" width="440">
+  <img src="docs/img/look-cockpit.png" alt="Cockpit Lite look: corner ticks and small caps" width="440"><br>
+  <img src="docs/img/look-buddy.png" alt="Buddy look: rounded font and a coloured tile for each section" width="440">
+</p>
+
+The phone's home-screen icon and start-up colour follow the look too, so "Add to Home Screen" saves the look you are using. (Screenshots are drawn with made-up numbers, not real data. Regenerate them with `node scripts/look-shots.mjs`.)
+
 ## Code by voice
 
 Open a project in VS Code or Cursor, bring it to the front and say "code me a login form" (or "add a dark mode toggle to my project"). Relay finds the folder the editor has open, hands the request to your own Claude (Codex takes over if Claude is out of usage), and opens the first changed file. It edits only inside that folder, runs no shell except reading git, and asks first if the folder is not under git, since that could not be undone.

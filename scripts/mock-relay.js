@@ -84,6 +84,7 @@
   window.__relayState = state;
   window.relay = {
     claudeStatus: async () => state.claude,
+    codexStatus: async () => ({ installed: false }),
     claudeLogin: async () => ({ ok: true }), claudeCancelLogin: async () => {}, claudeLogout: async () => {},
     requestMic: async () => ({ ok: true, status: 'granted' }),
     speechLocales: async () => [{ id: 'en-US', name: 'English (United States)' }, { id: 'en-GB', name: 'English (United Kingdom)' }, { id: 'es-ES', name: 'Spanish (Spain)' }, { id: 'fr-FR', name: 'French (France)' }, { id: 'de-DE', name: 'German (Germany)' }],
