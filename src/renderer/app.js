@@ -85,13 +85,22 @@ function renderSidebar() {
     const data = S?.providerUsage?.[id] || {};
     const limit = data.limit ? `${data.limit.type === 'five_hour' ? '5-hour' : data.limit.type === 'seven_day' ? 'Weekly' : 'Plan'}: ${Math.round(data.limit.util * 100)}% used (reported ${timeAgo(data.limit.ts)})` : 'Account limit unavailable';
     const last = data.last ? `Last request: ${data.last.in} in · ${data.last.out} out (${timeAgo(data.last.ts)})` : 'No request usage recorded';
-    const box = h(`<details class="usage-menu"><summary>${label} usage</summary><div>${esc(limit)}</div><div>${esc(last)}</div></details>`);
+    const box = h(`<details class="usage-menu"><summary>${label} usage</summary><div>${esc(codexLimit(id, data) || limit)}</div><div>${esc(last)}</div></details>`);
     box.open = usageOpen[id];
     box.addEventListener('toggle', () => { usageOpen[id] = box.open; });
     sb.append(box);
   }
   sb.append(h(`<div class="status-card"><div class="status-line"><span class="dot ${r.ok ? '' : 'off'}"></span>${r.text}</div>
     <div class="status-hint"><span class="kbd small">${esc(S?.labels.ask || '')}</span>to ask</div></div>`));
+}
+
+// Codex's own plan limits, as it last reported them: "5-hour: 0% used, reset · Weekly: 49% used, resets Fri 7:03 AM (reported 2 days ago)". Only for Codex; Claude keeps its own line.
+function codexLimit(id, data) {
+  const l = id === 'codex' && data && data.limits;
+  if (!l) return '';
+  const win = (name, w) => (w ? `${name}: ${w.reset ? '0% used, window reset' : `${Math.round(w.util * 100)}% used${w.resetsAt ? `, resets ${new Date(w.resetsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}`}` : '');
+  const text = [win('5-hour', l.five), win('Weekly', l.week)].filter(Boolean).join(' · ');
+  return text ? `${text}${l.ts ? ` (reported ${timeAgo(l.ts)})` : ''}` : '';
 }
 
 function go(p) {

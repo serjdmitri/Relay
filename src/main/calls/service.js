@@ -114,10 +114,21 @@ function parseCallCommand(raw){
   const P='(twilio|bland|auto|automatic|free(?: calling)?(?: model)?)',name=v=>/^free/i.test(v)||/^twilio$/i.test(v)?'twilio':/^bland$/i.test(v)?'bland':'auto';
   const pv=new RegExp('^(?:please )?(?:(?:switch|change|set|move)(?: my| the)?(?: (?:phone|calling))? ?(?:calls?|calling)?(?: (?:model|provider|service))? (?:over )?(?:to|back to|on) (?:the )?'+P+'(?: (?:for|to make) (?:my |the )?(?:phone )?calls?)?|(?:switch|change) to (?:the )?'+P+'(?: (?:for )?(?:my |the )?(?:phone )?calls?)?|use (?:the )?'+P+'(?: (?:for|to make) (?:my |the )?(?:phone )?calls?)?)$','i').exec(text);
   if(pv)return{type:'provider',provider:name(pv[1]||pv[2]||pv[3])};
+  // The ask can come wrapped in talk: "You have Bland connected and my number. Can you call me?" Try the whole text first, then each sentence from the last, with the polite lead-in removed.
+  const LEAD=/^(?:(?:and|so|ok|okay|now|then|well|hey|yeah|yes|alright)[, ]+)*(?:(?:jarvis|relay)[, ]+)?(?:(?:(?:can|could|would|will) you|you can|i (?:want|need|would like|'d like) you to|go ahead and|just|please)[, ]+)*/i;
+  const sentences=text.split(/(?<=[.!?])\s+/).map(s=>s.replace(/[.!?]+$/,'').trim()).filter(Boolean).reverse();
+  for(const candidate of [text,...sentences.map(s=>s.replace(LEAD,'').trim())]){const found=callAsk(candidate);if(found)return found;}
+  return null;
+}
+// "call me", "can you call me", "call my phone", "give me a call", with or without a purpose or a time. Never someone else ("call Mom"), and never a nickname ("call me Sir").
+function callAsk(text){
   const scheduled=parseScheduleCommand(/^schedule\b/i.test(text)?text:'schedule '+text);
   const callText=scheduled?.type==='schedule-add'?scheduled.text:text;
-  const m=/^(?:please )?(?:call|phone|ring) me(?: (?:about|to|and|for))?(?: (.+))?$/i.exec(callText);if(!m)return null;
-  const why=m[1]||'A brief check-in. Ask how I am doing and whether I need anything.';
+  const VERB='(?:(?:call|phone|ring|dial|buzz) (?:me|my (?:phone|cell(?:phone)?|mobile|number|iphone))|give me a (?:call|ring|buzz))';
+  if(/^(?:please )?(?:call|phone|ring|dial|buzz) me (?:sir|boss|master|mister|mr|mrs|ms|miss|dr|doctor|by|buddy|bro|chief|captain|tony|stark)\b/i.test(callText))return null;
+  const m=new RegExp('^(?:please )?'+VERB+'(?: (?:about|to|and|for))?(?: (.+))?$','i').exec(callText);if(!m)return null;
+  const rest=(m[1]||'').replace(/^(?:(?:on|from) (?:my|the) (?:phone|cell(?:phone)?|mobile)|right now|now|please)\b[ ,]*/i,'').trim();
+  const why=rest||'A brief check-in. Ask how I am doing and whether I need anything.';
   return scheduled?.type==='schedule-add'?{type:'schedule',spec:{...scheduled,purpose:why}}:{type:'prepare',purpose:why};
 }
 module.exports={Calls,DEFAULTS,quiet,number,purpose,parseCallCommand};

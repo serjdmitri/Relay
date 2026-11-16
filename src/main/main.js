@@ -241,7 +241,11 @@ function publicState() {
     hasTtsKeys,
     hasHfToken,
     activity: { state: ask?.state || 'idle', question: ask?.pendingConfirm ? ask.confirmQuestion || '' : '', tasks: ask?.taskList?.() || [], agents: ask?.agents?.view?.() || [] },
-    providerUsage: require('./usage').providerSummaries(d.history, ask?.rate),
+    providerUsage: (() => { // Codex's plan limits come from its own session logs on this Mac (read, never written), looked at at most every 20 s
+      const u = require('./usage').providerSummaries(d.history, ask?.rate);
+      try { const now = Date.now(); if (!publicState.codexLimits || now - publicState.codexLimits.at > 20000) publicState.codexLimits = { at: now, v: require('./codexUsage').readCodexLimits() }; u.codex.limits = publicState.codexLimits.v; } catch { /* the panel just says unavailable */ }
+      return u;
+    })(),
     handsInfo: { paused: !!hands?.paused, status: hands?.status || 'off', message: hands?.message || '' },
     presenceInfo: { status: presence?.status || 'off', message: presence?.message || '', state: presence?.state || 'unknown', faces: presence?.faces || 0 },
     voiceProblem,

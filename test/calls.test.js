@@ -59,6 +59,15 @@ test('"use Twilio for calls" and its phrasings switch only the provider; ordinar
   assert.match(src, /which only you can add in Calls settings/, 'it says the credentials are the person\'s to add');
 });
 
+test('a call is understood however it is asked: polite, wrapped in talk, "my phone", "give me a call"; never someone else or a nickname', () => {
+  for (const ask of ['can you call me', 'could you call me please', 'call my phone', 'give me a call', 'hey jarvis can you call me', 'I want you to call me', 'call me on my phone', 'call me now',
+    'You have Bland connected, and you have my phone number connected. Can you call me?']) assert.equal(parseCallCommand(ask)?.type, 'prepare', ask);
+  assert.equal(parseCallCommand('Can you call me about the website').purpose, 'the website');
+  assert.match(parseCallCommand('call me on my phone').purpose, /^A brief check-in/, '"on my phone" is not the purpose');
+  assert.equal(parseCallCommand('can you call me every day at 8 pm').type, 'schedule');
+  for (const no of ['call Mom', 'can you call my mom', 'call me Sir', 'you can call me Tony', 'what time is it', 'remind me to call me later']) assert.equal(parseCallCommand(no), null, no);
+});
+
 test('a scheduled, authorized call through Twilio reads the message in the British male voice (Brian), once, to the owner number from the Twilio number', async () => {
   const { Twilio } = require('../src/main/calls/twilio');
   let now = new Date(2026, 10, 2, 12).getTime(); const posts = [];
