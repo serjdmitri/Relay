@@ -46,15 +46,18 @@ test('the open-the-page Shortcut is one URL step then Open URLs on that URL', ()
 
 test('the share-sheet Shortcut asks what to do, base64-encodes the shared thing, sends both to /api/send and speaks the reply', () => {
   const { buildShareShortcut } = require('../src/main/remote/shortcutFile');
-  const ids = ['A', 'E', 'F', 'V'];
+  const ids = ['A', 'E', 'N', 'F', 'V'];
   const s = buildShareShortcut({ url: 'https://mac.ts.net/api/send', token: 'tok', uuid: () => ids.shift() });
   assert.ok(s.WFWorkflowInputContentItemClasses.includes('WFImageContentItem') && s.WFWorkflowInputContentItemClasses.includes('WFURLContentItem'));
   assert.deepEqual(s.WFWorkflowTypes, ['ActionExtension']);
-  const [ask, enc, post, val, say] = s.WFWorkflowActions;
+  const [ask, enc, nameAction, post, val, say] = s.WFWorkflowActions;
+  assert.equal(nameAction.WFWorkflowActionIdentifier, 'is.workflow.actions.getitemname', 'the shared item\'s own name is read so Relay can keep a file under it');
+  assert.equal(nameAction.WFWorkflowActionParameters.WFInput.Value.Type, 'ExtensionInput');
+  assert.ok(['WFGenericFileContentItem', 'WFAVAssetContentItem', 'WFURLContentItem', 'WFStringContentItem'].every((c) => s.WFWorkflowInputContentItemClasses.includes(c)), 'any file or link shows the shortcut in the share sheet');
   assert.equal(ask.WFWorkflowActionIdentifier, 'is.workflow.actions.ask');
   assert.equal(enc.WFWorkflowActionParameters.WFInput.Value.Type, 'ExtensionInput');
   const body = post.WFWorkflowActionParameters.WFJSONValues.Value.WFDictionaryFieldValueItems.map((i) => [i.WFKey.Value.string, i.WFValue.Value.attachmentsByRange?.['{0, 1}']?.OutputUUID || i.WFValue.Value.string]);
-  assert.deepEqual(body, [['data', 'E'], ['text', 'A'], ['wait', 'true']]);
+  assert.deepEqual(body, [['data', 'E'], ['text', 'A'], ['name', 'N'], ['wait', 'true']]);
   assert.equal(val.WFWorkflowActionParameters.WFDictionaryKey, 'reply');
   assert.equal(say.WFWorkflowActionIdentifier, 'is.workflow.actions.speaktext');
 });
