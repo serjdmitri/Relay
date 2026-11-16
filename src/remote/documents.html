@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050d14">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script src="/look.js"></script>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/looks.css">
+<title>Relay documents</title>
+</head>
+<body class="holo-page doc-page">
+<main id="dlist" hidden>
+  <header><a class="back" href="/" aria-label="Back">&#8249;</a><span>Documents</span></header>
+  <p id="dempty" class="dim" hidden>No documents yet. Ask Relay to write one (“write me a one-page cover letter”), then come back.</p>
+  <ul id="dtiles"></ul>
+</main>
+<main id="dview" hidden>
+  <header><a class="back" href="/documents.html" aria-label="Back">&#8249;</a><span id="dtitle">Document</span></header>
+  <p id="dwhere" class="dim"></p>
+  <section id="dpending" class="panel" hidden>
+    <div class="dpt">A change is waiting for you</div>
+    <p id="dpnote" class="dim"></p>
+    <ul id="dchanges"></ul>
+    <div class="dpbtns"><button id="dreject" type="button">Reject</button><button id="dapprove" type="button">Approve</button></div>
+  </section>
+  <div id="dtools"><button id="dsort" type="button" aria-pressed="false">Reorder pages</button></div>
+  <p id="dsorthint" class="dim" hidden>Drag a page by its handle, or use the arrows. The new order is saved into the document.</p>
+  <ol id="dpages"></ol>
+  <form id="dtell"><input id="dtellin" type="text" placeholder="Tell Relay what to change…" enterkeyhint="send" autocomplete="off"><button type="submit">Send</button></form>
+  <details id="dver"><summary>Versions</summary><ul id="dvers"></ul></details>
+  <div id="dmsg" class="dim"></div>
+</main>
+<script src="/documents.js"></script>
+</body>
+</html>

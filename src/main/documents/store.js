@@ -257,4 +257,4 @@ class DocumentStore {
   }
 }
 
-module.exports = { DocumentStore, documentHtml, withPageBreaks, BREAK };
+module.exports = { DocumentStore, documentHtml, withPageBreaks, parts, BREAK };

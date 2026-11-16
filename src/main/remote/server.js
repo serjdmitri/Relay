@@ -11,7 +11,7 @@ const { isPrivateAddress } = require('./auth');
 const TYPES = { '.woff2': 'font/woff2', '.ico': 'image/png', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const VENDOR = { '/vendor/three.module.min.js': 'three.module.min.js', '/vendor/GLTFLoader.js': 'GLTFLoader.js', '/vendor/BufferGeometryUtils.js': 'BufferGeometryUtils.js' };
 const MAP_FILES=['maplibre-gl.mjs','maplibre-gl-shared.mjs','maplibre-gl-worker.mjs','maplibre-gl.css','LICENSE.txt'];
-const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css','/navmath.js':'navmath.js','/navvoice.js':'navvoice.js','/wakeword.js':'wakeword.js', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/flick.html': 'flick.html', '/flick.js': 'flick.js', '/flickstore.js': 'flickstore.js', '/flickhome.js': 'flickhome.js', '/look.js': 'look.js', '/looks.css': 'looks.css', '/fonts/Quicksand-Regular.woff2': 'fonts/Quicksand-Regular.woff2', '/fonts/Quicksand-Bold.woff2': 'fonts/Quicksand-Bold.woff2','/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
+const PAGES = { '/navigation.html':'navigation.html','/navigation.js':'navigation.js','/navigation.css':'navigation.css','/navmath.js':'navmath.js','/navvoice.js':'navvoice.js','/wakeword.js':'wakeword.js', '/holo.html': 'holo.html', '/holo.js': 'holo.js', '/documents.html': 'documents.html', '/documents.js': 'documents.js', '/flick.html': 'flick.html', '/flick.js': 'flick.js', '/flickstore.js': 'flickstore.js', '/flickhome.js': 'flickhome.js', '/look.js': 'look.js', '/looks.css': 'looks.css', '/fonts/Quicksand-Regular.woff2': 'fonts/Quicksand-Regular.woff2', '/fonts/Quicksand-Bold.woff2': 'fonts/Quicksand-Bold.woff2','/holo-export.js': '../renderer/holo-export.js', '/holo-cad-spec.js': '../renderer/holo-cad-spec.js', '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/holokb.js': 'holokb.js', '/style.css': 'style.css', '/manifest.webmanifest': 'manifest.webmanifest', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'apple-touch-icon.png' };
 const MAX_BODY = 20000;
 
 class RemoteServer {
@@ -203,6 +203,30 @@ class RemoteServer {
       if (!text) return this.json(res, 400, { error: 'Say or type what to change first.' });
       const id = await this.control.holoAsk?.(hc[1], text, device);
       return id ? this.json(res, 200, { id }) : this.json(res, 404, { error: 'That hologram is gone.' });
+    }
+    // Documents Relay wrote: the list, one document with what changed, a page as a picture, a page as a hologram, the pages in a new order, approve or reject a change.
+    if (p === '/api/documents' && req.method === 'GET') return this.json(res, 200, { documents: this.control.docs?.list() || [] });
+    const dm = p.match(/^\/api\/documents\/([\w-]{8,64})(?:\/(page\/\d{1,3}\.png|hologram|reorder|review))?$/);
+    if (dm && this.control.docs) {
+      const docs = this.control.docs;
+      const fail = (e) => this.json(res, /could not find|no documents/i.test(e?.message) ? 404 : 400, { error: e?.message || 'Could not do that.' });
+      try {
+        if (req.method === 'GET' && !dm[2]) return this.json(res, 200, docs.detail(dm[1]));
+        const pg = dm[2]?.match(/^page\/(\d+)\.png$/);
+        if (req.method === 'GET' && pg) {
+          const r = await docs.page(dm[1], Number(pg[1]));
+          res.writeHead(200, { 'content-type': 'image/png', 'content-length': r.bytes.length, 'cache-control': 'private, max-age=86400' });
+          return res.end(r.bytes);
+        }
+        if (req.method === 'POST' && dm[2] && !pg) {
+          const b = await this.body(req).catch(() => null);
+          if (!b) return this.json(res, 400, { error: 'Bad request.' });
+          if (dm[2] === 'hologram') return this.json(res, 200, await docs.hologram(dm[1], b.page));
+          if (dm[2] === 'reorder') return this.json(res, 200, await docs.reorder(dm[1], b.order));
+          if (dm[2] === 'review') return this.json(res, 200, await docs.review(dm[1], b.action === 'reject' ? 'reject' : b.action === 'approve' ? 'approve' : ''));
+        }
+      } catch (e) { return fail(e); }
+      return this.json(res, 405, { error: 'Not allowed.' });
     }
     if (p === '/api/memory' && req.method === 'GET') return this.json(res, 200, this.control.memory?.() || { lessons: [], inferred: [] });
     if (p === '/api/memory' && req.method === 'POST') { // delete or approve what Relay learned (editing stays on the Mac)

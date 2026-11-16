@@ -153,6 +153,7 @@ async function buildItem(it) {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry((w / big) * 2, (h / big) * 2), solid ? new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }) : photoMaterial(tex));
     g.add(mesh);
     ud.meshes = [mesh];
+    mesh.userData.orig = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }); // what the phone's model of it is made of (its picture), instead of grey
     if (!solid) photoFx.push({ u: mesh.material.uniforms.fill, t0: performance.now() });
   } else if (it.kind === 'cad') {
     // A designed model: shapes added together, holes cut out (see holo-cad.js). Its shapes can be edited here.

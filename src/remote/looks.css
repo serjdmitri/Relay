@@ -29,8 +29,8 @@ html[data-look="buddy"][data-mode="light"] { --bg: #eef7fc; --ink: #0f2433; --di
 }
 
 /* ---- the controls, in every look: the old neon-cyan outlines become the look's own line and fill ---- */
-html[data-look] :is(#qtog, #kbd, #flickfab, #holofab) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); border-radius: var(--r-btn); box-shadow: var(--shadow); }
-html[data-look] :is(#qtog, #kbd, #flickfab, #holofab):active, html[data-look] #kbd[aria-pressed=true] { background: var(--acc); color: var(--bg); }
+html[data-look] :is(#qtog, #kbd, #flickfab, #holofab, #docfab) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); border-radius: var(--r-btn); box-shadow: var(--shadow); }
+html[data-look] :is(#qtog, #kbd, #flickfab, #holofab, #docfab):active, html[data-look] #kbd[aria-pressed=true] { background: var(--acc); color: var(--bg); }
 html[data-look] #lock svg { background: var(--fill); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--r-btn); }
 html[data-look] #lock.locked svg { background: var(--fill); border-color: var(--warn); }
 html[data-look] :is(#quick button, #sleep, #asked, #menu button, #vbar button, #vtools button, #pcut button, #cadact button, #addrow button, #chips button, #tell button, #ask button) { background: var(--fill); border: 1px solid var(--line); color: var(--ink); text-shadow: none; box-shadow: none; }
@@ -54,10 +54,10 @@ html[data-look] #line.dim { color: var(--dim); }
 html[data-look] header { color: var(--dim); }
 
 /* ================= Glass: translucent controls over the glow behind them ================= */
-html[data-look="glass"] :is(#qtog, #kbd, #flickfab, #holofab, #quick button, #sleep, #asked, .panel, #tiles li, #vbar button, #vtools button, #lock svg, #chips button, #cadact button, #pcut button, #tell button, #ask button, #agents .ag) {
+html[data-look="glass"] :is(#qtog, #kbd, #flickfab, #holofab, #docfab, #quick button, #sleep, #asked, .panel, #tiles li, #vbar button, #vtools button, #lock svg, #chips button, #cadact button, #pcut button, #tell button, #ask button, #agents .ag) {
   -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
   box-shadow: inset 0 1px 0 var(--edge), inset 0 -1px 0 rgba(0, 0, 0, .1), var(--shadow); }
-html[data-look="glass"] :is(#qtog, #kbd, #flickfab, #holofab, #lock svg) { background-image: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, 0) 55%); }
+html[data-look="glass"] :is(#qtog, #kbd, #flickfab, #holofab, #docfab, #lock svg) { background-image: linear-gradient(180deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, 0) 55%); }
 html[data-look="glass"] :is(#menu) { background: var(--card); -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8); box-shadow: inset 0 1px 0 var(--edge), var(--shadow); }
 html[data-look="glass"] :is(#bar input, #tell input, #fields input, input[type=text]) { -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 html[data-look="glass"] :is(#quick button, #sleep, #asked, #chips button, #cadact button, #pcut button, #tell button, #ask button) { border-radius: 999px; }
@@ -67,16 +67,16 @@ html[data-look="glass"] #lock.locked svg { box-shadow: inset 0 1px 0 var(--edge)
 /* ================= Instrument: hairlines, no shadow, mono status ================= */
 html[data-look="instrument"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 8px; }
 html[data-look="instrument"] #status { font-family: ui-monospace, Menlo, monospace; letter-spacing: .12em; }
-html[data-look="instrument"] :is(#qtog, #kbd, #flickfab, #holofab) { color: var(--dim); }
+html[data-look="instrument"] :is(#qtog, #kbd, #flickfab, #holofab, #docfab) { color: var(--dim); }
 
 /* ================= Studio: solid cards with a soft shadow ================= */
 html[data-look="studio"] :is(#quick button, #sleep, #asked) { border-radius: 14px; box-shadow: var(--shadow); }
 
 /* ================= Cockpit Lite: outlined, mono caps, the only glow is the reactor and the active control ================= */
 html[data-look="cockpit"] #status { font-family: ui-monospace, Menlo, monospace; letter-spacing: .18em; }
-html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab) { color: var(--acc); }
+html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab, #docfab) { color: var(--acc); }
 html[data-look="cockpit"] :is(#quick button, #sleep, #asked, #chips button, #tell button) { border-radius: 3px; border-color: var(--line); }
-html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab):active { box-shadow: 0 0 14px var(--acc); }
+html[data-look="cockpit"] :is(#qtog, #kbd, #flickfab, #holofab, #docfab):active { box-shadow: 0 0 14px var(--acc); }
 
 /* ================= Buddy: a colour for each button, and a rounded face ================= */
 @font-face { font-family: "Quicksand"; src: url("/fonts/Quicksand-Regular.woff2") format("woff2"); font-weight: 300 500; font-display: swap; }
