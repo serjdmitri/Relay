@@ -61,8 +61,7 @@ function createPageRenderer({ BrowserWindow, wait = (ms) => new Promise((r) => s
     clearTimeout(idle);
     const w = open();
     const size = SIZE[kind] || SIZE.doc;
-    const killer = setTimeout(close, timeoutMs); // a window that hangs is closed, so the next page gets a fresh one
-    killer.unref?.();
+    const killer = setTimeout(close, timeoutMs); // a window that hangs is closed, so the next page gets a fresh one (cleared in the finally below, so it is not unref'd)
     try {
       w.setContentSize(size.w, size.h);
       await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(pageHtml(md, kind))}`);
