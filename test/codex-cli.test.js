@@ -53,7 +53,7 @@ function fakeSpawn({ events = [], out = null, code = 0, stderr = '', hang = fals
     const child = new EventEmitter();
     child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
     let prompt = '';
-    child.stdin = { on() {}, end(p) { prompt = p; calls.push({ bin, args, env: opts.env, prompt }); if (hang) return; setImmediate(() => { for (const e of events) child.stdout.emit('data', `${JSON.stringify(e)}\n`); if (stderr) child.stderr.emit('data', stderr); if (out != null) fs.writeFileSync(args[args.indexOf('-o') + 1], out); child.emit('exit', code); }); } };
+    child.stdin = { on() {}, end(p) { prompt = p; calls.push({ bin, args, env: opts.env, prompt }); if (hang) return; setImmediate(() => { for (const e of events) child.stdout.emit('data', `${JSON.stringify(e)}\n`); if (stderr) child.stderr.emit('data', stderr); if (out != null) fs.writeFileSync(args[args.indexOf('-o') + 1], out); child.emit('exit', code); child.emit('close', code); }); } };
     child.kill = () => { calls.push('killed'); };
     return child;
   };
@@ -110,4 +110,24 @@ test('fast mode asks Codex for little reasoning', () => {
   const base = { port: 1, outFile: '/o', cwd: '/c' };
   assert.ok(buildArgs({ ...base, fast: true }).includes('model_reasoning_effort="low"'));
   assert.ok(!buildArgs(base).join(' ').includes('model_reasoning_effort'));
+});
+
+// Found by the full audit: the result was read on 'exit', which can come before the last lines of output; the usage-limit error is often the last line,
+// so failover to the local model could be missed.
+test('the last line of output still counts when the process exits before its output is read (usage limit is seen)', async () => {
+  const tmp = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'codex-close-'));
+  const spawnFn = (bin, args) => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.kill = () => {};
+    child.stdin = { on() {}, end() { setImmediate(() => {
+      child.emit('exit', 1); // the process ended...
+      child.stdout.emit('data', `${JSON.stringify({ type: 'turn.failed', error: { message: "You've hit your usage limit. Try again later." } })}\n`); // ...before its last line was read
+      child.emit('close', 1);
+    }); } };
+    return child;
+  };
+  const r = await runCodex({ codexPath: '/x/codex', host: { port: 1, token: 't', run: null }, text: 'hi', tools: [], spawnFn, tmpDir: tmp });
+  assert.equal(r.status, 'failed');
+  assert.equal(r.limit, true);
+  require('fs').rmSync(tmp, { recursive: true, force: true });
 });

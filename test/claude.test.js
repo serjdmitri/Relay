@@ -299,3 +299,77 @@ test('the prompt tells the model how to compare two things in 3D: the first, the
   const p = buildSystemPrompt({ withContext: false });
   assert.match(p, /compare[^.]*show_3d[^.]*combine[^.]*next to it/i);
 });
+
+// ---- found by the full audit (measured against the real CLI: the tool call after a preamble took 5 seconds to be written) ----
+test('a sentence before a slow tool call is not taken as the final answer, and the real answer is kept', async () => {
+  const fake = fakeClaude(({ out }) => {
+    out(text('Let me save that.'));
+    out({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use' } } }, 5); // the tool call starts being written at once...
+    out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'x' }] } }, 450); // ...and is only complete long after the 250 ms wait
+    out({ type: 'result', is_error: false, result: 'All saved.' }, 470);
+  });
+  const session = mk(fake);
+  const t0 = Date.now();
+  const r = await session.ask('save a long note');
+  assert.deepEqual([r.status, r.reply], ['done', 'All saved.']);
+  assert.ok(Date.now() - t0 >= 400, 'it waited for the tool call instead of answering with the first sentence');
+  session.close();
+});
+
+test('a final answer still arrives quickly when nothing follows it', async () => {
+  const fake = fakeClaude(({ out }) => { out({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'text' } } }); out(text('It is sunny.'), 5); });
+  const session = mk(fake);
+  const t0 = Date.now();
+  const r = await session.ask('weather');
+  assert.deepEqual([r.status, r.reply], ['done', 'It is sunny.']);
+  assert.ok(Date.now() - t0 < 1000);
+  session.close();
+});
+
+test('a letter split across two chunks of output arrives whole', async () => {
+  const line = Buffer.from(JSON.stringify({ type: 'result', is_error: false, result: 'Café “да” ok' }) + '\n');
+  const cut = line.indexOf(Buffer.from('é')) + 1; // in the middle of the two bytes of é
+  const spawnFn = () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter(); child.stderr = new PassThrough(); child.stdin = new PassThrough(); child.kill = () => {};
+    child.stdin.on('data', () => { setTimeout(() => child.stdout.emit('data', line.subarray(0, cut)), 5); setTimeout(() => child.stdout.emit('data', line.subarray(cut)), 15); });
+    return child;
+  };
+  const session = new ClaudeSession({ claudePath: '/x/claude', host: { run: null, config: () => ({ mcpServers: {} }) }, system: 's', tools: [], spawnFn });
+  const r = await session.ask('hello');
+  assert.equal(r.reply, 'Café “да” ok');
+  session.close();
+});
+
+test('a request that takes too long is interrupted, so it cannot keep calling tools after it was reported failed', async () => {
+  const fake = fakeClaude(() => { /* never answers */ });
+  const session = mk(fake, { timeoutMs: 40 });
+  const r = await session.ask('think forever');
+  assert.equal(r.status, 'failed');
+  assert.match(r.reply, /took too long/);
+  await new Promise((res) => setTimeout(res, 20));
+  assert.ok(fake.log.includes('interrupt'), `the CLI was told to stop: ${fake.log.join(', ')}`);
+  session.close();
+});
+
+// Found by the full audit: pressing the ask key while a request is running started a warm Claude session on the same tool server, and its constructor took the
+// server over (host.run), so the running request's next tool calls were declined, could not be stopped and were not logged.
+test('a new session takes over the shared tool server, so the controller never warms one up while a request is running', async () => {
+  const fake = fakeClaude(() => {});
+  const host = { run: null, config: () => ({ mcpServers: {} }) };
+  const running = new ClaudeSession({ claudePath: '/x/claude', host, system: 's', tools: [], spawnFn: fake.spawnFn });
+  const mine = running.run;
+  const warm = new ClaudeSession({ claudePath: '/x/claude', host, system: 's', tools: [], spawnFn: fake.spawnFn });
+  assert.notEqual(host.run, mine, 'the mechanism: the newest session owns the server');
+  warm.close(); running.close();
+  const Module = require('module'), orig = Module._load;
+  Module._load = function (req, ...r) { return req === 'electron' ? { app: {}, BrowserWindow: class {}, screen: {}, clipboard: {}, desktopCapturer: {}, safeStorage: {}, systemPreferences: {}, nativeImage: {}, ipcMain: { handle() {} }, shell: {}, Notification: class {} } : orig.call(this, req, ...r); };
+  let AskController;
+  try { delete require.cache[require.resolve('../src/main/askController')]; ({ AskController } = require('../src/main/askController')); } finally { Module._load = orig; }
+  const c = Object.create(AskController.prototype);
+  let started = 0;
+  Object.assign(c, { store: { get: (k) => (k === 'settings.model.provider' ? 'claude' : undefined) }, failover: { active: false }, warm: null, warming: false, state: 'listening', runningTask: { id: 't', status: 'running' }, mcp: { start: async () => { started++; } } });
+  await c.warmUp();
+  assert.equal(c.warm, null, 'no session was made while a request runs');
+  assert.equal(started, 0, 'the shared tool server was not touched');
+});

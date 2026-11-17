@@ -273,3 +273,15 @@ test('a plugin can tell Relay something happened; an event with no title is igno
   assert.deepEqual(events, [['echo-plugin', { title: 'Build done', importance: 0.8 }]]);
   m.stopAll();
 });
+
+// Found by the full audit: every other helper Relay talks to ignores a broken pipe on its stdin; the plugin host did not, so a plugin dying mid-write crashed the app.
+test('a plugin that dies while Relay is writing to it fails the call instead of crashing Relay', async () => {
+  const { EventEmitter } = require('events');
+  const { PluginProcess } = require('../src/main/plugins/host');
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.kill = () => {};
+  child.stdin = new EventEmitter();
+  child.stdin.write = () => { setImmediate(() => { child.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })); child.emit('exit', 1); }); return false; };
+  const p = new PluginProcess({ dir: '/tmp/x', manifest: { name: 'demo', command: ['node', 'main.js'], permissions: { network: [], files: [] } }, spawnFn: () => child, timeoutMs: 500 });
+  await assert.rejects(p.start(), /exited with code 1/);
+});

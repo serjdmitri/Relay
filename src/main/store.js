@@ -170,9 +170,21 @@ class Store {
     this.io = io; this.onError = onError; this.lastError = null; this._generation = 0; this._writing = Promise.resolve();
     this.file = path.join(dir, 'relay.json');
     let loaded = {};
-    try {
-      loaded = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-    } catch {}
+    this.recovered = null; // when the settings file was there but could not be read as settings: where its copy was kept ('' if even the copy failed)
+    let raw = null;
+    try { raw = fs.readFileSync(this.file, 'utf8'); } catch { /* first start: there is no file yet */ }
+    if (raw !== null) {
+      try { loaded = JSON.parse(raw); } catch { loaded = null; }
+      if (!loaded || typeof loaded !== 'object' || Array.isArray(loaded)) {
+        // The file is not settings (cut short by a crash or a full disk, or edited by hand). Starting on defaults is right, but the first save
+        // would then replace it, and the history, memories, paired phones and encrypted keys in it would be gone for good: keep a copy first.
+        loaded = {};
+        if (raw.trim()) {
+          const kept = `${this.file}.unreadable-${Date.now()}`;
+          try { fs.copyFileSync(this.file, kept); fs.chmodSync(kept, 0o600); this.recovered = kept; } catch { this.recovered = ''; }
+        }
+      }
+    }
     this.data = merge(JSON.parse(JSON.stringify(DEFAULTS)), loaded);
     const from = loaded.schema || 1;
     if (from < 2) {

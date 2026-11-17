@@ -155,3 +155,26 @@ test('thermal changes abort the overnight job and restore sleep',async()=>{
  await w.withAwake(async({signal})=>{assert.equal(signal.aborted,false);hot=true;await tick();assert.equal(signal.aborted,true);assert.match(signal.reason.message,/hot/);});
  assert.equal(mac.sleepDisabled,0);
 });
+
+// Found by the full audit: a second hold while one was running recorded Relay's own "sleep off" as the state to restore, so the Mac never slept again;
+// and a hold whose heartbeat file could not be written left the watchdog unable to restore after a crash.
+test('a second hold joins the first, and sleep is back as it was when both are done', async () => {
+  const mac = fakeMac({ sleepDisabled: 0 });
+  const { w, spawned } = make(mac);
+  let inner;
+  await w.withAwake(async () => { inner = await w.withAwake(async (ctx) => ctx.held, 'second'); }, 'first');
+  assert.equal(inner, true, 'the second ran inside the hold');
+  assert.equal(mac.sleepDisabled, 0, 'sleep is allowed again');
+  assert.equal(spawned.length, 1, 'one watchdog');
+  assert.equal(w.holding, false);
+});
+
+test('a hold whose heartbeat cannot be written does not hold at all', async () => {
+  const mac = fakeMac({ sleepDisabled: 0 });
+  const { w, fsImpl } = make(mac);
+  fsImpl.writeFileSync = () => { throw new Error('disk full'); };
+  const r = await w.withAwake(async (ctx) => ctx.held);
+  assert.equal(r, false);
+  assert.equal(mac.sleepDisabled, 0);
+  assert.equal(w.holding, false);
+});

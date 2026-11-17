@@ -100,6 +100,7 @@ class RemoteServer {
   body(req, max = MAX_BODY) {
     return new Promise((resolve, reject) => {
       let s = '';
+      req.setEncoding('utf8'); // a letter split across two chunks must not arrive broken
       req.on('data', (c) => { s += c; if (s.length > max) { reject(new Error('too large')); req.destroy(); } });
       req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch { reject(new Error('bad json')); } });
     });

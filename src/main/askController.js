@@ -108,6 +108,10 @@ const { ConfirmHub } = require('./confirmHub');
 const { parsePanelCommand } = require('./panels/hub');
 const { needsInternet, OFFLINE_SYSTEM } = require('./connectivity');
 const RISKY_AFTER_PLUGIN = new Set(['messages_send', 'trash_path', 'run_shell', 'run_applescript', 'drive_apply']); // send, delete, run code: always ask once a plugin's output was read
+// Tools that act on the Mac without asking in normal use. Once the injection shield has found a clear attempt (level high) in something this request read, they ask first too: typing and clicking
+// can run anything (a Terminal is one keystroke away), and the risky tools above were the only ones gated, so the flag used to restrict nothing new. Only high: a medium
+// match is often ordinary text ("System: macOS 27" on a spec page), and a scheduled request that nobody is there to answer would quietly fail.
+const ACTS_AFTER_INJECTION = new Set(['type_text', 'press_keys', 'click', 'ui_click', 'menu_click', 'clipboard_write', 'open_url', 'open_path', 'open_app', 'quit_app', 'save_files', 'make_document', 'notes_create', 'notes_append', 'reminders_add', 'calendar_create', 'remember', 'save_skill', 'firefox_open', 'firefox_navigate', 'firefox_click', 'firefox_type', 'firefox_press', 'doc_create', 'doc_edit']);
 const flagsMod = require('./flags');
 const phish = require('./phish');
 const workshop = require('./workshop');
@@ -1411,9 +1415,16 @@ class AskController {
       return { status: 'done', actions: 0, reply: `${local}${todayNote} This list does not include Sentient OS.` };
     }
     if (cmd.type === 'forget-all') {
-      if (!(this.store.get('memories') || []).length) return { status: 'done', actions: 0, reply: `There was nothing in Relay’s local memory to forget.${vaultNote}` };
+      // Everything Relay keeps about you, not only the facts list: learned lessons, things it noticed, session notes (which quote what you said word for
+      // word) and the search index built from them. Found by the audit: only the facts list was cleared, and with it empty the reply said there was nothing to forget.
+      const kept = ['memories', 'lessons', 'inferred', 'sessionNotes'].filter((k) => (this.store.get(k) || []).length);
+      let indexFile = null; try { indexFile = this.semanticPath(); } catch { /* no index path */ }
+      const hasIndex = !!indexFile && require('fs').existsSync(indexFile);
+      if (!kept.length && !hasIndex) return { status: 'done', actions: 0, reply: `There was nothing in Relay’s local memory to forget.${vaultNote}` };
       if (!(await this.askConfirm({ question: 'Forget everything Relay remembers about you?' }))) return { status: 'done', actions: 0, reply: 'Okay, I kept it all.' };
-      this.store.set('memories', []);
+      for (const k of ['memories', 'lessons', 'inferred', 'sessionNotes']) this.store.set(k, []);
+      this.semanticIndex = null;
+      if (hasIndex) { try { require('fs').rmSync(indexFile, { force: true }); } catch { /* removed on the next rebuild */ } }
       this.onChange();
       return { status: 'done', actions: 0, reply: `Forgot everything in Relay’s local memory.${vaultNote}` };
     }
@@ -1525,7 +1536,8 @@ class AskController {
     const base = levelTools(guardTools(this.baseTools(vision), { home: os.homedir(), enabled: () => this.store.get('settings.homeOnly') !== false }), { home: os.homedir(), rules: () => filePermissionRules(this.store.get('settings.filePermissions')) });
     const tools = [...base, ...this.connectorTools(), ...this.pluginTools()];
     // Text from a plugin is data, not instructions: once one was read in this request, anything that sends, deletes or runs code asks first.
-    for (const t of tools) if (RISKY_AFTER_PLUGIN.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.tainted ? `This request read output from a plugin. Allow "${t.name}"?` : null); }
+    for (const t of tools) if (RISKY_AFTER_PLUGIN.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.tainted ? `This request read output from a plugin, or outside text the security check flagged. Allow "${t.name}"?` : null); }
+    for (const t of tools) if (ACTS_AFTER_INJECTION.has(t.name)) { const orig = t.confirm; t.confirm = (i) => orig?.(i) || (this.injected ? `Something this request read looked like instructions aimed at an AI. Allow "${t.name.replace(/_/g, ' ')}"?` : null); }
     // Injection shield: what a tool reads from outside is data. If it holds wording aimed at an AI, the model gets a notice in front of it and risky tools ask first; and nothing private is sent out through a search or web request.
     for (const t of tools) {
       if (t.shielded || typeof t.run !== 'function') continue;
@@ -1537,7 +1549,7 @@ class AskController {
         const r = await orig.call(t, i, ctx);
         if (!untrusted) return r;
         const g = shieldMod.guardResult(t.name, r);
-        if (g.level === 'medium' || g.level === 'high') { this.tainted = true; try { shieldMod.logEntry(this.store, t.name, g); } catch { /* the log is a convenience */ } }
+        if (g.level === 'medium' || g.level === 'high') { this.tainted = true; if (g.level === 'high') this.injected = true; try { shieldMod.logEntry(this.store, t.name, g); } catch { /* the log is a convenience */ } }
         return g.result;
       };
     }
@@ -1819,13 +1831,15 @@ class AskController {
   // not with a second of start-up.
   async warmUp() {
     if (this.store.get('settings.speakReplies')) this.speaker?.wakeVoice?.(); // the voice model may have been unloaded: start it now, not when the reply is ready
-    if (this.store.get('settings.model.provider') !== 'claude' || this.warm?.alive || this.warming || this.failover.active) return;
+    // Not while a request is running: a new session takes over the one shared tool server (ClaudeSession sets host.run), so the running request's next tool
+    // calls would be answered with the idle session's "decline everything", no Stop button and no action log. A request that joins the list starts its own when its turn comes.
+    if (this.store.get('settings.model.provider') !== 'claude' || this.warm?.alive || this.warming || this.failover.active || this.runningTask) return;
     this.warming = true;
     try {
       const claudePath = await findClaude();
       if (!claudePath) return;
       await this.mcp.start();
-      if (this.warm?.alive || !['listening', 'finishing', 'input'].includes(this.state)) return;
+      if (this.warm?.alive || this.runningTask || !['listening', 'finishing', 'input'].includes(this.state)) return;
       this.warm = new ClaudeSession({ claudePath, host: this.mcp, system: this.claudeSystem(), tools: this.makeTools(true, { forModel: true }), model: 'haiku', fast: this.fastMode() });
       clearTimeout(this.warmTimer);
       this.warmTimer = setTimeout(() => this.dropWarm(), 90000);
@@ -2228,6 +2242,7 @@ class AskController {
     this.currentRequest = text;
     if (this.runningTask && !opts.drain) return this.enqueue(text, opts); // one at a time: this one waits its turn
     this.tainted = false; // no plugin output read yet in this request
+    this.injected = false; // nothing this request read has been flagged by the injection shield yet
     this.currentRemote = opts.remote || null; // where this request came from, so a risky question can be asked there too
     if (!opts.drain) { this.queue = []; this.tasks = []; }
     if (opts.scheduled || opts.remote) this.voiceAsk = false; // not something asked out loud
@@ -3816,6 +3831,9 @@ class AskController {
   }
 
   askConfirm(q) {
+    // Only one question is open at a time, and an answer only ever counts for the question it was given to. Found by the audit: a second question
+    // replaced the first without closing it, and a phone answer to the old question approved whichever question was current.
+    if (this.pendingConfirm) this.pendingConfirm(false);
     return new Promise((resolve) => {
       this.state = 'confirm';
       this.win.setFocusable(true);
@@ -3825,28 +3843,34 @@ class AskController {
       if (!q.macOnly && this.inbound?.owns(this.currentRemote) && this.hub) {
         const opened = this.inbound.askPhone(q.question);
         hubId = opened.id;
-        opened.answer.then(({ yes, by }) => { if (by !== 'mac' && this.pendingConfirm) this.pendingConfirm(yes); });
+        opened.answer.then(({ yes, by }) => { if (by !== 'mac' && this.pendingConfirm === answer) answer(yes); });
       }
-      this.pendingConfirm = (yes) => {
+      let settled = false;
+      const answer = (yes) => {
+        if (settled) return;
+        settled = true;
         if (hubId) this.hub.answer(hubId, yes, 'mac');
-        this.pendingConfirm = null;
+        if (this.pendingConfirm === answer) this.pendingConfirm = null;
         this.confirmMacOnly = false;
         this.state = 'working';
         this.win.setFocusable(false);
         this.push({ label: yes ? 'Working' : 'Skipping' });
         resolve(yes);
       };
+      this.pendingConfirm = answer;
       this.confirmQuestion = q.question;
       this.statusChanged();
       this.reveal({ question: q.question }, 'show');
       this.sound('Tink');
       // A scheduled request runs while nobody may be at the Mac: no answer in 90 seconds means no.
-      if (this.unattended) setTimeout(() => this.pendingConfirm && this.pendingConfirm(false), 90000);
+      if (this.unattended) setTimeout(() => answer(false), 90000);
     });
   }
 
   finish(entry, res) {
     clearTimeout(this.ackTimer);
+    // A request that ended (it timed out, failed or was answered early) must not leave its question open: a later "yes" would run its tool after all.
+    if (this.pendingConfirm) this.pendingConfirm(false);
     if (this.quizFresh && this.quiz) { this.quizFresh = false; res = { ...res, status: 'done', reply: `${String(res.reply || '').trim().replace(/\s+$/, '')} ${this.quiz.ask()}`.trim() }; } else this.quizFresh = false;
     const reply = res.reply || '';
     const u = res.usage;
@@ -3874,8 +3898,9 @@ class AskController {
       this.push({});
       return res;
     }
-    const next = this.queue.shift();
-    if (next && res.status !== 'stopped') { // the next waiting request starts, and the reactor stays where it is
+    // Stop empties the list; anything still on it starts next, also after a question was answered No (that ends as "stopped" too, and used to drop the next request).
+    const next = this.abort?.signal?.aborted ? null : this.queue.shift();
+    if (next) { // the next waiting request starts, and the reactor stays where it is
       const task = this.tasks.find((t) => t.id === next.id);
       if (task) task.status = 'running';
       this.state = 'working';

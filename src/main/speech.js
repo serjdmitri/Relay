@@ -38,7 +38,7 @@ class Speech extends EventEmitter {
     return child;
   }
 
-  _onExit(child, message) {
+  _onExit(child, message, { restarting = false } = {}) {
     if (this.child !== child) return;
     this.child = null;
     this.listening = false;
@@ -48,7 +48,9 @@ class Speech extends EventEmitter {
       clearTimeout(w.timer);
       w.reject(new Error(message));
     }
-    this.emit('exit', message);
+    // A restart Relay chose (a stuck helper is replaced inside the same listen() call) is not the helper stopping: 'exit' tells listeners to give up,
+    // which turned that recovery into "The dictation helper stopped. You can type instead." (found by the audit). If the retry fails too, listen() rejects.
+    this.emit(restarting ? 'restart' : 'exit', message);
   }
 
   _onData(chunk) {
@@ -79,7 +81,12 @@ class Speech extends EventEmitter {
       case 'error': this.lastError = msg; this.listening = false; break;
       default: break;
     }
-    const idx = this.waiters.findIndex((w) => w.events.includes(msg.event) || msg.event === 'error');
+    // An error belongs to the command it is about (its code), not to whichever request happens to be waiting first: a "start" error used to reject a
+    // pending device list, while the start itself waited for its timeout. A microphone failure with no command ('error') goes to listeners (error-event).
+    const errorFor = { prepare: 'prepared', start: 'listening', stop: 'final' }[msg.code];
+    const idx = msg.event === 'error'
+      ? (errorFor ? this.waiters.findIndex((w) => w.events.includes(errorFor)) : msg.code === 'unsupported' ? 0 : -1)
+      : this.waiters.findIndex((w) => w.events.includes(msg.event));
     if (idx >= 0) {
       const [w] = this.waiters.splice(idx, 1);
       clearTimeout(w.timer);
@@ -142,7 +149,7 @@ class Speech extends EventEmitter {
     const c = this.child;
     if (!c) return false;
     this.log.error?.('relay-speech restarted:', why);
-    this._onExit(c, 'The dictation helper was restarted.'); // forget it now, so the next request cannot reuse the stuck one
+    this._onExit(c, 'The dictation helper was restarted.', { restarting: true }); // forget it now, so the next request cannot reuse the stuck one
     try { c.kill('SIGKILL'); } catch { /* already gone */ }
     return true;
   }

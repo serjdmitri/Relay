@@ -71,3 +71,13 @@ test('the setup calls are only answered to the Connections window, and the UI an
   assert.match(read('src/main/askController.js'), /parseGoogleSetup\(effective\)/);
   assert.match(read('native/relay-cal.swift'), /case "calendars":/);
 });
+
+// Found by the full audit: the helper was a constant inside registerIpc(), but "connect Google" by voice is set up in another function,
+// so saying it threw "googleConnections is not defined" right after opening Connections.
+test('"connect Google" by voice can reach the sign-in helper: it is module state, set in registerIpc, not a constant local to it', () => {
+  const main = read('src/main/main.js');
+  assert.match(main, /^let googleConnections = null;/m);
+  assert.match(main, /^\s*googleConnections = registerGoogleConnections\(/m);
+  assert.doesNotMatch(main, /\b(?:const|let|var) googleConnections\s*=\s*registerGoogleConnections/);
+  assert.match(main, /ask\.googleSetupCommand = async \(\) => \{[\s\S]{0,400}googleConnections\.startGuide\(\)/);
+});

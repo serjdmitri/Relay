@@ -293,3 +293,27 @@ test('/api/confirm lets a paired phone answer the Mac\'s question; nobody else',
 });
 
 test('map pages are available but navigation APIs require a paired token and request header',async()=>{const {s,base,post,pairing}=await make();try{s.navigation={config:()=>({style:'https://tiles.example/style'}),search:async q=>[{label:q,coordinates:[0,0]}]};assert.equal((await fetch(base+'/api/navigation/config')).status,401);pairing.start();const {token}=await(await post('/api/pair',{code:'424242'},null)).json();assert.equal((await fetch(base+'/api/navigation/config',{headers:{authorization:'Bearer '+token}})).status,200);assert.equal((await fetch(base+'/api/navigation/search',{method:'POST',headers:{authorization:'Bearer '+token},body:'{}'})).status,400);assert.equal((await post('/api/navigation/search',{query:'London'},token)).status,200);}finally{s.stop();}});
+
+// Found by the full audit: request bodies were joined chunk by chunk as text, so a letter cut in two by the network arrived as two broken characters.
+test('words with accents or other alphabets arrive whole even when the request is cut in the middle of a letter', async () => {
+  const http = require('http');
+  const asked = [];
+  const { RemoteServer } = require('../src/main/remote/server');
+  const { Pairing, Devices } = require('../src/main/remote/auth');
+  let list = [];
+  const devices = new Devices({ list: () => list, save: (l) => { list = l; } });
+  const { token } = devices.add('Phone');
+  const server = new RemoteServer({ control: { ask: async (t) => { asked.push(t); return 'id'; }, stop() {}, snapshot: () => ({}), recent: () => [] }, pairing: new Pairing(), devices, root: require('path').join(__dirname, '../src/remote'), host: '127.0.0.1', port: 0 });
+  const port = await server.start();
+  try {
+    const body = Buffer.from(JSON.stringify({ text: 'напомни про café' }));
+    const cut = body.indexOf(Buffer.from('п')) + 1; // inside the two bytes of a Cyrillic letter
+    await new Promise((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port, path: '/api/ask', method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-relay-remote': '1', 'content-type': 'application/json', 'content-length': body.length } }, (res) => { res.resume(); res.on('end', resolve); });
+      req.on('error', reject);
+      req.write(body.subarray(0, cut));
+      setTimeout(() => req.end(body.subarray(cut)), 30);
+    });
+    assert.deepEqual(asked, ['напомни про café']);
+  } finally { server.stop(); }
+});

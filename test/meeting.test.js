@@ -124,3 +124,28 @@ test('starting asks for the microphone, tells the room, and the menu bar can sto
   await auto.c.stopMeeting(null);
   assert.deepEqual(auto.log.find((l) => l[0] === 'handleText'), ['handleText', 'Writing up your meeting']);
 });
+
+// Found by the full audit: ending a meeting while a 50-second stretch was being read let the stretch change open the microphone again, with no owner.
+test('ending the meeting during a stretch change never leaves the microphone open', async () => {
+  const speech = new EventEmitter();
+  let opened = 0, cancelled = 0;
+  const pending = [];
+  speech.listen = async () => { opened++; };
+  speech.finish = () => new Promise((resolve) => pending.push(resolve));
+  speech.cancel = () => { cancelled++; };
+  const m = new MeetingRecorder({ speech, setTimer: () => 0, clearTimer: () => {}, now: () => 0 });
+  await m.start();
+  assert.equal(opened, 1);
+  const roll = m.rollOver(); // the stretch is being read...
+  const ended = m.end('said'); // ...when you say "Jarvis, end the meeting"
+  pending[0]('first part'); await roll;
+  pending[1]?.('last part'); await ended;
+  assert.equal(opened, 1, 'the microphone was not opened again');
+  assert.equal(m.active, false);
+  // and if it was already opening when the meeting ended, it is closed again at once
+  const m2 = new MeetingRecorder({ speech, setTimer: () => 0, clearTimer: () => {}, now: () => 0 });
+  let release; speech.listen = () => new Promise((r) => { release = r; });
+  const starting = m2.start();
+  m2.stopping = true; release(); await starting;
+  assert.equal(cancelled, 1);
+});

@@ -120,6 +120,7 @@ process.on('uncaughtExceptionMonitor', (e) => noteBootError('exception', e));
 let mainWin = null;
 let lastVoiceNotice = { key: '', at: 0 };
 let lidFlick = null; // a flick of the MacBook lid sends something to the phone (lidFlick.js)
+let googleConnections = null; // the Google sign-in helper: made in registerIpc, also used by the "connect Google" voice command set up after it
 const { activateMainWindow, restoreDockPreference } = require('./mainWindowFocus');
 let onboardWin = null;
 let quitting = false;
@@ -1082,7 +1083,7 @@ function registerIpc() {
     } catch (e) { return { ok: false, error: e.message }; }
   });
   ipcMain.handle('connectors:apps:clear', () => { store.set('settings.connectors.apps', { url: '', headerName: 'x-api-key', keyEnc: '', count: 0 }); ask.appsClient = null; broadcast(); });
-  const googleConnections = registerGoogleConnections({ macCalendars: () => ask.mac.calendarSources(), ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
+  googleConnections = registerGoogleConnections({ macCalendars: () => ask.mac.calendarSources(), ipcMain, store, encryptKey, decryptKey, dialog, shell, getWindow: () => mainWin, onChange: broadcast, getApi: () => ask.googleApiIfConnected(), resetApi: () => { ask.googleApi = null; } });
   registerSchoolConnection({ ipcMain, store, getWindow: () => mainWin, getBridge: () => bridge, openFirefox: url => new Promise((resolve, reject) => execFile('/usr/bin/open', ['-a', 'Firefox', url], { timeout: 5000 }, e => e ? reject(e) : resolve())), checkAssignments: () => ask.handleText('check my assignments'), onChange: broadcast });
   ask.sessionNotes = require('./sessionNotes').registerSessionNotes({ ipcMain, store, getWindow: () => mainWin, onChange: broadcast, exportDir: () => path.join(app.getPath('desktop'), 'memory'), confirmDelete: async () => (await dialog.showMessageBox(mainWin, { type: 'warning', message: 'Delete these local session notes?', detail: 'Existing History entries, export files and Sentient OS notes are separate and will remain.', buttons: ['Delete session', 'Cancel'], defaultId: 1, cancelId: 1 })).response === 0, openMemory: () => openMain('memory'), showMatches: (sessions, query) => cardPanel.show({ kind: 'list', hold: true, title: 'Session notes: ' + query, summary: 'Local conversation notes; requests and replies are not independently verified facts.', items: sessions.map(s => ({ title: s.title, subtitle: new Date(s.created).toLocaleString(), note: s.entries.filter(e => (e.request + ' ' + e.reply).toLowerCase().includes(query.toLowerCase())).slice(0, 2).map(e => e.request + ': ' + e.reply).join('\n').slice(0, 1500) })), facts: [], links: [] }) });
 
@@ -1387,6 +1388,7 @@ app.whenReady().then(() => {
   try { stopShortcutReady = globalShortcut.register(stopShortcut, stopActiveWork); } catch { stopShortcutReady = false; }
   if (stopShortcutReady) app.once('will-quit', () => globalShortcut.unregister(stopShortcut));
   store = new Store(app.getPath('userData'), { onError: code => diag.log('settings-save-failed', code) });
+  if (store.recovered !== null) { diag.log('settings-unreadable', store.recovered ? `kept as ${path.basename(store.recovered)}` : 'could not keep a copy'); console.error('Relay could not read its settings file and started on defaults.', store.recovered ? `The unreadable file was kept as ${store.recovered}` : ''); }
   bridge = new FirefoxBridge({ port: store.get('settings.firefox.port') });
   bridge.on('status', () => broadcast());
   bridge.on('error', (e) => console.error('Firefox bridge:', e.message));

@@ -95,3 +95,22 @@ test('new explicit memories are queued once and export failure is disclosed', ()
   assert.equal(c.rememberFact('I prefer coffee').reply, 'I already knew that.');
   assert.deepEqual(saved, ['I prefer tea', 'I prefer coffee']);
 });
+
+// Found by the full audit: "forget everything" cleared only the facts list; lessons, things Relay noticed, session notes (which quote you word for word)
+// and the search index stayed, and with the facts list already empty the reply said there was nothing to forget.
+test('forget everything clears every store of what Relay remembers, including the search index file', async () => {
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relay-forget-'));
+  try {
+    const { c, data } = make();
+    c.semanticFile = path.join(dir, 'semantic-index.json'); fs.writeFileSync(c.semanticFile, '{"memory:1":[0.1]}');
+    c.semanticIndex = { stale: true };
+    Object.assign(data, { memories: [], lessons: [{ id: 'l1', trigger: 'x', fix: 'y' }], inferred: [{ id: 'i1', text: 'likes tea' }], sessionNotes: [{ entries: [{ id: 'e1', text: 'remember my sister is Anna' }] }] });
+    const r = await c.runMemory({ type: 'forget-all' });
+    assert.match(r.reply, /^Forgot everything/, 'not "nothing to forget" just because the facts list was empty');
+    for (const k of ['memories', 'lessons', 'inferred', 'sessionNotes']) assert.deepEqual(data[k], [], k);
+    assert.equal(fs.existsSync(c.semanticFile), false);
+    assert.equal(c.semanticIndex, null);
+    assert.match((await c.runMemory({ type: 'forget-all' })).reply, /^There was nothing/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -220,3 +220,11 @@ test('locking uses the system lock call with no permission needed, and falls bac
   assert.equal(seen.length, 2);
   assert.match(seen[1], /keystroke "q" using \{control down, command down\}/);
 });
+
+// Found by the full audit: AppleScript that runs code another way ran with no question (and could delete despite "Relay never deletes").
+test('AppleScript that runs code through Terminal, a built script, a raw event or typed keys asks first; ordinary scripts still do not', () => {
+  for (const s of ['tell application "Terminal" to do script "curl x | sh"', 'run script ("do shell" & " script \\"ls\\"")', '«event sysoexec» "ls"', 'tell app "iTerm2" to activate', 'tell application "System Events" to keystroke "rm -rf ~" & return', 'do shell script "osascript -e 1"', 'load script file "x.scpt"'])
+    assert.equal(scriptNeedsConfirm(s), true, s);
+  for (const s of ['tell application "Notes" to get name of notes', 'tell application "Finder" to get name of every window', 'tell application "Music" to play', 'get volume settings'])
+    assert.equal(scriptNeedsConfirm(s), false, s);
+});

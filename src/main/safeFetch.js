@@ -22,6 +22,7 @@ function isPrivateAddress(ip) {
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(s); if (mapped) return isPrivateV4(mapped[1]);
     const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(s);
     if (mappedHex) { const n = (parseInt(mappedHex[1], 16) << 16) | parseInt(mappedHex[2], 16); return isPrivateV4([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.')); }
+    if (/^64:ff9b:/.test(s) || /^2002:/.test(s) || /^2001:0{0,4}:/.test(s)) return true; // NAT64, 6to4 and Teredo carry an IPv4 address inside: refuse rather than decode
     return s === '::' || s === '::1' || /^f[cd]/.test(s) || /^fe[89ab]/.test(s) || /^ff/.test(s) || /^2001:db8/.test(s);
   }
   return true; // not an address at all: refuse

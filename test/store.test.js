@@ -98,3 +98,31 @@ test('failed background saves preserve existing data and report a bounded error 
  s.set('settings.look','new');await s.saveAsync();assert.equal(fs.readFileSync(s.file,'utf8'),before);assert.deepEqual(errors,['ENOSPC']);
  s.io=fs.promises;await s.saveAsync();assert.equal(new Store(dir).get('settings.look'),'new');assert.equal(s.lastError,null);fs.rmSync(dir,{recursive:true});
 });
+
+// Found by the full audit: an unreadable settings file was silently replaced by defaults on the first save, losing history, memories, paired phones and keys.
+test('an unreadable settings file is kept as a copy before defaults replace it, and odd contents never crash the start', () => {
+  const dir = tmp();
+  const file = path.join(dir, 'relay.json');
+  fs.writeFileSync(file, '{"history":[{"text":"important"}],"memories":[{"text":"my dog is Rex"');   // cut short
+  const s = new Store(dir);
+  assert.equal(s.get('onboardingDone'), false, 'starts on defaults');
+  assert.ok(s.recovered && fs.existsSync(s.recovered), 'a copy was kept');
+  assert.match(fs.readFileSync(s.recovered, 'utf8'), /my dog is Rex/);
+  assert.equal(fs.statSync(s.recovered).mode & 0o077, 0, 'the copy is readable by its owner only');
+  s.flush();
+  assert.match(fs.readFileSync(s.recovered, 'utf8'), /my dog is Rex/, 'the copy survives the save that replaces the file');
+  for (const odd of ['null', '[]', '"text"', '42']) { // valid JSON that is not settings: used to crash the start ("null") or pass as settings
+    const d = tmp(); fs.writeFileSync(path.join(d, 'relay.json'), odd);
+    const st = new Store(d);
+    assert.equal(st.get('settings.firefox.port'), 47831, `${odd}: defaults`);
+    assert.ok(st.recovered, `${odd}: kept`);
+  }
+  const fresh = new Store(tmp());
+  assert.equal(fresh.recovered, null, 'a first start is not a recovery');
+  const empty = tmp(); fs.writeFileSync(path.join(empty, 'relay.json'), '');
+  assert.equal(new Store(empty).recovered, null, 'an empty file has nothing to keep');
+  const good = tmp(); fs.writeFileSync(path.join(good, 'relay.json'), JSON.stringify({ settings: { playSounds: false } }));
+  const g = new Store(good);
+  assert.equal(g.recovered, null); assert.equal(g.get('settings.playSounds'), false);
+  assert.deepEqual(fs.readdirSync(good), ['relay.json'], 'a readable file leaves nothing extra behind');
+});

@@ -26,6 +26,7 @@ class PluginProcess {
     this.child = this.spawnFn(cmd.file, cmd.args, { cwd: this.dir, env: this.env, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.on('data', (d) => this.onData(d));
     this.child.stderr.on('data', (d) => { this.stderr = (this.stderr + d).slice(-1500); });
+    this.child.stdin.on('error', () => {}); // a plugin that has just died closes its pipe before 'exit' arrives: writing to it must not crash Relay (the waiting call fails on exit or on its time limit)
     this.child.on('error', (e) => this.onExit(`could not start: ${e.message}`));
     this.child.on('exit', (code) => this.onExit(`exited with code ${code}`));
     await this.request('initialize', { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: 'relay', version: '1' } });

@@ -122,3 +122,30 @@ test('experimental echo option and active status are passed through the native h
  let captured;const {speech}=harness((cmd,emit)=>{captured=cmd;if(cmd.cmd==='start')emit({event:'listening',echoActive:true});});
  const result=await speech.listen('default',{echoCancellation:true});assert.equal(captured.echoCancellation,true);assert.equal(result.echoActive,true);speech.stop();
 });
+
+// Found by the full audit: the stuck-helper recovery emitted 'exit', and the controller treats 'exit' while listening as failure, so the recovery never helped.
+test('replacing a stuck helper inside listen() is not reported as the helper stopping', async () => {
+  const r = stuckRig({ stuckAfter: 1 });
+  await r.speech.listen();
+  r.speech.cancel(); r.speech.listening = false;
+  const seen = [];
+  r.speech.on('exit', () => seen.push('exit')); r.speech.on('restart', () => seen.push('restart'));
+  await r.speech.listen();
+  assert.equal(r.speech.listening, true);
+  assert.ok(!seen.includes('exit'), `listeners were not told the helper stopped: ${seen.join(',')}`);
+  assert.ok(seen.includes('restart'));
+});
+
+test('an error reaches the request it is about, and a microphone failure with no command goes to listeners', async () => {
+  const { speech } = harness((cmd, emit) => { if (cmd.cmd === 'start') emit({ event: 'error', code: 'start', message: 'No microphone input is available.' }); });
+  const devices = speech.inputDevices();
+  const listening = speech.listen();
+  await assert.rejects(listening, (e) => e.code === 'start');
+  let devicesSettled = false; devices.then(() => {}, () => {}).finally(() => { devicesSettled = true; });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(devicesSettled, false, 'the pending device list was not rejected by the start error');
+  const events = []; speech.on('error-event', (m) => events.push(m.message));
+  speech._onEvent({ event: 'error', code: 'error', message: 'The microphone stopped.' });
+  assert.deepEqual(events, ['The microphone stopped.']);
+  devices.catch(() => {});
+});

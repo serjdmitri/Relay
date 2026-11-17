@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs');
 const { spawn, execFile } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 const { callTool } = require('./loop');
 const categories = require('./toolCategories');
 const { isLimitText } = require('../failover');
@@ -166,6 +167,7 @@ class McpHost {
     if (auth.length !== want.length || !crypto.timingSafeEqual(auth, want)) return deny(401);
     if (req.method !== 'POST') return deny(405);
     let body = '';
+    req.setEncoding('utf8'); // tool input in any language, split across chunks, stays whole
     req.on('data', (c) => {
       body += c;
       if (body.length > 5e6) req.destroy();
@@ -243,7 +245,8 @@ class ClaudeSession {
     this.startedAt = Date.now();
     const child = spawnFn(claudePath, buildArgs({ model, system, config: host.config() }), { cwd: os.tmpdir(), env: childEnv(fast ? { MAX_THINKING_TOKENS: '0' } : {}), stdio: ['pipe', 'pipe', 'pipe'] }); // fast: no extended thinking, which is most of the wait on ordinary requests
     this.child = child;
-    child.stdout.on('data', (d) => this._onData(d.toString()));
+    const decoder = new StringDecoder('utf8'); // a letter split across two chunks (é, “, Cyrillic) must not turn into broken characters in the answer
+    child.stdout.on('data', (d) => this._onData(typeof d === 'string' ? d : decoder.write(d)));
     child.stderr.on('data', (d) => (this.stderr += d));
     child.stdin.on('error', () => {});
     child.on('error', (e) => this._died(`Could not start Claude: ${e.message}`));
@@ -325,7 +328,10 @@ class ClaudeSession {
       };
       this._onThought = (t) => onEvent({ type: 'thought', text: t });
       this._onDelta = (t) => onEvent({ type: 'text-delta', text: t });
-      turn.timer = setTimeout(() => this._finish({ status: 'failed', reply: 'Claude took too long and I stopped waiting.' }), this.timeoutMs);
+      turn.timer = setTimeout(() => {
+        this.interrupt(); // stop the work too: a request reported as failed must not keep calling tools
+        this._finish({ status: 'failed', reply: 'Claude took too long and I stopped waiting.' });
+      }, this.timeoutMs);
       if (signal) {
         if (signal.aborted) return this._finish({ status: 'stopped', reply: 'Stopped.' });
         turn.onAbort = () => {
@@ -378,6 +384,9 @@ class ClaudeSession {
     } else if (ev.type === 'stream_event') {
       const e = ev.event || {};
       if (e.type === 'message_start') this._acc = '';
+      // Another block is being written (a tool call, usually, whose input can take seconds): the text before it was not the final answer.
+      // Without this, "Let me save that." was taken as the answer and the tool then ran after the request had already been reported done.
+      else if (e.type === 'content_block_start' && t) clearTimeout(t.finalTimer);
       else if (e.type === 'content_block_delta' && e.delta?.type === 'text_delta' && t && !t.interrupted) {
         this._acc = (this._acc || '') + e.delta.text;
         this._onDelta?.(this._acc);

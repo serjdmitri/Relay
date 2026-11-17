@@ -117,15 +117,20 @@ class WakeScheduler {
   async withAwake(fn, reason = 'overnight work') {
     const none = { held: false, shouldStop: () => false };
     if (!this.cfg().enabled || !(await this.ready())) return fn(none);
+    // Already holding: join that hold. A second hold used to record "sleep was off" (Relay's own hold) as the state to restore and overwrite the heartbeat
+    // timer, so after both finished the Mac could never sleep again (found by the audit). The first hold puts sleep back when it ends.
+    if (this.holding) return fn({ held: true, shouldStop: () => this.stop, signal: this.holdSignal });
     if(this.state().holding && !this.holding && await this.recover()===false)return {skipped:true,reason:'sleep restoration pending'};
     const p = await this.power();
     const allowed = !p.hot && (p.ac || (this.cfg().battery && p.percent !== null && p.percent >= MIN_BATTERY_START));
     if (!allowed) { this.log('wake-skipped', p.hot ? 'the Mac is running hot' : 'on battery'); return { skipped: true, reason: p.hot ? 'too hot' : 'battery policy' }; }
     const prev = await this.sleepDisabled();
     if (!(await this.setSleepDisabled(true))) return fn(none);
-    this.holding = true; this.stop = false; const controller = new AbortController();
+    this.holding = true; this.stop = false; const controller = new AbortController(); this.holdSignal = controller.signal;
     this.save({ holding: true, prev, holdingSince: this.now().getTime() });
-    try { this.fs.mkdirSync(this.dir, { recursive: true }); this.fs.writeFileSync(this.hb, String(Date.now())); } catch { /* the watchdog then restores at once, which is the safe direction */ }
+    // Without a heartbeat file the watchdog quits without restoring (it checks for the file first), so a crash would leave sleep off: do not hold at all.
+    try { if (!this.hb) throw new Error('no heartbeat path'); this.fs.mkdirSync(this.dir, { recursive: true }); this.fs.writeFileSync(this.hb, String(Date.now())); }
+    catch { this.log('wake-skipped', 'could not write the heartbeat file'); await this.release(); return fn(none); }
     this.spawnDetached('/bin/sh', ['-c', WATCHDOG, 'sh', this.hb, String(CEILING_SECONDS), prev ? '1' : '0']);
     this.log('wake-hold', reason);
     this.timer = this.setTimer(async () => {

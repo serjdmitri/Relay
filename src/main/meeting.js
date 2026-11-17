@@ -47,9 +47,10 @@ class MeetingRecorder {
   }
 
   async openSegment() {
-    if (!this.active) return;
+    if (!this.active || this.stopping) return;
     try {
       await this.speech.listen(this.getDevice());
+      if (!this.active || this.stopping) { try { this.speech.cancel?.(); } catch { /* already closed */ } return; } // ended while the microphone was opening: close it again
       this.errors = 0;
       this.timer = this.setTimer(() => this.rollOver(), this.segmentMs);
     } catch (e) {
@@ -63,6 +64,9 @@ class MeetingRecorder {
   async rollOver() {
     if (!this.active || this.stopping) return;
     await this.takeSegment();
+    // Ended while the last stretch was being read ("Jarvis, end the meeting", or the menu): do not open the microphone again. Found by the audit:
+    // it reopened with nobody to close it, and stayed open until Relay quit.
+    if (!this.active || this.stopping) return;
     if (this.now() - this.startedAt > this.maxMs) return this.end('limit');
     await this.openSegment();
   }

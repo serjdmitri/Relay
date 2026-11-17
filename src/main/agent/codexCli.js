@@ -6,6 +6,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 const { isLimitText } = require('../failover');
 
 const HOME = os.homedir();
@@ -135,11 +136,13 @@ async function runCodex({ codexPath, host, system = '', text, tools, confirm, on
       if (e.error) error = e.error;
       if (e.fileChange) { error = 'Codex tried to change files, which Relay does not allow.'; done({ status: 'failed', reply: error }); }
     };
-    child.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { line(buf.slice(0, i)); buf = buf.slice(i + 1); } });
+    const decoder = new StringDecoder('utf8'); // a letter split across two chunks stays whole
+    child.stdout.on('data', (d) => { buf += typeof d === 'string' ? d : decoder.write(d); let i; while ((i = buf.indexOf('\n')) >= 0) { line(buf.slice(0, i)); buf = buf.slice(i + 1); } });
     child.stderr.on('data', (d) => { errText += d; });
     child.stdin.on('error', () => {});
     child.on('error', (e) => done({ status: 'failed', reply: `Could not start Codex: ${e.message}` }));
-    child.on('exit', (code) => {
+    // 'close', not 'exit': 'exit' can come before the last lines of output are read, and those carry the usage-limit error that failover needs.
+    child.on('close', (code) => {
       if (buf.trim()) line(buf);
       let reply = '';
       try { reply = fs.readFileSync(outFile, 'utf8').trim(); } catch { /* not written */ }

@@ -455,7 +455,7 @@ const PAGES = {
         const list = S.dictations.filter((d) => !dictQuery || d.text.toLowerCase().includes(dictQuery.toLowerCase()));
         holder.innerHTML = `<div class="card">${list.length ? list.map((d, i) => `<div class="dict"><div><div class="tx">${esc(d.text)}</div><div class="when">${timeAgo(d.ts)}</div></div><div class="side"><button class="btn" data-copy="${i}">${icon('copy')}Copy</button><span class="fix" data-fix="${i}">Fix a Word…</span><span class="fix" data-remove="${esc(d.id)}" style="color:var(--red)">Remove</span></div></div>`).join('') : '<div class="empty">' + (S.settings.saveDictation === false ? 'Dictation history is off. Turn it on in General.' : 'No dictation yet. Hold the Dictate key and talk.') + '</div>'}</div>`;
         holder.onclick = (e) => {
-          const t = e.target.closest('[data-copy],[data-fix]');
+          const t = e.target.closest('[data-copy],[data-fix],[data-remove]'); // Remove was left out, so it never did anything (found by the audit)
           if (!t) return;
           if (t.dataset.copy !== undefined) navigator.clipboard?.writeText(list[+t.dataset.copy].text);
           if (t.dataset.fix !== undefined) fixWord(list[+t.dataset.fix].text);
@@ -467,12 +467,12 @@ const PAGES = {
       const rc = S.recap;
       if (rc && !rc.empty) {
         const card = h(`<div class="card" style="margin-bottom:16px"><div class="t" style="padding:10px 14px 2px;font-weight:600">Today</div><div class="note" style="padding:0 14px 8px;line-height:1.5">${esc(rc.spoken.replace(/ The list is in History, under Actions\.$/, ''))}</div>${rc.items.length ? rc.items.map((x) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${x.risk >= 2 ? '#ff9f0a' : '#4cc2ff'}"/><path d="M7 12.5l3.5 3.5L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(x.text)}</div></div><span class="note">${esc(x.when)}</span>${x.undoable ? `<button class="btn" data-undo="${esc(x.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : ''}</div>`);
-        card.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
+        card.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; let r; try { r = await relay.undoAction(id); } catch (err) { r = { ok: false, message: err.message }; } e.target.textContent = r?.ok ? 'Undone' : 'Could not'; e.target.title = r?.message || ''; };
         c.append(card);
       }
       c.append(h('<div class="note" style="margin-bottom:16px">Every tool call Relay made, newest first. Where an action can be put back (a moved file, a window, the volume, a timer, a note…), it has an Undo button until Relay quits. Use this to see what happened when a request did not work.</div>'));
       const actCard = h(`<div class="card">${S.actions.length ? S.actions.map((a) => `<div class="act"><svg viewBox="0 0 24 24" width="20" height="20" style="margin-top:2px"><circle cx="12" cy="12" r="10" fill="${a.ok ? '#4cc2ff' : '#ff453a'}"/><path d="${a.ok ? 'M7 12.5l3.5 3.5L17 9' : 'M8 8l8 8M16 8l-8 8'}" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg><div><div class="nm">${esc(a.tool)}</div><div class="ar">${esc(JSON.stringify(a.input))}</div><div class="rs ${a.ok ? '' : 'bad'}">${esc(a.result)}</div></div><span class="note">${timeAgo(a.ts)}</span>${a.undoable ? `<button class="btn" data-undo="${esc(a.id)}" style="margin-left:8px">Undo</button>` : ''}</div>`).join('') : '<div class="empty">No actions yet.</div>'}</div>`);
-      actCard.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; const r = await relay.undoAction(id); e.target.textContent = r.ok ? 'Undone' : 'Could not'; e.target.title = r.message || ''; };
+      actCard.onclick = async (e) => { const id = e.target.dataset && e.target.dataset.undo; if (!id) return; e.target.disabled = true; e.target.textContent = 'Undoing…'; let r; try { r = await relay.undoAction(id); } catch (err) { r = { ok: false, message: err.message }; } e.target.textContent = r?.ok ? 'Undone' : 'Could not'; e.target.title = r?.message || ''; };
       c.append(actCard);
     }
   },
@@ -542,7 +542,7 @@ const PAGES = {
     ];
     const card = h('<div class="card"></div>');
     for (const idea of ideas) {
-      const el = h(`<div class="routine"><div class="rn"><span>${idea.name}</span><button class="btn">Use…</button></div><ol>${idea.steps.map((s, i) => `<li><span>${i + 1}</span>${esc(s)}</li>`).join('')}</ol></div>`);
+      const el = h(`<div class="routine"><div class="rn"><span>${esc(idea.name)}</span><button class="btn">Use…</button></div><ol>${idea.steps.map((s, i) => `<li><span>${i + 1}</span>${esc(s)}</li>`).join('')}</ol></div>`);
       $('button', el).onclick = () => editRoutine({ ...idea });
       card.append(el);
     }

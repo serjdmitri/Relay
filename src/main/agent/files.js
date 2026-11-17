@@ -13,9 +13,11 @@ const PDF = '.pdf';
 const expand = (p) => path.resolve(String(p).replace(/^~(?=$|\/)/, os.homedir()));
 
 // Is `file` one of the dropped paths, or inside a dropped folder?
+// Both sides are compared as the real paths on disk: a link inside a dropped folder (notes.txt -> ~/.ssh/id_ed25519) must not lead out of it.
+const real = (p) => { const e = expand(p); try { return fs.realpathSync(e); } catch { return e; } };
 function allowed(file, dropped) {
-  const f = expand(file);
-  return dropped.some((d) => { const r = expand(d); return f === r || f.startsWith(r + path.sep); });
+  const f = real(file);
+  return dropped.some((d) => { const r = real(d); return f === r || f.startsWith(r + path.sep); });
 }
 
 const PDF_SCRIPT = 'function run(argv){ ObjC.import("PDFKit"); var d = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0])); return d ? ObjC.unwrap(d.string) : ""; }';
