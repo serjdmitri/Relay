@@ -1,7 +1,7 @@
 # Relay 0.38.18 — audit report
 
 - **Checked commit:** `2397e75` (= `origin/main` and local `mine`, fetched 2026-11-16). `package.json` version 0.38.18.
-- **Work branch:** `audit/full-audit-2026-11-16`, in the worktree `~/Downloads/relay/relay-audit`. Committed as `2d81a8c` (not pushed, not installed).
+- **Work branch:** `audit/full-audit-2026-11-16`, in the worktree `~/Downloads/relay/relay-audit`. Released as 0.38.19 (tag `v0.38.19`, pre-release, like the earlier 0.38.x releases) and installed on this Mac.
 - **Your other checkouts were not touched.** `relay-latest` still has its 13 uncommitted files; `relay-mine`, `relay-lid`, `relay-docs4`, `relay-send-erase` and `relay-review-fixes` are unchanged.
 - **Environment:** macOS 27.2 on Apple Silicon, Node 26.10 (CI uses Node 22), Electron 45.2.3, Swift 6.4.2, Claude Code CLI 2.1.325, Codex CLI 0.165.0. The installed app is 0.38.18 and was running during the audit.
 - **Status:** complete for the areas listed in A–F. Five read-only review agents did the second pass. They hit the account usage limit twice and were then asked to report early, so each covered about a third to a half of its scope. Section G lists what was not reached.
@@ -64,6 +64,13 @@ These are the small changes listed in B. Each new or extended test fails on the 
   - `npm audit --omit=dev --audit-level=high`: 0 vulnerabilities.
   - `xcrun swiftc -frontend -parse` on every `native/`, `ios/` and `ios/Navigation/` Swift file, as CI does: no errors.
 - **Warnings seen (not changed):** Node prints `MODULE_TYPELESS_PACKAGE_JSON` for the ES-module renderer files that tests import (`holo-*.js`, `liveness.js`). These are harmless.
+
+### Release and install notes (0.38.19)
+
+- The first build, made in the audit worktree with a symlinked `node_modules`, **was missing `node-gyp-build`** (the key listener needs it). The project's own startup check caught it ("Cannot find module 'node-gyp-build'") and refused to make a DMG, so it was never installed. The release was rebuilt from a real `npm ci` and passed the startup check (15.3 s). Lesson: build releases from a checkout with a real `node_modules`.
+- One full test run after the clean install gave 1930 pass and 1 fail out of 1931 tests. It could not be reproduced: the next three runs gave 1935/1935. Cause unknown; worth watching.
+- The installed 0.38.18 ignored a polite quit and a terminate signal after running for 21 hours, so it was force-quit to install. Its settings file had been saved a minute earlier. A backup of the 0.38.18 app is in `~/Downloads/relay/Relay-0.38.18-before-0.38.19.app`.
+- After installing, macOS asked once for Keychain access for "Relay Safe Storage". Relay waits for that answer before it finishes starting.
 
 ## E. Performance (measured)
 
@@ -133,7 +140,6 @@ These are the small changes listed in B. Each new or extended test fails on the 
   - Hand-gesture misclassification, camera recovery after sleep, and Bluetooth microphone switching.
 - **Needs external credentials:** live Google, Notion, Twilio and Bland flows. Nothing was sent or edited.
 - **Needs your approval:**
-  - Pushing this branch and merging it into `main`.
   - Rebuilding and installing over `/Applications/Relay.app`.
   - Switching fast mode to `--effort low`.
 - **Not yet investigated:** the second-pass agents' areas, unless their findings appear in the addendum below:
@@ -186,7 +192,7 @@ These are the small changes listed in B. Each new or extended test fails on the 
   - `test/memory-controller.test.js` (1 new test)
   - `test/settings-page-fixes.test.js` (new, 3 tests)
 - **New dependencies:** none.
-- **Branch:** `audit/full-audit-2026-11-16` (worktree `~/Downloads/relay/relay-audit`), one commit `2d81a8c` on top of `2397e75`. Not pushed.
+- **Branch:** `audit/full-audit-2026-11-16` (worktree `~/Downloads/relay/relay-audit`), commits `2d81a8c` (fixes), `95be255` (report) and the release commit on top of `2397e75`, fast-forwarded into `main`.
 - **Rollback:** discard the worktree with `git -C ~/Downloads/relay/relay-latest worktree remove --force ~/Downloads/relay/relay-audit && git -C ~/Downloads/relay/relay-latest branch -D audit/full-audit-2026-11-16`. Nothing else was changed.
 
 ## J. Top 10 next improvements
