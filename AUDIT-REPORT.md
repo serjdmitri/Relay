@@ -51,6 +51,7 @@
 | F22 | P2 | `wakeScheduler.js` | If the heartbeat file could not be written, Relay held the Mac awake anyway. The watchdog exits without restoring when that file is missing, so a crash left sleep off until the next start. | Do not hold without a heartbeat. | New test fails on old code. |
 | F23 | P1 | `src/renderer/app.js` | History > Dictation "Remove" never did anything: the click handler only matched Copy and Fix. | Remove is matched too. | Found by the frontend agent. New test fails on old code. |
 | F24 | P3 | `app.js`, `shared.js` | A suggested routine's name went into the page unescaped. A failed Undo left its button stuck on "Undoing…". `esc()` did not escape single quotes. | Escaped; try/catch; `esc()` now escapes `'`. | New tests fail on old code. |
+| F25 | P2 | `src/main/main.js` (quit path) | **Found, not fixed.** A running Relay ignored a normal Apple Event quit and `SIGTERM` for at least 15 s, in both 0.38.18 (after 21 hours) and 0.38.19 (after 12 minutes, responsive and logging). Nothing in `main.js` prevents quitting, so the cause is not known. It makes the install script's polite quit fail, and updates then need a force-quit. | Not changed. Needs a reproduction with the running app (`app.on('before-quit')` handlers and `window-all-closed` are the first places to look). | Observed three times; not reproduced in isolation. |
 
 ## C. Fixes implemented
 
@@ -71,6 +72,11 @@ These are the small changes listed in B. Each new or extended test fails on the 
 - One full test run after the clean install gave 1930 pass and 1 fail out of 1931 tests. It could not be reproduced: the next three runs gave 1935/1935. Cause unknown; worth watching.
 - The installed 0.38.18 ignored a polite quit and a terminate signal after running for 21 hours, so it was force-quit to install. Its settings file had been saved a minute earlier. A backup of the 0.38.18 app is in `~/Downloads/relay/Relay-0.38.18-before-0.38.19.app`.
 - After installing, macOS asked once for Keychain access for "Relay Safe Storage". Relay waits for that answer before it finishes starting.
+
+### CI and history notes
+
+- **CI on Node 22 was failing before this audit** (and still failed on the first 0.38.19 tag): two unref'd timers in `documents/store.js` and `documents/render.js` let Node 22 end waiting tests ("event loop has already resolved"). Fixed in `a96e3b7`; the whole suite passes on Node 22 (1935/1935) and `Checks` is green on `main`.
+- **Commit attribution:** no git identity was set, so git used the Mac's hostname email and GitHub could not link the commits to your account. A global identity is now set (`Sergey Dmitriev <113930457+serjdmitri@users.noreply.github.com>`). On request, the history was rewritten: 78 commits authored as `Claude <noreply@anthropic.com>` and 172 `Co-authored-by: Claude` lines were removed, and the Mac-hostname emails were mapped to your account. File trees, commit dates and commit counts are identical on every branch and tag (verified), all 5 branches and 69 tags on GitHub were force-pushed, and `v0.38.19` and its release assets were kept. A mirror backup of the old history is at `~/Downloads/relay/Relay-github-backup-before-rewrite.git`.
 
 ## E. Performance (measured)
 
