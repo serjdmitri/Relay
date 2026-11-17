@@ -1,7 +1,7 @@
 # Relay 0.38.18 — audit report
 
 - **Checked commit:** `2397e75` (= `origin/main` and local `mine`, fetched 2026-11-16). `package.json` version 0.38.18.
-- **Work branch:** `audit/full-audit-2026-11-16`, in the worktree `~/Downloads/relay/relay-audit`. Nothing is committed, pushed or installed.
+- **Work branch:** `audit/full-audit-2026-11-16`, in the worktree `~/Downloads/relay/relay-audit`. Committed as `2d81a8c` (not pushed, not installed).
 - **Your other checkouts were not touched.** `relay-latest` still has its 13 uncommitted files; `relay-mine`, `relay-lid`, `relay-docs4`, `relay-send-erase` and `relay-review-fixes` are unchanged.
 - **Environment:** macOS 27.2 on Apple Silicon, Node 26.10 (CI uses Node 22), Electron 45.2.3, Swift 6.4.2, Claude Code CLI 2.1.325, Codex CLI 0.165.0. The installed app is 0.38.18 and was running during the audit.
 - **Status:** complete for the areas listed in A–F. Five read-only review agents did the second pass. They hit the account usage limit twice and were then asked to report early, so each covered about a third to a half of its scope. Section G lists what was not reached.
@@ -133,7 +133,7 @@ These are the small changes listed in B. Each new or extended test fails on the 
   - Hand-gesture misclassification, camera recovery after sleep, and Bluetooth microphone switching.
 - **Needs external credentials:** live Google, Notion, Twilio and Bland flows. Nothing was sent or edited.
 - **Needs your approval:**
-  - Committing this branch.
+  - Pushing this branch and merging it into `main`.
   - Rebuilding and installing over `/Applications/Relay.app`.
   - Switching fast mode to `--effort low`.
 - **Not yet investigated:** the second-pass agents' areas, unless their findings appear in the addendum below:
@@ -186,7 +186,7 @@ These are the small changes listed in B. Each new or extended test fails on the 
   - `test/memory-controller.test.js` (1 new test)
   - `test/settings-page-fixes.test.js` (new, 3 tests)
 - **New dependencies:** none.
-- **Branch:** `audit/full-audit-2026-11-16` (worktree `~/Downloads/relay/relay-audit`). No commits.
+- **Branch:** `audit/full-audit-2026-11-16` (worktree `~/Downloads/relay/relay-audit`), one commit `2d81a8c` on top of `2397e75`. Not pushed.
 - **Rollback:** discard the worktree with `git -C ~/Downloads/relay/relay-latest worktree remove --force ~/Downloads/relay/relay-audit && git -C ~/Downloads/relay/relay-latest branch -D audit/full-audit-2026-11-16`. Nothing else was changed.
 
 ## J. Top 10 next improvements
